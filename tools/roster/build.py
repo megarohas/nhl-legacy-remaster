@@ -184,6 +184,8 @@ def attach_captains(players, caps):
                 if not cands:
                     last = name.split()[-1]
                     cands = [p for p in by_team[team] if norm(p['last']) == norm(last)]
+                if len(cands) > 1:     # тёзки (два Элиаса Петтерссона): букву носит опытный
+                    cands = [max(cands, key=lambda p: p['nhl_gp']['career'])]
                 if len(cands) == 1:
                     cands[0]['letter'] = letter
                     found += 1

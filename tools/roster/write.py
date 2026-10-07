@@ -250,6 +250,8 @@ class Writer:
             put(f, x)
         if not p['landing']:
             notes.append('нет карточки landing: драфт и игры по сезонам не заполнены')
+        if p.get('omitted'):
+            notes.append('нет в /roster/current (вероятно, травмирован)')
         if new:
             put('artid', self.artid[p['nhl_id']])
             put('audioid', 0)
@@ -279,8 +281,8 @@ class Writer:
         else:
             db.set(G, 'g_overall', row, clamp_rating(ovr) - BASE)
             db.set(G, 'g_style', row, style)
-            db.set(G, 'g_consistency', row, clamp_rating(ovr + m.cons_delta) - BASE)
             db.set(G, 'g_potential', row, pot)
+            # g_consistency не трогаем: в базе это не рейтинг, а 0–2 (у 383 из 537 вратарей — 1)
         if pot == 30:
             db.set(t, 'growthtier', row, 0)
             db.set(t, 'growthletter', row, 0)
@@ -601,7 +603,7 @@ def run(paths, log=print):
         'lines': {SLOT_TEAM[t]: k for t, k in w.lines_of.items()},
         'rows': {'roster': w.db.by_name[R]['rows'], 'free_agents': w.db.by_name[F]['rows'],
                  'links': w.db.by_name[P]['rows']},
-        'model': {'offset': w.model.offset, 'depth': w.model.depth, 'cons_delta': w.model.cons_delta},
+        'model': {'offset': w.model.offset, 'depth': w.model.depth},
     }
     write_json(paths.written, summary)
     n_new = len(w.new)

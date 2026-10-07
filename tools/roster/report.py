@@ -39,7 +39,8 @@ def run(paths, log=print):
     add(f"Собрано {time.strftime('%d.%m.%Y %H:%M')} (`python tools/roster all`; данные — снимок {meta['generated']}).")
     add('')
     add(f"- Вход: `{wr['db_in']}`; выход: `{wr['db_out']}` (CRC пересчитаны, `tools/tdb.py verify` — OK).")
-    add(f"- Игроков в составах 32 клубов (API НХЛ, `/v1/roster/{{TEAM}}/current`): **{c['players']}**.")
+    add(f"- Игроков в составах 32 клубов: **{c['players']}** (`/v1/roster/{{TEAM}}/current` — "
+        f"{c['players'] - c.get('omitted_added', 0)}, вне его, с клубом НХЛ — {c.get('omitted_added', 0)}).")
     add(f'- Сопоставлено с игроками базы: **{n_match}**; новых (в строках доноров): **{n_new}**; '
         f"без места: **{len(wr['no_room'])}**.")
     add(f"- Записей составов: {wr['rows']['roster']}, свободных агентов: {wr['rows']['free_agents']}, "
@@ -110,7 +111,11 @@ def run(paths, log=print):
     notes = Counter()
     for o in out.values():
         for n in o['notes']:
-            notes[n.split(' →')[0].split(' (')[0] if n.startswith('номер') else n.split(' — ')[0]] += 1
+            if n.startswith('номер'):
+                n = 'номера из API нет или он занят в клубе — выдан прежний или свободный'
+            elif n.startswith('страна рождения'):
+                n = 'страна рождения без кода в базе (127)'
+            notes[n.split(' — ')[0] if n.startswith(('рейтинга нет', 'буква A')) else n] += 1
     add('- Контракты у всех игроков НХЛ — **заглушка** по OVR и возрасту (сумма 0,9–10 млн $, срок 1–4 года, '
         'yearufa, yearfirstsigned, yearwaivereligible — по сроку и драфту); настоящие — этап контрактов.')
     add('- Портреты, логотипы, формы — следующий этап: у новых игроков `hasportrait` = 0 (силуэт), типовая голова, '
@@ -151,6 +156,14 @@ def run(paths, log=print):
         add('')
         for b in probs[:200]:
             add(f'- {b}')
+        add('')
+    if meta.get('omitted_added'):
+        add('## Добавлены вне /roster/current (вероятно, травмированы)')
+        add('')
+        add('Состав API их не показывает; в поиске search.d3 у них клуб НХЛ, и либо 40+ игр в НХЛ в прошлом '
+            'сезоне, либо они в топ-300 EA за этим клубом. Могут оказаться и отправленные в АХЛ.')
+        add('')
+        add(', '.join(meta['omitted_added']))
         add('')
     if meta.get('ea_unmatched'):
         add('## Топ-300 EA, которых нет в составах НХЛ')

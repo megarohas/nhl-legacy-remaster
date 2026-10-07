@@ -11,9 +11,9 @@
   с рейтингом ± возраст (молодым −2) — по смыслу формулы estimate.py из puckpeak (медиана
   НХЛ + поправки), без разрывов лиг: все игроки здесь — из составов НХЛ.
 - p_overall / g_overall = OVR NHL 27; p_potential — как в исходной базе: 30 до 21 года
-  включительно, иначе 5; стиль — с nhlratings.net, иначе прежний (того же класса F/D) или
-  ближайший по форме атрибутов «центроид» стиля из исходной базы; у вратаря g_consistency
-  (в NHL 27 его нет) = OVR + медиана (g_consistency − g_overall) исходной базы.
+  включительно, иначе 5; стиль — с nhlratings.net, иначе прежний (того же класса F/D), по
+  результативности или ближайший по форме атрибутов «центроид» стиля из исходной базы.
+  g_consistency (в NHL 27 его нет) — не рейтинг: в базе 0–2, не меняется.
 """
 import statistics
 import zlib
@@ -121,8 +121,6 @@ class Model:
         self.centroid = {st: {f: statistics.mean(x) for f, x in d.items()} for st, d in cent.items()
                          if st in D_STYLES + F_STYLES and len(d['p_speed']) >= 3}
         self.bias = {st: {f: int(statistics.median(x)) for f, x in d.items()} for st, d in bias.items()}
-        cons = [db.get(G, 'g_consistency', r) - db.get(G, 'g_overall', r) for r in range(db.by_name[G]['rows'])]
-        self.cons_delta = _median(cons, 0)
         self.estimated = {}
 
     # --- атрибуты ------------------------------------------------------------------------------
@@ -156,17 +154,22 @@ class Model:
         rt = p['rating']
         ovr = self.target_ovr(p)
         known = {f: v for f, v in rt['attrs'].items() if f in fs}
-        if len(known) >= 3:
+        if rt['source'] in ('ea', 'nhlratings') and len(known) >= 3:
+            # полный набор: известные — как есть, недостающие — форма на уровне известных
             delta = sum(known.values()) / len(known) - sum(shape[f] for f in known) / len(known)
             out = {f: known.get(f, shape[f] + delta) for f in fs}
             return {f: clamp_rating(x) for f, x in out.items()}, ovr
-        out = dict(shape)
-        for _ in range(8):   # упирающиеся в 36/99 значения съедают часть сдвига
+        # только OVR (и, может быть, несколько атрибутов): известные — как есть, остальные —
+        # форма, сдвинутая так, чтобы среднее всех плюс поправка амплуа дало OVR
+        unknown = [f for f in fs if f not in known]
+        out = {f: known.get(f, shape[f]) for f in fs}
+        for _ in range(10):   # упирающиеся в 36/99 значения съедают часть сдвига
             level = sum(clamp_rating(out[f]) for f in fs) / len(fs) + self.offset[c]
-            delta = ovr - level
-            if abs(delta) < 0.5:
+            delta = (ovr - level) * len(fs) / max(1, len(unknown))
+            if abs(ovr - level) < 0.3 or not unknown:
                 break
-            out = {f: out[f] + delta for f in fs}
+            for f in unknown:
+                out[f] += delta
         return {f: clamp_rating(x) for f, x in out.items()}, ovr
 
     def style(self, p, row, new):
