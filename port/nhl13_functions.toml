@@ -21,6 +21,8 @@
 # Сгенерировано tools/find_indirect_targets.py (осторожный фильтр: вне функций
 # .pdata, перед адресом граница, не начало switch, не таблица переходов).
 0x82417230 = { name = "sub_82417230" }  # data 839632BC
+0x8241A298 = { name = "sub_8241A298" }  # data 83963358
+0x8241A2D0 = { name = "sub_8241A2D0" }  # data 8396335C, data 83963360
 0x82427FC8 = { name = "sub_82427FC8" }  # data 822E4EB8
 0x8243A990 = { name = "sub_8243A990" }  # data 822E58E0
 0x8243B408 = { name = "sub_8243B408" }  # data 822E5714
@@ -298,7 +300,6 @@
 0x8327D3A8 = { name = "sub_8327D3A8" }  # data 822687D0
 0x8327E070 = { name = "sub_8327E070" }  # code 83286DAC
 0x8327E098 = { name = "sub_8327E098" }  # code 83286D94
-0x832B9AA4 = { name = "sub_832B9AA4" }  # code 832B9AE8
 0x832FFBD8 = { name = "sub_832FFBD8" }  # data 8227903C
 0x8333F6F0 = { name = "sub_8333F6F0" }  # data 8227E928
 0x83374310 = { name = "sub_83374310" }  # data 8393ADA4
@@ -328,5 +329,3 @@
 0x8358BA18 = { name = "sub_8358BA18" }  # data 822AD830
 0x8358BE30 = { name = "sub_8358BE30" }  # data 822AD900
 0x8358C3F8 = { name = "sub_8358C3F8" }  # data 822AD9D0
-0x8241A298 = { name = "sub_8241A298" }  # data 83963358
-0x8241A2D0 = { name = "sub_8241A2D0" }  # data 8396335C, data 83963360

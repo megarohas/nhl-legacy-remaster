@@ -1,9 +1,11 @@
 """Ищет код, на который есть только косвенные ссылки, но ReXGlue его не завёл как функцию.
 
-    python find_indirect_targets.py IMAGE REGISTER_CPP > batch.toml
+    python find_indirect_targets.py IMAGE REGISTER_CPP [FUNCTIONS_TOML] > batch.toml
 
 IMAGE — образ памяти из xex.py (база 0x82000000), REGISTER_CPP — сгенерированный
-nhl13_register.cpp (строки SetFunction(0xADDR, …) — известные функции).
+nhl13_register.cpp (строки SetFunction(0xADDR, …) — известные функции). Адреса из
+FUNCTIONS_TOML (наши ручные записи) из «известных» вычитаются — так пачка
+пересчитывается целиком, а не только новые находки.
 
 Источники адресов:
   - указатели на .text в .rdata и .data (vtable, таблицы обратных вызовов);
@@ -13,8 +15,10 @@ nhl13_register.cpp (строки SetFunction(0xADDR, …) — известные
     цель switch-таблицы, и объявление функции разрежет чужую функцию);
   - перед адресом граница: blr / bctr / безусловный b / нулевое выравнивание;
   - первая инструкция похожа на начало кода;
-  - не первый case вычисляемого switch (сразу перед адресом add/lwzx/lhzx/lbzx →
-    mtctr → bctr — так 0x827E2670 оказался базой таблицы переходов);
+  - не база вычисляемого switch: адрес из lis+addi дальше идёт в add → mtctr → bctr
+    (0x827E2670 — case сразу после bctr; 0x832B9AA4 — case перед диспетчером, его
+    объявление разрезало функцию и оставило default снаружи); плюс старая проверка
+    «сразу перед адресом add/lwzx/lhzx/lbzx → mtctr → bctr»;
   - ссылка из данных не часть таблицы переходов switch: таблица — это база, которую
     код собирает lis+addi и читает lwzx (vtable так не читают). Грубое правило «3+
     указателя в окне 0x800» выбрасывало настоящие vtable (0x83963348: 8 методов
@@ -28,6 +32,8 @@ BASE = 0x82000000
 def main():
     img = open(sys.argv[1], 'rb').read()
     known = {int(m.group(1), 16) for m in re.finditer(rb'SetFunction\(0x([0-9A-Fa-f]{8})', open(sys.argv[2], 'rb').read())}
+    if len(sys.argv) > 3:
+        known -= {int(m.group(1), 16) for m in re.finditer(rb'(?m)^0x([0-9A-Fa-f]{8})\s*=', open(sys.argv[3], 'rb').read())}
     word = lambda va: struct.unpack('>I', img[va - BASE:va - BASE + 4])[0]
 
     # секции из PE-заголовка образа
@@ -81,7 +87,14 @@ def main():
                 else:
                     continue
                 if text_lo <= v < text_hi and not v & 3:
-                    refs[v].append(f'code {text_lo + 4 * i:08X}')
+                    ry = rs if op == 14 else ra
+                    tail = words[i + 2 + n:i + 2 + n + 8]
+                    is_switch_base = any(
+                        y >> 26 == 31 and (y >> 1) & 0x3FF == 266 and ry in ((y >> 16) & 31, (y >> 11) & 31)
+                        and any(z == 0x4E800420 for z in tail[k + 1:k + 4])
+                        for k, y in enumerate(tail))
+                    if not is_switch_base:
+                        refs[v].append(f'code {text_lo + 4 * i:08X}')
                 else:
                     ry = rs if op == 14 else ra  # регистр с базой; lwzx от неё — switch
                     for y in words[i + 2 + n:i + 2 + n + 8]:
@@ -101,9 +114,15 @@ def main():
             j = i
             while j < len(vals) and is_code[j]:
                 j += 1
-            if lo + 4 * i not in jump_table_bases:
-                for k, v in enumerate(vals[i:j]):
-                    refs[v].append(f'data {lo + 4 * (i + k):08X}')
+            start = i
+            if lo + 4 * i in jump_table_bases:
+                # Таблица переходов: её записи смотрят в одну функцию. Вплотную за
+                # ней может лежать vtable (0x822E58E0, метод 0x8243A990) — её не трогаем.
+                first = vals[i]
+                while start < j and abs(vals[start] - first) < 0x4000:
+                    start += 1
+            for k in range(start, j):
+                refs[vals[k]].append(f'data {lo + 4 * k:08X}')
             i = j
 
     out = []
