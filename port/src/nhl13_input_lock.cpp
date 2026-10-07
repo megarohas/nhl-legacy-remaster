@@ -13,7 +13,7 @@
 
 #include <mutex>
 
-#include <rex/cvar.h>
+#include <rex/logging.h>
 #include <rex/ppc.h>
 
 #if defined(_WIN32)
@@ -26,13 +26,23 @@ using GuestFn = void (*)(PPCContext&, uint8_t*);
 std::mutex g_input_mutex;
 
 GuestFn RuntimeExport(const char* name) {
-  // Модуль рантайма — тот, где живёт любая его функция (имя DLL зависит от
-  // конфигурации: rexruntime / rexruntimed / rexruntimerd).
+  // DLL рантайма по имени (зависит от конфигурации). Адрес функции SDK тут не
+  // годится: в exe он указывает на переходник импорта, то есть на сам exe —
+  // GetProcAddress ничего не находил, и геймпад «отключался».
   HMODULE runtime = nullptr;
-  GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                         GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                     reinterpret_cast<LPCSTR>(&rex::cvar::GetFlagByName), &runtime);
-  return runtime ? reinterpret_cast<GuestFn>(GetProcAddress(runtime, name)) : nullptr;
+  for (const char* dll : {"rexruntimerd.dll", "rexruntime.dll", "rexruntimed.dll"}) {
+    if ((runtime = GetModuleHandleA(dll)) != nullptr) {
+      break;
+    }
+  }
+  auto fn = runtime ? reinterpret_cast<GuestFn>(GetProcAddress(runtime, name)) : nullptr;
+  if (fn) {
+    REXLOG_INFO("[nhl13] input lock: {} -> rexruntime", name);
+  } else {
+    REXLOG_ERROR("[nhl13] input lock: {} not found in rexruntime (module {})", name,
+                 static_cast<void*>(runtime));
+  }
+  return fn;
 }
 
 void CallLocked(const char* name, GuestFn& cached, PPCContext& ctx, uint8_t* base) {
