@@ -36,6 +36,7 @@ REXCVAR_DEFINE_INT32(nhl_teams, 30, "NHL13",
 
 extern "C" void __imp__sub_82809330(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__sub_8289A868(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__sub_82819268(PPCContext& ctx, uint8_t* base);
 extern "C" void sub_828FD590(PPCContext& ctx, uint8_t* base);  // список команд: добавить
 extern "C" void sub_828FE278(PPCContext& ctx, uint8_t* base);  // узел: задать команды
 
@@ -137,13 +138,26 @@ void Nhl13ScheduleBytes(PPCRegister& r) {
   r.u64 = kScheduleCapacity * kScheduleEntryBytes;
 }
 
+// Фабрика структуры лиги. Меню выбора команды (827C2BA8, через переходник 828D12F0 —
+// lr указывает в 827C2BA8) пока получает НХЛ на 30 команд: его массивы рассчитаны на
+// 30/60 команд, и с 32 экран падал в скрипте; лига франшизы строится на 32.
+thread_local bool t_menu_structure = false;
+
+extern "C" void sub_82819268(PPCContext& ctx, uint8_t* base) {
+  const uint32_t lr = static_cast<uint32_t>(ctx.lr);
+  const bool prev = t_menu_structure;
+  t_menu_structure = lr >= 0x827C2BA8 && lr < 0x827C2F70;
+  __imp__sub_82819268(ctx, base);
+  t_menu_structure = prev;
+}
+
 // Структура НХЛ: r3 — ?, r4 — корень дерева (может быть 0), r5 — список команд (может быть 0).
 extern "C" void sub_82809330(PPCContext& ctx, uint8_t* base) {
   const uint32_t root = ctx.r4.u32;
   const uint32_t list = ctx.r5.u32;
   const uint32_t sp = ctx.r1.u32;
   __imp__sub_82809330(ctx, base);
-  if (!ThirtyTwo()) {
+  if (!ThirtyTwo() || t_menu_structure) {
     return;
   }
   static int logged = 0;
