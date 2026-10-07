@@ -4,6 +4,12 @@
     python stfs.py verify  PACKAGE           # SHA-1 блоков файлов, таблиц L0 и верхней таблицы
     python stfs.py list    PACKAGE
     python stfs.py extract PACKAGE OUT_DIR
+    python stfs.py replace PACKAGE NAME NEW_FILE OUT_PACKAGE   # тот же размер, с перехешированием
+
+При замене пересчитываются SHA-1 изменённых блоков, их таблиц L0, верхней таблицы,
+хеш в дескрипторе и хеш заголовка (0x32C). Подпись пакета (RSA консоли для CON) не
+трогается — розничная приставка такой пакет не примет; на RGH подписи пакетов, как
+правило, не проверяются.
 
 Блоки по 0x1000 сразу после заголовка. На каждые 0xAA блоков данных — таблица L0
 (0xAA записей по 0x18: SHA-1, статус, следующий блок), на каждые 0xAA таблиц L0 —
@@ -131,6 +137,33 @@ class Stfs:
         data = b''.join(self.block(n) for n in self.file_blocks(e))
         return data[:e['size']]
 
+    def replaced(self, entry, data):
+        """Байты нового пакета, где у файла entry содержимое data (размер тот же)."""
+        if len(data) != entry['size']:
+            raise ValueError(f'размер {len(data)} вместо {entry["size"]}: менять размер не умею')
+        self.f.seek(0)
+        out = bytearray(self.f.read())
+        tables = set()
+        for i, n in enumerate(self.file_blocks(entry)):
+            addr = self.addr(self.backing(n))
+            part = data[i * BLOCK:(i + 1) * BLOCK]
+            block = bytes(part) + bytes(out[addr + len(part):addr + BLOCK])
+            if block == bytes(out[addr:addr + BLOCK]):
+                continue
+            out[addr:addr + BLOCK] = block
+            h = self.addr(self.l0_block(n)) + self.l0_active_offset(n) + (n % PER_TABLE) * 0x18
+            out[h:h + 20] = hashlib.sha1(block).digest()
+            tables.add(n // PER_TABLE)
+        if self.top_level == 1:
+            for t in tables:
+                n = t * PER_TABLE
+                a = self.addr(self.l0_block(n)) + self.l0_active_offset(n)
+                e = self.top_addr + t * 0x18
+                out[e:e + 20] = hashlib.sha1(out[a:a + BLOCK]).digest()
+        out[0x381:0x395] = hashlib.sha1(out[self.top_addr:self.top_addr + BLOCK]).digest()
+        out[0x32C:0x340] = hashlib.sha1(out[0x344:self.base]).digest()
+        return bytes(out), len(tables)
+
     def verify(self):
         """Возвращает (ошибки, проверено блоков данных)."""
         errors, checked = [], 0
@@ -156,11 +189,23 @@ class Stfs:
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument('cmd', choices=['info', 'verify', 'list', 'extract'])
+    ap.add_argument('cmd', choices=['info', 'verify', 'list', 'extract', 'replace'])
     ap.add_argument('package')
-    ap.add_argument('out', nargs='?')
+    ap.add_argument('out', nargs='*')
     a = ap.parse_args()
     s = Stfs(a.package)
+    if a.cmd == 'replace':
+        if len(a.out) != 3:
+            ap.error('нужно: NAME NEW_FILE OUT_PACKAGE')
+        name, new_file, out_path = a.out
+        entry = next((e for e in s.entries() if e['path'] == name), None)
+        if entry is None:
+            sys.exit(f'в пакете нет файла {name}')
+        data, tables = s.replaced(entry, open(new_file, 'rb').read())
+        open(out_path, 'wb').write(data)
+        print(f'записано -> {out_path} (изменено таблиц L0: {tables})')
+        return
+    a.out = a.out[0] if a.out else None
     if a.cmd == 'info':
         v = s.version
         print(f'{s.magic.decode()} «{s.name}» title {s.title_id:08X}, тип {s.content_type:08X}, '
