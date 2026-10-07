@@ -336,3 +336,25 @@ address = 0x82925C2C   # addi r10, r1, 400 — три записи обратн�
 name = "Nhl13TieBuffer"
 registers = ["r10"]
 after_instruction = true
+
+# 82925900 (виды 121/125/126): начало дивизиона = сумма размеров предыдущих, а не размер × номер
+# (src/nhl13_teams.cpp, Nhl13DivisionStart; разбор — docs/audit-2026-10-07.md).
+[[midasm_hook]]
+address = 0x829264B0   # mullw r11, r3, r25
+name = "Nhl13DivisionStart"
+registers = ["r11", "r24", "r25"]
+after_instruction = true
+
+# 829212E8: список номеров записей узла — не писать больше выделенного (r26).
+[[midasm_hook]]
+address = 0x82921410   # lwz r11, 84(r31) — перед list[count] = k
+name = "Nhl13TeamListFull"
+registers = ["r31", "r26"]
+jump_address_on_true = 0x8292142C
+
+# 82925900: команды дерева нет среди записей (r9 = −1) — не копировать мусор из-за края буфера.
+[[midasm_hook]]
+address = 0x82925E7C   # lwz r11, 32(r19) — перед memcpy(запись, буфер + r9·24)
+name = "Nhl13TreeTeamMissing"
+registers = ["r9"]
+jump_address_on_true = 0x82925E98

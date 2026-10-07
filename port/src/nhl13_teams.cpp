@@ -349,6 +349,51 @@ void Nhl13TieBuffer(PPCRegister& r) {
   r.u64 = buffer;
 }
 
+// Число команд в узле дерева лиги вместе с детьми (как 828FE030): +4 — свои команды,
+// +16 — число детей, +20 — массив указателей на детей.
+uint32_t NodeTeams(uint8_t* base, uint32_t node, int depth = 0) {
+  if (!node || depth > 6) {
+    return 0;
+  }
+  uint32_t n = Load32(base, node + 4);
+  const uint32_t kids = Load32(base, node + 16);
+  const uint32_t arr = Load32(base, node + 20);
+  for (uint32_t k = 0; k < kids && k < 32; ++k) {
+    n += NodeTeams(base, Load32(base, arr + 4 * k), depth + 1);
+  }
+  return n;
+}
+
+// 82925900, виды 121/125/126 (таблица конференции: лидеры дивизионов, потом остальные):
+// начало j-го дивизиона в конференции игра считает как «размер дивизиона j × j»
+// (829264B0 mullw r11, r3, r25) — верно только при равных дивизионах. У нас 5+5+6 и 6+5+5:
+// дивизионы налезали друг на друга и на соседнюю конференцию → дубли и пропавшие команды в
+// таблице статистики (Чикаго — Монреаль, сетка плей-офф, драфт). Начало — сумма размеров
+// предыдущих дивизионов (r24 — конференция, r25 — номер дивизиона). Найдено аудитом слепков.
+void Nhl13DivisionStart(PPCRegister& r11, PPCRegister& r24, PPCRegister& r25) {
+  auto* base = rex::Runtime::instance()->memory()->TranslateVirtual<uint8_t*>(0);
+  const uint32_t arr = Load32(base, r24.u32 + 20);
+  uint32_t start = 0;
+  for (uint32_t k = 0; k < r25.u32 && k < 32; ++k) {
+    start += NodeTeams(base, Load32(base, arr + 4 * k));
+  }
+  r11.u64 = start;
+}
+
+// 829212E8: список номеров записей для узла выделен на число его команд (r26), но пишется
+// без проверки (82921410…82921428) — при дублях в таблице за конец блока (порча кучи
+// «голова = 0x0F», вызов по нулю). true — список полон, запись пропустить (→ 8292142C).
+bool Nhl13TeamListFull(PPCRegister& r31, PPCRegister& r26) {
+  auto* base = rex::Runtime::instance()->memory()->TranslateVirtual<uint8_t*>(0);
+  return static_cast<int32_t>(Load32(base, r31.u32 + 84)) >= r26.s32;
+}
+
+// 82925E7C: команды дерева нет среди записей (r9 = −1) — игра копировала бы 24 байта из-за
+// края буфера на стеке (мусорная запись). true — копирование пропустить (→ 82925E98).
+bool Nhl13TreeTeamMissing(PPCRegister& r9) {
+  return r9.s32 < 0;
+}
+
 // Таблица статистики (объект 8205A920): записи по 24 байта с +32, число — +44; запись: +0 —
 // номер объекта команды, +16 — объект команды (массив с +36, по 200 байт), +20 — сведения
 // (массив с +40, по 296). Цела, если каждая запись указывает на свой объект и объекты не
@@ -942,6 +987,56 @@ bool Nhl13DraftLottery(PPCRegister& r1, PPCRegister& r27, PPCRegister& r29) {
   r27.u64 = 0;
   r29.u64 = 1;
   return true;
+}
+
+// 832055C8 — вырезанный из релиза OutputDebugString (просто blr): через него игра печатает,
+// в частности, текст своих ассертов перед twi 31, r0, 22 (825F24E0) — в логе рантайма это
+// только «trap hit (type 22)». Строка (r3) и адрес вызова — в лог; каждая строка один раз,
+// не больше 200 разных (аудит 07.10.2026).
+extern "C" void sub_832055C8(PPCContext& ctx, uint8_t* base) {
+  static std::mutex mutex;
+  static std::unordered_map<std::string, int> seen;
+  const uint32_t str = ctx.r3.u32;
+  if (str < 0x40000000u || str >= 0xE0000000u) {
+    return;
+  }
+  // r3 может оказаться не строкой: читать только из выделенных страниц
+  auto readable = [&](uint32_t addr) {
+#if defined(_WIN32)
+    MEMORY_BASIC_INFORMATION mbi{};
+    if (!VirtualQuery(Host(base, addr), &mbi, sizeof(mbi))) {
+      return false;
+    }
+    return mbi.State == MEM_COMMIT && (mbi.Protect & (PAGE_READONLY | PAGE_READWRITE | PAGE_EXECUTE_READ |
+                                                     PAGE_EXECUTE_READWRITE | PAGE_WRITECOPY)) &&
+           !(mbi.Protect & PAGE_GUARD);
+#else
+    return true;
+#endif
+  };
+  if (!readable(str) || !readable(str + 299)) {
+    return;
+  }
+  std::string text;
+  for (uint32_t i = 0; i < 300; ++i) {
+    const char c = static_cast<char>(Load8(base, str + i));
+    if (!c) {
+      break;
+    }
+    text += (c >= 32 && c < 127) ? c : '?';
+  }
+  while (!text.empty() && (text.back() == '?' || text.back() == ' ')) {
+    text.pop_back();
+  }
+  if (text.empty()) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(mutex);
+  if (seen.size() >= 200 || seen.count(text)) {
+    return;
+  }
+  seen[text] = 1;
+  REXLOG_WARN("[nhl13] guest debug print (lr {:08X}): {}", static_cast<uint32_t>(ctx.lr), text);
 }
 
 // 825F7C90 — ошибка менеджера памяти гостя: печатает [r3+12] и twi 31, r0, 22 (рантайм

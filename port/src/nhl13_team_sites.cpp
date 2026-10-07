@@ -52,6 +52,15 @@ void Nhl13CmpS_32(PPCRegister& a, PPCCRRegister& cr) {
   }
 }
 
+void Nhl13CmpS_576(PPCRegister& a, PPCCRRegister& cr) {
+  if (Nhl13ThirtyTwo()) {
+    const int32_t v = a.s32, n = 576;
+    cr.lt = v < n;
+    cr.gt = v > n;
+    cr.eq = v == n;
+  }
+}
+
 void Nhl13CmpS_62(PPCRegister& a, PPCCRRegister& cr) {
   if (Nhl13ThirtyTwo()) {
     const int32_t v = a.s32, n = 62;
@@ -85,6 +94,18 @@ void Nhl13Li_140(PPCRegister& d) {
 void Nhl13Li_16(PPCRegister& d) {
   if (Nhl13ThirtyTwo()) {
     d.s64 = 16;
+  }
+}
+
+void Nhl13Li_17(PPCRegister& d) {
+  if (Nhl13ThirtyTwo()) {
+    d.s64 = 17;
+  }
+}
+
+void Nhl13Li_18(PPCRegister& d) {
+  if (Nhl13ThirtyTwo()) {
+    d.s64 = 18;
   }
 }
 

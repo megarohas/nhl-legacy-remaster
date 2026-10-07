@@ -265,6 +265,30 @@ name = "Nhl13Li_32"
 registers = ["r11"]
 after_instruction = true
 
+# STANDINGS 828DFD98: баннеры конца регулярки (828DFD98): строки лидеров второй конференции 15 → 16
+# li r11, 15 → 16
+[[midasm_hook]]
+address = 0x828DFE54
+name = "Nhl13Li_16"
+registers = ["r11"]
+after_instruction = true
+
+# STANDINGS 828DFD98: баннеры конца регулярки: 16 → 17
+# li r10, 16 → 17
+[[midasm_hook]]
+address = 0x828DFE5C
+name = "Nhl13Li_17"
+registers = ["r10"]
+after_instruction = true
+
+# STANDINGS 828DFD98: баннеры конца регулярки: 17 → 18
+# li r9, 17 → 18
+[[midasm_hook]]
+address = 0x828DFE64
+name = "Nhl13Li_18"
+registers = ["r9"]
+after_instruction = true
+
 # NHL_TEAMS 828DFD98: баннеры в конце регулярки: цикл по командам (с 828DFE2C)
 # cmps r31, 30 → 32
 [[midasm_hook]]
@@ -615,6 +639,70 @@ after_instruction = true
 address = 0x82929AA8
 name = "Nhl13Li_32"
 registers = ["r4"]
+after_instruction = true
+
+# STANDINGS 8292A8B8: отметки x/y/z/e (8292A8B8): первая запись второй конференции 15 → 16
+# li r11, 15 → 16
+[[midasm_hook]]
+address = 0x8292AC04
+name = "Nhl13Li_16"
+registers = ["r11"]
+after_instruction = true
+
+# STANDINGS 8292A8B8: отметки x/y/z/e: лидеры второй конференции 15/16/17 → 16/17/18
+# li r11, 15 → 16
+[[midasm_hook]]
+address = 0x8292ACC0
+name = "Nhl13Li_16"
+registers = ["r11"]
+after_instruction = true
+
+# STANDINGS 8292A8B8: отметки x/y/z/e: лидеры второй конференции
+# li r9, 16 → 17
+[[midasm_hook]]
+address = 0x8292ACC8
+name = "Nhl13Li_17"
+registers = ["r9"]
+after_instruction = true
+
+# STANDINGS 8292A8B8: отметки x/y/z/e: лидеры второй конференции
+# li r8, 17 → 18
+[[midasm_hook]]
+address = 0x8292ACD0
+name = "Nhl13Li_18"
+registers = ["r8"]
+after_instruction = true
+
+# STANDINGS 8292A8B8: отметки x/y/z/e: смещение второй конференции 15·24 → 16·24
+# li r11, 360 → 384
+[[midasm_hook]]
+address = 0x8292AEF0
+name = "Nhl13Li_384"
+registers = ["r11"]
+after_instruction = true
+
+# STANDINGS 8292A8B8: отметки x/y/z/e: конец мест плей-офф второй конференции 23·24 → 24·24
+# cmps r11, 552 → 576
+[[midasm_hook]]
+address = 0x8292AF0C
+name = "Nhl13CmpS_576"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+# STANDINGS 8292A8B8: отметки x/y/z/e: смещение второй конференции 15·24 → 16·24
+# li r11, 360 → 384
+[[midasm_hook]]
+address = 0x8292B1A8
+name = "Nhl13Li_384"
+registers = ["r11"]
+after_instruction = true
+
+# STANDINGS 8292A8B8: отметки x/y/z/e: конец мест плей-офф второй конференции 23·24 → 24·24
+# cmps r11, 552 → 576
+[[midasm_hook]]
+address = 0x8292B1C4
+name = "Nhl13CmpS_576"
+registers = ["r11", "cr6"]
 after_instruction = true
 
 # DRAFT : 82931B70: пиков в раунде = число команд
