@@ -16,3 +16,6 @@ _netrc
 __pycache__/
 *.pyc
 .venv/
+
+# Чужие репозитории для справки (puckhead73 и др.)
+/ref/
