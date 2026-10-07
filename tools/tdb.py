@@ -153,6 +153,52 @@ class Tdb:
         self.put32(0x08, self.u32(0x08) + delta)
         self.__init__(bytes(self.d), self.meta)
 
+    def widen(self, table, fields, width):
+        """Поля `fields` таблицы — шириной `width` бит: переезжают в конец записи (старые биты
+        остаются мёртвыми), запись удлиняется до кратного 4 байт. Значения сохраняются (сырые).
+        Заголовок (+0x08 длина записи, +0x0C бит − 1, дескрипторы полей), сдвиг следующих таблиц
+        и db_size — здесь; CRC — потом fix(). Только простые таблицы (тип 2/6, без индексов)."""
+        t = self.by_name[table]
+        blk, old_len = t['block'], t['reclen']
+        if self.u32(blk + 4) not in (2, 6) or self.d[blk + 0x1D]:
+            raise ValueError(f'{table}: только простые таблицы без индексов')
+        maxr = struct.unpack(self.E + 'H', self.d[blk + 0x14:blk + 0x16])[0]
+        values = {f: [self.get(table, f, r) for r in range(maxr)] for f in fields}
+        used = max(o + w for o, w in t['fields'].values())
+        place = {}
+        for f in fields:
+            place[f] = used
+            used += width
+        new_len = (used + 31) // 32 * 4
+        nf = self.d[blk + 0x1C]
+        for j in range(nf):
+            fd = blk + 0x28 + 16 * j
+            fid = bytes(self.d[fd + 8:fd + 12]).decode('latin1')
+            name = self.meta.get(t['id'], (t['id'], {}))[1].get(fid, (fid,))[0]
+            if name in place:
+                self.put32(fd + 4, place[name])
+                self.put32(fd + 12, width)
+        # записи: старые байты + нули до новой длины
+        rec0 = t['records']
+        old = bytes(self.d[rec0:rec0 + old_len * maxr])
+        new = bytearray()
+        for r in range(maxr):
+            new += old[r * old_len:(r + 1) * old_len] + bytes(new_len - old_len)
+        self.d[rec0:rec0 + old_len * maxr] = new
+        delta = (new_len - old_len) * maxr
+        self.put32(blk + 0x08, new_len)
+        self.put32(blk + 0x0C, new_len * 8 - 1)
+        n = self.u32(0x10)
+        for i in range(n):
+            slot = 0x1C + 8 * i
+            if 0x18 + 8 * n + self.u32(slot) > blk:
+                self.put32(slot, self.u32(slot) + delta)
+        self.put32(0x08, self.u32(0x08) + delta)
+        self.__init__(bytes(self.d), self.meta)
+        for f in fields:
+            for r, v in enumerate(values[f]):
+                self.set(table, f, r, v)
+
     def _layout(self):
         order = sorted(self.tables, key=lambda t: t['block'])
         ends = [t['block'] for t in order[1:]] + [len(self.d) - 4]

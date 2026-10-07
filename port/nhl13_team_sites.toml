@@ -1,1 +1,522 @@
-# Сгенерировано tools/team_hooks.py — пока пусто.
+# Сгенерировано tools/team_hooks.py — не править руками. Разбор — docs/teams.md.
+# «30 команд НХЛ → 32»: границы, константы, смещения АХЛ (src/nhl13_team_sites.cpp).
+
+# ARRAY_SIZE 82758DB8: CTR обнуления stats+156 bytes[30] → [32] (пара к 8276DD80)
+# li r9, 30 → 32
+[[midasm_hook]]
+address = 0x82758DB8
+name = "Nhl13Li_32"
+registers = ["r9"]
+after_instruction = true
+
+# ARRAY_SIZE 82767D20: Alloc u32[30] менеджера ачивок (+8, пишется без проверки в 8276DD10) → [32]
+# li r3, 120 → 128
+[[midasm_hook]]
+address = 0x82767DD4
+name = "Nhl13Li_128"
+registers = ["r3"]
+after_instruction = true
+
+# ARRAY_SIZE 82767D20: CTR обнуления того же массива
+# li r11, 30 → 32
+[[midasm_hook]]
+address = 0x82767DE4
+name = "Nhl13Li_32"
+registers = ["r11"]
+after_instruction = true
+
+# NHL_TEAMS 82767EB0: ачивки: своя команда 0…29
+# cmps r17, 29 → 31
+[[midasm_hook]]
+address = 0x82767F7C
+name = "Nhl13CmpS_31"
+registers = ["r17", "cr6"]
+after_instruction = true
+
+# NHL_TEAMS 8276B558: ачивки: соперник 0…29
+# cmps r16, 29 → 31
+[[midasm_hook]]
+address = 0x8276B5AC
+name = "Nhl13CmpS_31"
+registers = ["r16", "cr6"]
+after_instruction = true
+
+# NHL_TEAMS 8276DB50: ачивки: «победил команду» stats+156[team] (32 байта влезают до +188; очистка 82758DB8)
+# cmps r25, 29 → 31
+[[midasm_hook]]
+address = 0x8276DD80
+name = "Nhl13CmpS_31"
+registers = ["r25", "cr6"]
+after_instruction = true
+
+# NHL_TEAMS 8278A068: сводка команды: team < 30 → 82917FB8 (кэш сводок 0x83987B64, в порту расширен)
+# cmps r11, 30 → 32
+[[midasm_hook]]
+address = 0x8278A0A4
+name = "Nhl13CmpS_32"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+# NHL_TEAMS 8278CE88: сводка состава: team ≥ 30 → «не НХЛ» (атрибут 15 игрокам)
+# cmps r11, 30 → 32
+[[midasm_hook]]
+address = 0x8278CEDC
+name = "Nhl13CmpS_32"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+# CALENDAR 827A5B28: то же, значение по умолчанию
+# li r11, 30 → 32
+[[midasm_hook]]
+address = 0x827A5B2C
+name = "Nhl13Li_32"
+registers = ["r11"]
+after_instruction = true
+
+# CALENDAR 827A5B28: число команд лиги для календаря (НХЛ/АХЛ): в 827B2300 home ≥ n → Матч звёзд (команды из leaguestate 53/54 = −16)
+# li r11, 30 → 32
+[[midasm_hook]]
+address = 0x827A5B64
+name = "Nhl13Li_32"
+registers = ["r11"]
+after_instruction = true
+
+# AHL 827B2300: календарь АХЛ из БД: home + 30 → номер франшизы
+# addi r11, r11, 30 → 32
+[[midasm_hook]]
+address = 0x827B2B54
+name = "Nhl13Add_p2"
+registers = ["r11"]
+after_instruction = true
+
+# AHL 827B2300: календарь АХЛ из БД: away + 30 → номер франшизы
+# addi r11, r9, 30 → 32
+[[midasm_hook]]
+address = 0x827B2B8C
+name = "Nhl13Add_p2"
+registers = ["r11"]
+after_instruction = true
+
+# PRO_TEAMS 827D8388: свойство игрока: команда < 60 → объект команды
+# cmps r4, 60 → 62
+[[midasm_hook]]
+address = 0x827D8B24
+name = "Nhl13CmpS_62"
+registers = ["r4", "cr6"]
+after_instruction = true
+
+# NHL_TEAMS 827E0D18: название команды по году: вне 0…29 → общая строка
+# cmps r3, 30 → 32
+[[midasm_hook]]
+address = 0x827E0D5C
+name = "Nhl13CmpS_32"
+registers = ["r3", "cr6"]
+after_instruction = true
+
+# PRO_TEAMS 82804D20: статус игрока: команда < 60 → «в другой профи-команде»
+# cmps r5, 60 → 62
+[[midasm_hook]]
+address = 0x82804D64
+name = "Nhl13CmpS_62"
+registers = ["r5", "cr6"]
+after_instruction = true
+
+# NHL_TEAMS 82804D80: сбор игроков команды из БД составов: team ≥ 30 → return 0
+# cmps r4, 30 → 32
+[[midasm_hook]]
+address = 0x82804DB0
+name = "Nhl13CmpS_32"
+registers = ["r4", "cr6"]
+after_instruction = true
+
+# DBQUERY 82804EE0: запрос по полю team < 60
+# li r4, 60 → 62
+[[midasm_hook]]
+address = 0x82805470
+name = "Nhl13Li_62"
+registers = ["r4"]
+after_instruction = true
+
+# DBQUERY 82805600: запрос по полю team < 60
+# li r4, 60 → 62
+[[midasm_hook]]
+address = 0x82805660
+name = "Nhl13Li_62"
+registers = ["r4"]
+after_instruction = true
+
+# DBQUERY 82805820: leaguerostertable WHERE team < 60 (офлайн)
+# li r4, 60 → 62
+[[midasm_hook]]
+address = 0x82805890
+name = "Nhl13Li_62"
+registers = ["r4"]
+after_instruction = true
+
+# KEY 828076C8: key пика = (год % 6)·210 + номер → ·224 (≤ 1343, 11 бит)
+# mulli r26, r11, 210 → 224
+[[midasm_hook]]
+address = 0x82807764
+name = "Nhl13Mul_210_224"
+registers = ["r26", "r11"]
+after_instruction = true
+
+# DRAFT 828076C8: создание leaguedraftpick на 6 лет: команды 0…29 → 0…31
+# cmps r31, 30 → 32
+[[midasm_hook]]
+address = 0x82807A04
+name = "Nhl13CmpS_32"
+registers = ["r31", "cr6"]
+after_instruction = true
+
+# ARRAY_SIZE 828090C0: bzero массива задачи u32[30] → [32]
+# li r4, 120 → 128
+[[midasm_hook]]
+address = 0x828090EC
+name = "Nhl13Li_128"
+registers = ["r4"]
+after_instruction = true
+
+# KEY 8281E850: key пика ·210 → ·224
+# mulli r26, r11, 210 → 224
+[[midasm_hook]]
+address = 0x8281E898
+name = "Nhl13Mul_210_224"
+registers = ["r26", "r11"]
+after_instruction = true
+
+# DRAFT 8281E850: пики нового года (офлайн): команды 0…29 → 0…31
+# cmps r31, 30 → 32
+[[midasm_hook]]
+address = 0x8281EA10
+name = "Nhl13CmpS_32"
+registers = ["r31", "cr6"]
+after_instruction = true
+
+# NHL_TEAMS 82837768: переход игрока (офлайн): franchTeamInfo out+0 ≥ 30 → «не НХЛ»
+# cmpu r11, 30 → 32
+[[midasm_hook]]
+address = 0x82837814
+name = "Nhl13CmpU_32"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+# PRO_TEAMS 82843900: рекорды: команда (колонка 9) < 60, иначе −1
+# cmps r11, 60 → 62
+[[midasm_hook]]
+address = 0x82843A04
+name = "Nhl13CmpS_62"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+# NHL_TEAMS 82849B78: добавление игрока в команду: team ≥ 30 → права НХЛ из игрока
+# cmps r5, 30 → 32
+[[midasm_hook]]
+address = 0x82849C90
+name = "Nhl13CmpS_32"
+registers = ["r5", "cr6"]
+after_instruction = true
+
+# NHL_TEAMS 8284EE18: шаг задачи 828090C0: team ≥ 30 пропускается (вместе с ARRAY_SIZE 828F6EE8/828090EC)
+# cmps r3, 30 → 32
+[[midasm_hook]]
+address = 0x8284EE2C
+name = "Nhl13CmpS_32"
+registers = ["r3", "cr6"]
+after_instruction = true
+
+# NHL_TEAMS 8289AB00: первая команда списка лиги со сброшенным флагом (поиск до 30)
+# cmps r11, 30 → 32
+[[midasm_hook]]
+address = 0x8289AB5C
+name = "Nhl13CmpS_32"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+# NHL_TEAMS 828D46A8: потолок зарплат у CPU: цикл по командам НХЛ
+# cmps r31, 30 → 32
+[[midasm_hook]]
+address = 0x828D470C
+name = "Nhl13CmpS_32"
+registers = ["r31", "cr6"]
+after_instruction = true
+
+# ARRAY_SIZE 828DF6F0: memset флагов команд на стеке r1+96 (место до r1+224 есть)
+# li r5, 120 → 128
+[[midasm_hook]]
+address = 0x828DF73C
+name = "Nhl13Li_128"
+registers = ["r5"]
+after_instruction = true
+
+# AHL 828DF880: фарм-клуб − 30 → порядковый АХЛ для 828CE810 (там уже +32)
+# addi r4, r3, -30 → -32
+[[midasm_hook]]
+address = 0x828DFB38
+name = "Nhl13Add_m2"
+registers = ["r4"]
+after_instruction = true
+
+# ARRAY_SIZE 828DFD98: CTR обнуления u32[30] на стеке r1+112 (до r1+240 есть), пара к 828DFFD0
+# li r11, 30 → 32
+[[midasm_hook]]
+address = 0x828DFE2C
+name = "Nhl13Li_32"
+registers = ["r11"]
+after_instruction = true
+
+# NHL_TEAMS 828DFD98: баннеры в конце регулярки: цикл по командам (с 828DFE2C)
+# cmps r31, 30 → 32
+[[midasm_hook]]
+address = 0x828DFFD0
+name = "Nhl13CmpS_32"
+registers = ["r31", "cr6"]
+after_instruction = true
+
+# NHL_TEAMS 828E7130: событие 21: CPU-команды закрывают дыры в составе
+# cmps r29, 30 → 32
+[[midasm_hook]]
+address = 0x828E72E8
+name = "Nhl13CmpS_32"
+registers = ["r29", "cr6"]
+after_instruction = true
+
+# NHL_TEAMS 828E7130: авто-составы и звенья всех команд НХЛ
+# cmps r30, 30 → 32
+[[midasm_hook]]
+address = 0x828E7408
+name = "Nhl13CmpS_32"
+registers = ["r30", "cr6"]
+after_instruction = true
+
+# NHL_TEAMS 828E7FC0: начало межсезонья: 82850DF0(b,8) по командам
+# cmps r30, 30 → 32
+[[midasm_hook]]
+address = 0x828E8A7C
+name = "Nhl13CmpS_32"
+registers = ["r30", "cr6"]
+after_instruction = true
+
+# NHL_TEAMS 828E9160: событие 25: CPU-команды избавляются от ветеранов
+# cmps r30, 30 → 32
+[[midasm_hook]]
+address = 0x828E93A4
+name = "Nhl13CmpS_32"
+registers = ["r30", "cr6"]
+after_instruction = true
+
+# ARRAY_SIZE 828F6D88: Alloc задачи 828090C0: 12 + u32[30] → [32]
+# li r3, 132 → 140
+[[midasm_hook]]
+address = 0x828F6EE8
+name = "Nhl13Li_140"
+registers = ["r3"]
+after_instruction = true
+
+# NHL_TEAMS 828F9858: team 0…29 → GM-запись 828D32E8 (+100); нужны GM-записи на 32 (leaguegmdata)
+# cmps r31, 30 → 32
+[[midasm_hook]]
+address = 0x828F9928
+name = "Nhl13CmpS_32"
+registers = ["r31", "cr6"]
+after_instruction = true
+
+# DBQUERY 828FBF58: exhibitionteams WHERE league==0 AND index < 30 (число НХЛ для UI)
+# li r4, 30 → 32
+[[midasm_hook]]
+address = 0x828FBFA4
+name = "Nhl13Li_32"
+registers = ["r4"]
+after_instruction = true
+
+# NHL_TEAMS 828FC148: компаратор TeamList: НХЛ (teamid < 30) первыми
+# cmpu r11, 30 → 32
+[[midasm_hook]]
+address = 0x828FC1A8
+name = "Nhl13CmpU_32"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+# NHL_TEAMS 828FC148: компаратор TeamList (r10)
+# cmpu r10, 30 → 32
+[[midasm_hook]]
+address = 0x828FC1B4
+name = "Nhl13CmpU_32"
+registers = ["r10", "cr6"]
+after_instruction = true
+
+# NHL_TEAMS 828FC148: то же
+# cmpu r11, 30 → 32
+[[midasm_hook]]
+address = 0x828FC1BC
+name = "Nhl13CmpU_32"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+# NHL_TEAMS 828FC148: компаратор TeamList (r11)
+# cmpu r11, 30 → 32
+[[midasm_hook]]
+address = 0x828FC1C8
+name = "Nhl13CmpU_32"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+# NHL_TEAMS 8290B5A0: stock-статистика прошлых лет: teamid ≤ 29
+# cmps r30, 29 → 31
+[[midasm_hook]]
+address = 0x8290B6DC
+name = "Nhl13CmpS_31"
+registers = ["r30", "cr6"]
+after_instruction = true
+
+# NHL_TEAMS 82910938: сделка/подпись (leaguestate 44/45): флаг «НХЛ» для 828489F0
+# cmps r3, 30 → 32
+[[midasm_hook]]
+address = 0x82910968
+name = "Nhl13CmpS_32"
+registers = ["r3", "cr6"]
+after_instruction = true
+
+# NHL_TEAMS 829125E8: запись (lhz 0 = команда) ≥ 30 → сообщение (АХЛ)
+# cmpu r11, 30 → 32
+[[midasm_hook]]
+address = 0x82912628
+name = "Nhl13CmpU_32"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+# ARRAY_SIZE 82919020: CTR очистки bytes[30] @+0xB2744 объекта сима (до +0xB2764 место есть)
+# li r10, 30 → 32
+[[midasm_hook]]
+address = 0x82919170
+name = "Nhl13Li_32"
+registers = ["r10"]
+after_instruction = true
+
+# ARRAY_SIZE 82919020: CTR очистки bytes[30] @+0xB2768 (до +0xB2788 место есть)
+# li r10, 30 → 32
+[[midasm_hook]]
+address = 0x82919190
+name = "Nhl13Li_32"
+registers = ["r10"]
+after_instruction = true
+
+# ARRAY_SIZE 82919690: CTR обнуления флагов [30] на стеке r1+112 (до r1+144 есть), пара к 8291976C
+# li r11, 30 → 32
+[[midasm_hook]]
+address = 0x829196BC
+name = "Nhl13Li_32"
+registers = ["r11"]
+after_instruction = true
+
+# NHL_TEAMS 82919690: какие команды сделали предложение: цикл по флагам (вывод ограничен r27)
+# cmps r11, 30 → 32
+[[midasm_hook]]
+address = 0x8291976C
+name = "Nhl13CmpS_32"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+# ARRAY_SIZE 82919F30: CTR повторной очистки +0xB2744
+# li r9, 30 → 32
+[[midasm_hook]]
+address = 0x82919F58
+name = "Nhl13Li_32"
+registers = ["r9"]
+after_instruction = true
+
+# NHL_TEAMS 8291BDD8: зажим команды 0…29 (иначе 0) для данных штаба
+# cmps r4, 30 → 32
+[[midasm_hook]]
+address = 0x8291BE00
+name = "Nhl13CmpS_32"
+registers = ["r4", "cr6"]
+after_instruction = true
+
+# NHL_TEAMS 8291E370: контракт при переходе (офлайн): out+0 ≥ 30 → «не НХЛ»
+# cmps r31, 30 → 32
+[[midasm_hook]]
+address = 0x8291E434
+name = "Nhl13CmpS_32"
+registers = ["r31", "cr6"]
+after_instruction = true
+
+# ARRAY_SIZE 82921060: Alloc mDraftStorage 30×12 → 32×12
+# li r3, 360 → 384
+[[midasm_hook]]
+address = 0x82921094
+name = "Nhl13Li_384"
+registers = ["r3"]
+after_instruction = true
+
+# ARRAY_SIZE 82921060: обнуление mDraftStorage 360 → 384
+# li r4, 360 → 384
+[[midasm_hook]]
+address = 0x829210A0
+name = "Nhl13Li_384"
+registers = ["r4"]
+after_instruction = true
+
+# NHL_TEAMS 82921060: mDraftStorage: потребности по позициям на команду
+# cmps r28, 30 → 32
+[[midasm_hook]]
+address = 0x8292115C
+name = "Nhl13CmpS_32"
+registers = ["r28", "cr6"]
+after_instruction = true
+
+# NHL_TEAMS 829255D8: создание франшизы: тренерский штаб каждой команды НХЛ
+# cmps r31, 30 → 32
+[[midasm_hook]]
+address = 0x829256F0
+name = "Nhl13CmpS_32"
+registers = ["r31", "cr6"]
+after_instruction = true
+
+# PRO_TEAMS 82928740: смена потолка зарплат: пересчёт составов всех профи-команд
+# cmps r31, 60 → 62
+[[midasm_hook]]
+address = 0x82928800
+name = "Nhl13CmpS_62"
+registers = ["r31", "cr6"]
+after_instruction = true
+
+# ARRAY_SIZE 829299D8: bzero счётчиков подписаний [30] на стеке r1+160 (до r1+192 есть)
+# li r4, 30 → 32
+[[midasm_hook]]
+address = 0x82929AA8
+name = "Nhl13Li_32"
+registers = ["r4"]
+after_instruction = true
+
+# KEY 82941AE8: ключ leaguecontractoffers = (игрок·2+флаг)·30 + команда → ·32 (19 бит впритык)
+# mulli r11, r11, 30 → 32
+[[midasm_hook]]
+address = 0x82941BD4
+name = "Nhl13MulSame_30_32"
+registers = ["r11"]
+after_instruction = true
+
+# KEY 82941E28: то же
+# mulli r11, r11, 30 → 32
+[[midasm_hook]]
+address = 0x82941F30
+name = "Nhl13MulSame_30_32"
+registers = ["r11"]
+after_instruction = true
+
+# KEY 82942438: то же (удаление предложения)
+# mulli r11, r11, 30 → 32
+[[midasm_hook]]
+address = 0x82942538
+name = "Nhl13MulSame_30_32"
+registers = ["r11"]
+after_instruction = true
+
+# NHL_TEAMS 82958480: карточка игрока (офлайн): команда 0…29 → «в НХЛ» (+108)
+# cmps r27, 30 → 32
+[[midasm_hook]]
+address = 0x82958B94
+name = "Nhl13CmpS_32"
+registers = ["r27", "cr6"]
+after_instruction = true

@@ -686,3 +686,19 @@ void Nhl13NhlLast(PPCRegister& r) {
 bool Nhl13ThirtyTwo() {
   return ThirtyTwo();
 }
+
+// 829470E8 (загрузка франшизы, 8294B068): средние и разброс 7 показателей по командам лиги —
+// таблица 7 × 30 слов на стеке (шаг строки 120), цикл — по числу команд. При 32 командах
+// последняя строка уходила на сохранённые регистры, и у вызывающего портились указатели
+// (падение после создания сейва). Пока считаем по первым 30 командам.
+extern "C" void __imp__sub_829470E8(PPCContext& ctx, uint8_t* base);
+extern "C" void sub_829470E8(PPCContext& ctx, uint8_t* base) {
+  if (ThirtyTwo() && ctx.r5.s32 > 30) {
+    static int logged = 0;
+    if (logged++ < 2) {
+      REXLOG_INFO("[nhl13] 829470E8: {} teams -> 30", ctx.r5.s32);
+    }
+    ctx.r5.u64 = 30;
+  }
+  __imp__sub_829470E8(ctx, base);
+}

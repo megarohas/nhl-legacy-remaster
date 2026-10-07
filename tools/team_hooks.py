@@ -64,9 +64,10 @@ def plan(site, img):
         name = f"Nhl13Add_{'p' if delta >= 0 else 'm'}{abs(delta)}"
         return (name, [f"r{f['rd']}"], f"addi r{f['rd']}, r{f['ra']}, {f['imm']} → {n}"), None
     if kind == 'mulli':
-        name = f"Nhl13Mul_{f['imm']}_{n}"
-        regs = [f"r{f['rd']}", f"r{f['ra']}"]
-        return (name, regs, f"mulli r{f['rd']}, r{f['ra']}, {f['imm']} → {n}"), None
+        text = f"mulli r{f['rd']}, r{f['ra']}, {f['imm']} → {n}"
+        if f['rd'] == f['ra']:  # множитель уже затёрт результатом: d = d / old · new
+            return (f"Nhl13MulSame_{f['imm']}_{n}", [f"r{f['rd']}"], text), None
+        return (f"Nhl13Mul_{f['imm']}_{n}", [f"r{f['rd']}", f"r{f['ra']}"], text), None
     return None, 'не поддерживаемая инструкция'
 
 
@@ -93,10 +94,11 @@ def cpp_function(name, regs):
     if kind == 'Mul':
         old, new = arg.split('_')
         return (f'void {name}(PPCRegister& d, PPCRegister& a) {{\n'
-                f'  if (Nhl13ThirtyTwo()) {{\n'
-                f'    // d = a · {old} уже посчитано; если d и a — один регистр, a испорчено\n'
-                f'    const int64_t x = (&d == &a) ? d.s32 / {old} : a.s32;\n'
-                f'    d.s64 = x * {new};\n  }}\n}}\n')
+                f'  if (Nhl13ThirtyTwo()) {{\n    d.s64 = static_cast<int64_t>(a.s32) * {new};\n  }}\n}}\n')
+    if kind == 'MulSame':
+        old, new = arg.split('_')
+        return (f'void {name}(PPCRegister& d) {{\n'
+                f'  if (Nhl13ThirtyTwo()) {{\n    d.s64 = static_cast<int64_t>(d.s32 / {old}) * {new};\n  }}\n}}\n')
     raise ValueError(name)
 
 

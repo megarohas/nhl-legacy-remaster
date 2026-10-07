@@ -82,6 +82,19 @@ AHL_AFFILIATE = {30: 32 + 1, 31: 58 + 1}   # Abbotsford, Texas
 # (их порт поднимает до 1600 — src/nhl13_teams.cpp).
 META_MAXINSERT = {'leaguegmdata': 32, 'leaguestaffdata': 32, 'leaguedraftpick': 32 * 7 * 6,
                   'leaguetempscheduletable': 2 * 1600}
+# Поля франшизы «команда НХЛ» шириной 5 бит с диапазоном −1…30 (хранится номер + 1): номер 31
+# туда не влезает — расширяем до 6 бит (−1…62). Таблицы франшизы игра создаёт по этой схеме.
+META_WIDEN = {
+    'exhibitionplayerbiotable': ['proteam', 'draftteam'],
+    'leaguedraftpick': ['origteamid', 'owner'],
+    'leagueplayerbiotable': ['proteam', 'draftteam'],
+    'leaguefreeagentdata': ['originalteamid', 'signedteamid'],
+    'leaguerookiedata': ['draftteam'],
+    'leaguecontractoffers': ['teamnotification'],
+    'leagueretirementtable': ['team'],
+    'leaguegamemodesvars': ['team'],
+    'leaguescoutvisits': ['team'],
+}
 LOC_ALIASES = {  # ключ по номеру команды ← ключ по аббревиатуре
     'NHLTeamName_{n}': 'NHLTeamName_{a}', 'NHLCityName_{n}': 'NHLCityName_{a}',
     'NICKLINE2_{n}': 'Teamline2_{a}', 'CITYLINE1_{n}': 'Teamline1_{a}',
@@ -287,6 +300,14 @@ def patch_meta(text):
         pat = re.compile(r'(<table name="%s"[^>]*maxinsert=")(\d+)(")' % table)
         text, k = pat.subn(lambda m: m.group(1) + str(n) + m.group(3), text)
         assert k == 1, table
+    for table, fields in META_WIDEN.items():
+        m = re.search(r'<table name="%s".*?</table>' % table, text, re.S)
+        block = m.group(0)
+        for field in fields:
+            pat = re.compile(r'(<field name="%s"[^>]*?)depth="5"([^>]*?)rangehigh="30"([^>]*?rangelow="-1")' % field)
+            block, k = pat.subn(lambda f: f.group(1) + 'depth="6"' + f.group(2) + 'rangehigh="62"' + f.group(3), block)
+            assert k == 1, (table, field)
+        text = text[:m.start()] + block + text[m.end():]
     return text
 
 def main():
@@ -324,7 +345,7 @@ def main():
     if a.meta:
         meta = patch_meta(open(a.meta[0], encoding='utf-8', newline='').read())
         open(a.meta[1], 'w', encoding='utf-8', newline='').write(meta)
-        print(f'схема: {META_MAXINSERT} -> {a.meta[1]}')
+        print(f'схема: {META_MAXINSERT}, поля 6 бит: {sum(map(len, META_WIDEN.values()))} -> {a.meta[1]}')
     print(f'записано: {a.db_out}, {a.loc_out}')
 
 if __name__ == '__main__':
