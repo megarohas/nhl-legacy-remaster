@@ -19,6 +19,7 @@
 | [docs/year-and-date.md](docs/year-and-date.md) | Где живут текущий год и даты: сейвы, календари, код |
 | [docs/save-editing.md](docs/save-editing.md) | Устройство сейва франшизы и как его править |
 | [docs/port.md](docs/port.md) | Тулчейн порта, генерация кода ReXGlue, что дальше |
+| [docs/research.md](docs/research.md) | Соседние рекомпилы (NHL 14, 3 on 3, Skate 3…) и что из них взято |
 | `port/` | Проект порта ReXGlue (сгенерированный код — не в git) |
 | [tools/svod.py](tools/svod.py) | Проверка и распаковка контейнеров SVOD (установка с диска, GoD) |
 | [tools/stfs.py](tools/stfs.py) | Проверка и распаковка пакетов STFS (апдейты, сейвы) |
