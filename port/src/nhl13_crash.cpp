@@ -22,6 +22,10 @@
 #include <thread>
 #include <vector>
 
+#include "nhl13_debug.h"
+
+void Nhl13StartWatcher();  // nhl13_watch.cpp
+
 namespace {
 
 std::mutex g_dbghelp_mutex;  // dbghelp не потокобезопасен
@@ -232,12 +236,31 @@ struct Installer {
 
 }  // namespace
 
+std::mutex& Nhl13DbghelpMutex() {
+  return g_dbghelp_mutex;
+}
+
+void Nhl13EnsureSymbols() {
+  EnsureSymbols();
+}
+
+void Nhl13WriteFrame(FILE* f, int i, DWORD64 addr) {
+  WriteFrame(f, i, addr);
+}
+
+int Nhl13CaptureStack(CONTEXT ctx, DWORD64* out, int max) {
+  return CaptureStack(ctx, out, max);
+}
+
 // Повторная установка после настройки рантайма (на случай, если SDK или SDL
 // поставили свой фильтр) и запуск наблюдателя за флагом снимка стеков.
 void Nhl13InstallCrashReporter() {
   SetUnhandledExceptionFilter(CrashFilter);
   static std::once_flag watcher;
-  std::call_once(watcher, [] { std::thread(StackDumpWatcher).detach(); });
+  std::call_once(watcher, [] {
+    std::thread(StackDumpWatcher).detach();
+    Nhl13StartWatcher();
+  });
 }
 
 #else

@@ -18,6 +18,8 @@ set(NHL13_SOURCES
     src/nhl13_input_lock.cpp
     src/nhl13_year.cpp
     src/nhl13_teams.cpp
+    src/nhl13_watch.cpp
+    src/nhl13_dbtrace.cpp
 )
 
 if(WIN32)

@@ -88,19 +88,29 @@ def main():
         return
     pat = bytes.fromhex(a.arg)
     hits = 0
-    for gaddr_lo, gaddr_hi in ((0x00000000, 0x40000000), (0x40000000, 0x80000000), (0x80000000, 0xA0000000), (0xA0000000, 0x100000000)):
-        step = 1 << 22
-        for g in range(gaddr_lo, gaddr_hi, step):
-            data = p.read(gb + g, step + len(pat))
-            if not data:
-                continue
-            o = data.find(pat)
-            while o != -1 and o < step:
-                print(f'0x{g + o:08X}')
-                hits += 1
-                if hits >= a.max:
-                    return
-                o = data.find(pat, o + 1)
+
+    def scan(g, size):
+        # кусок не читается целиком (закрытая или пустая страница) — дробим до 4 КБ
+        nonlocal hits
+        data = p.read(gb + g, size + len(pat))
+        if data is None and size > 0x1000:
+            for sub in range(g, g + size, size // 16):
+                if scan(sub, size // 16):
+                    return True
+            return False
+        o = data.find(pat) if data else -1
+        while o != -1 and o < size:
+            print(f'0x{g + o:08X}')
+            hits += 1
+            if hits >= a.max:
+                return True
+            o = data.find(pat, o + 1)
+        return False
+
+    step = 1 << 22
+    for g in range(0, 1 << 32, step):
+        if scan(g, step):
+            return
     print(f'найдено: {hits}')
 
 if __name__ == '__main__':
