@@ -8,6 +8,7 @@
 #include <memory>
 #include <system_error>
 
+#include <rex/cvar.h>
 #include <rex/filesystem/devices/host_path_device.h>
 #include <rex/filesystem/vfs.h>
 #include <rex/logging.h>
@@ -22,6 +23,27 @@ class Nhl13App : public rex::ReXApp {
       rex::ui::WindowedAppContext& ctx) {
     return std::unique_ptr<Nhl13App>(new Nhl13App(ctx, "nhl13",
         PPCImageConfig));
+  }
+
+  // SDK вычисляет пути до чтения nhl13.toml, поэтому game_data_root/user_data_root
+  // из конфига сами по себе не работают — загружаем конфиг здесь и берём их оттуда.
+  // Аргументы командной строки, если заданы, остаются в силе.
+  void OnConfigurePaths(rex::PathConfig& paths) override {
+    std::error_code ec;
+    if (std::filesystem::exists(paths.config_path, ec)) {
+      rex::cvar::LoadConfig(paths.config_path);
+    }
+    if (paths.game_data_root.empty()) {
+      if (auto v = rex::cvar::GetFlagByName("game_data_root"); !v.empty()) {
+        paths.game_data_root = v;
+      }
+    }
+    if (auto v = rex::cvar::GetFlagByName("user_data_root"); !v.empty()) {
+      paths.user_data_root = v;
+      if (rex::cvar::GetFlagByName("cache_root").empty()) {
+        paths.cache_root = paths.user_data_root / "cache";
+      }
+    }
   }
 
   // NHL 13 при загрузке открывает cache:\ (раздел кэша жёсткого диска 360), а
@@ -52,5 +74,4 @@ class Nhl13App : public rex::ReXApp {
   // std::unique_ptr<rex::ui::AchievementNotificationDialog>
   // CreateAchievementNotificationDialog() override;
   // void OnShutdown() override {}
-  // void OnConfigurePaths(rex::PathConfig& paths) override {}
 };

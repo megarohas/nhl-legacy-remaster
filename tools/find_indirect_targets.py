@@ -15,8 +15,10 @@ nhl13_register.cpp (строки SetFunction(0xADDR, …) — известные
   - первая инструкция похожа на начало кода;
   - не первый case вычисляемого switch (сразу перед адресом add/lwzx/lhzx/lbzx →
     mtctr → bctr — так 0x827E2670 оказался базой таблицы переходов);
-  - ссылка из данных не часть таблицы переходов: 3+ указателя подряд, все в окне
-    0x800 байт (у vtable цели разбросаны по коду).
+  - ссылка из данных не часть таблицы переходов switch: таблица — это база, которую
+    код собирает lis+addi и читает lwzx (vtable так не читают). Грубое правило «3+
+    указателя в окне 0x800» выбрасывало настоящие vtable (0x83963348: 8 методов
+    рядом в коде → FATAL «unregistered function at 0x8241A2D0»).
 """
 import bisect, re, struct, sys
 from collections import defaultdict
@@ -65,6 +67,28 @@ def main():
                                                    48, 50, 52, 54, 58, 59, 62, 63}
 
     refs = defaultdict(list)
+    jump_table_bases = set()
+    words = struct.unpack(f'>{(text_hi - text_lo) // 4}I', img[text_lo - BASE:text_hi - BASE])
+    for i, w in enumerate(words):
+        if w >> 26 == 15 and (w >> 16) & 31 == 0:  # lis rX, hi
+            rx, hi16 = (w >> 21) & 31, w & 0xFFFF
+            for n, x in enumerate(words[i + 1:i + 9]):
+                op, rs, ra, imm = x >> 26, (x >> 21) & 31, (x >> 16) & 31, x & 0xFFFF
+                if op == 14 and ra == rx:      # addi rY, rX, lo
+                    v = ((hi16 << 16) + (imm - 0x10000 if imm & 0x8000 else imm)) & 0xFFFFFFFF
+                elif op == 24 and rs == rx:    # ori rY, rX, lo
+                    v = (hi16 << 16) | imm
+                else:
+                    continue
+                if text_lo <= v < text_hi and not v & 3:
+                    refs[v].append(f'code {text_lo + 4 * i:08X}')
+                else:
+                    ry = rs if op == 14 else ra  # регистр с базой; lwzx от неё — switch
+                    for y in words[i + 2 + n:i + 2 + n + 8]:
+                        if y >> 26 == 31 and (y >> 1) & 0x3FF == 23 and ry in ((y >> 16) & 31, (y >> 11) & 31):
+                            jump_table_bases.add(v)
+                            break
+                break
     for name in ('.rdata', '.data'):
         lo, hi = sections[name]
         vals = struct.unpack(f'>{(hi - lo) // 4}I', img[lo - BASE:lo - BASE + (hi - lo) // 4 * 4])
@@ -77,27 +101,10 @@ def main():
             j = i
             while j < len(vals) and is_code[j]:
                 j += 1
-            run = vals[i:j]
-            jump_table = len(run) >= 3 and max(run) - min(run) < 0x800
-            if not jump_table:
-                for k, v in enumerate(run):
+            if lo + 4 * i not in jump_table_bases:
+                for k, v in enumerate(vals[i:j]):
                     refs[v].append(f'data {lo + 4 * (i + k):08X}')
             i = j
-    words = struct.unpack(f'>{(text_hi - text_lo) // 4}I', img[text_lo - BASE:text_hi - BASE])
-    for i, w in enumerate(words):
-        if w >> 26 == 15 and (w >> 16) & 31 == 0:  # lis rX, hi
-            rx, hi16 = (w >> 21) & 31, w & 0xFFFF
-            for x in words[i + 1:i + 9]:
-                op, rs, ra, imm = x >> 26, (x >> 21) & 31, (x >> 16) & 31, x & 0xFFFF
-                if op == 14 and ra == rx:      # addi rY, rX, lo
-                    v = ((hi16 << 16) + (imm - 0x10000 if imm & 0x8000 else imm)) & 0xFFFFFFFF
-                elif op == 24 and rs == rx:    # ori rY, rX, lo
-                    v = (hi16 << 16) | imm
-                else:
-                    continue
-                if text_lo <= v < text_hi and not v & 3:
-                    refs[v].append(f'code {text_lo + 4 * i:08X}')
-                break
 
     out = []
     for v in sorted(refs):

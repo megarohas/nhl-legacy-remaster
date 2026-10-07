@@ -322,3 +322,5 @@
 0x8358BA18 = { name = "sub_8358BA18" }  # data 822AD830
 0x8358BE30 = { name = "sub_8358BE30" }  # data 822AD900
 0x8358C3F8 = { name = "sub_8358C3F8" }  # data 822AD9D0
+0x8241A298 = { name = "sub_8241A298" }  # data 83963358
+0x8241A2D0 = { name = "sub_8241A2D0" }  # data 8396335C, data 83963360
