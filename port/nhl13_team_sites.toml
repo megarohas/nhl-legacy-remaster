@@ -625,12 +625,52 @@ name = "Nhl13Li_32"
 registers = ["r10"]
 after_instruction = true
 
+# DRAFT 82931B70: порядок драфта: перебор таблицы с конца — с 31-й команды
+# li r29, 29 → 31
+[[midasm_hook]]
+address = 0x82931E74
+name = "Nhl13Li_31"
+registers = ["r29"]
+after_instruction = true
+
+# DRAFT 82931B70: порядок драфта: вне плей-офф 14 → 16 команд
+# cmps r28, 14 → 16
+[[midasm_hook]]
+address = 0x82931EC0
+name = "Nhl13CmpS_16"
+registers = ["r28", "cr6"]
+after_instruction = true
+
+# DRAFT 82931B70: порядок драфта: копия до лотереи — 16 команд вне плей-офф
+# li r10, 14 → 16
+[[midasm_hook]]
+address = 0x82931ED4
+name = "Nhl13Li_16"
+registers = ["r10"]
+after_instruction = true
+
 # DRAFT : драфт: команда < 32
 # cmps r28, 30 → 32
 [[midasm_hook]]
 address = 0x8293210C
 name = "Nhl13CmpS_32"
 registers = ["r28", "cr6"]
+after_instruction = true
+
+# DRAFT 82931B70: порядок драфта: пики 1…16 — команды вне плей-офф
+# li r10, 14 → 16
+[[midasm_hook]]
+address = 0x82932684
+name = "Nhl13Li_16"
+registers = ["r10"]
+after_instruction = true
+
+# DRAFT 82931B70: порядок драфта: команды плей-офф с 17-го пика (смещение 16·4)
+# li r11, 56 → 64
+[[midasm_hook]]
+address = 0x829326AC
+name = "Nhl13Li_64"
+registers = ["r11"]
 after_instruction = true
 
 # DRAFT : Alloc пиков 210·16 → 224·16

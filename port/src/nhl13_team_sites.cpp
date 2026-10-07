@@ -25,6 +25,15 @@ void Nhl13Add_p2(PPCRegister& d) {
   }
 }
 
+void Nhl13CmpS_16(PPCRegister& a, PPCCRRegister& cr) {
+  if (Nhl13ThirtyTwo()) {
+    const int32_t v = a.s32, n = 16;
+    cr.lt = v < n;
+    cr.gt = v > n;
+    cr.eq = v == n;
+  }
+}
+
 void Nhl13CmpS_31(PPCRegister& a, PPCCRRegister& cr) {
   if (Nhl13ThirtyTwo()) {
     const int32_t v = a.s32, n = 31;
@@ -73,6 +82,12 @@ void Nhl13Li_140(PPCRegister& d) {
   }
 }
 
+void Nhl13Li_16(PPCRegister& d) {
+  if (Nhl13ThirtyTwo()) {
+    d.s64 = 16;
+  }
+}
+
 void Nhl13Li_224(PPCRegister& d) {
   if (Nhl13ThirtyTwo()) {
     d.s64 = 224;
@@ -82,6 +97,12 @@ void Nhl13Li_224(PPCRegister& d) {
 void Nhl13Li_248(PPCRegister& d) {
   if (Nhl13ThirtyTwo()) {
     d.s64 = 248;
+  }
+}
+
+void Nhl13Li_31(PPCRegister& d) {
+  if (Nhl13ThirtyTwo()) {
+    d.s64 = 31;
   }
 }
 
@@ -106,6 +127,12 @@ void Nhl13Li_384(PPCRegister& d) {
 void Nhl13Li_62(PPCRegister& d) {
   if (Nhl13ThirtyTwo()) {
     d.s64 = 62;
+  }
+}
+
+void Nhl13Li_64(PPCRegister& d) {
+  if (Nhl13ThirtyTwo()) {
+    d.s64 = 64;
   }
 }
 

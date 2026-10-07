@@ -25,10 +25,12 @@
 //    при отправке лишних игроков в АХЛ (828CD928) → − 32; меню франшизы заполняет список
 //    АХЛ номерами i + 30 (827C2BA8) → i + 32; 828A6080 ищет teamid среди 60 команд → 62.
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <mutex>
+#include <random>
 #include <string>
 #include <unordered_map>
 
@@ -785,6 +787,63 @@ void Nhl13DraftOrderTable(PPCRegister& r9) {
     return addr;
   }();
   r9.u64 = table;
+}
+
+// Лотерея драфта при 32 командах (82931EF8, вместо розыгрыша 2012 года): 16 команд вне
+// плей-офф лежат на стеке r1+608 от худшей к лучшей. Правила НХЛ с 2022 года: два розыгрыша
+// (1-й и 2-й пики), шансы по месту до лотереи, победитель поднимается не больше чем на 10
+// мест, второй раз одна команда не выигрывает.
+bool Nhl13DraftLottery(PPCRegister& r1, PPCRegister& r27, PPCRegister& r29) {
+  if (!ThirtyTwo()) {
+    return false;
+  }
+  static const uint32_t kOdds[16] = {185, 135, 115, 95, 85, 75, 65, 60, 50, 35, 30, 25, 20, 15, 5, 5};
+  static std::mt19937 rng{std::random_device{}()};
+  auto* order = rex::Runtime::instance()->memory()->TranslateVirtual<uint8_t*>(r1.u32 + 608);
+  uint32_t teams[16];
+  std::memcpy(teams, order, sizeof(teams));  // как есть, big-endian
+  int cur[16];  // cur[место] = место до лотереи
+  for (int i = 0; i < 16; ++i) {
+    cur[i] = i;
+  }
+  bool won[16] = {};
+  int winners[2];
+  for (int draw = 0; draw < 2; ++draw) {
+    uint32_t total = 0;
+    for (int i = 0; i < 16; ++i) {
+      total += won[i] ? 0 : kOdds[i];
+    }
+    uint32_t x = rng() % total;
+    int w = 0;
+    for (; w < 15; ++w) {
+      if (won[w]) {
+        continue;
+      }
+      if (x < kOdds[w]) {
+        break;
+      }
+      x -= kOdds[w];
+    }
+    won[w] = true;
+    winners[draw] = w;
+    int p = 0;
+    while (cur[p] != w) {
+      ++p;
+    }
+    const int target = std::max(draw, p - 10);
+    for (int k = p; k > target; --k) {
+      cur[k] = cur[k - 1];
+    }
+    cur[target] = w;
+  }
+  for (int k = 0; k < 16; ++k) {
+    std::memcpy(order + 4 * k, &teams[cur[k]], 4);
+  }
+  REXLOG_INFO("[nhl13] draft lottery: winners {} and {} (places before lottery, 0 = worst); team {} picks 1st",
+              winners[0], winners[1], __builtin_bswap32(teams[cur[0]]));
+  r27.u64 = 0;
+  r29.u64 = 1;
+  return true;
 }
 
 // 825F7C90 — ошибка менеджера памяти гостя: печатает [r3+12] и twi 31, r0, 22 (рантайм
