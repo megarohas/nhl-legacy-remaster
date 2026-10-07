@@ -4,7 +4,7 @@
 (worktree) его нет: тогда берётся game/ основной копии (по файлу .git). Переопределить —
 переменной окружения NHL13_GAME.
 """
-import json, os, sys, time, unicodedata, urllib.error, urllib.parse, urllib.request
+import http.client, json, os, sys, time, unicodedata, urllib.error, urllib.parse, urllib.request
 
 TOOLS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REPO = os.path.dirname(TOOLS)
@@ -128,7 +128,7 @@ class Http:
                 delay = min(120, 5 * 2 ** attempt)
                 self.log(f'  HTTP {err.code} {url} — пауза {delay} с')
                 time.sleep(delay)
-            except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as err:
+            except (urllib.error.URLError, http.client.HTTPException, TimeoutError, ConnectionError, OSError) as err:
                 self.last[host] = time.time()
                 if attempt == 6:
                     raise

@@ -47,7 +47,7 @@ def main():
             fetch.run(paths, a.only.split(',') if a.only else None, pause=max(1.0, a.pause), refresh=a.refresh)
         elif stage == 'build':
             from . import build
-            build.run(paths, offline=a.offline)
+            build.run(paths)
         elif stage == 'match':
             from . import match
             match.run(paths)
