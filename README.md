@@ -16,9 +16,9 @@
 | [docs/briefing.md](docs/briefing.md) | Вводная: цель, что известно о базе, план |
 | [docs/xbox-transfer.md](docs/xbox-transfer.md) | Как достать файлы с приставки |
 | [docs/game-files.md](docs/game-files.md) | Что внутри игры, где база, как распаковать |
-| [tools/svod.py](tools/svod.py) | Проверка и распаковка контейнеров SVOD (установка с диска, GoD) |
 | [docs/year-and-date.md](docs/year-and-date.md) | Где живут текущий год и даты: сейвы, календари, код |
 | [docs/save-editing.md](docs/save-editing.md) | Устройство сейва франшизы и как его править |
+| [tools/svod.py](tools/svod.py) | Проверка и распаковка контейнеров SVOD (установка с диска, GoD) |
 | [tools/stfs.py](tools/stfs.py) | Проверка и распаковка пакетов STFS (апдейты, сейвы) |
 | [tools/xex.py](tools/xex.py) | Расшифровка и разжатие `default.xex` в образ памяти |
 | [tools/lzx.py](tools/lzx.py), [tools/aes.py](tools/aes.py) | LZX (порт lzxd) и AES-128 на чистом Python |
