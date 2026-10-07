@@ -9,6 +9,12 @@
 0x82AC44B0 = { name = "sub_82AC44B0" }
 0x82B08DC0 = { name = "sub_82B08DC0" }
 
+# «Перечисление → строка» без .pdata: switch на 10 case (lbzx+add+bctr), ветка
+# default (bgt → 0x832B9B40) стоит после последнего case. Сканер раздвигал конец
+# только до самой дальней цели таблицы, default оставался снаружи: REX_FATAL
+# «Unresolved branch from 0x832B9AD8 to 0x832B9B40». Конец — выравнивание 0 на 0x832B9B4C.
+0x832B9A70 = { name = "sub_832B9A70", end = 0x832B9B4C }
+
 # Пачка: код, на который есть только косвенные ссылки (vtable, таблицы обратных
 # вызовов в .rdata/.data, адреса из lis+addi в коде), а сканер его не завёл.
 # Первый случай — FATAL «unregistered function at 0x825DC988» при загрузке.

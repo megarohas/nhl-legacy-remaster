@@ -14,6 +14,7 @@ include(generated/rexglue.cmake)
 set(NHL13_SOURCES
     src/main.cpp
     src/nhl13_imports.cpp
+    src/nhl13_crash.cpp
 )
 
 if(WIN32)
@@ -23,3 +24,7 @@ else()
 endif()
 
 rexglue_setup_target(nhl13 GPU_PLUGINS xenos)
+
+if(WIN32)
+    target_link_libraries(nhl13 PRIVATE dbghelp)  # стек в отчёте о падении
+endif()

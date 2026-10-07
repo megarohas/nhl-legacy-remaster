@@ -15,6 +15,8 @@
 #include <rex/rex_app.h>
 #include <rex/runtime.h>
 
+void Nhl13InstallCrashReporter();  // nhl13_crash.cpp
+
 class Nhl13App : public rex::ReXApp {
  public:
   using rex::ReXApp::ReXApp;
@@ -50,6 +52,7 @@ class Nhl13App : public rex::ReXApp {
   // рантайм монтирует только game: и update:. Как в Xenia и nhl-legacy-recomp —
   // подкладываем записываемую папку хоста (cache_root/guest).
   void OnPostSetup() override {
+    Nhl13InstallCrashReporter();
     const std::filesystem::path cache_dir = cache_root() / "guest";
     std::error_code ec;
     std::filesystem::create_directories(cache_dir, ec);
