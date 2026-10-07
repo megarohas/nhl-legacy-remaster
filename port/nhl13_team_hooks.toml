@@ -322,3 +322,17 @@ registers = ["r3", "r4", "r5"]
 address = 0x82809534   # дивизион 8
 name = "Nhl13NhlDivision"
 registers = ["r3", "r4", "r5"]
+
+# 82925900 — сортировка таблицы статистики: буфер записей при тройной ничьей (r1+400)
+# перетирается временными объектами с r1+496 → свой буфер (src/nhl13_teams.cpp, Nhl13TieBuffer).
+[[midasm_hook]]
+address = 0x82925A2C   # addi r11, r1, 400 — копия всех записей в буфер
+name = "Nhl13TieBuffer"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82925C2C   # addi r10, r1, 400 — три записи обратно по номеру
+name = "Nhl13TieBuffer"
+registers = ["r10"]
+after_instruction = true
