@@ -1,0 +1,1574 @@
+# Сгенерировано tools/year_hooks.py — не править руками.
+# Сдвиг года: 262 мест (season_year в nhl13.toml, код — src/nhl13_year.cpp).
+
+[[midasm_hook]]
+address = 0x8275640C
+name = "Nhl13YearSub"
+registers = ["r14"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8276C86C
+name = "Nhl13YearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8276F01C
+name = "Nhl13YearAdd"
+registers = ["r29"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8276F0E8
+name = "Nhl13YearAdd"
+registers = ["r30"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827828F8
+name = "Nhl13YearAdd"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82788068
+name = "Nhl13YearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8278807C
+name = "Nhl13YearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82788F3C
+name = "Nhl13YearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8278B8B0
+name = "Nhl13YearAdd"
+registers = ["r29"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8278B8CC
+name = "Nhl13YearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8278C5BC
+name = "Nhl13YearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82790DD0
+name = "Nhl13YearCmpU2012"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82792AD0
+name = "Nhl13YearSub"
+registers = ["r29"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827A9BE0
+name = "Nhl13YearAdd"
+registers = ["r3"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827A9BE8
+name = "Nhl13YearAdd"
+registers = ["r3"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827BEA30
+name = "Nhl13YearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827BEE70
+name = "Nhl13YearAdd"
+registers = ["r3"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827BEE78
+name = "Nhl13YearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827BF920
+name = "Nhl13YearAdd"
+registers = ["r3"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827BF9A0
+name = "Nhl13YearCmpS2012"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827BFB44
+name = "Nhl13YearCmpS2012"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827C0198
+name = "Nhl13YearAdd"
+registers = ["r3"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827C5C84
+name = "Nhl13YearAdd"
+registers = ["r28"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827C5FC8
+name = "Nhl13YearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827C6014
+name = "Nhl13YearCmpS2012"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827D2554
+name = "Nhl13YearAdd"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827D2E6C
+name = "Nhl13YearAdd"
+registers = ["r26"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827D2F70
+name = "Nhl13YearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827D2F74
+name = "Nhl13YearAdd"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827DEBB8
+name = "Nhl13YearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827DEBBC
+name = "Nhl13YearCmpS1962"
+registers = ["r29", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827DF970
+name = "Nhl13YearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827E0D24
+name = "Nhl13YearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827E0D80
+name = "Nhl13YearCmpS2012"
+registers = ["r31", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827E1660
+name = "Nhl13YearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827E1694
+name = "Nhl13YearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827EBC88
+name = "Nhl13YearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827EC198
+name = "Nhl13YearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827F23C4
+name = "Nhl13YearAdd"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8280CE0C
+name = "Nhl13YearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82821510
+name = "Nhl13YearSub"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82823CB8
+name = "Nhl13YearAdd"
+registers = ["r7"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82823D00
+name = "Nhl13YearAdd"
+registers = ["r8"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8282D228
+name = "Nhl13YearCmpS2012"
+registers = ["r4", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8282E294
+name = "Nhl13YearCmpS2012"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828352C8
+name = "Nhl13YearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82837268
+name = "Nhl13YearAdd"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828373F8
+name = "Nhl13YearAdd"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8283B398
+name = "Nhl13YearSub"
+registers = ["r30"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8283B39C
+name = "Nhl13YearAdd"
+registers = ["r28"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8283F41C
+name = "Nhl13YearCmpU2011"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82841C18
+name = "Nhl13YearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82849084
+name = "Nhl13YearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8284950C
+name = "Nhl13YearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8284EF78
+name = "Nhl13YearCmpU2004"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828514D0
+name = "Nhl13YearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82853410
+name = "Nhl13YearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828536D4
+name = "Nhl13YearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82854E20
+name = "Nhl13YearSub"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82855D54
+name = "Nhl13YearAdd"
+registers = ["r23"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8285A12C
+name = "Nhl13YearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8285A134
+name = "Nhl13YearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8285A148
+name = "Nhl13YearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8285A154
+name = "Nhl13YearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8285F288
+name = "Nhl13YearSub"
+registers = ["r6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8285F29C
+name = "Nhl13YearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8286A06C
+name = "Nhl13YearSub"
+registers = ["r30"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8286CE40
+name = "Nhl13YearAdd"
+registers = ["r3"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828963B0
+name = "Nhl13YearAdd"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8289BC4C
+name = "Nhl13YearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828A16D8
+name = "Nhl13YearSub"
+registers = ["r29"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828A1BF0
+name = "Nhl13YearSub"
+registers = ["r29"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828A2AF8
+name = "Nhl13YearSub"
+registers = ["r28"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828A2EA8
+name = "Nhl13YearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828A32F8
+name = "Nhl13YearSub"
+registers = ["r28"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828A36A8
+name = "Nhl13YearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828A8944
+name = "Nhl13YearCmpS2012"
+registers = ["r24", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828B0B40
+name = "Nhl13YearSub"
+registers = ["r25"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828B1188
+name = "Nhl13YearSub"
+registers = ["r25"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828B5794
+name = "Nhl13YearCmpS2012"
+registers = ["r30", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828B584C
+name = "Nhl13YearCmpS2012"
+registers = ["r31", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828B587C
+name = "Nhl13YearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828B6218
+name = "Nhl13YearCmpU2012"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828BB7E0
+name = "Nhl13YearCmpS2012"
+registers = ["r29", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828BCF8C
+name = "Nhl13YearCmpS2012"
+registers = ["r4", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828BCFD0
+name = "Nhl13YearSub"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828BD0FC
+name = "Nhl13YearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828BD294
+name = "Nhl13YearCmpS2012"
+registers = ["r4", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828BD2D8
+name = "Nhl13YearSub"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828BD420
+name = "Nhl13YearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828BD5C4
+name = "Nhl13YearCmpS2012"
+registers = ["r4", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828BD608
+name = "Nhl13YearSub"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828BD750
+name = "Nhl13YearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828C1148
+name = "Nhl13YearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828C3B48
+name = "Nhl13YearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828C4318
+name = "Nhl13YearSub"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828C4484
+name = "Nhl13YearCmpS2012"
+registers = ["r30", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828C4540
+name = "Nhl13YearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828C470C
+name = "Nhl13YearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828C4850
+name = "Nhl13YearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828C4D2C
+name = "Nhl13YearCmpS2012"
+registers = ["r27", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828C4D90
+name = "Nhl13YearSub"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828C4FA4
+name = "Nhl13YearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828C5D78
+name = "Nhl13YearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828C5F48
+name = "Nhl13YearAdd"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828C5F50
+name = "Nhl13YearAdd"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828C5F78
+name = "Nhl13YearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828C5F84
+name = "Nhl13YearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828C5FEC
+name = "Nhl13YearAdd"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828C5FF8
+name = "Nhl13YearAdd"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828C6734
+name = "Nhl13YearSub"
+registers = ["r29"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828C6D14
+name = "Nhl13YearSub"
+registers = ["r27"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828C785C
+name = "Nhl13YearSub"
+registers = ["r29"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828C7E0C
+name = "Nhl13YearSub"
+registers = ["r27"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828C9EE8
+name = "Nhl13YearCmpS2012"
+registers = ["r5", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828C9EF0
+name = "Nhl13YearSub"
+registers = ["r30"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828CA104
+name = "Nhl13YearCmpS2012"
+registers = ["r28", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828CA17C
+name = "Nhl13YearSub"
+registers = ["r26"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828CA3E0
+name = "Nhl13YearSub"
+registers = ["r26"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828CDD18
+name = "Nhl13YearAdd"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828CF8C8
+name = "Nhl13YearSub"
+registers = ["r6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828CFA34
+name = "Nhl13YearCmpS2012"
+registers = ["r29", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828CFA98
+name = "Nhl13YearSub"
+registers = ["r26"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828CFE84
+name = "Nhl13YearCmpS2012"
+registers = ["r28", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828CFF08
+name = "Nhl13YearSub"
+registers = ["r7"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828D0000
+name = "Nhl13YearCmpS2012"
+registers = ["r5", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828D005C
+name = "Nhl13YearSub"
+registers = ["r7"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828D008C
+name = "Nhl13YearAdd"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828D04B0
+name = "Nhl13YearCmpS2012"
+registers = ["r26", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828D04B4
+name = "Nhl13YearSub"
+registers = ["r18"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828D05FC
+name = "Nhl13YearCmpS2012"
+registers = ["r26", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828D093C
+name = "Nhl13YearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828D54D0
+name = "Nhl13YearSub"
+registers = ["r31"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828D5538
+name = "Nhl13YearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828D627C
+name = "Nhl13YearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828D74AC
+name = "Nhl13YearAdd"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828DA82C
+name = "Nhl13YearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828DAD4C
+name = "Nhl13YearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828DB78C
+name = "Nhl13YearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828DB900
+name = "Nhl13YearSub"
+registers = ["r28"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828DBF48
+name = "Nhl13YearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828DC220
+name = "Nhl13YearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828DC244
+name = "Nhl13YearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828DC714
+name = "Nhl13YearSub"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828DD5E0
+name = "Nhl13YearSub"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828DD818
+name = "Nhl13YearAdd"
+registers = ["r31"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828DD828
+name = "Nhl13YearAdd"
+registers = ["r31"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828DDC80
+name = "Nhl13YearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828DE630
+name = "Nhl13YearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828DFC18
+name = "Nhl13YearCmpS2012"
+registers = ["r29", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828E00BC
+name = "Nhl13YearAdd"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828E6684
+name = "Nhl13YearAdd"
+registers = ["r7"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828E669C
+name = "Nhl13YearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828E7FEC
+name = "Nhl13YearSub"
+registers = ["r22"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828E80EC
+name = "Nhl13YearCmpS2012"
+registers = ["r30", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828E8B88
+name = "Nhl13YearSub"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828E8C68
+name = "Nhl13YearSub"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828E8CCC
+name = "Nhl13YearSub"
+registers = ["r31"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828ED60C
+name = "Nhl13YearSub"
+registers = ["r26"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828ED69C
+name = "Nhl13YearSub"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828EDC78
+name = "Nhl13YearSub"
+registers = ["r31"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828EDF68
+name = "Nhl13YearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828EF260
+name = "Nhl13YearCmpS2012"
+registers = ["r23", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828EF5A0
+name = "Nhl13YearCmpS2012"
+registers = ["r23", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828EF634
+name = "Nhl13YearCmpS2012"
+registers = ["r23", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828F275C
+name = "Nhl13YearSub"
+registers = ["r23"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828F68EC
+name = "Nhl13YearCmpS2012"
+registers = ["r29", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828F6E50
+name = "Nhl13YearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828F6E64
+name = "Nhl13YearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828F6E84
+name = "Nhl13YearCmpS2012"
+registers = ["r28", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828F6F18
+name = "Nhl13YearCmpS2012"
+registers = ["r28", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828F6FB4
+name = "Nhl13YearCmpS2012"
+registers = ["r28", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828F85C0
+name = "Nhl13YearSub"
+registers = ["r31"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828F8E5C
+name = "Nhl13YearAdd"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828F8E64
+name = "Nhl13YearAdd"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828F9100
+name = "Nhl13YearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828F9180
+name = "Nhl13YearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828F92C8
+name = "Nhl13YearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828F932C
+name = "Nhl13YearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828F9374
+name = "Nhl13YearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828F93CC
+name = "Nhl13YearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828F9898
+name = "Nhl13YearCmpS2012"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829003EC
+name = "Nhl13YearAdd"
+registers = ["r30"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82902D44
+name = "Nhl13YearSub"
+registers = ["r30"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82906E38
+name = "Nhl13YearSub"
+registers = ["r31"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82906E5C
+name = "Nhl13YearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82908190
+name = "Nhl13YearSub"
+registers = ["r28"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82908194
+name = "Nhl13YearCmpS2011"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82909FC4
+name = "Nhl13YearSub"
+registers = ["r28"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8290B26C
+name = "Nhl13YearCmpS2012"
+registers = ["r23", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8290B278
+name = "Nhl13YearSub"
+registers = ["r28"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8290B4EC
+name = "Nhl13YearCmpS2012"
+registers = ["r23", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8290B50C
+name = "Nhl13YearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8290C4E4
+name = "Nhl13YearCmpS2011"
+registers = ["r29", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8290C4EC
+name = "Nhl13YearAdd"
+registers = ["r29"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8290C4F0
+name = "Nhl13YearCmpS2012"
+registers = ["r29", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8290C624
+name = "Nhl13YearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8290F1DC
+name = "Nhl13YearSub"
+registers = ["r31"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829101C0
+name = "Nhl13YearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829164E8
+name = "Nhl13YearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8291A060
+name = "Nhl13YearSub"
+registers = ["r7"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8291CB2C
+name = "Nhl13YearAdd"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8291CC10
+name = "Nhl13YearAdd"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8291E6F8
+name = "Nhl13YearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82922918
+name = "Nhl13YearSub"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8292494C
+name = "Nhl13YearSub"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82924CB4
+name = "Nhl13YearSub"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8292523C
+name = "Nhl13YearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829252B0
+name = "Nhl13YearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82927D60
+name = "Nhl13YearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82928E98
+name = "Nhl13YearSub"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82929AE0
+name = "Nhl13YearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8292E394
+name = "Nhl13YearCmpS2012"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8292EBE4
+name = "Nhl13YearCmpS2012"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8292ED60
+name = "Nhl13YearCmpS2012"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8292F214
+name = "Nhl13YearCmpS2012"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8292F74C
+name = "Nhl13YearCmpS2012"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8292F8EC
+name = "Nhl13YearCmpS2012"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8292FE34
+name = "Nhl13YearSub"
+registers = ["r26"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82930560
+name = "Nhl13YearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82930564
+name = "Nhl13YearSub"
+registers = ["r24"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82930884
+name = "Nhl13YearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829312D8
+name = "Nhl13YearAdd"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829318A0
+name = "Nhl13YearAdd"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82932EB0
+name = "Nhl13YearSub"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82934FE0
+name = "Nhl13YearSub"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829366E8
+name = "Nhl13YearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82936954
+name = "Nhl13YearSub"
+registers = ["r30"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8293695C
+name = "Nhl13YearCmpS2012"
+registers = ["r31", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82936A48
+name = "Nhl13YearCmpS2012"
+registers = ["r31", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82936A68
+name = "Nhl13YearSub"
+registers = ["r6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82939418
+name = "Nhl13YearAdd"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82939434
+name = "Nhl13YearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82939448
+name = "Nhl13YearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82939708
+name = "Nhl13YearAdd"
+registers = ["r28"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8293A830
+name = "Nhl13YearCmpS2012"
+registers = ["r31", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8293A860
+name = "Nhl13YearCmpS2012"
+registers = ["r31", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8293A874
+name = "Nhl13YearSub"
+registers = ["r6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8293A918
+name = "Nhl13YearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8293A9EC
+name = "Nhl13YearSub"
+registers = ["r6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8293B1D8
+name = "Nhl13YearSub"
+registers = ["r28"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8293C7B0
+name = "Nhl13YearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8293E5A4
+name = "Nhl13YearCmpS2012"
+registers = ["r30", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8293E5D8
+name = "Nhl13YearCmpS2012"
+registers = ["r30", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8293E5F0
+name = "Nhl13YearSub"
+registers = ["r6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8293E6A8
+name = "Nhl13YearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8293E8AC
+name = "Nhl13YearSub"
+registers = ["r6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8294561C
+name = "Nhl13YearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82958D14
+name = "Nhl13YearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82985D00
+name = "Nhl13YearCmpU2004"
+registers = ["r18", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8298BA34
+name = "Nhl13YearAdd"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8298E400
+name = "Nhl13YearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8299DE28
+name = "Nhl13YearAdd"
+registers = ["r6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8299DE44
+name = "Nhl13YearCmpS2012"
+registers = ["r3", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8299DE74
+name = "Nhl13YearAdd"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82D39774
+name = "Nhl13YearSub"
+registers = ["r28"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82D5872C
+name = "Nhl13YearAdd"
+registers = ["r31"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82D58734
+name = "Nhl13YearCmpS2012"
+registers = ["r26", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82D58740
+name = "Nhl13YearSub"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82D58790
+name = "Nhl13YearCmpS2012"
+registers = ["r24", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82D587E0
+name = "Nhl13YearCmpS2012"
+registers = ["r30", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82DA6C88
+name = "Nhl13YearSub"
+registers = ["r11"]
+after_instruction = true

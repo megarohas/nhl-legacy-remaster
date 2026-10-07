@@ -30,6 +30,8 @@
 | [tools/ppcdis.py](tools/ppcdis.py) | Мини-дизассемблер PowerPC для разведки по образу |
 | [tools/tdb_read.py](tools/tdb_read.py) | Читалка баз EA TDB v6 (только чтение) |
 | [tools/tdb.py](tools/tdb.py) | Запись полей TDB, пересчёт CRC базы и обёртки сейва |
+| [tools/locdb.py](tools/locdb.py) | Строки локализации (Хаффман): выгрузка и правка |
+| [tools/year_hooks.py](tools/year_hooks.py) | Поиск годов-констант в коде и врезки сдвига года для порта |
 | `game/` | Локальные файлы игры, не в git |
 | `ref/` | Клоны репозиториев puckhead73 для справки, не в git |
 
@@ -43,7 +45,7 @@
 - [x] `nhlng.db` найдена (`cache.big` → `db/`), побайтово равна анкерной из nhl-modding-studio
 - [x] Апдейт TU2 разобран: `default.xexp` + `patch.big` (интерфейс, сценарии; базы нет)
 - [x] Стартовый год: в конфигах нет; год лиги — в сейве (`leaguestates`), но 2012 зашит в код ~88 функций
-- [ ] Возраст во франшизе 2017 года: от года лиги или от 2012 (проверка на приставке)
+- [x] Возраст во франшизе считается от года лиги (подтвердил пользователь по своей франшизе 2017 года)
 - [x] Правка сейвов: запись TDB с CRC, перехеширование STFS ([docs/save-editing.md](docs/save-editing.md))
 - [x] Тулчейн порта: VS 2022 Build Tools, LLVM 23, CMake, Ninja, Vulkan SDK, ReXGlue SDK 0.10.0
 - [x] Порт: первая генерация кода ReXGlue (679 файлов, 5 нераспознанных переходов) — [docs/port.md](docs/port.md)
