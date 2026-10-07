@@ -4,6 +4,13 @@
 
 # Рендер: плагин rexgpu-xenos (D3D12 на Windows).
 gpu_plugin = "xenos"
+# Флаги по опыту NHL 12/14/Legacy и 3 on 3 (ресерч 07.10.2026): с путём RTV матч у
+# соседей рисовался чёрным; readback_resolve=full — формы игроков (и в Xenia для
+# NHL 13); EA-игры читают нулевую страницу; недопустимые fetch-константы — как у Legacy.
+render_target_path_d3d12 = "rov"
+readback_resolve = "full"
+protect_zero = false
+gpu_allow_invalid_fetch_constants = true
 
 # Файлы игры: распакованная установка с диска (tools/svod.py).
 game_data_root = "S:/Claude/megarohas_nhl13/game/extracted/disc"

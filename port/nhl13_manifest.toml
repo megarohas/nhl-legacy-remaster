@@ -8,7 +8,7 @@ game_root = "../game/extracted/disc"
 [entrypoint]
 file_path = "../game/extracted/disc/default.xex"
 out_directory_path = "generated/default"
-includes = ["nhl13_functions.toml"]
+includes = ["nhl13_functions.toml", "nhl13_switch_tables.toml"]
 # Пара setjmp/longjmp CRT EA (как в nhl-legacy-recomp, найдена по тем же признакам).
 # setjmp 0x82C9D9B0: проверка слота-хука 0x83B29DC0 (статически 0, в BSS) — lis/lwz/
 # cmpwi/mtctr/bnectr — затем сохранение f14-f31, r13-r31, VMX; без явного адреса
