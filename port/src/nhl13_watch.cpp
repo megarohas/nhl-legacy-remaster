@@ -12,6 +12,9 @@
 // Чужие исключения уходят дальше (MMIO и др. — рантайму). Пока страница открыта для
 // одного потока, обращения других потоков могут проскочить — для разведки это
 // допустимо. Гостевая память порта — одно отображение с базой 0x100000000.
+//
+// Программные страницы (Nhl13WatchPage, сторож кучи): до 8 страниц на ходу, в журнал — только
+// записи, для которых фильтр вызывающего вернул true (сторож кучи: запись в свободный блок).
 
 #if defined(_WIN32)
 
@@ -60,6 +63,22 @@ PVOID g_veh = nullptr;
 
 thread_local uintptr_t t_pending[4] = {};
 
+// Программные страницы (хост-адреса), их исходная защита и фильтр записей (гостевой адрес).
+constexpr int kProgPages = 8;
+std::atomic<uintptr_t> g_prog_page[kProgPages];
+std::atomic<DWORD> g_prog_protect[kProgPages];
+std::atomic<bool (*)(uint32_t)> g_prog_filter{nullptr};
+std::mutex g_prog_mutex;
+
+int ProgSlot(uintptr_t page) {
+  for (int i = 0; i < kProgPages; ++i) {
+    if (g_prog_page[i].load(std::memory_order_acquire) == page) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 std::wstring ExeDir() {
   wchar_t exe[MAX_PATH];
   GetModuleFileNameW(nullptr, exe, MAX_PATH);
@@ -82,8 +101,12 @@ LONG CALLBACK WatchHandler(EXCEPTION_POINTERS* ep) {
     bool ours = false;
     for (uintptr_t& page : t_pending) {
       if (page) {
-        DWORD old;
-        VirtualProtect(reinterpret_cast<void*>(page), kPage, PAGE_NOACCESS, &old);
+        const bool still = ProgSlot(page) >= 0 ||
+                           (g_armed.load(std::memory_order_acquire) && OriginalProtect(page));
+        if (still) {
+          DWORD old;
+          VirtualProtect(reinterpret_cast<void*>(page), kPage, PAGE_NOACCESS, &old);
+        }
         page = 0;
         ours = true;
       }
@@ -94,17 +117,34 @@ LONG CALLBACK WatchHandler(EXCEPTION_POINTERS* ep) {
     ep->ContextRecord->EFlags &= ~0x100u;
     return EXCEPTION_CONTINUE_EXECUTION;
   }
-  if (code != EXCEPTION_ACCESS_VIOLATION || !g_armed.load(std::memory_order_acquire) ||
-      ep->ExceptionRecord->NumberParameters < 2) {
+  if (code != EXCEPTION_ACCESS_VIOLATION || ep->ExceptionRecord->NumberParameters < 2) {
     return EXCEPTION_CONTINUE_SEARCH;
   }
   const uintptr_t addr = ep->ExceptionRecord->ExceptionInformation[1];
   const uintptr_t page = addr & ~(kPage - 1);
-  const DWORD orig = OriginalProtect(page);
+  const int slot = ProgSlot(page);
+  const bool prog = slot >= 0;
+  const DWORD orig = prog ? g_prog_protect[slot].load(std::memory_order_acquire)
+                          : (g_armed.load(std::memory_order_acquire) ? OriginalProtect(page) : 0);
   if (!orig) {
     return EXCEPTION_CONTINUE_SEARCH;
   }
-  for (const Range& r : g_ranges) {
+  bool (*filter)(uint32_t) = g_prog_filter.load(std::memory_order_acquire);
+  const bool prog_hit = prog && ep->ExceptionRecord->ExceptionInformation[0] == 1 && filter &&
+                        filter(static_cast<uint32_t>(addr - kGuestBase));
+  if (prog_hit) {
+    const uint64_t i = g_write_index.fetch_add(1, std::memory_order_relaxed);
+    Event& e = g_ring[i % kRing];
+    if (!e.ready.load(std::memory_order_acquire)) {
+      e.tid = GetCurrentThreadId();
+      e.addr = addr;
+      e.write = 1;
+      e.n = Nhl13CaptureStack(*ep->ContextRecord, e.frames, kFrames);
+      e.ready.store(1, std::memory_order_release);
+    }
+  }
+  for (size_t k = 0; !prog && k < g_ranges.size(); ++k) {
+    const Range& r = g_ranges[k];
     if (addr >= r.lo && addr < r.hi) {
       const uint64_t i = g_write_index.fetch_add(1, std::memory_order_relaxed);
       Event& e = g_ring[i % kRing];
@@ -208,6 +248,9 @@ void WatchThread() {
   FILE* log = nullptr;
   for (;;) {
     Sleep(200);
+    if (!log && g_write_index.load(std::memory_order_acquire) > read_index) {
+      log = _wfopen((dir + L"nhl13_watch.log").c_str(), L"a");
+    }
     if (GetFileAttributesW(flag.c_str()) != INVALID_FILE_ATTRIBUTES) {
       if (!log) {
         log = _wfopen((dir + L"nhl13_watch.log").c_str(), L"a");
@@ -274,8 +317,43 @@ void Nhl13StartWatcher() {
   std::thread(WatchThread).detach();
 }
 
+bool Nhl13WatchPage(uint32_t guest, bool (*filter)(uint32_t)) {
+  if (*reinterpret_cast<const uint16_t*>(kGuestBase + 0x82000000) != 0x5A4D) {
+    return false;
+  }
+  const uintptr_t page = (kGuestBase + guest) & ~(kPage - 1);
+  std::lock_guard<std::mutex> lock(g_prog_mutex);
+  if (ProgSlot(page) >= 0) {
+    return true;
+  }
+  if (std::any_of(g_pages.begin(), g_pages.end(), [&](auto& x) { return x.first == page; })) {
+    return false;  // страница уже под сторожем по флагу
+  }
+  const int slot = ProgSlot(0);
+  if (slot < 0) {
+    return false;
+  }
+  MEMORY_BASIC_INFORMATION mbi{};
+  VirtualQuery(reinterpret_cast<void*>(page), &mbi, sizeof(mbi));
+  if (mbi.Protect != PAGE_READWRITE) {
+    return false;
+  }
+  if (!g_veh) {
+    g_veh = AddVectoredExceptionHandler(1, WatchHandler);
+  }
+  g_prog_filter.store(filter, std::memory_order_release);
+  g_prog_protect[slot].store(mbi.Protect, std::memory_order_release);
+  g_prog_page[slot].store(page, std::memory_order_release);
+  DWORD old;
+  VirtualProtect(reinterpret_cast<void*>(page), kPage, PAGE_NOACCESS, &old);
+  return true;
+}
+
 #else
 
 void Nhl13StartWatcher() {}
+bool Nhl13WatchPage(uint32_t, bool (*)(uint32_t)) {
+  return false;
+}
 
 #endif

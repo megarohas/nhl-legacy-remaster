@@ -13,5 +13,7 @@ std::mutex& Nhl13DbghelpMutex();                              // dbghelp не п
 void Nhl13EnsureSymbols();                                    // SymInitialize один раз
 void Nhl13WriteFrame(FILE* f, int i, DWORD64 addr);           // «#NN модуль!функция+смещение (файл:строка)»
 int Nhl13CaptureStack(CONTEXT ctx, DWORD64* out, int max);    // раскрутка без выделения памяти
+void Nhl13WriteSnapshot(const char* reason);                  // слепок процесса в папку dumps (игра замирает)
+bool Nhl13WatchPage(uint32_t guest, bool (*filter)(uint32_t)); // записи в страницу (фильтр) — в nhl13_watch.log
 
 #endif

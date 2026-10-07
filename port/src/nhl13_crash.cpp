@@ -362,6 +362,10 @@ int Nhl13CaptureStack(CONTEXT ctx, DWORD64* out, int max) {
   return CaptureStack(ctx, out, max);
 }
 
+void Nhl13WriteSnapshot(const char* reason) {
+  WriteSnapshot(reason, nullptr);
+}
+
 // Повторная установка после настройки рантайма (на случай, если SDK или SDL
 // поставили свой фильтр) и запуск наблюдателя за флагом снимка стеков.
 void Nhl13InstallCrashReporter() {
