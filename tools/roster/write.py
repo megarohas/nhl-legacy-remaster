@@ -13,8 +13,10 @@
    амплуа, номер, команда и права (proteam: у команды 31 — Вегаса — 0, не влезает в 5 бит),
    драфт, дебют, игры в НХЛ, новичок. Контракт — заглушка по OVR и возрасту (следующий этап).
 3. Рейтинги NHL 27 (ratings.py) и стиль.
-4. exhibitionrostertable целиком пересобирается: составы 32 клубов НХЛ со звеньями (lines.py) и
-   буквами, место каждого ушедшего из клуба АХЛ/Европы/юниоров занимает ушедший из НХЛ игрок
+4. exhibitionrostertable целиком пересобирается: составы 32 клубов НХЛ со звеньями и буквами —
+   звенья по реальным сочетаниям (lines.json этапа lines, DailyFaceoff; lines.build_real: тройки,
+   пары, вратари, PP, PK как в источнике, пропуски, овертайм, буллиты и лишние — по рейтингу), у
+   клуба без них — по рейтингу (lines.build); место каждого ушедшего из клуба АХЛ/Европы/юниоров занимает ушедший из НХЛ игрок
    того же амплуа — с номером, звеньями, буквой и условиями места (контракт, права, юниорский
    клуб) прежнего, так что размеры и звенья этих команд не меняются; key = команда × 40 +
    место, внутри команды — по возрастанию playerindex (как в исходной базе). Ушедшие из НХЛ,
@@ -35,7 +37,7 @@ from tdb import Tdb
 from . import lines as lines_mod
 from .codes import NONE, country_code, state_code
 from .common import SEASON, SEASON_YEAR, SLOT_TEAM, fit_utf8, norm, read_json, team_slot, write_json
-from .dbview import (B, CLUBS, F, FLAGS, G, LINK_LIMIT, NHL, P, POS_CODE, R, S, SPECIAL, View)
+from .dbview import (B, CLUBS, F, FLAGS, G, LINK_LIMIT, NHL, P, POS_CODE, POS_NAME, R, S, SPECIAL, View)
 from .match import load_db
 from .ratings import BASE, SK_BIAS, TRAITS, Model, age, clamp_rating
 
@@ -54,8 +56,10 @@ MAX_PER_TEAM = 40
 
 
 class Writer:
-    def __init__(self, paths, log=print):
+    def __init__(self, paths, log=print, real_lines=True):
         self.paths, self.log = paths, log
+        # реальные сочетания звеньев (этап lines); нет файла или --rating-lines — всё по рейтингу
+        self.real = ((read_json(paths.lines) or {}).get('teams') or {}) if real_lines else {}
         self.db, self.meta_path = load_db(paths)
         self.orig = Tdb(bytes(self.db.d), self.db.meta)      # исходные значения (db меняется по ходу)
         self.v = View(self.db)
@@ -66,6 +70,10 @@ class Writer:
         self.players = data['players']
         self.mt = mt['players']
         self.registry = read_json(paths.registry, {}) or {}
+        if not self.registry and os.path.exists(paths.registry_main):
+            # своя папка (--work) без таблицы artid: те же номера, что в основной (только чтение)
+            self.registry = read_json(paths.registry_main, {}) or {}
+            log(f'write: artid новых — по {paths.registry_main}')
         self.model = Model(self.v, self.players)
         self.safe = {ch for r in range(self.v.nbio) for f in ('firstname', 'lastname', 'birthplace')
                      for ch in self.v.s(f, r) if ord(ch) > 127}
@@ -349,6 +357,33 @@ class Writer:
         out.update({p['nhl_id']: 2 for p in alts})
         return out
 
+    def team_lines(self, team, tp):
+        """Звенья клуба: по реальным сочетаниям (lines.json), если источник дал хотя бы
+        lines.MIN_REAL игроков клуба в тройки, пары и ворота, иначе по рейтингу."""
+        abbr = SLOT_TEAM[team]
+        lp = [{'key': p['nhl_id'], 'pos': p['pos'], 'ovr': p['_ovr'], 'shoots': p.get('shoots'), 'attrs': p['_attrs'],
+               'out': bool(p.get('omitted'))} for p in tp]
+        src = self.real.get(abbr)
+        info = {'source': 'rating'}
+        if src:
+            real = {k: src.get(k) or [] for k in ('f', 'd', 'g', 'pp', 'pk', 'extra_d')}
+            real['injured'] = [i['nhl_id'] for i in src.get('injured') or [] if i.get('nhl_id')]
+            n = lines_mod.real_count(lp, real)
+            if n >= lines_mod.MIN_REAL:
+                keys, dressed, how = lines_mod.build_real(lp, real)
+                name = {p['nhl_id']: f"{p['first']} {p['last']}" for p in tp}
+                info = {'source': 'dailyfaceoff', 'updated': src.get('updated'), 'by': src.get('source'),
+                        'url': src.get('source_url'), 'from_source': n,
+                        'filled': [{'slot': s, 'nhl_id': k, 'name': name[k]} for s, k in how['filled']],
+                        'dropped': [{'nhl_id': k, 'name': name[k], 'where': w, 'why': why} for k, w, why in how['dropped']]}
+                self.lines_info[abbr] = info
+                return keys, dressed
+            info = {'source': 'rating', 'why': f'источник дал {n} игроков клуба в тройки, пары и ворота '
+                                               f'(нужно {lines_mod.MIN_REAL})'}
+            self.log(f"  {abbr}: звенья по рейтингу — {info['why']}")
+        self.lines_info[abbr] = info
+        return lines_mod.build(lp)
+
     def rebuild_entries(self):
         v, db = self.v, self.db
         new_rows = set(self.p_of_row)
@@ -434,13 +469,12 @@ class Writer:
         by_team = defaultdict(list)
         for p in self.players:
             by_team[p['slot']].append(p)
-        self.lines_of = {}
+        self.lines_of, self.lines_info = {}, {}
         for team in sorted(by_team):
             tp = by_team[team]
             nums = self.numbers(tp)
             letters = self.letters(tp)
-            keys, dressed = lines_mod.build([{'key': p['nhl_id'], 'pos': p['pos'], 'ovr': p['_ovr'],
-                                              'shoots': p.get('shoots'), 'attrs': p['_attrs']} for p in tp])
+            keys, dressed = self.team_lines(team, tp)
             holder = defaultdict(set)
             for slot, k in keys.items():
                 holder[k].add(slot)
@@ -554,6 +588,18 @@ class Writer:
                 n = sum(e[f] for e in te)
                 if n != 1:
                     bad.append(f'команда {team}: место {f} у {n} игроков')
+            # амплуа по местам: вратари — только g1/g2; у звеньев из источника — как в исходной базе
+            strict = (self.lines_info.get(SLOT_TEAM[team]) or {}).get('source', 'rating') != 'rating'
+            for f in FLAGS:
+                for e in (e for e in te if e[f]):
+                    r = v2.row_of_gid.get(v2.link_gid.get(e['playerindex']))
+                    if r is None:
+                        continue
+                    pos = POS_NAME[v2.g('position', r)]
+                    kind = lines_mod.slot_kind(f)
+                    got = 'G' if pos == 'G' else 'D' if pos == 'D' else 'F'
+                    if (kind == 'G') != (got == 'G') or (strict and kind not in (None, 'G') and kind != got):
+                        bad.append(f'команда {team}: на месте {f} {v2.name(r)} ({pos})')
             dressed = [e for e in te if any(e[f] for f in FLAGS)]
             if len(dressed) != 20 or any(e['rosterstatus'] != (e in dressed) for e in te):
                 bad.append(f'команда {team}: одетых {len(dressed)}, rosterstatus не совпадает')
@@ -601,8 +647,8 @@ class Writer:
         return bad, crc, removed
 
 
-def run(paths, log=print):
-    w = Writer(paths, log)
+def run(paths, log=print, real_lines=True):
+    w = Writer(paths, log, real_lines)
     bad, crc, removed = w.run()
     if crc:
         raise SystemExit(f'CRC не сходятся: {crc[:3]}')
@@ -620,6 +666,7 @@ def run(paths, log=print):
                                           'special': [t for t in w.v.teams_of[r] if t in SPECIAL]} for r in w.teamless],
         'new_links': w.new_links, 'stats_removed': removed, 'problems': bad,
         'lines': {SLOT_TEAM[t]: k for t, k in w.lines_of.items()},
+        'lines_info': w.lines_info,
         'rows': {'roster': w.db.by_name[R]['rows'], 'free_agents': w.db.by_name[F]['rows'],
                  'links': w.db.by_name[P]['rows']},
         'model': {'offset': w.model.offset, 'depth': w.model.depth},
@@ -629,6 +676,9 @@ def run(paths, log=print):
     log(f'write: {len(w.out)} игроков ({len(w.out) - n_new} сопоставлено, {n_new} в строках доноров, '
         f'без места {len(w.no_room)}); составов {w.db.by_name[R]["rows"]} записей, свободных агентов '
         f'{w.db.by_name[F]["rows"]}, новых связей {len(w.new_links)} -> {paths.db_out}')
+    real = [a for a, i in w.lines_info.items() if i['source'] != 'rating']
+    log(f'  звенья: по реальным сочетаниям {len(real)} клубов (достроено мест '
+        f"{sum(len(w.lines_info[a]['filled']) for a in real)}), по рейтингу {len(w.lines_info) - len(real)}")
     if bad:
         log(f'  проверки: {len(bad)} проблем, первые: {bad[:5]}')
     else:
