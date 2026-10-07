@@ -13,7 +13,8 @@
 ## Запуск
 
 ```bash
-python tools/roster fetch     # API → game/work/roster-cache/ (~2000 запросов, ~45 мин в первый раз)
+python tools/roster fetch     # API → game/work/roster-cache/ (~2000 запросов, около часа в первый раз;
+                              # части можно гонять параллельно: --only nhl,ea,wiki и --only nhlratings)
 python tools/roster build     # кэш → game/work/roster/players.json
 python tools/roster match     # players.json + база → match.json
 python tools/roster write     # → game/work/roster/nhlng.db (+ nhlng-meta.xml рядом)
@@ -242,3 +243,11 @@ C + 2A или 3A, номера без повторов; каждый игрок 
   0,96 у вратарей; пересчитывает ли игра OVR на экране — проверить).
 - Буквы и номера на сегодня (7.10.2026) — составы меняются каждый день; прогон с
   `fetch --refresh` обновит кэш.
+- Во входной базе остались следы проверки мода: у Кросби фамилия «Megarohas» (сопоставляется
+  по artid и дате рождения, имя возвращается из API), у PIT `fullname` «Megarohas Penguins»
+  (поле команды, интерфейс его не показывает — конвейер команды не трогает).
+- Результат прогона 7.10.2026: 798 игроков, 146 сопоставлено (74 по artid), 652 новых (443 в
+  строках ушедших из НХЛ, 174 — свободных агентов 2012 года, 35 — игроков без команды), без
+  места 0; рейтинги: EA 298, nhlratings.net с атрибутами 91, только OVR 353, оценка 56;
+  `exhibitionrostertable` 5446 → 5463 записей, свободных агентов 183 → 9. Повторный `write`
+  с тем же кэшем даёт ту же базу байт в байт.
