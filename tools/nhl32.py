@@ -32,7 +32,6 @@ LIIGA_REL = {86 - 74, 87 - 74}     # их номера внутри финско
 # Поля-ссылки на команду: (таблица, поле, кодировка). 'zero' — номер строки,
 # 'plus1' — номер + 1 (0 = нет команды). Проверено по известным игрокам и командам.
 TEAM_FIELDS = [
-    ('exhibitionrostertable', 'team', 'zero'),
     ('stockteamjerseys', 'teamid', 'zero'),
     ('stockteamequipmenttable', 'team', 'zero'),
     ('stockretirednumbertable', 'team', 'zero'),
@@ -50,6 +49,9 @@ TEAM_FIELDS = [
     ('exhibitiondraftpick', 'owner', 'plus1'),
 ]
 PER_TEAM_ROWS = ['exhibitionteams', 'exhibitionteamstrategies']
+# Составы: team с нуля, key = team · 40 + место в составе, таблица отсортирована по key
+# (нашёл агент конвейера базы; по puckpeak иначе ломается экран «Состав»).
+ROSTER, ROSTER_SLOTS = 'exhibitionrostertable', 40
 
 WEST, EAST = 1, 2
 # divisiongroup: 3 Northwest, 4 Pacific, 5 Central (Запад); 6 Southeast, 7 Atlantic,
@@ -102,7 +104,7 @@ def move_teams(db):
     for a, b in SWAP.items():
         db.set('exhibitionteams', 'index', a, a)
         db.set('exhibitionteams', 'index', b, b)
-    report = {}
+    report = {f'{ROSTER}.team': move_roster(db)}
     for table, field, enc in TEAM_FIELDS:
         m = swap_map(enc)
         n = 0
@@ -113,6 +115,24 @@ def move_teams(db):
                 n += 1
         report[f'{table}.{field}'] = n
     return report
+
+def move_roster(db):
+    """Команда и ключ строк состава по обмену, затем сортировка по ключу."""
+    m = swap_map('zero')
+    rows, moved = [], 0
+    for r in range(db.by_name[ROSTER]['rows']):
+        team, key = db.get(ROSTER, 'team', r), db.get(ROSTER, 'key', r)
+        slot = key - team * ROSTER_SLOTS
+        assert 0 <= slot < ROSTER_SLOTS, (r, team, key)
+        if team in m:
+            db.set(ROSTER, 'team', r, m[team])
+            db.set(ROSTER, 'key', r, m[team] * ROSTER_SLOTS + slot)
+            moved += 1
+        rows.append((db.get(ROSTER, 'key', r), db.record(ROSTER, r)))
+    rows.sort(key=lambda x: x[0])
+    for r, (_, raw) in enumerate(rows):
+        db.put_record(ROSTER, r, raw)
+    return moved
 
 def realign(db):
     seen = sorted(t for teams in DIVISIONS.values() for t in teams)
