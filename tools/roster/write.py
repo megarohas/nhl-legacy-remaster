@@ -395,15 +395,16 @@ class Writer:
         self.displaced = list(displaced)
         # места ушедших в НХЛ из клубов АХЛ/Европы/юниоров — ушедшим из НХЛ того же амплуа
         refill = []
+        orig_name = lambda r: f"{self.orig.get_string(B, 'firstname', r)} {self.orig.get_string(B, 'lastname', r)}"
         for e in sorted(vacancies, key=lambda e: (e['team'], e['playerindex'])):
             r_old = row_of_link(e['playerindex'])
-            pos = v.g('position', r_old)
+            pos = self.orig.get(B, 'position', r_old)      # амплуа того, кто занимал место (до правок)
             same_kind = [r for r in displaced if v.is_goalie(r) == (pos == 4)
                          and (v.g('position', r) == 3) == (pos == 3)]
             if not same_kind:
                 same_kind = [r for r in displaced if v.is_goalie(r) == (pos == 4)]
             if not same_kind:
-                self.events.append({'team': e['team'], 'what': 'место осталось пустым', 'player': v.name(r_old)})
+                self.events.append({'team': e['team'], 'what': 'место осталось пустым', 'player': orig_name(r_old)})
                 continue
             same_kind.sort(key=lambda r: (v.g('position', r) != pos, -v.birth(r)[0], r))
             r = same_kind[0]
@@ -418,7 +419,7 @@ class Writer:
             for f in SLOT_TERMS:            # условия места — как у ушедшего (по исходной базе)
                 db.set(B, f, r, self.orig.get(B, f, r_old))
             self.events.append({'team': e['team'], 'what': 'место ушедшего в НХЛ', 'player': v.name(r),
-                                'instead': v.name(r_old)})
+                                'instead': orig_name(r_old)})
         # остальные ушедшие из НХЛ — без клуба и контракта. Как в исходной базе: у игрока без клуба,
         # но в сборной (легендах и т. п.), `team` = эта команда + 1, у совсем без команды — 0
         for r in displaced:
