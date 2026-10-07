@@ -8,12 +8,13 @@
 nhlratings.net — по фамилии и дате рождения. Капитаны — из Wikipedia.
 Места под следующие этапы — поля `photo`, `contract` (null), `ea.avatar`.
 """
+import os
 import time
 from collections import defaultdict
 from difflib import SequenceMatcher
 
 from . import sources
-from .common import SEASON, SEASON_YEAR, TEAM_SLOT, norm, write_json
+from .common import SEASON, SEASON_YEAR, TEAM_SLOT, norm, read_json, write_json
 
 POS = {'C': 'C', 'L': 'L', 'R': 'R', 'D': 'D', 'G': 'G'}
 
@@ -91,7 +92,7 @@ def base_record(abbr, e, land, bio):
         'pro_gp': pro,
         'scoring': _scoring(land),
         'rookie': is_rookie((y, m, d), gp),
-        'landing': bool(land),
+        'landing': bool(land), 'omitted': False,
         'photo': e.get('headshot'),        # следующий этап: портреты
         'contract': None,                  # следующий этап: контракты (CapWages и т. п.)
         'letter': None, 'ea': None, 'nhlratings': None, 'rating': None,
@@ -120,6 +121,9 @@ def attach_ea(players, ea):
         cands = [p for p in by_name.get(norm(q['first'] + q['last']), []) if (p['pos'] == 'G') == goalie]
         if len(cands) > 1:
             cands = [p for p in cands if p['team'] == q['team']] or cands
+        if len(cands) > 1:        # тёзки в одном клубе (два Элиаса Петтерссона в «Ванкувере»): амплуа, номер
+            cands = [p for p in cands if (p['pos'] == 'D') == (q['pos'] == 'D')] or cands
+            cands = [p for p in cands if p['num'] == q['num']] or cands
         if not cands:     # другое написание имени: та же фамилия, клуб и номер или похожее имя
             cands = [p for p in by_last.get(norm(q['last']), []) if (p['pos'] == 'G') == goalie
                      and p['team'] == q['team'] and (p['num'] == q['num'] or same_first(p['first'], q['first']))]
@@ -203,6 +207,16 @@ def choose_rating(p):
     return {'source': 'none', 'ovr': None, 'attrs': attrs, 'style': style}
 
 
+def entry_from_landing(land):
+    """Запись «как в составе» из карточки — для игроков вне /roster/current."""
+    return {'id': land['playerId'], 'firstName': land['firstName'], 'lastName': land['lastName'],
+            'positionCode': land.get('position'), 'shootsCatches': land.get('shootsCatches'),
+            'sweaterNumber': land.get('sweaterNumber'), 'heightInInches': land.get('heightInInches'),
+            'weightInPounds': land.get('weightInPounds'), 'birthDate': land['birthDate'],
+            'birthCity': land.get('birthCity'), 'birthStateProvince': land.get('birthStateProvince'),
+            'birthCountry': land.get('birthCountry'), 'headshot': land.get('headshot')}
+
+
 def run(paths, log=print):
     cache = paths.cache
     rosters = sources.nhl_rosters(cache)
@@ -214,6 +228,17 @@ def run(paths, log=print):
             if not land:
                 no_landing.append(e['id'])
             players.append(base_record(abbr, e, land, bios.get(e['id'])))
+    on = {p['nhl_id'] for p in players}
+    extras = []
+    for pid in read_json(os.path.join(cache, 'nhl', 'extras.json'), []) or []:
+        land = sources.nhl_landing(cache, pid) or {}
+        abbr = land.get('currentTeamAbbrev')
+        if pid in on or not land.get('isActive') or abbr not in TEAM_SLOT or land.get('position') not in POS:
+            continue
+        p = base_record(abbr, entry_from_landing(land), land, bios.get(pid))
+        p['omitted'] = True       # нет в /roster/current — скорее всего травмирован
+        players.append(p)
+        extras.append(f"{abbr} {p['first']} {p['last']}")
     dup = defaultdict(list)
     for p in players:
         dup[p['nhl_id']].append(p['team'])
@@ -231,17 +256,20 @@ def run(paths, log=print):
         by_src[p['rating']['source']] += 1
     meta = {
         'season': SEASON, 'generated': time.strftime('%Y-%m-%d %H:%M:%S'),
-        'counts': {'players': len(players), 'no_landing': len(no_landing), 'ea_top300': len(ea),
+        'counts': {'players': len(players), 'omitted_added': len(extras), 'no_landing': len(no_landing),
+                   'ea_top300': len(ea),
                    'ea_matched': len(ea) - len(ea_unmatched), 'nhlratings_pages': len(nr),
                    'nhlratings_matched': nr_used, 'captains_teams': len(caps), 'letters_found': cap_found,
                    'rating_sources': dict(by_src)},
         'two_rosters': {str(k): v for k, v in dup.items() if len(v) > 1},
+        'omitted_added': extras,
         'ea_unmatched': ea_unmatched, 'letters_unmatched': cap_miss, 'no_landing': no_landing,
     }
     players.sort(key=lambda p: (p['slot'], {'C': 0, 'L': 1, 'R': 2, 'D': 3, 'G': 4}[p['pos']], p['last'], p['first']))
     write_json(paths.players, {'meta': meta, 'players': players})
     c = meta['counts']
-    log(f"build: {c['players']} игроков 32 клубов; EA {c['ea_matched']}/{c['ea_top300']}, nhlratings.net "
+    log(f"build: {c['players']} игроков 32 клубов (из них вне /roster/current {c['omitted_added']}); "
+        f"EA {c['ea_matched']}/{c['ea_top300']}, nhlratings.net "
         f"{c['nhlratings_matched']}; рейтинги {dict(by_src)}; буквы {cap_found} ({len(caps)} клубов) -> {paths.players}")
     if no_landing:
         log(f'  без карточки landing: {len(no_landing)} (fetch не закончен?)')

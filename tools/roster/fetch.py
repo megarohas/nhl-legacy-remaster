@@ -3,6 +3,8 @@
 Источники (только GET, пауза ≥ 1 с на хост, повтор на 429/5xx):
 - api-web.nhle.com: `/v1/roster/{TEAM}/current` (32 клуба), `/v1/player/{id}/landing` по
   каждому игроку составов (биография, драфт, статистика по сезонам);
+- search.d3.nhle.com: все активные игроки одним запросом — найти тех, кого состав не
+  показывает (травмированные), см. nhl_extras;
 - api.nhle.com/stats/rest: `{skater,goalie}/bios` за 2025/26 и 2026/27 — гражданство
   (`nationalityCode`) и дебютный сезон;
 - ea.com/games/nhl/ratings?page=1…6 — топ-300 NHL 27 с 40 атрибутами и ID EA;
@@ -18,6 +20,8 @@ from .common import Http, SEASON, SLOT_TEAM, TEAM_SLOT, write_json
 
 NHL = 'https://api-web.nhle.com/v1'
 STATS = 'https://api.nhle.com/stats/rest/en'
+SEARCH_ALL = 'https://search.d3.nhle.com/api/v1/search/player?culture=en-us&limit=10000&q=*&active=true'
+EXTRA_GP = 40
 EA = 'https://www.ea.com/games/nhl/ratings'
 NR = 'https://www.nhlratings.net/'
 WIKI_CAPTAINS = ('https://en.wikipedia.org/w/index.php?title=List_of_current_NHL_captains_and_alternate_captains'
@@ -73,6 +77,32 @@ def nhl_landing(h, ids, log):
     log(f'NHL: карточек {len(ids)}, скачано сейчас {done}')
 
 
+def nhl_extras(h, rosters, log):
+    """Игроки, которых `/roster/current` не показывает (травмированные): в поиске
+    search.d3 (все активные одним запросом) у них клуб НХЛ, а в составе их нет. Берём тех, кто
+    сыграл в прошлом сезоне не меньше 40 игр в НХЛ, или кого EA в топ-300 числит за этим клубом;
+    их список — nhl/extras.json, карточки — как у всех."""
+    from . import sources
+    from .common import norm, read_json
+    found = h.json(SEARCH_ALL, 'nhl/search-active.json') or []
+    on = set(roster_ids(rosters))
+    gp = {}
+    for kind in ('skater', 'goalie'):
+        d = read_json(h.path(f'nhl/stats/{kind}-bios-{SEASON - 10001}.json')) or {}
+        for r in d.get('data') or []:
+            gp[r['playerId']] = r.get('gamesPlayed') or 0
+    ea = {(norm(q['first'] + q['last']), q['team']) for q in sources.ea_players(h.cache)}
+    ids = []
+    for x in found:
+        pid, team = int(x['playerId']), x.get('teamAbbrev')
+        if team in TEAM_SLOT and pid not in on and (gp.get(pid, 0) >= EXTRA_GP or (norm(x.get('name')), team) in ea):
+            ids.append(pid)
+    write_json(h.path('nhl/extras.json'), sorted(ids))
+    for pid in sorted(ids):
+        h.json(f'{NHL}/player/{pid}/landing', f'nhl/landing/{pid}.json')
+    log(f'NHL: вне /roster/current, но с клубом НХЛ (травмы): {len(ids)}')
+
+
 def nhl_bios(h, log):
     for kind in ('skater', 'goalie'):
         for season in (SEASON - 10001, SEASON):
@@ -126,6 +156,8 @@ def run(paths, parts=None, pause=1.0, refresh=False, log=print):
         nhl_bios(h, log)
     if 'ea' in parts:
         ea_ratings(h, log)
+    if 'nhl' in parts:
+        nhl_extras(h, rosters, log)
     if 'wiki' in parts:
         wiki(h, log)
     if 'nhlratings' in parts:
