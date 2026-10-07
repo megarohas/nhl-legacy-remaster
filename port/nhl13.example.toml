@@ -12,6 +12,12 @@ readback_resolve = "full"
 protect_zero = false
 gpu_allow_invalid_fetch_constants = true
 
+# Ввод через XInput, а не SDL: геймпад у пользователя — DualSense через DS4Windows
+# (виртуальный Xbox 360). С SDL лог полон циклов «отключён/подключён», а после
+# подмены DualSense → Xbox 360 процесс упал с повреждением кучи (0xC0000374) —
+# похоже на гонку в InputSystem SDK при подключении устройств (известна по 3 on 3).
+input_backend = "xinput"
+
 # Файлы игры: распакованная установка с диска (tools/svod.py).
 game_data_root = "S:/Claude/megarohas_nhl13/game/extracted/disc"
 
