@@ -1,0 +1,138 @@
+"""Строки локализации EA (nhl_<язык>.db, таблица LanguageStrings): выгрузка и правка.
+
+    python locdb.py dump DB META [FILTER]          # stringid<TAB>текст (FILTER — подстрока)
+    python locdb.py set  DB META OUT KEY=ТЕКСТ…    # правка по stringid, CRC пересчитываются
+
+Таблица типа 66: записи по 16 байт (stringid — varchar с 1-байтовой длиной,
+sourcetext — с 2-байтовой, hashid), строки лежат в пуле за записями, сжатые
+Хаффманом (nhl-modding-studio, tdb-v6-format-spec.md §3.1): в начале пула дерево —
+обход в ширину по 2 байта [index, value] (index 0 — лист с байтом value), у
+раскрытого узла правый потомок встаёт в очередь раньше левого; код: левый — 0,
+правый — 1. Строка: длина в символах (BE) + биты от старшего.
+
+Правка на месте: новый текст кодируется тем же деревом и пишется по старому
+смещению, если влезает в прежний объём (иначе ошибка). Одна строка пула может
+принадлежать нескольким ключам (дедупликация) — правка меняет их все, это выводится.
+Текст — UTF-8 (® = C2 AE).
+"""
+import struct, sys
+from collections import deque
+from tdb import Tdb
+from tdb_read import load_meta
+
+MISSING = 0xFFFFFFFF  # у ключа нет строки (29 таких в nhl_eng_us.db)
+
+class LocDb:
+    def __init__(self, data, meta):
+        self.db = Tdb(data, meta)
+        t = self.table = self.db.by_name['LanguageStrings']
+        maxr = int.from_bytes(self.db.d[t['block'] + 0x14:t['block'] + 0x16], 'big')
+        self.pool_start = t['records'] + t['reclen'] * maxr
+        order = sorted(self.db.tables, key=lambda x: x['block'])
+        i = order.index(t)
+        self.pool_end = order[i + 1]['block'] if i + 1 < len(order) else len(self.db.d) - 4
+        self.children, self.tree_size = self._parse_tree()
+        self.codes = {}
+        self._build_codes(0, '')
+
+    def _byte(self, off):
+        return self.db.d[self.pool_start + off]
+
+    def _parse_tree(self):
+        children, q, pos, next_id = {}, deque([0]), 0, 1
+        while q:
+            parent = q.popleft()
+            li, lv, ri, rv = (self._byte(pos + k) for k in range(4))
+            pos += 4
+            kids = []
+            for ix, val in ((li, lv), (ri, rv)):
+                if ix == 0:
+                    kids.append(('leaf', val))
+                else:
+                    kids.append(('node', next_id))
+                    next_id += 1
+            children[parent] = kids
+            for kind, nid in (kids[1], kids[0]):
+                if kind == 'node':
+                    q.append(nid)
+        return children, pos
+
+    def _build_codes(self, node, prefix):
+        for bit, (kind, v) in enumerate(self.children[node]):
+            if kind == 'leaf':
+                self.codes[v] = prefix + str(bit)
+            else:
+                self._build_codes(v, prefix + str(bit))
+
+    def decode_at(self, off, prefix_len):
+        n = self._byte(off) if prefix_len == 1 else (self._byte(off) << 8) | self._byte(off + 1)
+        bitpos, out = (off + prefix_len) * 8, bytearray()
+        while len(out) < n:
+            node = 0
+            while True:
+                bit = (self._byte(bitpos >> 3) >> (7 - (bitpos & 7))) & 1
+                bitpos += 1
+                kind, v = self.children[node][bit]
+                if kind == 'leaf':
+                    out.append(v)
+                    break
+                node = v
+        return bytes(out), (bitpos + 7) // 8 - off  # байты и занятый объём
+
+    def rows(self):
+        recs = self.table['records']
+        for r in range(self.table['rows']):
+            sid_off, txt_off = struct.unpack('>II', self.db.d[recs + r * 16:recs + r * 16 + 8])
+            sid = self.decode_at(sid_off, 1)[0].decode('utf-8', errors='replace')
+            yield r, sid, txt_off
+
+    def text(self, txt_off):
+        if txt_off == MISSING:
+            return ''
+        return self.decode_at(txt_off, 2)[0].decode('utf-8', errors='replace')
+
+    def set_text(self, txt_off, text):
+        if txt_off == MISSING:
+            raise ValueError('у ключа нет строки (0xFFFFFFFF) — на место не записать')
+        raw = text.encode('utf-8')
+        missing = sorted({chr(b) for b in raw if b not in self.codes})
+        if missing:
+            raise ValueError(f'символов нет в дереве Хаффмана: {missing}')
+        bits = ''.join(self.codes[b] for b in raw)
+        encoded = len(raw).to_bytes(2, 'big') + int(bits.ljust((len(bits) + 7) // 8 * 8, '0'), 2).to_bytes((len(bits) + 7) // 8, 'big')
+        old_size = self.decode_at(txt_off, 2)[1]
+        if len(encoded) > old_size:
+            raise ValueError(f'«{text}» не влезает: {len(encoded)} байт вместо {old_size}')
+        start = self.pool_start + txt_off
+        self.db.d[start:start + len(encoded)] = encoded
+
+def main():
+    cmd, db_path, meta_path = sys.argv[1:4]
+    loc = LocDb(open(db_path, 'rb').read(), load_meta(meta_path))
+    if cmd == 'dump':
+        flt = sys.argv[4] if len(sys.argv) > 4 else ''
+        for r, sid, off in loc.rows():
+            t = loc.text(off)
+            if flt in sid or flt in t:
+                print(f'{sid}\t{t}')
+        return
+    out, edits = sys.argv[4], dict(a.split('=', 1) for a in sys.argv[5:])
+    by_offset = {}
+    for r, sid, off in loc.rows():
+        by_offset.setdefault(off, []).append(sid)
+    done = set()
+    for r, sid, off in loc.rows():
+        if sid in edits and off not in done:
+            loc.set_text(off, edits[sid])
+            done.add(off)
+            others = [s for s in by_offset[off] if s != sid]
+            print(f'{sid} -> «{edits[sid]}»' + (f' (та же строка у: {", ".join(others)})' if others else ''))
+    missing = set(edits) - {sid for offs in by_offset.values() for sid in offs}
+    if missing:
+        sys.exit(f'нет ключей: {sorted(missing)}')
+    loc.db.fix()
+    open(out, 'wb').write(loc.db.d)
+    print(f'записано -> {out}')
+
+if __name__ == '__main__':
+    main()
