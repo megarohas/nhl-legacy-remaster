@@ -9,3 +9,11 @@ game_root = "../game/extracted/disc"
 file_path = "../game/extracted/disc/default.xex"
 out_directory_path = "generated/default"
 includes = ["nhl13_functions.toml"]
+# Пара setjmp/longjmp CRT EA (как в nhl-legacy-recomp, найдена по тем же признакам).
+# setjmp 0x82C9D9B0: проверка слота-хука 0x83B29DC0 (статически 0, в BSS) — lis/lwz/
+# cmpwi/mtctr/bnectr — затем сохранение f14-f31, r13-r31, VMX; без явного адреса
+# генератор считает bnectr концом функции и теряет сохранение (у Legacy это вело к
+# падению при загрузке). Тела после хука нет в .pdata. longjmp 0x82C9BCB0 (.pdata):
+# восстановление с lfd f14,0(r7).
+setjmp_address = 0x82C9D9B0
+longjmp_address = 0x82C9BCB0
