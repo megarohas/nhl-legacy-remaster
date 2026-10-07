@@ -1,7 +1,8 @@
-"""Конвейер составов НХЛ 2026/27 для nhlng.db (NHL 13): fetch → build → match → write → report.
+"""Конвейер составов НХЛ 2026/27 для nhlng.db (NHL 13): fetch → build → lines → match → write → report.
 
     python tools/roster fetch  [--only nhl,ea,nhlratings,wiki,dfo] [--refresh]  # API → game/work/roster-cache/
     python tools/roster build                       # кэш → game/work/roster/players.json
+    python tools/roster lines                       # звенья DailyFaceoff + players.json → lines.json
     python tools/roster match                       # players.json + база → match.json
     python tools/roster write  [--db-in DB] [--db-out DB]                    # → game/work/roster/nhlng.db
     python tools/roster report                      # → game/work/roster/report.md
@@ -17,7 +18,7 @@ import sys
 
 from .common import Paths
 
-STAGES = ['fetch', 'build', 'match', 'write', 'report']
+STAGES = ['fetch', 'build', 'lines', 'match', 'write', 'report']
 
 
 def main():
@@ -52,6 +53,9 @@ def main():
         elif stage == 'build':
             from . import build
             build.run(paths)
+        elif stage == 'lines':
+            from . import lines_real
+            lines_real.run(paths)
         elif stage == 'match':
             from . import match
             match.run(paths)

@@ -67,6 +67,7 @@ class Paths:
         self.db_orig = os.path.join(self.game, 'extracted', 'big', 'cache', 'db', 'nhlng.db')
         self.db_out = os.path.join(self.work, 'nhlng.db')
         self.players = os.path.join(self.work, 'players.json')
+        self.lines = os.path.join(self.work, 'lines.json')
         self.matched = os.path.join(self.work, 'match.json')
         self.written = os.path.join(self.work, 'write.json')
         self.report = os.path.join(self.work, 'report.md')
