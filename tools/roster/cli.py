@@ -1,6 +1,6 @@
 """Конвейер составов НХЛ 2026/27 для nhlng.db (NHL 13): fetch → build → match → write → report.
 
-    python tools/roster fetch  [--only nhl,ea,nhlratings,wiki] [--refresh]   # API → game/work/roster-cache/
+    python tools/roster fetch  [--only nhl,ea,nhlratings,wiki,dfo] [--refresh]  # API → game/work/roster-cache/
     python tools/roster build                       # кэш → game/work/roster/players.json
     python tools/roster match                       # players.json + база → match.json
     python tools/roster write  [--db-in DB] [--db-out DB]                    # → game/work/roster/nhlng.db
@@ -27,7 +27,7 @@ def main():
     ap.add_argument('--game', help='каталог game/ (по умолчанию — основной копии репозитория)')
     ap.add_argument('--db-in', help='входная база (по умолчанию game/work/nhl32/nhlng.db)')
     ap.add_argument('--db-out', help='выходная база (по умолчанию game/work/roster/nhlng.db)')
-    ap.add_argument('--only', help='fetch: части через запятую (nhl, ea, nhlratings, wiki)')
+    ap.add_argument('--only', help='fetch: части через запятую (nhl, ea, nhlratings, wiki, dfo)')
     ap.add_argument('--refresh', action='store_true', help='fetch: скачать заново, не глядя в кэш')
     ap.add_argument('--offline', action='store_true', help='только кэш; нет файла — ошибка')
     ap.add_argument('--pause', type=float, default=1.0, help='пауза между запросами к хосту, с (не меньше 1)')

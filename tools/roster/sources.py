@@ -1,4 +1,5 @@
-"""Разбор сырых ответов из кэша: API НХЛ, EA NHL 27, nhlratings.net, капитаны из Wikipedia.
+"""Разбор сырых ответов из кэша: API НХЛ, EA NHL 27, nhlratings.net, капитаны из Wikipedia,
+звенья DailyFaceoff.
 
 Каждая функция читает только кэш (game/work/roster-cache/) и возвращает простые словари;
 сшивка источников — в build.py.
@@ -8,7 +9,7 @@ import json
 import os
 import re
 
-from .common import SEASON, TEAM_NAMES, norm, read_json
+from .common import SEASON, TEAM_NAMES, TEAM_URL_SLUG, norm, read_json
 
 # --- атрибуты: названия источников → поля NHL 13 ----------------------------------------------
 # EA (ключи stats на ea.com) → exhibitionskaterai
@@ -252,4 +253,36 @@ def captains(cache):
                 m = re.search(r'\{\{\s*sortname\s*\|([^|}]+)\|([^|}]+)', line, re.I)
                 if m:
                     out[team][letter].append(f'{m.group(1).strip()} {m.group(2).strip()}')
+    return out
+
+
+# --- звенья (DailyFaceoff) --------------------------------------------------------------------
+NEXT_DATA = re.compile(r'<script id="__NEXT_DATA__" type="application/json"[^>]*>(.*?)</script>', re.S)
+
+
+def dfo_lines(cache):
+    """{TEAM: сочетания} со страниц dailyfaceoff.com/teams/{slug}/line-combinations (JSON
+    `__NEXT_DATA__` → props.pageProps.combinations). В `players` — запись на каждое место:
+    группа (`groupIdentifier`: f1–f4 — тройки, d1–d3 — пары, d4 — седьмой защитник, g —
+    вратари, pp1/pp2 — большинство, pk1/pk2 — меньшинство, ir — травмированные), место в группе
+    (`positionIdentifier`: lw/c/rw, ld/rd, g1/g2; в спецбригадах sk1…sk5 — без амплуа), имя,
+    номер, статус травмы. Один и тот же игрок стоит в каждой своей группе."""
+    out = {}
+    for abbr, slug in TEAM_URL_SLUG.items():
+        fn = _p(cache, 'dailyfaceoff', 'teams', f'{slug}.html')
+        if not os.path.exists(fn):
+            continue
+        with open(fn, encoding='utf-8') as f:
+            m = NEXT_DATA.search(f.read())
+        if not m:
+            continue
+        c = ((json.loads(m.group(1)).get('props') or {}).get('pageProps') or {}).get('combinations') or {}
+        groups = {}
+        for q in c.get('players') or []:
+            groups.setdefault(q.get('groupIdentifier'), []).append({
+                'slot': q.get('positionIdentifier'), 'name': (q.get('name') or '').strip(), 'num': q.get('jerseyNumber'),
+                'injury': q.get('injuryStatus'), 'gtd': bool(q.get('gameTimeDecision'))})
+        if groups:
+            out[abbr] = {'abbr': c.get('teamAbbreviation'), 'updated': c.get('updatedAt'),
+                         'source': c.get('sourceName'), 'source_url': c.get('source'), 'groups': groups}
     return out

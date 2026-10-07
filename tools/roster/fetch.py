@@ -10,13 +10,16 @@
 - ea.com/games/nhl/ratings?page=1…6 — топ-300 NHL 27 с 40 атрибутами и ID EA;
 - nhlratings.net: страницы 32 клубов, игроков с них и 13 списков вратарских атрибутов
   (сборщик — по образцу tools/providers/ea_ratings.py из puckpeak-nhl-legacy-rosters, MIT);
-- en.wikipedia.org: «List of current NHL captains and alternate captains» (wikitext).
+- en.wikipedia.org: «List of current NHL captains and alternate captains» (wikitext);
+- dailyfaceoff.com: сочетания звеньев 32 клубов (`/teams/{slug}/line-combinations`, данные —
+  JSON `__NEXT_DATA__` страницы); перед ними — robots.txt (там `Disallow: /api/`, `/cms/`).
 """
 import re
 import time
 import urllib.parse
+import urllib.robotparser
 
-from .common import Http, SEASON, SLOT_TEAM, TEAM_SLOT, write_json
+from .common import SEASON, SLOT_TEAM, TEAM_SLOT, TEAM_URL_SLUG, UA, Http, write_json
 
 NHL = 'https://api-web.nhle.com/v1'
 STATS = 'https://api.nhle.com/stats/rest/en'
@@ -26,23 +29,15 @@ EA = 'https://www.ea.com/games/nhl/ratings'
 NR = 'https://www.nhlratings.net/'
 WIKI_CAPTAINS = ('https://en.wikipedia.org/w/index.php?title=List_of_current_NHL_captains_and_alternate_captains'
                  '&action=raw')
-NR_TEAMS = {'ANA': 'anaheim-ducks', 'BOS': 'boston-bruins', 'BUF': 'buffalo-sabres', 'CGY': 'calgary-flames',
-            'CAR': 'carolina-hurricanes', 'CHI': 'chicago-blackhawks', 'COL': 'colorado-avalanche',
-            'CBJ': 'columbus-blue-jackets', 'DAL': 'dallas-stars', 'DET': 'detroit-red-wings',
-            'EDM': 'edmonton-oilers', 'FLA': 'florida-panthers', 'LAK': 'los-angeles-kings',
-            'MIN': 'minnesota-wild', 'MTL': 'montreal-canadiens', 'NSH': 'nashville-predators',
-            'NJD': 'new-jersey-devils', 'NYI': 'new-york-islanders', 'NYR': 'new-york-rangers',
-            'OTT': 'ottawa-senators', 'PHI': 'philadelphia-flyers', 'PIT': 'pittsburgh-penguins',
-            'SJS': 'san-jose-sharks', 'SEA': 'seattle-kraken', 'STL': 'st-louis-blues',
-            'TBL': 'tampa-bay-lightning', 'TOR': 'toronto-maple-leafs', 'UTA': 'utah-mammoth',
-            'VAN': 'vancouver-canucks', 'VGK': 'vegas-golden-knights', 'WSH': 'washington-capitals',
-            'WPG': 'winnipeg-jets'}
+NR_TEAMS = TEAM_URL_SLUG              # anaheim-ducks … winnipeg-jets
 NR_GOALIE_LISTS = ['angles', 'breakaway', 'five-hole', 'glove-side-high', 'glove-side-low', 'stick-side-high',
                    'stick-side-low', 'poke-check', 'rebound-control', 'shot-recover', 'vision',
                    'puck-playing-frequency', 'aggression']
 NR_NOT_PLAYERS = ('teams/', 'countries/', 'lists/', 'about', 'contact', 'privacy-policy', 'terms', 'nhl-27-',
                   'wp-content', 'favicon', 'category', 'tag/', 'author', 'feed', 'page/')
 NR_LINK = re.compile(r'href="https://www\.nhlratings\.net/([a-z0-9\-]+)/?" title="([^"]+)"')
+DFO = 'https://www.dailyfaceoff.com'
+DFO_TEAMS = TEAM_URL_SLUG              # у DailyFaceoff те же (sortedTeams на странице)
 
 
 def teams():
@@ -144,7 +139,22 @@ def wiki(h, log):
     log(f'Wikipedia: капитаны, {len(t or "")} символов')
 
 
-PARTS = ['nhl', 'ea', 'nhlratings', 'wiki']
+def dfo(h, log):
+    """DailyFaceoff: страницы сочетаний 32 клубов — 4 тройки, 3 пары, вратари, PP1/PP2, PK1/PK2
+    (разбор — sources.dfo_lines). Сначала robots.txt: страницу, которую он запрещает, не берём."""
+    robots = urllib.robotparser.RobotFileParser()
+    robots.parse((h.text(f'{DFO}/robots.txt', 'dailyfaceoff/robots.txt') or '').splitlines())
+    got = 0
+    for abbr in teams():
+        url = f'{DFO}/teams/{DFO_TEAMS[abbr]}/line-combinations'
+        if not robots.can_fetch(UA, url):
+            log(f'  DailyFaceoff: robots.txt не разрешает {url}')
+            continue
+        got += h.text(url, f'dailyfaceoff/teams/{DFO_TEAMS[abbr]}.html') is not None
+    log(f'DailyFaceoff: сочетания звеньев — {got} клубов из 32')
+
+
+PARTS = ['nhl', 'ea', 'nhlratings', 'wiki', 'dfo']
 
 
 def run(paths, parts=None, pause=1.0, refresh=False, log=print):
@@ -162,6 +172,8 @@ def run(paths, parts=None, pause=1.0, refresh=False, log=print):
         wiki(h, log)
     if 'nhlratings' in parts:
         nhlratings(h, log)
+    if 'dfo' in parts:
+        dfo(h, log)
     write_json(h.path(f'_fetched-{"-".join(parts)}.json'),
                {'date': time.strftime('%Y-%m-%d %H:%M:%S'), 'parts': parts, 'requests': h.requests})
     log(f'fetch: готово, запросов в сеть {h.requests}')

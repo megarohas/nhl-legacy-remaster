@@ -212,6 +212,9 @@ TEAM_NAMES = {
     'UTA': 'Utah Mammoth', 'VAN': 'Vancouver Canucks', 'VGK': 'Vegas Golden Knights', 'WSH': 'Washington Capitals',
     'WPG': 'Winnipeg Jets',
 }
+# клуб в адресах страниц: одинаково у nhlratings.net (/teams/…) и DailyFaceoff (/teams/…/line-combinations)
+TEAM_URL_SLUG = {a: n.lower().replace('.', '').replace(' ', '-') for a, n in TEAM_NAMES.items()}
+assert TEAM_URL_SLUG['STL'] == 'st-louis-blues' and TEAM_URL_SLUG['UTA'] == 'utah-mammoth'
 
 
 def team_slot(abbr):
