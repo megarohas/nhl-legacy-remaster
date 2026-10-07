@@ -225,45 +225,31 @@ def nr_style(p):
 
 # --- капитаны (Wikipedia) ---------------------------------------------------------------------
 def captains(cache):
-    """{TEAM: {'C': [имя], 'A': [имена]}} из wikitext «List of current NHL captains…»."""
+    """{TEAM: {'C': [имя], 'A': [имена]}} из wikitext «List of current NHL captains and alternate
+    captains»: две таблицы (разделы Captains и Alternate captains) — строка-заголовок
+    `! [[Клуб]]` (у ассистентов с rowspan), под ней ячейки `{{sortname|Имя|Фамилия}}`;
+    «Vacant» — капитана нет."""
     fn = _p(cache, 'wiki', 'captains.wikitext')
     if not os.path.exists(fn):
         return {}
     text = open(fn, encoding='utf-8').read()
+    full = {norm(n): a for a, n in TEAM_NAMES.items()}
     out = {}
-
-    def names(cell):
-        cell = re.sub(r'<ref[^>]*/>|<ref[^>]*>.*?</ref>', '', cell, flags=re.S)
-        cell = re.sub(r'\{\{(?:sortname|sname)\|([^|}]+)\|([^|}]+)[^}]*\}\}', r'[[\1 \2]]', cell, flags=re.I)
-        found = []
-        for m in re.finditer(r'\[\[([^\]|]+)(?:\|([^\]]+))?\]\]', cell):
-            name = (m.group(2) or m.group(1)).strip()
-            name = re.sub(r'\s*\(.*?\)\s*', '', name)
-            if name and not name.lower().startswith(('file:', 'image:')):
-                found.append(name)
-        return found
-
-    for row in re.split(r'\n\|-', text):
-        cells = [c.strip() for c in re.split(r'\n\||\|\|', row) if c.strip()]
-        if len(cells) < 2:
+    for section, letter in (('==Captains==', 'C'), ('==Alternate captains==', 'A')):
+        start = text.find(section)
+        if start < 0:
             continue
+        end = text.find('\n==', start + len(section))
         team = None
-        for c in cells:
-            for abbr, full in TEAM_NAMES.items():
-                if norm(full) in norm(c):
-                    team = abbr
-                    break
-            if team:
-                break
-        if not team:
-            continue
-        rest = [c for c in cells if norm(TEAM_NAMES[team]) not in norm(c)]
-        people = [names(c) for c in rest]
-        people = [p for p in people if p]
-        if not people:
-            continue
-        cap = people[0]
-        alts = [n for p in people[1:] for n in p]
-        vacant = any('vacant' in c.lower() for c in rest[:1])
-        out[team] = {'C': [] if vacant else cap[:1], 'A': (cap[1:] if vacant else []) + alts}
+        for line in text[start:end if end > 0 else None].split('\n'):
+            line = line.strip()
+            if line.startswith('!'):
+                m = re.search(r'\[\[([^\]|]+)', line)
+                team = full.get(norm(m.group(1))) if m else None
+                if team:
+                    out.setdefault(team, {'C': [], 'A': []})
+            elif team and line.startswith('|') and not line.startswith(('|-', '|+', '|}')):
+                m = re.search(r'\{\{\s*sortname\s*\|([^|}]+)\|([^|}]+)', line, re.I)
+                if m:
+                    out[team][letter].append(f'{m.group(1).strip()} {m.group(2).strip()}')
     return out

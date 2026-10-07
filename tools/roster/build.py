@@ -19,18 +19,21 @@ POS = {'C': 'C', 'L': 'L', 'R': 'R', 'D': 'D', 'G': 'G'}
 
 
 def _season_gp(land):
-    """{сезон: игр} в регулярке НХЛ и сумма НХЛ + АХЛ (профессиональные игры)."""
-    nhl, pro = defaultdict(int), 0
+    """Игры НХЛ по сезонам: регулярка и регулярка + плей-офф; профессиональные (НХЛ + АХЛ, всё)
+    до нынешнего сезона. В базе NHL 13 счётчики игр — вместе с плей-офф (у Кросби 2009/10:
+    81 + 13 = 94, карьера к 2012 году 434 + 68 = 502)."""
+    reg, total, pro = defaultdict(int), defaultdict(int), 0
     for s in land.get('seasonTotals') or []:
-        if s.get('gameTypeId') != 2:
+        if s.get('gameTypeId') not in (2, 3):
             continue
         gp = s.get('gamesPlayed') or 0
         if s.get('leagueAbbrev') == 'NHL':
-            nhl[s['season']] += gp
+            total[s['season']] += gp
+            if s['gameTypeId'] == 2:
+                reg[s['season']] += gp
+        if s.get('leagueAbbrev') in ('NHL', 'AHL') and s['season'] < SEASON:
             pro += gp
-        elif s.get('leagueAbbrev') == 'AHL':
-            pro += gp
-    return dict(nhl), pro
+    return dict(reg), dict(total), pro
 
 
 def is_rookie(birth, gp_by_season):
@@ -42,10 +45,29 @@ def is_rookie(birth, gp_by_season):
     return age < 26 and max(prior, default=0) <= 25 and sum(n >= 6 for n in prior) < 2
 
 
+NON_PRO = ('OHL', 'WHL', 'QMJHL', 'USHL', 'NCAA', 'USDP', 'USNTDP', 'U.S. National Development Team', 'MHL', 'J20',
+           'J20 SM-Liiga', 'U20 SM-sarja', 'BCHL', 'AJHL', 'NAHL', 'Swiss-Jr', 'J20 Nationell')
+
+
+def _scoring(land):
+    """Результативность для стиля игры: карьера в НХЛ и последний сезон в другой лиге
+    (у новичков в НХЛ мало игр)."""
+    ct = (land.get('careerTotals') or {}).get('regularSeason') or {}
+    out = {'nhl': {k: ct.get(f) or 0 for k, f in (('gp', 'gamesPlayed'), ('g', 'goals'), ('a', 'assists'),
+                                                    ('pim', 'pim'))}}
+    other = [s for s in land.get('seasonTotals') or [] if s.get('gameTypeId') == 2 and s.get('leagueAbbrev') != 'NHL'
+             and (s.get('gamesPlayed') or 0) >= 10 and s.get('goals') is not None]
+    if other:
+        s = max(other, key=lambda s: (s['season'], s.get('gamesPlayed') or 0))
+        out['other'] = {'league': s.get('leagueAbbrev'), 'season': s['season'], 'gp': s.get('gamesPlayed') or 0,
+                        'g': s.get('goals') or 0, 'a': s.get('assists') or 0, 'pim': s.get('pim') or 0,
+                        'junior': s.get('leagueAbbrev') in NON_PRO}
+    return out
+
+
 def base_record(abbr, e, land, bio):
     y, m, d = (int(x) for x in e['birthDate'].split('-'))
-    gp, pro = _season_gp(land)
-    career = ((land.get('careerTotals') or {}).get('regularSeason') or {}).get('gamesPlayed')
+    gp, total, pro = _season_gp(land)
     dd = land.get('draftDetails')
     nat = (bio or {}).get('nationalityCode') or e.get('birthCountry')
     return {
@@ -60,10 +82,14 @@ def base_record(abbr, e, land, bio):
         'height_in': e.get('heightInInches'), 'weight_lb': e.get('weightInPounds'),
         'draft': ({'year': dd.get('year'), 'team': dd.get('teamAbbrev'), 'round': dd.get('round'),
                    'pick_in_round': dd.get('pickInRound'), 'overall': dd.get('overallPick')} if dd else None),
-        'nhl_gp': {'career': career if career is not None else sum(gp.values()),
-                   'by_season': {str(k): v for k, v in sorted(gp.items())},
+        # игры НХЛ до нынешнего сезона (регулярка + плей-офф) и по сезонам; дебют — первый сезон
+        # с играми в регулярке
+        'nhl_gp': {'career': sum(n for s, n in total.items() if s < SEASON),
+                   'by_season': {str(k): v for k, v in sorted(total.items())},
+                   'regular_by_season': {str(k): v for k, v in sorted(gp.items())},
                    'debut': min((s for s, n in gp.items() if n), default=None)},
         'pro_gp': pro,
+        'scoring': _scoring(land),
         'rookie': is_rookie((y, m, d), gp),
         'landing': bool(land),
         'photo': e.get('headshot'),        # следующий этап: портреты
