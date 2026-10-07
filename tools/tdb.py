@@ -44,6 +44,7 @@ assert crc32_ieee(b'123456789') == 0xCBF43926
 
 class Tdb:
     def __init__(self, data, meta):
+        self.meta = meta
         self.d = bytearray(data)
         if self.d[:2] != b'DB':
             raise ValueError('нет сигнатуры DB')
@@ -112,6 +113,45 @@ class Tdb:
 
     def column(self, table, field):
         return [self.get(table, field, r) for r in range(self.by_name[table]['rows'])]
+
+    def record(self, table, row):
+        t = self.by_name[table]
+        start = t['records'] + row * t['reclen']
+        return bytes(self.d[start:start + t['reclen']])
+
+    def put_record(self, table, row, raw):
+        t = self.by_name[table]
+        if len(raw) != t['reclen']:
+            raise ValueError(f'{table}: запись {len(raw)} байт вместо {t["reclen"]}')
+        start = t['records'] + row * t['reclen']
+        self.d[start:start + t['reclen']] = raw
+
+    def resize(self, table, rows):
+        """Число записей таблицы (max = current = rows): нули дописываются в конец или
+        записи обрезаются с конца. Каталог следующих таблиц и db_size (@0x08) сдвигаются,
+        структура перечитывается; CRC — потом fix(). Только простые таблицы (тип 2/6,
+        без индексов): у них данные — ровно reclen · max_records."""
+        t = self.by_name[table]
+        blk = t['block']
+        maxr = struct.unpack(self.E + 'H', self.d[blk + 0x14:blk + 0x16])[0]
+        if self.u32(blk + 4) not in (2, 6) or self.d[blk + 0x1D]:
+            raise ValueError(f'{table}: размер меняется только у простых таблиц без индексов')
+        if not 0 <= rows <= 0xFFFF:
+            raise ValueError(f'{table}: {rows} записей не влезает в u16')
+        end = t['records'] + t['reclen'] * maxr
+        delta = t['reclen'] * (rows - maxr)
+        if delta >= 0:
+            self.d[end:end] = bytes(delta)
+        else:
+            del self.d[end + delta:end]
+        self.d[blk + 0x14:blk + 0x18] = struct.pack(self.E + 'HH', rows, rows)
+        n = self.u32(0x10)
+        for i in range(n):
+            slot = 0x1C + 8 * i
+            if 0x18 + 8 * n + self.u32(slot) > blk:
+                self.put32(slot, self.u32(slot) + delta)
+        self.put32(0x08, self.u32(0x08) + delta)
+        self.__init__(bytes(self.d), self.meta)
 
     def _layout(self):
         order = sorted(self.tables, key=lambda t: t['block'])

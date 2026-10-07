@@ -91,6 +91,17 @@ class LocDb:
             return ''
         return self.decode_at(txt_off, 2)[0].decode('utf-8', errors='replace')
 
+    def alias(self, dst_key, src_key):
+        """Ключ dst_key показывает ту же строку пула, что src_key (меняется только указатель)."""
+        found = {sid: r for r, sid, off in self.rows() if sid in (dst_key, src_key)}
+        for k in (dst_key, src_key):
+            if k not in found:
+                raise KeyError(f'нет ключа {k}')
+        recs = self.table['records']
+        src = recs + found[src_key] * 16 + 4
+        dst = recs + found[dst_key] * 16 + 4
+        self.db.d[dst:dst + 4] = self.db.d[src:src + 4]
+
     def set_text(self, txt_off, text):
         if txt_off == MISSING:
             raise ValueError('у ключа нет строки (0xFFFFFFFF) — на место не записать')
