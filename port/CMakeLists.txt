@@ -15,6 +15,7 @@ set(NHL13_SOURCES
     src/main.cpp
     src/nhl13_imports.cpp
     src/nhl13_crash.cpp
+    src/nhl13_input_lock.cpp
 )
 
 if(WIN32)
