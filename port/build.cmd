@@ -15,3 +15,4 @@ if /i "%~2"=="configure" exit /b 0
 set "EXTRA="
 if "%KEEP_GOING%"=="1" set "EXTRA=-- -k 0"
 cmake --build out/build/%PRESET% -j %JOBS% %EXTRA% || exit /b 1
+if not exist "out\build\%PRESET%\nhl13.toml" copy /y "nhl13.example.toml" "out\build\%PRESET%\nhl13.toml" >nul

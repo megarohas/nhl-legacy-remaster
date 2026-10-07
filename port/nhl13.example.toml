@@ -1,0 +1,16 @@
+# Настройки запуска порта (cvar'ы ReXGlue). build.cmd копирует этот файл в папку
+# сборки как nhl13.toml, если там ещё нет своего. Конфиг сильнее аргументов
+# командной строки (порядок SDK: env > конфиг > CLI > умолчания).
+
+# Рендер: плагин rexgpu-xenos (D3D12 на Windows).
+gpu_plugin = "xenos"
+
+# Файлы игры: распакованная установка с диска (tools/svod.py).
+game_data_root = "S:/Claude/megarohas_nhl13/game/extracted/disc"
+
+# Сейвы и кэш (в т. ч. раздел cache:) — локально, а не в «Документах» OneDrive.
+user_data_root = "S:/Claude/megarohas_nhl13/game/userdata"
+
+# update: (апдейт TU2) не подключаем: его patch.big рассчитан на пропатченный
+# default.xex, а порт собран с диска.
+# update_data_root = "S:/Claude/megarohas_nhl13/game/extracted/tu2"
