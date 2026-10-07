@@ -14,6 +14,7 @@
 #include <rex/logging.h>
 #include <rex/rex_app.h>
 #include <rex/runtime.h>
+#include <rex/ui/overlay/achievement_notification.h>
 
 void Nhl13InstallCrashReporter();  // nhl13_crash.cpp
 
@@ -67,6 +68,15 @@ class Nhl13App : public rex::ReXApp {
     }
   }
 
+  // Без окна уведомлений о достижениях: пока у презентера есть хоть одно окно интерфейса
+  // (а это окно SDK создаёт всегда, даже невидимым), кадр игры выводится из потока UI по
+  // обновлению монитора (presenter.cpp, PaintMode::kUIThreadOnRequest) — до кадра монитора
+  // лишней задержки и рывки; без окон — сразу из потока игры (разбор: docs/graphics-settings.md).
+  std::unique_ptr<rex::ui::AchievementNotificationDialog>
+  CreateAchievementNotificationDialog() override {
+    return nullptr;
+  }
+
   // Override virtual hooks for customization:
   // void OnPostInitLogging() override {}
   // void OnPreSetup(rex::RuntimeConfig& config) override {}
@@ -74,7 +84,5 @@ class Nhl13App : public rex::ReXApp {
   // void OnPostLoadXexImage() override {}
   // void OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) override {}
   // std::unique_ptr<rex::ui::ImGuiDialog> CreateAchievementsOverlay() override;
-  // std::unique_ptr<rex::ui::AchievementNotificationDialog>
-  // CreateAchievementNotificationDialog() override;
   // void OnShutdown() override {}
 };
