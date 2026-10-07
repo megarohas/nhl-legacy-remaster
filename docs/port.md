@@ -36,6 +36,25 @@ cd port
   `[functions]` в манифесте (как `nhllegacy_functions.toml` у Legacy).
 - «Функция» `0x833824D0` размером 2,2 МБ — вероятно, ложная граница, проверить.
 
+## Первый запуск до титульного экрана (07.10.2026)
+
+SDK nightly 0.10.0.24, RelWithDebInfo, D3D12 (RTX 3060). Что понадобилось:
+
+- `[[switch_tables]]` для 9 перечитываемых таблиц (`nhl13_switch_tables.toml`);
+- 309 функций с только косвенными ссылками (`tools/find_indirect_targets.py`) и
+  граница `0x832B9A70` (default switch за последним case);
+- setjmp/longjmp `0x82C9D9B0` / `0x82C9BCB0`;
+- заглушки `XUsbcamGetState`/`XUsbcamSetConfig` (нет в готовой rexruntime);
+- монтирование `cache:` (`OnPostSetup`), пути из `nhl13.toml` (`OnConfigurePaths` —
+  SDK читает конфиг после вычисления путей), плагин `xenos`, флаги `rov`,
+  `readback_resolve=full`, `protect_zero=false`, `gpu_allow_invalid_fetch_constants`;
+- отчёт о падении `nhl13_crash.txt` (dbghelp) — без него процесс умирал молча.
+
+Итог: звук, геймпад, вступительный ролик VP6 с правильными цветами и титульный экран
+«PRESS START». Запуск: `port/out/build/win-amd64-relwithdebinfo/nhl13.exe`
+(`--log_file=…` по желанию). Снимок окна: `PrintWindow` с флагом 2 (полное
+содержимое D3D12).
+
 ## Дальше
 
 1. Сборка: окружение vcvars64 + LLVM в PATH, пресет `win-amd64-*`.

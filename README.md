@@ -46,5 +46,5 @@
 - [x] Правка сейвов: запись TDB с CRC, перехеширование STFS ([docs/save-editing.md](docs/save-editing.md))
 - [x] Тулчейн порта: VS 2022 Build Tools, LLVM 23, CMake, Ninja, Vulkan SDK, ReXGlue SDK 0.10.0
 - [x] Порт: первая генерация кода ReXGlue (679 файлов, 5 нераспознанных переходов) — [docs/port.md](docs/port.md)
-- [ ] Порт: первая сборка и запуск
+- [x] Порт: сборка и запуск до титульного экрана (ролик VP6, звук, геймпад) — [docs/port.md](docs/port.md)
 - [ ] Год: старт франшизы и «Играть сейчас» в коде
