@@ -24,3 +24,6 @@ __pycache__/
 /port/generated/default/
 /port/out/
 /.claude/
+
+# Экспериментальная копия порта под свою сборку SDK (Vulkan + FSR/CAS), docs/sdk-build.md
+/port-ffx/
