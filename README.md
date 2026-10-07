@@ -15,9 +15,11 @@
 |---|---|
 | [docs/briefing.md](docs/briefing.md) | Вводная: цель, что известно о базе, план |
 | [docs/xbox-transfer.md](docs/xbox-transfer.md) | Как достать файлы с приставки |
+| [docs/game-files.md](docs/game-files.md) | Что внутри игры, где база, как распаковать |
 | [tools/svod.py](tools/svod.py) | Проверка и распаковка контейнеров SVOD (установка с диска, GoD) |
 | [tools/tdb_read.py](tools/tdb_read.py) | Читалка баз EA TDB v6 (только чтение) |
 | `game/` | Локальные файлы игры, не в git |
+| `ref/` | Клоны репозиториев puckhead73 для справки, не в git |
 
 ## Статус
 
@@ -26,6 +28,7 @@
 - [x] На ПК: заголовок установки, TU2, сейвы
 - [x] На ПК: данные установки `Data0000`–`Data0037` (5,92 ГБ, размеры сверены)
 - [x] Распаковка SVOD с проверкой хешей: 20 файлов в `game/extracted/disc/` (`default.xex`, `.big`)
-- [ ] `nhlng.db` найдена и сверена с анкерной базой nhl-modding-studio
+- [x] `nhlng.db` найдена (`cache.big` → `db/`), побайтово равна анкерной из nhl-modding-studio
+- [ ] Апдейт TU2: что внутри
 - [ ] Стартовый год франшизы (2012): конфиг или код
 - [ ] Порт: генерация кода ReXGlue
