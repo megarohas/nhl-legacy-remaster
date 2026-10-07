@@ -10,8 +10,9 @@
 //    0…29 (828FD590 — добавить в список на 60) и дерево «лига → 2 конференции → 6
 //    дивизионов по 5» с зашитыми номерами (узлы по 28 байт: id, число команд,
 //    массив команд, …, число детей, дети — массивы выделяются по размеру, 828FE278 и
-//    828FE540). С nhl_teams = 32 подмена вызывает оригинал, дописывает команды 30 и 31
-//    и перестраивает дивизионы 6 + 5 + 5 в конференции.
+//    828FE540). С nhl_teams = 32 дивизионы 6 + 5 + 5 в конференции строит сам оригинал:
+//    врезки перед его вызовами 828FE278 подставляют команды (Nhl13NhlDivision), подмена
+//    дописывает в список команды 30 и 31.
 // 3. 8289A868 добавлял во франшизу сборные Матча звёзд — строки 30 и 31 базы; при 32
 //    командах там новые клубы, и подмена его пропускает (Матча звёзд в календаре нет).
 // 4. Номера франшизы (строки leagueteams) выдаются по порядку при создании: было НХЛ 0…29,
@@ -65,7 +66,6 @@ extern "C" void __imp__sub_827C2BA8(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__sub_828A6080(PPCContext& ctx, uint8_t* base);
 extern "C" void sub_828FD590(PPCContext& ctx, uint8_t* base);  // список команд: добавить
 extern "C" void sub_828FD5D8(PPCContext& ctx, uint8_t* base);  // список команд: записать i-й
-extern "C" void sub_828FE278(PPCContext& ctx, uint8_t* base);  // узел: задать команды
 extern "C" void sub_8289AFB8(PPCContext& ctx, uint8_t* base);  // фарм-клуб общий у 2+ команд?
 extern "C" void sub_828FC250(PPCContext& ctx, uint8_t* base);  // итератор команд: создать
 extern "C" void sub_828FC2A0(PPCContext& ctx, uint8_t* base);  // итератор команд: удалить
@@ -139,24 +139,6 @@ constexpr Division kDivisions[] = {
     {7, 5, {17, 18, 19, 21, 23}},     // NJ NYI NYR PHI PIT
     {8, 5, {2, 3, 15, 20, 27}},       // BOS BUF MTL OTT TOR
 };
-
-// Найти узел с данным id в дереве (дети — массив указателей по +20, число — +16).
-uint32_t FindNode(uint8_t* base, uint32_t node, uint32_t id, int depth = 0) {
-  if (!node || depth > 4) {
-    return 0;
-  }
-  if (Load32(base, node) == id && depth > 0) {
-    return node;
-  }
-  const uint32_t n = Load32(base, node + 16);
-  const uint32_t kids = Load32(base, node + 20);
-  for (uint32_t i = 0; i < n && i < 16; ++i) {
-    if (uint32_t hit = FindNode(base, Load32(base, kids + 4 * i), id, depth + 1)) {
-      return hit;
-    }
-  }
-  return 0;
-}
 
 uint8_t Load8(uint8_t* base, uint32_t addr) {
   return *Host(base, addr);
@@ -302,49 +284,84 @@ extern "C" void sub_82819268(PPCContext& ctx, uint8_t* base) {
 }
 
 // Структура НХЛ: r3 — ?, r4 — корень дерева (может быть 0), r5 — список команд (может быть 0).
+// Дивизионы на 32 команды строит сам оригинал: врезки Nhl13NhlDivision перед шестью вызовами
+// 828FE278 подставляют число и номера команд. Раньше дерево правилось после оригинала
+// (828FE278 на готовых узлах), и таблица статистики команд (8292F258) порой собиралась с
+// дырами и дублями — падения при загрузке матча (07.10.2026).
 extern "C" void sub_82809330(PPCContext& ctx, uint8_t* base) {
-  const uint32_t root = ctx.r4.u32;
   const uint32_t list = ctx.r5.u32;
-  const uint32_t sp = ctx.r1.u32;
   __imp__sub_82809330(ctx, base);
   if (!ThirtyTwo() || t_menu_structure) {
     return;
   }
   static int logged = 0;
   if (logged++ < 3) {
-    LogStackOnce("82809330 (структура НХЛ)");
+    REXLOG_INFO("[nhl13] NHL structure: 32 teams, divisions 6+5+5");
   }
-  const uint64_t saved_r3 = ctx.r3.u64;
   if (list) {
+    const uint64_t saved_r3 = ctx.r3.u64;
     for (uint32_t team : {30u, 31u}) {
       ctx.r3.u64 = list;
       ctx.r4.u64 = team;
       sub_828FD590(ctx, base);
     }
+    ctx.r3.u64 = saved_r3;
   }
-  if (root) {
-    // массив команд — во временной области гостевого стека ниже текущего кадра
-    const uint32_t scratch = (sp - 0x200) & ~0xFu;
-    ctx.r1.u64 = scratch - 0x100;
-    for (const Division& d : kDivisions) {
-      const uint32_t node = FindNode(base, root, d.id);
-      if (!node) {
-        REXLOG_WARN("[nhl13] NHL division {} not found", d.id);
-        continue;
-      }
-      for (uint32_t i = 0; i < d.count; ++i) {
-        Store32(base, scratch + 4 * i, d.teams[i]);
-      }
-      ctx.r3.u64 = node;
-      ctx.r4.u64 = d.count;
-      ctx.r5.u64 = scratch;
-      sub_828FE278(ctx, base);
+}
+
+// bl 0x828FE278 (узел, число, массив) в 82809330: r3 — узел дивизиона (id уже записан),
+// r5 — массив команд на стеке (r1+80, места на 8 номеров).
+void Nhl13NhlDivision(PPCRegister& r3, PPCRegister& r4, PPCRegister& r5) {
+  if (!ThirtyTwo() || t_menu_structure) {
+    return;
+  }
+  auto* memory = rex::Runtime::instance()->memory();
+  uint32_t id;
+  std::memcpy(&id, memory->TranslateVirtual<const uint8_t*>(r3.u32), 4);
+  id = __builtin_bswap32(id);
+  for (const Division& d : kDivisions) {
+    if (d.id != id) {
+      continue;
     }
-    ctx.r1.u64 = sp;
+    auto* teams = memory->TranslateVirtual<uint8_t*>(r5.u32);
+    for (uint32_t i = 0; i < d.count; ++i) {
+      const uint32_t v = __builtin_bswap32(d.teams[i]);
+      std::memcpy(teams + 4 * i, &v, 4);
+    }
+    r4.u64 = d.count;
+    return;
   }
-  ctx.r3.u64 = saved_r3;
-  if (logged <= 3) {
-    REXLOG_INFO("[nhl13] NHL structure: 32 teams, divisions 6+5+5");
+  REXLOG_WARN("[nhl13] NHL division {} unknown", id);
+}
+
+// Таблица статистики команд (8292F258 заполняет записи по командам дерева лиги): проверка,
+// что команды в ней не повторяются — повтор значит испорченное дерево (см. выше).
+extern "C" void __imp__sub_8292F258(PPCContext& ctx, uint8_t* base);
+extern "C" void sub_8292F258(PPCContext& ctx, uint8_t* base) {
+  const uint32_t self = ctx.r3.u32;
+  __imp__sub_8292F258(ctx, base);
+  const uint32_t recs = Load32(base, self + 32);
+  const uint32_t n = Load32(base, self + 44);
+  if (!recs || n > 64) {
+    return;
+  }
+  uint64_t seen = 0;
+  std::string teams;
+  bool bad = false;
+  for (uint32_t k = 0; k < n; ++k) {
+    const uint32_t obj = Load32(base, recs + 24 * k + 16);
+    const uint32_t t = obj ? Load8(base, obj + 8) : 255;
+    teams += std::to_string(t) + " ";
+    if (t >= 64 || (seen >> t & 1)) {
+      bad = true;
+    } else {
+      seen |= 1ull << t;
+    }
+  }
+  static int logged = 0;
+  if (bad && logged++ < 5) {
+    REXLOG_ERROR("[nhl13] team stats table broken ({} records): {}", n, teams);
+    LogStackOnce("8292F258 (таблица статистики с повторами)");
   }
 }
 

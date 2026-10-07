@@ -289,3 +289,36 @@ address = 0x82931EF8   # bl 0x82ED58C8 (rand) — начало розыгрыш�
 name = "Nhl13DraftLottery"
 registers = ["r1", "r27", "r29"]
 jump_address_on_true = 0x82932034
+
+# 82809330 — дерево «НХЛ → 2 конференции → 6 дивизионов»: перед каждым из шести вызовов
+# 828FE278 (узел, число, массив команд на стеке r1+80) врезка подставляет дивизион на 32
+# команды по id узла (src/nhl13_teams.cpp, Nhl13NhlDivision; Запад 3–5, Восток 6–8).
+[[midasm_hook]]
+address = 0x828093EC   # bl 0x828FE278 — дивизион 3
+name = "Nhl13NhlDivision"
+registers = ["r3", "r4", "r5"]
+
+[[midasm_hook]]
+address = 0x82809424   # дивизион 4
+name = "Nhl13NhlDivision"
+registers = ["r3", "r4", "r5"]
+
+[[midasm_hook]]
+address = 0x82809464   # дивизион 5
+name = "Nhl13NhlDivision"
+registers = ["r3", "r4", "r5"]
+
+[[midasm_hook]]
+address = 0x828094B4   # дивизион 6
+name = "Nhl13NhlDivision"
+registers = ["r3", "r4", "r5"]
+
+[[midasm_hook]]
+address = 0x828094F8   # дивизион 7
+name = "Nhl13NhlDivision"
+registers = ["r3", "r4", "r5"]
+
+[[midasm_hook]]
+address = 0x82809534   # дивизион 8
+name = "Nhl13NhlDivision"
+registers = ["r3", "r4", "r5"]
