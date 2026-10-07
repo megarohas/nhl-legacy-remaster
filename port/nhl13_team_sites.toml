@@ -305,6 +305,126 @@ name = "Nhl13CmpS_32"
 registers = ["r30", "cr6"]
 after_instruction = true
 
+# PLAYOFF_RUN : 828EF198: Alloc this+80 u32[60] → [62]
+# li r3, 240 → 248
+[[midasm_hook]]
+address = 0x828EF1D0
+name = "Nhl13Li_248"
+registers = ["r3"]
+after_instruction = true
+
+# PLAYOFF_RUN : 828EF198: обнуление this+80 60 → 62
+# li r10, 60 → 62
+[[midasm_hook]]
+address = 0x828EF1DC
+name = "Nhl13Li_62"
+registers = ["r10"]
+after_instruction = true
+
+# PLAYOFF_RUN : 828EF198: список команд НХЛ 0…31
+# cmps r31, 30 → 32
+[[midasm_hook]]
+address = 0x828EF2E0
+name = "Nhl13CmpS_32"
+registers = ["r31", "cr6"]
+after_instruction = true
+
+# PLAYOFF_RUN : 828EF198: очки команд НХЛ в A[32]
+# cmps r29, 30 → 32
+[[midasm_hook]]
+address = 0x828EF400
+name = "Nhl13CmpS_32"
+registers = ["r29", "cr6"]
+after_instruction = true
+
+# PLAYOFF_RUN : 828EF198: первая команда АХЛ (первый сезон)
+# li r31, 30 → 32
+[[midasm_hook]]
+address = 0x828EF444
+name = "Nhl13Li_32"
+registers = ["r31"]
+after_instruction = true
+
+# PLAYOFF_RUN : 828EF198: первая команда АХЛ
+# li r28, 30 → 32
+[[midasm_hook]]
+address = 0x828EF4D4
+name = "Nhl13Li_32"
+registers = ["r28"]
+after_instruction = true
+
+# PLAYOFF_RUN : 828EF198: массив B (АХЛ) r1+784 → r1+800 (A вырос до 32)
+# addi r30, r1, 788 → 804
+[[midasm_hook]]
+address = 0x828EF4D8
+name = "Nhl13Add_p16"
+registers = ["r30"]
+after_instruction = true
+
+# PLAYOFF_RUN : 828EF198: сортировка A — 32
+# li r4, 30 → 32
+[[midasm_hook]]
+address = 0x828EF5BC
+name = "Nhl13Li_32"
+registers = ["r4"]
+after_instruction = true
+
+# PLAYOFF_RUN : 828EF198: сортировка B — новый адрес
+# addi r3, r1, 784 → 800
+[[midasm_hook]]
+address = 0x828EF5D8
+name = "Nhl13Add_p16"
+registers = ["r3"]
+after_instruction = true
+
+# PLAYOFF_RUN : 828EF198: чтение B — новый адрес
+# addi r10, r1, 784 → 800
+[[midasm_hook]]
+address = 0x828EF630
+name = "Nhl13Add_p16"
+registers = ["r10"]
+after_instruction = true
+
+# PLAYOFF_RUN : 828EF198: НХЛ < 32
+# cmps r31, 30 → 32
+[[midasm_hook]]
+address = 0x828EF684
+name = "Nhl13CmpS_32"
+registers = ["r31", "cr6"]
+after_instruction = true
+
+# PLAYOFF_RUN : 828EF198: АХЛ ≥ 32
+# cmps r30, 30 → 32
+[[midasm_hook]]
+address = 0x828EF69C
+name = "Nhl13CmpS_32"
+registers = ["r30", "cr6"]
+after_instruction = true
+
+# PLAYOFF_RUN : 828EF198: профи < 62
+# cmps r30, 60 → 62
+[[midasm_hook]]
+address = 0x828EF6A4
+name = "Nhl13CmpS_62"
+registers = ["r30", "cr6"]
+after_instruction = true
+
+# PLAYOFF_RUN : 828EF198: кадр 1120 → 1136 (пара к stwu 828EF1A0, врезка Nhl13StackGrow16)
+# addi r1, r1, 1120 → 1136
+[[midasm_hook]]
+address = 0x828EF6F4
+name = "Nhl13Add_p16"
+registers = ["r1"]
+after_instruction = true
+
+# PLAYOFF_RUN : 828F6A60: чтение this+80 по номеру профи-команды < 62
+# cmps r30, 60 → 62
+[[midasm_hook]]
+address = 0x828F6A98
+name = "Nhl13CmpS_62"
+registers = ["r30", "cr6"]
+after_instruction = true
+
 # ARRAY_SIZE 828F6D88: Alloc задачи 828090C0: 12 + u32[30] → [32]
 # li r3, 132 → 140
 [[midasm_hook]]
@@ -367,6 +487,14 @@ after_instruction = true
 address = 0x8290B6DC
 name = "Nhl13CmpS_31"
 registers = ["r30", "cr6"]
+after_instruction = true
+
+# DRAFT : порядок драфта: цикл по командам
+# cmps r10, 30 → 32
+[[midasm_hook]]
+address = 0x8290CDB4
+name = "Nhl13CmpS_32"
+registers = ["r10", "cr6"]
 after_instruction = true
 
 # NHL_TEAMS 82910938: сделка/подпись (leaguestate 44/45): флаг «НХЛ» для 828489F0
@@ -489,6 +617,62 @@ name = "Nhl13Li_32"
 registers = ["r4"]
 after_instruction = true
 
+# DRAFT : 82931B70: пиков в раунде = число команд
+# li r10, 30 → 32
+[[midasm_hook]]
+address = 0x82931BFC
+name = "Nhl13Li_32"
+registers = ["r10"]
+after_instruction = true
+
+# DRAFT : драфт: команда < 32
+# cmps r28, 30 → 32
+[[midasm_hook]]
+address = 0x8293210C
+name = "Nhl13CmpS_32"
+registers = ["r28", "cr6"]
+after_instruction = true
+
+# DRAFT : Alloc пиков 210·16 → 224·16
+# li r3, 3360 → 3584
+[[midasm_hook]]
+address = 0x82932794
+name = "Nhl13Li_3584"
+registers = ["r3"]
+after_instruction = true
+
+# DRAFT : пиков всего 7·30 → 7·32
+# li r10, 210 → 224
+[[midasm_hook]]
+address = 0x829327A4
+name = "Nhl13Li_224"
+registers = ["r10"]
+after_instruction = true
+
+# DRAFT : N команд для 82818D20
+# li r7, 30 → 32
+[[midasm_hook]]
+address = 0x829327E8
+name = "Nhl13Li_32"
+registers = ["r7"]
+after_instruction = true
+
+# DRAFT : N команд для 82818D20
+# li r7, 30 → 32
+[[midasm_hook]]
+address = 0x8293281C
+name = "Nhl13Li_32"
+registers = ["r7"]
+after_instruction = true
+
+# DRAFT : пиков всего 7·30 → 7·32
+# li r28, 210 → 224
+[[midasm_hook]]
+address = 0x82932AB4
+name = "Nhl13Li_224"
+registers = ["r28"]
+after_instruction = true
+
 # KEY 82941AE8: ключ leaguecontractoffers = (игрок·2+флаг)·30 + команда → ·32 (19 бит впритык)
 # mulli r11, r11, 30 → 32
 [[midasm_hook]]
@@ -519,4 +703,20 @@ after_instruction = true
 address = 0x82958B94
 name = "Nhl13CmpS_32"
 registers = ["r27", "cr6"]
+after_instruction = true
+
+# DRAFT : UI драфта: 32 команды
+# li r4, 30 → 32
+[[midasm_hook]]
+address = 0x82971E18
+name = "Nhl13Li_32"
+registers = ["r4"]
+after_instruction = true
+
+# DRAFT : UI драфта: цикл по командам
+# cmps r31, 30 → 32
+[[midasm_hook]]
+address = 0x82971E74
+name = "Nhl13CmpS_32"
+registers = ["r31", "cr6"]
 after_instruction = true

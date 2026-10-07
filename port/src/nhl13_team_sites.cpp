@@ -13,6 +13,12 @@ void Nhl13Add_m2(PPCRegister& d) {
   }
 }
 
+void Nhl13Add_p16(PPCRegister& d) {
+  if (Nhl13ThirtyTwo()) {
+    d.s64 += 16;
+  }
+}
+
 void Nhl13Add_p2(PPCRegister& d) {
   if (Nhl13ThirtyTwo()) {
     d.s64 += 2;
@@ -67,9 +73,27 @@ void Nhl13Li_140(PPCRegister& d) {
   }
 }
 
+void Nhl13Li_224(PPCRegister& d) {
+  if (Nhl13ThirtyTwo()) {
+    d.s64 = 224;
+  }
+}
+
+void Nhl13Li_248(PPCRegister& d) {
+  if (Nhl13ThirtyTwo()) {
+    d.s64 = 248;
+  }
+}
+
 void Nhl13Li_32(PPCRegister& d) {
   if (Nhl13ThirtyTwo()) {
     d.s64 = 32;
+  }
+}
+
+void Nhl13Li_3584(PPCRegister& d) {
+  if (Nhl13ThirtyTwo()) {
+    d.s64 = 3584;
   }
 }
 

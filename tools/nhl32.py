@@ -281,6 +281,25 @@ def write_schedule(db, table, plan):
             db.set(table, f, i, v)
     return db
 
+# Матч звёзд — отдельная строка календаря НХЛ, как в исходной базе (там «31 против 30» 27 января):
+# загрузчик календаря франшизы (827B2300) считает игру с хозяевами ≥ числа команд Матчем звёзд и
+# подставляет сборные (состояния 53/54). Без неё игра ставит матч с датой 0/0 и после перерыва
+# теряет дату франшизы. При 32 командах номер ≥ 32 не влезает в 5 бит — home/away → 6 бит.
+ALLSTAR = ((0, 26), (33, 32))
+SEASON_MONTHS = [8, 9, 10, 11, 0, 1, 2, 3, 4, 5, 6, 7]
+
+def add_allstar(db, table):
+    rows = [((db.get(table, 'month', r), db.get(table, 'day', r)), (db.get(table, 'home', r), db.get(table, 'away', r)))
+            for r in range(db.by_name[table]['rows'])]
+    assert not any(d == ALLSTAR[0] for d, _ in rows), 'в день Матча звёзд есть игры'
+    rows.append(ALLSTAR)
+    rows.sort(key=lambda x: (SEASON_MONTHS.index(x[0][0]), x[0][1]))
+    db.widen(table, ['home', 'away'], 6)
+    db.resize(table, len(rows))
+    for i, ((month, day), (h, a)) in enumerate(rows):
+        for f, v in (('index', i), ('home', h), ('away', a), ('month', month), ('day', day), ('round', 0), ('status', 0)):
+            db.set(table, f, i, v)
+
 def prune_liiga(db):
     t = 'finnishschedule'
     keep = []
@@ -329,6 +348,7 @@ def main():
     plan = schedule(pair_games(rng), days, counts, rng)
     for table in ('nhlschedule', 'favoriteteamschedule'):
         write_schedule(db, table, plan)
+        add_allstar(db, table)
     print(f'календарь НХЛ: {len(plan)} игр в {len(days)} игровых днях')
     print(f'финская лига: осталось {prune_liiga(db)} игр')
     db.fix()

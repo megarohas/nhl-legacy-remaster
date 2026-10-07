@@ -35,6 +35,8 @@
 #include <rex/cvar.h>
 #include <rex/logging.h>
 #include <rex/ppc.h>
+#include <rex/runtime.h>
+#include <rex/system/xmemory.h>
 
 #if defined(_WIN32)
 #include "nhl13_debug.h"
@@ -344,12 +346,64 @@ extern "C" void sub_82809330(PPCContext& ctx, uint8_t* base) {
   }
 }
 
-// Сборные Матча звёзд (строки 30/31) во франшизу не добавляются при 32 командах.
+// Сборные Матча звёзд: 8289A868 добавляет во франшизу teamid 30/31 (зашито) сразу после АХЛ
+// и пишет их номера в состояния 53/54. При 32 командах сборные — строки 86/87 базы
+// (tools/nhl32.py), и создаются они в конце, после юниоров (номера 124/125), чтобы номера
+// проспектов (62/63) и юниоров (64+) остались как в оригинале: вызов для лиги НХЛ
+// откладывается и выполняется после 828E7AC0 последней группы лиг (юниоры).
+namespace {
+struct DeferredAllStars {
+  bool pending = false;
+  uint32_t league = 0, settings = 0;
+  int call = 0;
+};
+DeferredAllStars g_allstars;
+int g_league_group_calls = 0;
+thread_local bool t_allstars_now = false;
+}  // namespace
+
 extern "C" void sub_8289A868(PPCContext& ctx, uint8_t* base) {
-  if (ThirtyTwo()) {
+  if (ThirtyTwo() && !t_allstars_now) {
+    if (Load32(base, ctx.r4.u32 + 600) == 2) {  // лига, у которой есть сборные (НХЛ)
+      g_allstars = {true, ctx.r3.u32, ctx.r4.u32, g_league_group_calls};
+    }
     return;
   }
   __imp__sub_8289A868(ctx, base);
+}
+
+// li r11, 30 / li r10, 31 в 8289A868 — teamid сборных.
+void Nhl13AllStarTeamA(PPCRegister& r) {
+  if (ThirtyTwo()) {
+    r.u64 = 86;
+  }
+}
+
+void Nhl13AllStarTeamB(PPCRegister& r) {
+  if (ThirtyTwo()) {
+    r.u64 = 87;
+  }
+}
+
+extern "C" void __imp__sub_828E7AC0(PPCContext& ctx, uint8_t* base);
+// 828E7AC0 зовут в цикле по группам лиг (828F8808: 828F8A34 и 828F8E24): r7 — номер группы,
+// r19 вызывающего (на входе ещё не тронут) — число групп. Сборные — после последней группы.
+extern "C" void sub_828E7AC0(PPCContext& ctx, uint8_t* base) {
+  const int call = ++g_league_group_calls;
+  const bool last_group = ctx.r7.s32 == ctx.r19.s32 - 1;
+  __imp__sub_828E7AC0(ctx, base);
+  if (!ThirtyTwo() || !g_allstars.pending || call <= g_allstars.call || !last_group) {
+    return;
+  }
+  g_allstars.pending = false;
+  const SavedArgs args(ctx);
+  ctx.r3.u64 = g_allstars.league;
+  ctx.r4.u64 = g_allstars.settings;
+  t_allstars_now = true;
+  __imp__sub_8289A868(ctx, base);
+  t_allstars_now = false;
+  args.Restore(ctx);
+  REXLOG_INFO("[nhl13] All-Star teams (86/87) created after junior leagues");
 }
 
 // --- Номера франшизы при 32 командах (пункт 4 в начале файла) ---
@@ -701,4 +755,58 @@ extern "C" void sub_829470E8(PPCContext& ctx, uint8_t* base) {
     ctx.r5.u64 = 30;
   }
   __imp__sub_829470E8(ctx, base);
+}
+
+
+// 828EF198: кадр на 16 байт больше (пара к addi r1, r1, 1136 в эпилоге).
+void Nhl13StackGrow16(PPCRegister& r1) {
+  if (ThirtyTwo()) {
+    r1.u64 -= 16;
+  }
+}
+
+// Порядок драфта первого сезона: статическая таблица 2012 года (0x83835200, 30 номеров) +
+// команды 30/31 в конце — в системной куче гостя (выделяется один раз).
+void Nhl13DraftOrderTable(PPCRegister& r9) {
+  if (!ThirtyTwo()) {
+    return;
+  }
+  static const uint32_t table = [] {
+    auto* memory = rex::Runtime::instance()->memory();
+    const uint32_t addr = memory->SystemHeapAlloc(4 * 32);
+    auto* dst = memory->TranslateVirtual<uint8_t*>(addr);
+    const auto* src = memory->TranslateVirtual<const uint8_t*>(0x83835200u);
+    std::memcpy(dst, src, 4 * 30);
+    for (uint32_t k = 0; k < 2; ++k) {
+      const uint32_t v = __builtin_bswap32(30 + k);
+      std::memcpy(dst + 4 * (30 + k), &v, 4);
+    }
+    REXLOG_INFO("[nhl13] draft order table 30 -> 32 at {:08X}", addr);
+    return addr;
+  }();
+  r9.u64 = table;
+}
+
+// 825F7C90 — ошибка менеджера памяти гостя: печатает [r3+12] и twi 31, r0, 22 (рантайм
+// пишет «trap hit (type 22)» и продолжает). Сообщение и стек — в лог / nhl13_teams.log.
+extern "C" void __imp__sub_825F7C90(PPCContext& ctx, uint8_t* base);
+extern "C" void sub_825F7C90(PPCContext& ctx, uint8_t* base) {
+  static int logged = 0;
+  if (logged < 8) {
+    ++logged;
+    const uint32_t msg = Load32(base, ctx.r3.u32 + 12);
+    std::string text;
+    if (msg) {
+      for (uint32_t i = 0; i < 160; ++i) {
+        const char c = static_cast<char>(Load8(base, msg + i));
+        if (!c) {
+          break;
+        }
+        text += c;
+      }
+    }
+    REXLOG_WARN("[nhl13] heap error: \"{}\" (lr {:08X})", text, static_cast<uint32_t>(ctx.lr));
+    LogStackOnce("825F7C90 (ошибка кучи)");
+  }
+  __imp__sub_825F7C90(ctx, base);
 }

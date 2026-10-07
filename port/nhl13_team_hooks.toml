@@ -248,3 +248,34 @@ address = 0x828D3324   # li r31, 29
 name = "Nhl13NhlLast"
 registers = ["r31"]
 after_instruction = true
+
+# 828EF198 («места прошлого сезона»): кадр 1120 → 1136, чтобы массив B (АХЛ) переехал с
+# r1+784 на r1+800 — массив A (НХЛ, пары {команда, очки}) вырос до 32 (остальное — в
+# nhl13_team_sites.toml, класс PLAYOFF_RUN; эпилог 828EF6F4 addi r1, r1, 1120 → 1136 — там же).
+[[midasm_hook]]
+address = 0x828EF1A0   # stwu r1, -1120(r1)
+name = "Nhl13StackGrow16"
+registers = ["r1"]
+after_instruction = true
+
+# 82931B70 — порядок драфта: на первом сезоне копируется статическая таблица 2012 года
+# 0x83835200 на 30 команд (за ней сразу другой глобал) → своя таблица на 32 команды.
+[[midasm_hook]]
+address = 0x82931D68   # addi r9, r9, 20992
+name = "Nhl13DraftOrderTable"
+registers = ["r9"]
+after_instruction = true
+
+# 8289A868 — сборные Матча звёзд: teamid 30/31 → 86/87 (после tools/nhl32.py сборные там);
+# вызов откладывается на после юниоров (src/nhl13_teams.cpp, sub_828E7AC0).
+[[midasm_hook]]
+address = 0x8289A89C   # li r11, 30
+name = "Nhl13AllStarTeamA"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8289A8A0   # li r10, 31
+name = "Nhl13AllStarTeamB"
+registers = ["r10"]
+after_instruction = true

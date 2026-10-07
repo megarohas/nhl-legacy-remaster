@@ -33,4 +33,9 @@ rexglue_setup_target(nhl13 GPU_PLUGINS xenos)
 
 if(WIN32)
     target_link_libraries(nhl13 PRIVATE dbghelp)  # стек в отчёте о падении
+    # nhl13_snap.exe — слепок памяти игры снаружи (src/nhl13_snap.cpp), кладётся рядом с nhl13.exe
+    add_executable(nhl13_snap src/nhl13_snap.cpp)
+    target_link_libraries(nhl13_snap PRIVATE dbghelp)
+    set_target_properties(nhl13_snap PROPERTIES RUNTIME_OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:nhl13>")
+    add_dependencies(nhl13 nhl13_snap)
 endif()

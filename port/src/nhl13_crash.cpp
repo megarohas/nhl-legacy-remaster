@@ -15,6 +15,7 @@
 #include <dbghelp.h>
 #include <tlhelp32.h>
 
+#include <algorithm>
 #include <csignal>
 #include <cstdio>
 #include <cstring>
@@ -100,6 +101,62 @@ int CaptureStack(CONTEXT ctx, DWORD64* out, int max) {
   return n;
 }
 
+// Полный слепок процесса (minidump со всей памятью: гостевая память Xbox, стеки, потоки) в
+// dumps\nhl13_<дата>_<время>_<причина>.dmp рядом с exe; хранятся последние kKeepDumps.
+// Разбор без игры — tools/memscan.py --dump ФАЙЛ (те же команды, что для живого процесса).
+constexpr int kKeepDumps = 3;
+
+void RotateDumps(const std::wstring& dir) {
+  std::vector<std::pair<FILETIME, std::wstring>> files;
+  WIN32_FIND_DATAW fd;
+  HANDLE h = FindFirstFileW((dir + L"nhl13_*.dmp").c_str(), &fd);
+  if (h == INVALID_HANDLE_VALUE) {
+    return;
+  }
+  do {
+    files.push_back({fd.ftLastWriteTime, fd.cFileName});
+  } while (FindNextFileW(h, &fd));
+  FindClose(h);
+  std::sort(files.begin(), files.end(), [](const auto& a, const auto& b) {
+    return CompareFileTime(&a.first, &b.first) > 0;
+  });
+  for (size_t i = kKeepDumps; i < files.size(); ++i) {
+    DeleteFileW((dir + files[i].second).c_str());
+  }
+}
+
+void WriteSnapshot(const char* reason, EXCEPTION_POINTERS* info) {
+  // Слепок пишет внешний nhl13_snap.exe (рядом с exe): снимать себя изнутри нельзя —
+  // MiniDumpWriteDump в своём процессе встаёт на блокировках остановленных потоков.
+  static std::mutex mutex;
+  std::lock_guard<std::mutex> lock(mutex);
+  const std::wstring dir = ExeDir() + L"dumps\\";
+  CreateDirectoryW(dir.c_str(), nullptr);
+  SYSTEMTIME t;
+  GetLocalTime(&t);
+  wchar_t name[128];
+  swprintf(name, 128, L"nhl13_%04u%02u%02u_%02u%02u%02u_%hs.dmp", t.wYear, t.wMonth, t.wDay, t.wHour,
+           t.wMinute, t.wSecond, reason);
+  wchar_t cmd[1024];
+  if (info) {
+    swprintf(cmd, 1024, L"\"%snhl13_snap.exe\" %lu \"%s%s\" %lu %llX", ExeDir().c_str(),
+             GetCurrentProcessId(), dir.c_str(), name, GetCurrentThreadId(),
+             static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(info)));
+  } else {
+    swprintf(cmd, 1024, L"\"%snhl13_snap.exe\" %lu \"%s%s\"", ExeDir().c_str(), GetCurrentProcessId(),
+             dir.c_str(), name);
+  }
+  STARTUPINFOW si{sizeof(si)};
+  PROCESS_INFORMATION pi{};
+  if (!CreateProcessW(nullptr, cmd, nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
+    return;
+  }
+  WaitForSingleObject(pi.hProcess, 180000);
+  CloseHandle(pi.hThread);
+  CloseHandle(pi.hProcess);
+  RotateDumps(dir);
+}
+
 LONG WINAPI CrashFilter(EXCEPTION_POINTERS* info) {
   static volatile LONG once = 0;
   if (InterlockedExchange(&once, 1)) {
@@ -147,6 +204,7 @@ LONG WINAPI CrashFilter(EXCEPTION_POINTERS* info) {
     fflush(f);
   }
   fclose(f);
+  WriteSnapshot("crash", info);
   return EXCEPTION_CONTINUE_SEARCH;
 }
 
@@ -204,6 +262,27 @@ void DumpAllThreads(FILE* f) {
   }
 }
 
+// Слепок по требованию (зависание): Ctrl+Alt+F12 или файл nhl13_snapshot.flag рядом с exe.
+void SnapshotWatcher() {
+  const std::wstring flag = ExeDir() + L"nhl13_snapshot.flag";
+  bool held = false;
+  for (;;) {
+    Sleep(100);
+    const bool keys = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_MENU) & 0x8000) &&
+                      (GetAsyncKeyState(VK_F12) & 0x8000);
+    const bool by_flag = GetFileAttributesW(flag.c_str()) != INVALID_FILE_ATTRIBUTES;
+    if (by_flag) {
+      DeleteFileW(flag.c_str());
+    }
+    if ((keys && !held) || by_flag) {
+      Beep(880, 120);
+      WriteSnapshot(by_flag ? "flag" : "manual", nullptr);
+      Beep(1320, 200);
+    }
+    held = keys;
+  }
+}
+
 void StackDumpWatcher() {
   const std::wstring flag = ExeDir() + L"nhl13_dump.flag";
   const std::wstring out = ExeDir() + L"nhl13_stacks.txt";
@@ -255,6 +334,10 @@ void AbortHandler(int) {
     WriteFrame(f, i, frames[i]);
   }
   fclose(f);
+  if (lock.owns_lock()) {
+    lock.unlock();
+  }
+  WriteSnapshot("abort", nullptr);
 }
 
 struct Installer {
@@ -287,6 +370,7 @@ void Nhl13InstallCrashReporter() {
   static std::once_flag watcher;
   std::call_once(watcher, [] {
     std::thread(StackDumpWatcher).detach();
+    std::thread(SnapshotWatcher).detach();
     Nhl13StartWatcher();
   });
 }

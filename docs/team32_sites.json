@@ -715,6 +715,231 @@
    "src": "inline",
    "asm_old": "cmpwi cr6, r27, 30",
    "asm_new": "cmpwi cr6, r27, 32"
+  },
+  {
+   "addr": "828EF1D0",
+   "old": "386000F0",
+   "new": "386000F8",
+   "class": "PLAYOFF_RUN",
+   "func": "",
+   "what": "828EF198: Alloc this+80 u32[60] → [62]",
+   "src": "main"
+  },
+  {
+   "addr": "828EF1DC",
+   "old": "3940003C",
+   "new": "3940003E",
+   "class": "PLAYOFF_RUN",
+   "func": "",
+   "what": "828EF198: обнуление this+80 60 → 62",
+   "src": "main"
+  },
+  {
+   "addr": "828EF2E0",
+   "old": "2F1F001E",
+   "new": "2F1F0020",
+   "class": "PLAYOFF_RUN",
+   "func": "",
+   "what": "828EF198: список команд НХЛ 0…31",
+   "src": "main"
+  },
+  {
+   "addr": "828EF400",
+   "old": "2F1D001E",
+   "new": "2F1D0020",
+   "class": "PLAYOFF_RUN",
+   "func": "",
+   "what": "828EF198: очки команд НХЛ в A[32]",
+   "src": "main"
+  },
+  {
+   "addr": "828EF444",
+   "old": "3BE0001E",
+   "new": "3BE00020",
+   "class": "PLAYOFF_RUN",
+   "func": "",
+   "what": "828EF198: первая команда АХЛ (первый сезон)",
+   "src": "main"
+  },
+  {
+   "addr": "828EF4D4",
+   "old": "3B80001E",
+   "new": "3B800020",
+   "class": "PLAYOFF_RUN",
+   "func": "",
+   "what": "828EF198: первая команда АХЛ",
+   "src": "main"
+  },
+  {
+   "addr": "828EF4D8",
+   "old": "3BC10314",
+   "new": "3BC10324",
+   "class": "PLAYOFF_RUN",
+   "func": "",
+   "what": "828EF198: массив B (АХЛ) r1+784 → r1+800 (A вырос до 32)",
+   "src": "main"
+  },
+  {
+   "addr": "828EF5BC",
+   "old": "3880001E",
+   "new": "38800020",
+   "class": "PLAYOFF_RUN",
+   "func": "",
+   "what": "828EF198: сортировка A — 32",
+   "src": "main"
+  },
+  {
+   "addr": "828EF5D8",
+   "old": "38610310",
+   "new": "38610320",
+   "class": "PLAYOFF_RUN",
+   "func": "",
+   "what": "828EF198: сортировка B — новый адрес",
+   "src": "main"
+  },
+  {
+   "addr": "828EF630",
+   "old": "39410310",
+   "new": "39410320",
+   "class": "PLAYOFF_RUN",
+   "func": "",
+   "what": "828EF198: чтение B — новый адрес",
+   "src": "main"
+  },
+  {
+   "addr": "828EF684",
+   "old": "2F1F001E",
+   "new": "2F1F0020",
+   "class": "PLAYOFF_RUN",
+   "func": "",
+   "what": "828EF198: НХЛ < 32",
+   "src": "main"
+  },
+  {
+   "addr": "828EF69C",
+   "old": "2F1E001E",
+   "new": "2F1E0020",
+   "class": "PLAYOFF_RUN",
+   "func": "",
+   "what": "828EF198: АХЛ ≥ 32",
+   "src": "main"
+  },
+  {
+   "addr": "828EF6A4",
+   "old": "2F1E003C",
+   "new": "2F1E003E",
+   "class": "PLAYOFF_RUN",
+   "func": "",
+   "what": "828EF198: профи < 62",
+   "src": "main"
+  },
+  {
+   "addr": "828EF6F4",
+   "old": "38210460",
+   "new": "38210470",
+   "class": "PLAYOFF_RUN",
+   "func": "",
+   "what": "828EF198: кадр 1120 → 1136 (пара к stwu 828EF1A0, врезка Nhl13StackGrow16)",
+   "src": "main"
+  },
+  {
+   "addr": "828F6A98",
+   "old": "2F1E003C",
+   "new": "2F1E003E",
+   "class": "PLAYOFF_RUN",
+   "func": "",
+   "what": "828F6A60: чтение this+80 по номеру профи-команды < 62",
+   "src": "main"
+  },
+  {
+   "addr": "82931BFC",
+   "old": "3940001E",
+   "new": "39400020",
+   "class": "DRAFT",
+   "func": "",
+   "what": "82931B70: пиков в раунде = число команд",
+   "src": "main"
+  },
+  {
+   "addr": "8290CDB4",
+   "old": "2F0A001E",
+   "new": "2F0A0020",
+   "class": "DRAFT",
+   "func": "",
+   "what": "порядок драфта: цикл по командам",
+   "src": "main"
+  },
+  {
+   "addr": "829327E8",
+   "old": "38E0001E",
+   "new": "38E00020",
+   "class": "DRAFT",
+   "func": "",
+   "what": "N команд для 82818D20",
+   "src": "main"
+  },
+  {
+   "addr": "8293281C",
+   "old": "38E0001E",
+   "new": "38E00020",
+   "class": "DRAFT",
+   "func": "",
+   "what": "N команд для 82818D20",
+   "src": "main"
+  },
+  {
+   "addr": "82932794",
+   "old": "38600D20",
+   "new": "38600E00",
+   "class": "DRAFT",
+   "func": "",
+   "what": "Alloc пиков 210·16 → 224·16",
+   "src": "main"
+  },
+  {
+   "addr": "829327A4",
+   "old": "394000D2",
+   "new": "394000E0",
+   "class": "DRAFT",
+   "func": "",
+   "what": "пиков всего 7·30 → 7·32",
+   "src": "main"
+  },
+  {
+   "addr": "82932AB4",
+   "old": "3B8000D2",
+   "new": "3B8000E0",
+   "class": "DRAFT",
+   "func": "",
+   "what": "пиков всего 7·30 → 7·32",
+   "src": "main"
+  },
+  {
+   "addr": "8293210C",
+   "old": "2F1C001E",
+   "new": "2F1C0020",
+   "class": "DRAFT",
+   "func": "",
+   "what": "драфт: команда < 32",
+   "src": "main"
+  },
+  {
+   "addr": "82971E18",
+   "old": "3880001E",
+   "new": "38800020",
+   "class": "DRAFT",
+   "func": "",
+   "what": "UI драфта: 32 команды",
+   "src": "main"
+  },
+  {
+   "addr": "82971E74",
+   "old": "2F1F001E",
+   "new": "2F1F0020",
+   "class": "DRAFT",
+   "func": "",
+   "what": "UI драфта: цикл по командам",
+   "src": "main"
   }
  ],
  "mismatch": [],

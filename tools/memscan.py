@@ -3,6 +3,8 @@
     python memscan.py base                      # где в процессе лежит гостевая память
     python memscan.py find HEX [--max N]        # найти последовательность байт (big-endian, как в госте)
     python memscan.py dump GUEST_ADDR [LEN]     # показать байты по гостевому адресу
+    python memscan.py --dump ФАЙЛ.dmp find HEX  # то же по слепку (dumps
+hl13_*.dmp рядом с exe)
 
 Порт держит память Xbox 360 одним большим отображением: гостевой адрес A лежит по
 host = base + A. База ищется по образу default.xex: в госте он начинается с 0x82000000
@@ -50,6 +52,44 @@ class Proc:
             if addr >= 1 << 47:
                 break
 
+class DumpProc:
+    """Слепок процесса (minidump с полной памятью, Memory64ListStream) с тем же интерфейсом, что Proc."""
+    def __init__(self, path):
+        import bisect, mmap
+        self.f = open(path, 'rb')
+        self.m = mmap.mmap(self.f.fileno(), 0, access=mmap.ACCESS_READ)
+        if self.m[:4] != b'MDMP':
+            raise SystemExit(f'{path}: не minidump')
+        n, rva = struct.unpack_from('<II', self.m, 8)
+        self.ranges = []
+        for i in range(n):
+            st, size, srva = struct.unpack_from('<III', self.m, rva + 12 * i)
+            if st == 9:  # Memory64ListStream
+                count, base = struct.unpack_from('<QQ', self.m, srva)
+                off = base
+                for k in range(count):
+                    start, length = struct.unpack_from('<QQ', self.m, srva + 16 + 16 * k)
+                    self.ranges.append((start, length, off))
+                    off += length
+        self.ranges.sort()
+        self.starts = [r[0] for r in self.ranges]
+        self._bisect = bisect.bisect_right
+
+    def read(self, addr, n):
+        i = self._bisect(self.starts, addr) - 1
+        if i < 0:
+            return None
+        start, length, off = self.ranges[i]
+        if addr + n > start + length:
+            if addr >= start + length:
+                return None
+            n = start + length - addr
+        return bytes(self.m[off + addr - start:off + addr - start + n])
+
+    def regions(self):
+        for start, length, _ in self.ranges:
+            yield start, length
+
 def find_base(p):
     probe = open(r'S:\Claude\megarohas_nhl13\game\extracted\xex\default.bin', 'rb').read()[0x1000:0x1040]
     # сначала типичные базы, потом — поиск образа по регионам процесса
@@ -73,8 +113,9 @@ def main():
     ap.add_argument('arg', nargs='?')
     ap.add_argument('arg2', nargs='?')
     ap.add_argument('--max', type=int, default=20)
+    ap.add_argument('--dump', help='слепок процесса (.dmp) вместо живой игры')
     a = ap.parse_args()
-    p = Proc(pid_of())
+    p = DumpProc(a.dump) if a.dump else Proc(pid_of())
     gb = find_base(p)
     if a.cmd == 'base':
         print(f'гостевая база: 0x{gb:X}')
