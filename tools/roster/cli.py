@@ -4,7 +4,7 @@
     python tools/roster build                       # кэш → game/work/roster/players.json
     python tools/roster lines                       # звенья DailyFaceoff + players.json → lines.json
     python tools/roster match                       # players.json + база → match.json
-    python tools/roster write  [--db-in DB] [--db-out DB]                    # → game/work/roster/nhlng.db
+    python tools/roster write  [--db-in DB] [--db-out DB] [--rating-lines]   # → game/work/roster/nhlng.db
     python tools/roster report                      # → game/work/roster/report.md
     python tools/roster all    [--offline]          # всё подряд
     python tools/roster all --offline --work roster-lines   # всё в другую папку: game/work/roster-lines/
@@ -36,6 +36,7 @@ def main():
     ap.add_argument('--refresh', action='store_true', help='fetch: скачать заново, не глядя в кэш')
     ap.add_argument('--offline', action='store_true', help='только кэш; нет файла — ошибка')
     ap.add_argument('--pause', type=float, default=1.0, help='пауза между запросами к хосту, с (не меньше 1)')
+    ap.add_argument('--rating-lines', action='store_true', help='write: звенья всех клубов по рейтингу, без lines.json')
     a = ap.parse_args()
     paths = Paths(a.game, a.work)
     if a.db_in:
@@ -61,7 +62,7 @@ def main():
             match.run(paths)
         elif stage == 'write':
             from . import write
-            write.run(paths)
+            write.run(paths, real_lines=not a.rating_lines)
         elif stage == 'report':
             from . import report
             report.run(paths)
