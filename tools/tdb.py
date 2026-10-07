@@ -94,6 +94,22 @@ class Tdb:
         v = (v & ~(((1 << width) - 1) << shift)) | (value << shift)
         self.d[rec:rec + t['reclen']] = v.to_bytes(t['reclen'], 'big')
 
+    def get_string(self, table, field, row):
+        """Строка фиксированной длины в записи (kind 0, UTF-8): байты до первого нуля."""
+        t = self.by_name[table]
+        off, width = t['fields'][field]
+        start = t['records'] + row * t['reclen'] + off // 8
+        return bytes(self.d[start:start + width // 8]).split(b'\0', 1)[0].decode('utf-8', errors='replace')
+
+    def set_string(self, table, field, row, text):
+        t = self.by_name[table]
+        off, width = t['fields'][field]
+        raw = text.encode('utf-8')
+        if off % 8 or width % 8 or len(raw) >= width // 8:
+            raise ValueError(f'{table}.{field}: строка «{text}» не влезает в {width // 8 - 1} байт')
+        start = t['records'] + row * t['reclen'] + off // 8
+        self.d[start:start + width // 8] = raw + bytes(width // 8 - len(raw))
+
     def column(self, table, field):
         return [self.get(table, field, r) for r in range(self.by_name[table]['rows'])]
 
