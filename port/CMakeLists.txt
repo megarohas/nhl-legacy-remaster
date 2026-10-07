@@ -13,6 +13,7 @@ include(generated/rexglue.cmake)
 # Sources
 set(NHL13_SOURCES
     src/main.cpp
+    src/nhl13_imports.cpp
 )
 
 if(WIN32)
