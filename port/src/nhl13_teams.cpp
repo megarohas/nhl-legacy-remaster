@@ -349,6 +349,72 @@ void Nhl13TieBuffer(PPCRegister& r) {
   r.u64 = buffer;
 }
 
+// Таблица статистики (объект 8205A920): записи по 24 байта с +32, число — +44; запись: +0 —
+// номер объекта команды, +16 — объект команды (массив с +36, по 200 байт), +20 — сведения
+// (массив с +40, по 296). Цела, если каждая запись указывает на свой объект и объекты не
+// повторяются.
+bool StatsTableOk(uint8_t* base, uint32_t self, std::string* teams = nullptr) {
+  const uint32_t recs = Load32(base, self + 32);
+  const uint32_t n = Load32(base, self + 44);
+  const uint32_t objs = Load32(base, self + 36);
+  if (!recs || !objs || n > 128) {
+    return true;
+  }
+  uint64_t seen[2] = {};
+  bool ok = true;
+  for (uint32_t k = 0; k < n; ++k) {
+    const uint32_t obj = Load32(base, recs + 24 * k + 16);
+    const uint32_t i = (obj - objs) / 200;
+    const bool valid = obj >= objs && i < n && (obj - objs) % 200 == 0;
+    if (teams) {
+      *teams += valid ? std::to_string(Load8(base, obj + 8)) + " " : "? ";
+    }
+    if (!valid || (seen[i >> 6] >> (i & 63) & 1)) {
+      ok = false;
+      continue;
+    }
+    seen[i >> 6] |= 1ull << (i & 63);
+  }
+  return ok;
+}
+
+// Сортировка таблицы статистики (диспетчер по типу +80: 82913330, 82925900, 829258B0,
+// 8291C838; r4 — вид статистики). С 32 командами при загрузке матча (Чикаго — Монреаль)
+// таблица выходила с дублями и мусором → чтение по мусору в 8291C220. Страховка: таблица до
+// вызова запоминается; если после вызова она испорчена — в лог (тип, вид статистики, команды
+// до/после) и обратно прежний порядок.
+extern "C" void __imp__sub_8292A868(PPCContext& ctx, uint8_t* base);
+extern "C" void sub_8292A868(PPCContext& ctx, uint8_t* base) {
+  const uint32_t self = ctx.r3.u32;
+  const uint32_t stat = ctx.r4.u32;
+  const uint32_t mode = ctx.r5.u32;
+  const uint32_t recs = Load32(base, self + 32);
+  const uint32_t n = Load32(base, self + 44);
+  std::string before;
+  const bool ok_before = recs && n && n <= 128 && StatsTableOk(base, self, &before);
+  std::string saved;
+  if (ok_before) {
+    saved.assign(reinterpret_cast<const char*>(Host(base, recs)), n * 24);
+  }
+  __imp__sub_8292A868(ctx, base);
+  if (!ok_before) {
+    return;
+  }
+  std::string after;
+  if (StatsTableOk(base, self, &after)) {
+    return;
+  }
+  static int logged = 0;
+  if (logged++ < 10) {
+    REXLOG_ERROR("[nhl13] stats sort broke the table: type {} stat {} mode {} n {}; before: {}; after: {}",
+                 Load32(base, self + 80), stat, mode, n, before, after);
+    if (logged == 1) {
+      LogStackOnce("8292A868 (сортировка испортила таблицу статистики)");
+    }
+  }
+  std::memcpy(Host(base, recs), saved.data(), saved.size());
+}
+
 // Таблица статистики команд (8292F258 заполняет записи по командам дерева лиги): проверка,
 // что команды в ней не повторяются — повтор значит испорченное дерево (см. выше).
 extern "C" void __imp__sub_8292F258(PPCContext& ctx, uint8_t* base);
