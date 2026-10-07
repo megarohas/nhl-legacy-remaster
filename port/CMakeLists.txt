@@ -17,6 +17,7 @@ set(NHL13_SOURCES
     src/nhl13_crash.cpp
     src/nhl13_input_lock.cpp
     src/nhl13_year.cpp
+    src/nhl13_teams.cpp
 )
 
 if(WIN32)

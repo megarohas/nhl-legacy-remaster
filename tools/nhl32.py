@@ -20,7 +20,7 @@
 - Строки локализации по номеру (NHLTeamName_30 и т. п.) указывают на строки
   Tappara/TPS (меняются только указатели, пул строк не трогается).
 """
-import argparse, random, struct, sys
+import argparse, random, re, struct, sys
 from collections import Counter, defaultdict
 from tdb import Tdb, DEFAULT_META
 from tdb_read import load_meta
@@ -74,6 +74,12 @@ REAL_CONFERENCE = {'Atlantic': EAST, 'Metropolitan': EAST, 'Central': WEST, 'Pac
 GAMES, HOME = 84, 42
 # АХЛ-филиал (номер + 1) — общий с соседом по региону, своих клубов в АХЛ нет.
 AHL_AFFILIATE = {30: 32 + 1, 31: 58 + 1}   # Abbotsford, Texas
+# Вместимость таблиц франшизы = maxinsert в схеме nhlng-meta.xml (игра читает её из
+# cache:\db\, сверено с сейвом франшизы): у этих — ровно под 30 команд.
+# leaguetempscheduletable — 2 × 1350 игр (НХЛ + АХЛ), как буферы календаря в коде
+# (их порт поднимает до 1600 — src/nhl13_teams.cpp).
+META_MAXINSERT = {'leaguegmdata': 32, 'leaguestaffdata': 32, 'leaguedraftpick': 32 * 7 * 6,
+                  'leaguetempscheduletable': 2 * 1600}
 LOC_ALIASES = {  # ключ по номеру команды ← ключ по аббревиатуре
     'NHLTeamName_{n}': 'NHLTeamName_{a}', 'NHLCityName_{n}': 'NHLCityName_{a}',
     'NICKLINE2_{n}': 'Teamline2_{a}', 'CITYLINE1_{n}': 'Teamline1_{a}',
@@ -256,10 +262,18 @@ def prune_liiga(db):
             db.set(t, f, i, v)
     return len(keep)
 
+def patch_meta(text):
+    for table, n in META_MAXINSERT.items():
+        pat = re.compile(r'(<table name="%s"[^>]*maxinsert=")(\d+)(")' % table)
+        text, k = pat.subn(lambda m: m.group(1) + str(n) + m.group(3), text)
+        assert k == 1, table
+    return text
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument('db_in'); ap.add_argument('db_out'); ap.add_argument('loc_in'); ap.add_argument('loc_out')
     ap.add_argument('--loc-meta', default=None)
+    ap.add_argument('--meta', nargs=2, metavar=('META_IN', 'META_OUT'), help='схема nhlng-meta.xml: вместимость таблиц франшизы')
     ap.add_argument('--seed', type=int, default=2026)
     a = ap.parse_args()
     sys.stdout.reconfigure(encoding='utf-8')
@@ -287,6 +301,10 @@ def main():
             loc.alias(dst.format(n=n), src.format(a=abbr))
     loc.db.fix()
     open(a.loc_out, 'wb').write(loc.db.d)
+    if a.meta:
+        meta = patch_meta(open(a.meta[0], encoding='utf-8', newline='').read())
+        open(a.meta[1], 'w', encoding='utf-8', newline='').write(meta)
+        print(f'схема: {META_MAXINSERT} -> {a.meta[1]}')
     print(f'записано: {a.db_out}, {a.loc_out}')
 
 if __name__ == '__main__':

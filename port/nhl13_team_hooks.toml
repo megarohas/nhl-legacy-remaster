@@ -1,0 +1,85 @@
+# Вместимость календаря лиги во франшизе: 1350 игр → 1600 (src/nhl13_teams.cpp).
+# Буфер 0x93A8 = 37 800 байт = 1350 игр по 28 байт: выделение (ori r3, …, 0x93A8),
+# заполнение нулями (li r10, 1350 → mtctr) и предел, который передаётся в 827B2C58 и
+# 8286AD88. Без этого календарь 32 команд по 84 игры (1344 + 64 предсезонных)
+# переполняет буфер и портит кучу. Разбор — docs/teams.md.
+
+# 827B2300: три буфера календаря
+[[midasm_hook]]
+address = 0x827B2360
+name = "Nhl13ScheduleBytes"
+registers = ["r3"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827B2374
+name = "Nhl13ScheduleCapacity"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827B27C0
+name = "Nhl13ScheduleBytes"
+registers = ["r3"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827B27D0
+name = "Nhl13ScheduleCapacity"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827B2958
+name = "Nhl13ScheduleBytes"
+registers = ["r3"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x827B2968
+name = "Nhl13ScheduleCapacity"
+registers = ["r10"]
+after_instruction = true
+
+# 828DE2C8: календарь лиги при создании франшизы и новом сезоне
+[[midasm_hook]]
+address = 0x828DE510
+name = "Nhl13ScheduleBytes"
+registers = ["r3"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828DE520
+name = "Nhl13ScheduleCapacity"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828DE5A8
+name = "Nhl13ScheduleCapacity"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828DE5D8
+name = "Nhl13ScheduleCapacity"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828DE648
+name = "Nhl13ScheduleCapacity"
+registers = ["r6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828DE6A8
+name = "Nhl13ScheduleCapacity"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828DE6D4
+name = "Nhl13ScheduleCapacity"
+registers = ["r9"]
+after_instruction = true
