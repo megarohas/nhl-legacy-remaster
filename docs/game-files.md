@@ -53,8 +53,30 @@ python ref/nhl-legacy-recomp/docs/nhl12-decomp-reference/tools/unpack_big.py gam
 
 `default.xex` (диск, без TU): SHA-1 `f4585cafe27bccd9bf68831f0bf1428907f5774a`.
 
+## Апдейт TU2
+
+```bash
+python tools/stfs.py verify game/raw/Hdd1/Content/0000000000000000/4541099B/000B0000/tu00000002_00000000
+python tools/stfs.py extract game/raw/Hdd1/Content/0000000000000000/4541099B/000B0000/tu00000002_00000000 game/extracted/tu2
+```
+
+Пакет `LIVE` «NHL® 13 Title Update», версия 2, media ID `583EFE34` — тот же, что у
+установки с диска, то есть апдейт именно к этому выпуску. Хеши STFS сходятся.
+
+| Файл | Размер | SHA-1 | Что |
+|---|---:|---|---|
+| `default.xexp` | 3 235 840 | `b3af7f5f02f719dcb12e7ae82547faeda93404c3` | дельта-патч к `default.xex` (XEX2) |
+| `patch.big` | 6 801 728 | `7ab034c60dd18d4aab5ec0a5addd2d96893398fd` | BigEB v3, 94 записи |
+
+`patch.big` заменяет файлы интерфейса (`fe/ion/…`, 49 шт.), сценарии (`scenario/…`),
+шлемы и джерси, `shaders/skatespray.fxo`, а также `sku/na.ini`,
+`fe/dime/nhldimecfg.xml` и `fe/gm_easy.bin` / `gm_med.bin` / `gm_hard.bin`.
+**Базы (`db/`, `fe/loc/`) в апдейте нет** — `nhlng.db` с диска актуальна.
+
+Legacy-порт собирается с чистого `default.xex` с диска и отказывает дампам с
+применённым апдейтом. Для NHL 13 база порта (диск или диск + TU2) — решить позже.
+
 ## Ещё посмотреть
 
 - `boot.big`: `fe/dynamicsettings.txt`, `sku/na.ini`, `fe/dime/*.xml` — кандидаты на
-  конфиг со стартовым годом.
-- Апдейт TU2 (`tu00000002_00000000`, пакет STFS `LIVE`) — что в нём кроме патча `default.xexp`.
+  конфиг со стартовым годом; `fe/gm_*.bin` из TU2.
