@@ -8,7 +8,9 @@ gpu_plugin = "xenos"
 # соседей рисовался чёрным; readback_resolve=full — формы игроков (и в Xenia для
 # NHL 13); EA-игры читают нулевую страницу; недопустимые fetch-константы — как у Legacy.
 render_target_path_d3d12 = "rov"
-readback_resolve = "full"
+# "full" (синхронное чтение, точно, но с остановками) — тормоза: видеокарта ~3%, ~25 кадров (07.10.2026).
+# "some" — с задержкой в кадр, только при промахе кэша: ~60 кадров.
+readback_resolve = "some"
 protect_zero = false
 gpu_allow_invalid_fetch_constants = true
 

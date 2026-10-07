@@ -35,10 +35,16 @@
 #include <mutex>
 #include <string>
 
+#include <rex/cvar.h>
 #include <rex/logging.h>
 #include <rex/ppc.h>
 
 #include "nhl13_debug.h"
+
+REXCVAR_DEFINE_BOOL(nhl_heap_guard, true, "NHL13",
+                    "Guard the guest small-block heap: double free, write after free, broken free list "
+                    "(nhl13_heap.log); costs some speed")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
 extern "C" void __imp__sub_82A9B108(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__sub_82A9AE28(PPCContext& ctx, uint8_t* base);
@@ -97,7 +103,15 @@ void Store32(uint8_t* base, uint32_t addr, uint32_t v) {
   std::memcpy(Host(base, addr), &v, 4);
 }
 
+bool GuardOn() {
+  static const bool on = REXCVAR_GET(nhl_heap_guard);
+  return on;
+}
+
 HeapTable* Table(uint8_t* base, uint32_t heap) {
+  if (!GuardOn()) {
+    return nullptr;
+  }
   for (auto& t : g_heaps) {
     const uint32_t h = t.heap.load(std::memory_order_acquire);
     if (h == heap) {
