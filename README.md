@@ -17,7 +17,12 @@
 | [docs/xbox-transfer.md](docs/xbox-transfer.md) | Как достать файлы с приставки |
 | [docs/game-files.md](docs/game-files.md) | Что внутри игры, где база, как распаковать |
 | [tools/svod.py](tools/svod.py) | Проверка и распаковка контейнеров SVOD (установка с диска, GoD) |
+| [docs/year-and-date.md](docs/year-and-date.md) | Где живут текущий год и даты: сейвы, календари, код |
 | [tools/stfs.py](tools/stfs.py) | Проверка и распаковка пакетов STFS (апдейты, сейвы) |
+| [tools/xex.py](tools/xex.py) | Расшифровка и разжатие `default.xex` в образ памяти |
+| [tools/lzx.py](tools/lzx.py), [tools/aes.py](tools/aes.py) | LZX (порт lzxd) и AES-128 на чистом Python |
+| [tools/unchunk.py](tools/unchunk.py) | Разжатие EA `chunklzx` / `chunkzip` внутри `.big` |
+| [tools/ppcdis.py](tools/ppcdis.py) | Мини-дизассемблер PowerPC для разведки по образу |
 | [tools/tdb_read.py](tools/tdb_read.py) | Читалка баз EA TDB v6 (только чтение) |
 | `game/` | Локальные файлы игры, не в git |
 | `ref/` | Клоны репозиториев puckhead73 для справки, не в git |
@@ -31,5 +36,7 @@
 - [x] Распаковка SVOD с проверкой хешей: 20 файлов в `game/extracted/disc/` (`default.xex`, `.big`)
 - [x] `nhlng.db` найдена (`cache.big` → `db/`), побайтово равна анкерной из nhl-modding-studio
 - [x] Апдейт TU2 разобран: `default.xexp` + `patch.big` (интерфейс, сценарии; базы нет)
-- [ ] Стартовый год франшизы (2012): конфиг или код
+- [x] Стартовый год: в конфигах нет; год лиги — в сейве (`leaguestates`), но 2012 зашит в код ~88 функций
+- [ ] Возраст во франшизе 2017 года: от года лиги или от 2012 (проверка на приставке)
+- [ ] Правка `leaguestates` в сейве: запись TDB + перехеширование STFS
 - [ ] Порт: генерация кода ReXGlue

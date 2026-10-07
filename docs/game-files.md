@@ -10,6 +10,22 @@ python tools/svod.py extract game/raw/Hdd1/Content/0000000000000000/4541099B/000
 python ref/nhl-legacy-recomp/docs/nhl12-decomp-reference/tools/unpack_big.py game/extracted/disc/cache.big -o game/extracted/big --pattern '^(db|fe/loc)/'
 ```
 
+Архивы удобнее распаковывать каждый в свою папку (`game/extracted/big/boot`,
+`…/cache`, `…/tu2-patch`), а потом разжимать вложенное сжатие: около 400 файлов внутри
+`.big` (`.lnb`, `.xml`, `.json`, `.bin`, `.lua`, текстуры) дополнительно упакованы
+EA `chunklzx` — LZX в кадрах XMemCompress с окном 2^17. `unpack_big.py` знает только
+`chunkzip` (deflate) и оставляет их как есть:
+
+```bash
+python tools/unchunk.py game/extracted/big
+```
+
+Исполняемый файл — расшифровка и разжатие в образ памяти (база 0x82000000):
+
+```bash
+python tools/xex.py extract game/extracted/disc/default.xex game/extracted/xex/default.bin
+```
+
 `ref/` — клоны [nhl-legacy-recomp](https://github.com/puckhead73/nhl-legacy-recomp) и
 [nhl-modding-studio](https://github.com/puckhead73/nhl-modding-studio) (`git clone --depth 1`).
 В git-консоли Windows для кириллицы в выводе — `PYTHONUTF8=1`.
@@ -52,6 +68,9 @@ python ref/nhl-legacy-recomp/docs/nhl12-decomp-reference/tools/unpack_big.py gam
 `exhibitionplayerbiotable` 5412 игроков с годами рождения 1960–1996.
 
 `default.xex` (диск, без TU): SHA-1 `f4585cafe27bccd9bf68831f0bf1428907f5774a`.
+Внутреннее имя `nhlzf.exe`, точка входа `0x82707550`, образ 0x1BB0000 байт, 11 секций
+(`.text` 0x823F0000, 20 МБ; `.pdata` — 75 355 функций). Образ (`default.bin`):
+SHA-1 `465b937a09c2819809c6f1a5c32f7c9b9d1e8f4e`; разжатие сверено с `expand.exe`.
 
 ## Апдейт TU2
 
