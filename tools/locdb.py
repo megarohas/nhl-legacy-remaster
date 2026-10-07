@@ -2,6 +2,7 @@
 
     python locdb.py dump DB META [FILTER]          # stringid<TAB>текст (FILTER — подстрока)
     python locdb.py set  DB META OUT KEY=ТЕКСТ…    # правка по stringid, CRC пересчитываются
+    python locdb.py put  DB META OUT KEY=ТЕКСТ…    # новая строка в конец пула (любой длины), ключ — на неё
 
 Таблица типа 66: записи по 16 байт (stringid — varchar с 1-байтовой длиной,
 sourcetext — с 2-байтовой, hashid), строки лежат в пуле за записями, сжатые
@@ -13,7 +14,9 @@ sourcetext — с 2-байтовой, hashid), строки лежат в пул
 Правка на месте: новый текст кодируется тем же деревом и пишется по старому
 смещению, если влезает в прежний объём (иначе ошибка). Одна строка пула может
 принадлежать нескольким ключам (дедупликация) — правка меняет их все, это выводится.
-Текст — UTF-8 (® = C2 AE).
+`put` дописывает строку в конец пула и переводит на неё только этот ключ: пул растёт,
+в заголовке таблицы (+0x10) — занятый объём пула, файл (db_size @0x08) — на столько же
+(область пула выровнена на 4). Текст — UTF-8 (® = C2 AE).
 """
 import struct, sys
 from collections import deque
@@ -117,6 +120,44 @@ class LocDb:
         start = self.pool_start + txt_off
         self.db.d[start:start + len(encoded)] = encoded
 
+    def encode(self, text):
+        raw = text.encode('utf-8')
+        missing = sorted({chr(b) for b in raw if b not in self.codes})
+        if missing:
+            raise ValueError(f'символов нет в дереве Хаффмана: {missing}')
+        bits = ''.join(self.codes[b] for b in raw)
+        return len(raw).to_bytes(2, 'big') + int(bits.ljust((len(bits) + 7) // 8 * 8, '0') or '0', 2).to_bytes((len(bits) + 7) // 8, 'big')
+
+    def put(self, key, text):
+        """Новая строка в конец пула; ключ key показывает её (другие ключи старой строки не меняются)."""
+        blk = self.table['block']
+        used = struct.unpack('>I', self.db.d[blk + 0x10:blk + 0x14])[0]
+        region = self.pool_end - self.pool_start
+        if used > region:
+            raise ValueError(f'занято {used} байт пула при области {region}')
+        enc = self.encode(text)
+        new_used = used + len(enc)
+        new_region = (new_used + 3) // 4 * 4
+        delta = new_region - region
+        if delta > 0:
+            self.db.d[self.pool_end:self.pool_end] = bytes(delta)
+        self.db.d[self.pool_start + used:self.pool_start + used + len(enc)] = enc
+        self.db.d[blk + 0x10:blk + 0x14] = struct.pack('>I', new_used)
+        if delta > 0:
+            n = self.db.u32(0x10)
+            for i in range(n):
+                slot = 0x1C + 8 * i
+                if 0x18 + 8 * n + self.db.u32(slot) > blk:
+                    self.db.put32(slot, self.db.u32(slot) + delta)
+            self.db.put32(0x08, self.db.u32(0x08) + delta)
+            self.pool_end += delta
+        recs = self.table['records']
+        for r, sid, off in self.rows():
+            if sid == key:
+                self.db.d[recs + r * 16 + 4:recs + r * 16 + 8] = struct.pack('>I', used)
+                return used
+        raise KeyError(f'нет ключа {key}')
+
 def main():
     cmd, db_path, meta_path = sys.argv[1:4]
     loc = LocDb(open(db_path, 'rb').read(), load_meta(meta_path))
@@ -128,6 +169,14 @@ def main():
                 print(f'{sid}\t{t}')
         return
     out, edits = sys.argv[4], dict(a.split('=', 1) for a in sys.argv[5:])
+    if cmd == 'put':
+        for key, text in edits.items():
+            loc.put(key, text)
+            print(f'{key} -> «{text}» (новая строка)')
+        loc.db.fix()
+        open(out, 'wb').write(loc.db.d)
+        print(f'записано -> {out}')
+        return
     by_offset = {}
     for r, sid, off in loc.rows():
         by_offset.setdefault(off, []).append(sid)
