@@ -6,10 +6,11 @@
     python tools/roster write  [--db-in DB] [--db-out DB]                    # → game/work/roster/nhlng.db
     python tools/roster report                      # → game/work/roster/report.md
     python tools/roster all    [--offline]          # всё подряд
+    python tools/roster all --offline --work roster-lines   # всё в другую папку: game/work/roster-lines/
 
 Вход по умолчанию — game/work/nhl32/nhlng.db (НХЛ на 32 команды, tools/nhl32.py), выход —
-game/work/roster/nhlng.db; в game/userdata/ ничего не пишется. Подробно —
-docs/roster-pipeline.md.
+game/work/roster/nhlng.db (или --work/nhlng.db); в game/userdata/ ничего не пишется.
+Подробно — docs/roster-pipeline.md.
 """
 import argparse
 import sys
@@ -25,14 +26,17 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter, epilog='\n'.join(__doc__.splitlines()[2:]))
     ap.add_argument('stage', choices=STAGES + ['all'])
     ap.add_argument('--game', help='каталог game/ (по умолчанию — основной копии репозитория)')
+    ap.add_argument('--work', help='папка players.json, lines.json, match.json, write.json, отчётов и выходной базы: '
+                                   'имя в game/work/ (roster-lines или game/work/roster-lines) или абсолютный путь '
+                                   '(по умолчанию game/work/roster)')
     ap.add_argument('--db-in', help='входная база (по умолчанию game/work/nhl32/nhlng.db)')
-    ap.add_argument('--db-out', help='выходная база (по умолчанию game/work/roster/nhlng.db)')
+    ap.add_argument('--db-out', help='выходная база (по умолчанию <work>/nhlng.db)')
     ap.add_argument('--only', help='fetch: части через запятую (nhl, ea, nhlratings, wiki, dfo)')
     ap.add_argument('--refresh', action='store_true', help='fetch: скачать заново, не глядя в кэш')
     ap.add_argument('--offline', action='store_true', help='только кэш; нет файла — ошибка')
     ap.add_argument('--pause', type=float, default=1.0, help='пауза между запросами к хосту, с (не меньше 1)')
     a = ap.parse_args()
-    paths = Paths(a.game)
+    paths = Paths(a.game, a.work)
     if a.db_in:
         paths.db_in = a.db_in
     if a.db_out:

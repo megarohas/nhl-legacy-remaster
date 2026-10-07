@@ -51,10 +51,18 @@ def ref_meta():
 
 
 class Paths:
-    def __init__(self, game=None):
+    def __init__(self, game=None, work=None):
+        """`work` — папка промежуточных файлов, отчётов и выходной базы: абсолютный путь или
+        имя внутри game/work/ («roster-lines», можно и «game/work/roster-lines»); по умолчанию
+        game/work/roster."""
         self.game = game or game_dir()
         self.cache = os.path.join(self.game, 'work', 'roster-cache')
-        self.work = os.path.join(self.game, 'work', 'roster')
+        if work and not os.path.isabs(work):
+            parts = [x for x in os.path.normpath(work).split(os.sep) if x not in ('', '.')]
+            if [x.lower() for x in parts[:2]] == ['game', 'work']:
+                parts = parts[2:]
+            work = os.path.join(self.game, 'work', *parts) if parts else None
+        self.work = work or os.path.join(self.game, 'work', 'roster')
         self.db_in = os.path.join(self.game, 'work', 'nhl32', 'nhlng.db')
         self.db_orig = os.path.join(self.game, 'extracted', 'big', 'cache', 'db', 'nhlng.db')
         self.db_out = os.path.join(self.work, 'nhlng.db')
@@ -63,6 +71,8 @@ class Paths:
         self.written = os.path.join(self.work, 'write.json')
         self.report = os.path.join(self.work, 'report.md')
         self.registry = os.path.join(self.work, 'artid-registry.json')
+        # artid новых игроков общие для всех папок: в новой папке таблица берётся из основной
+        self.registry_main = os.path.join(self.game, 'work', 'roster', 'artid-registry.json')
 
     def meta_for(self, db_path):
         """Схема рядом с базой (nhl32 кладёт свою, с вместимостью франшизы), иначе анкер."""

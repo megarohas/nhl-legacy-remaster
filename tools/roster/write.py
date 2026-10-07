@@ -66,6 +66,10 @@ class Writer:
         self.players = data['players']
         self.mt = mt['players']
         self.registry = read_json(paths.registry, {}) or {}
+        if not self.registry and os.path.exists(paths.registry_main):
+            # своя папка (--work) без таблицы artid: те же номера, что в основной (только чтение)
+            self.registry = read_json(paths.registry_main, {}) or {}
+            log(f'write: artid новых — по {paths.registry_main}')
         self.model = Model(self.v, self.players)
         self.safe = {ch for r in range(self.v.nbio) for f in ('firstname', 'lastname', 'birthplace')
                      for ch in self.v.s(f, r) if ord(ch) > 127}
