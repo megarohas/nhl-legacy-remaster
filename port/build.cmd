@@ -1,6 +1,7 @@
 @echo off
 rem Port build: MSVC environment (Windows SDK, libs) + Clang from LLVM, CMake, Ninja.
 rem   build.cmd [preset] [configure]     preset defaults to win-amd64-relwithdebinfo
+rem   env: JOBS (default 10), KEEP_GOING=1 to collect all compile errors (ninja -k 0)
 setlocal
 set "PATH=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer;%PATH%"
 call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" >nul || exit /b 1
@@ -11,4 +12,6 @@ if "%JOBS%"=="" set "JOBS=10"
 cd /d "%~dp0"
 cmake --preset %PRESET% -DCMAKE_PREFIX_PATH="%~dp0..\ref\rexglue-sdk-0.10.0\win-amd64" || exit /b 1
 if /i "%~2"=="configure" exit /b 0
-cmake --build out/build/%PRESET% -j %JOBS% || exit /b 1
+set "EXTRA="
+if "%KEEP_GOING%"=="1" set "EXTRA=-- -k 0"
+cmake --build out/build/%PRESET% -j %JOBS% %EXTRA% || exit /b 1

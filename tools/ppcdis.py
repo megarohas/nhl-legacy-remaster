@@ -57,10 +57,11 @@ def dis(w, addr):
         return f'bc{"l" if w & 1 else ""} {d}, cr{a >> 2}.{["lt", "gt", "eq", "so"][a & 3]}, 0x{tgt & 0xFFFFFFFF:08X}'
     if op == 19:
         xo = (w >> 1) & 0x3FF
+        lk = 'l' if w & 1 else ''
         if xo == 16:
-            return 'blr' if d == 20 else f'bclr {d}, {a}'
+            return f'blr{lk}' if d == 20 else f'bclr{lk} {d}, {a}'
         if xo == 528:
-            return 'bctr' if d == 20 else f'bcctr {d}, {a}'
+            return f'bctr{lk}' if d == 20 else f'bcctr{lk} {d}, {a}'
     if op == 21:
         sh, mb, me = b, (w >> 6) & 31, (w >> 1) & 31
         return f'rlwinm r{a}, r{d}, {sh}, {mb}, {me}'
