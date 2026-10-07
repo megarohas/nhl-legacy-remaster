@@ -83,6 +83,10 @@ python tools/year_hooks.py game/extracted/xex/default.bin --report   # реше�
 python tools/year_hooks.py game/extracted/xex/default.bin > port/nhl13_year_hooks.toml
 ```
 
+Проверено 07.10.2026 с `season_year = 2026`: возраст игроков в «Играть сейчас» — от
+2026 года, новая франшиза «Стань GM» создаётся и сохраняется; в её сейве
+`leaguestates` тип 13 = 2026, дата лиги 46290 = 25.09.2026, все CRC сходятся.
+
 Оговорки:
 
 - Франшиза хранит год лиги в сейве — грузить её с тем же `season_year`, с которым
