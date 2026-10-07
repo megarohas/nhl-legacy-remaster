@@ -20,6 +20,7 @@ set(NHL13_SOURCES
     src/nhl13_teams.cpp
     src/nhl13_watch.cpp
     src/nhl13_dbtrace.cpp
+    src/nhl13_team_sites.cpp
 )
 
 if(WIN32)

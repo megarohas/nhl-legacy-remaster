@@ -15,6 +15,7 @@
 #include <dbghelp.h>
 #include <tlhelp32.h>
 
+#include <csignal>
 #include <cstdio>
 #include <cstring>
 #include <mutex>
@@ -230,6 +231,32 @@ void StackDumpWatcher() {
   }
 }
 
+// std::abort() — так рантайм завершает игру на REX_FATAL (например, «Call to invalid or
+// unregistered function»): исключения нет, фильтр выше не срабатывает. Стек потока, где
+// вызван abort, — в nhl13_crash.txt (гостевые функции видны как __imp__sub_XXXXXXXX).
+void AbortHandler(int) {
+  static volatile LONG once = 0;
+  if (InterlockedExchange(&once, 1)) {
+    return;
+  }
+  FILE* f = _wfopen((ExeDir() + L"nhl13_crash.txt").c_str(), L"w");
+  if (!f) {
+    return;
+  }
+  fprintf(f, "abort() on thread %lu (REX_FATAL or CRT abort)\n", GetCurrentThreadId());
+  fflush(f);
+  CONTEXT c{};
+  RtlCaptureContext(&c);
+  DWORD64 frames[64];
+  std::unique_lock<std::mutex> lock(g_dbghelp_mutex, std::try_to_lock);
+  EnsureSymbols();
+  const int n = CaptureStack(c, frames, 64);
+  for (int i = 0; i < n; ++i) {
+    WriteFrame(f, i, frames[i]);
+  }
+  fclose(f);
+}
+
 struct Installer {
   Installer() { SetUnhandledExceptionFilter(CrashFilter); }
 } installer;
@@ -256,6 +283,7 @@ int Nhl13CaptureStack(CONTEXT ctx, DWORD64* out, int max) {
 // поставили свой фильтр) и запуск наблюдателя за флагом снимка стеков.
 void Nhl13InstallCrashReporter() {
   SetUnhandledExceptionFilter(CrashFilter);
+  signal(SIGABRT, AbortHandler);
   static std::once_flag watcher;
   std::call_once(watcher, [] {
     std::thread(StackDumpWatcher).detach();

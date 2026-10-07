@@ -83,3 +83,168 @@ address = 0x828DE6D4
 name = "Nhl13ScheduleCapacity"
 registers = ["r9"]
 after_instruction = true
+
+# Фарм-клубы команд 30/31: массив объекта лиги +520 рассчитан на 30 команд НХЛ, элементы
+# 30/31 хранятся снаружи (src/nhl13_teams.cpp, LeagueExtra). Чтения внутри больших функций:
+# 828C0250 (сведения о команде при записи в leagueteams)
+[[midasm_hook]]
+address = 0x828C0434
+name = "Nhl13AffiliateAt"
+registers = ["r11", "r29", "r30"]
+after_instruction = true
+
+# 828CD4E8 — то же при создании франшизы с составами
+[[midasm_hook]]
+address = 0x828CD7B8
+name = "Nhl13AffiliateAt"
+registers = ["r11", "r15", "r29"]
+after_instruction = true
+
+# 828CD4E8: лишние игроки (больше 23) — в фарм-клуб: r23 = фарм-клуб − 30 (АХЛ с 30) → − 32
+[[midasm_hook]]
+address = 0x828CD928
+name = "Nhl13AffiliateAhl"
+registers = ["r23", "r11", "r16", "r29"]
+after_instruction = true
+
+# Кэш сведений о командах НХЛ (глобальный указатель 0x83987B64, выделяет 82920020):
+# записи по 136 байт на 30 команд (+0…+4079), флаги «посчитано» (+4080, 32 байта), число
+# команд (+4112) — всего 4116 байт. 82917CD8 заполняет запись команды, 82917E10 отдаёт её.
+# При 32 командах записи 30/31 переезжают за счётчик (+4116): выделение больше на 2 · 136,
+# адрес записи для номеров ≥ 30 — туда (иначе запись 30-й команды затирала кучу).
+[[midasm_hook]]
+address = 0x82920058
+name = "Nhl13TeamCacheBytes"
+registers = ["r3"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82917D2C
+name = "Nhl13TeamCacheOffset"
+registers = ["r11", "r29"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82917D44
+name = "Nhl13TeamCacheWords"
+registers = ["r10", "r29"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82917E40
+name = "Nhl13TeamCacheOffset"
+registers = ["r11", "r30"]
+after_instruction = true
+
+# 828CD4E8 (создание команд и составов): ещё «АХЛ с 30» и «номер АХЛ = teamid − 2»
+# (разбор агента, team32_part1). При 32 командах номер АХЛ = teamid, первый — 32.
+[[midasm_hook]]
+address = 0x828CDC30   # addi r3, r11, -2: команда игрока АХЛ без клуба-владельца прав
+name = "Nhl13AhlUnshift"
+registers = ["r3"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828CDE04   # addi r11, r3, -30: индекс в league+772[30] (данные команд АХЛ)
+name = "Nhl13AhlShift"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828CDE4C   # addi r9, r16, -30: индекс своей команды АХЛ
+name = "Nhl13AhlShift"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828CDF80   # li r11, 30: первый номер АХЛ на быстром пути
+name = "Nhl13AhlBase"
+registers = ["r11"]
+after_instruction = true
+
+# 827C0D00: команды НХЛ, у которых фарм-клуб — данный клуб АХЛ (без франшизы, по базе): 0…29 → 0…31
+[[midasm_hook]]
+address = 0x827C0E4C   # cmpwi cr6, r30, 30
+name = "Nhl13NhlBound"
+registers = ["r30", "cr6"]
+after_instruction = true
+
+# StatsCache (рейтинги команд по статистике): блоки на 30 записей, заполнитель 827F24A8 пишет
+# по числу строк статистики команд без предела — пока ограничиваем 30 (2 команды без мест).
+[[midasm_hook]]
+address = 0x827F2508   # mr r29, r3: число строк
+name = "Nhl13StatsCacheCount"
+registers = ["r29"]
+after_instruction = true
+
+# Создание франшизы (разбор агента, team32_part2).
+# 828CEBF0 — раздача свободных агентов по составам: цикл по НХЛ, «фарм-клуб − 30», «i + 30»
+[[midasm_hook]]
+address = 0x828CF1AC   # cmpwi cr6, r29, 30
+name = "Nhl13NhlBound"
+registers = ["r29", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828CED70   # addi r11, r4, -30: AHL-порядковый номер фарм-клуба
+name = "Nhl13AhlShift"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828CF224   # addi r4, r30, 30: номер команды АХЛ
+name = "Nhl13AhlUnshift"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828CF570   # cmpwi cr6, r25, 30: потолок зарплат по командам НХЛ
+name = "Nhl13NhlBound"
+registers = ["r25", "cr6"]
+after_instruction = true
+
+# 828CE810: номер команды из AHL-порядкового (+ 30) — пара к 828CD928 (− 32)
+[[midasm_hook]]
+address = 0x828CE8C4   # addi r11, r29, 30
+name = "Nhl13AhlUnshift"
+registers = ["r11"]
+after_instruction = true
+
+# 828F8808, конец создания: ИИ составов — НХЛ 0…r22−1, затем остальные профи до 60.
+# r22 — число команд в списке НХЛ из меню (30 при меню на 30) → число команд НХЛ.
+[[midasm_hook]]
+address = 0x828F8FD8   # lwz r22, 100(r1)
+name = "Nhl13NhlCount"
+registers = ["r22"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828F8FE8   # lwz r22, 100(r1)
+name = "Nhl13NhlCount"
+registers = ["r22"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828F9754   # cmpwi cr6, r22, 60
+name = "Nhl13ProBound"
+registers = ["r22", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828F9824   # cmpwi cr6, r29, 60
+name = "Nhl13ProBound"
+registers = ["r29", "cr6"]
+after_instruction = true
+
+# 828D32E8 — данные GM команды: номер зажимается до 29 (cmpwi 30 / li 29)
+[[midasm_hook]]
+address = 0x828D331C   # cmpwi cr6, r31, 30
+name = "Nhl13NhlBound"
+registers = ["r31", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x828D3324   # li r31, 29
+name = "Nhl13NhlLast"
+registers = ["r31"]
+after_instruction = true

@@ -14,12 +14,23 @@
 //    и перестраивает дивизионы 6 + 5 + 5 в конференции.
 // 3. 8289A868 добавлял во франшизу сборные Матча звёзд — строки 30 и 31 базы; при 32
 //    командах там новые клубы, и подмена его пропускает (Матча звёзд в календаре нет).
+// 4. Номера франшизы (строки leagueteams) выдаются по порядку при создании: было НХЛ 0…29,
+//    АХЛ 30…59 (teamid 32…61), сборные 60/61; при 32 командах — НХЛ 0…31, АХЛ 32…61
+//    (номер = teamid). Списки лиг при создании приходят из меню (НХЛ на 30), поэтому
+//    перед записью команд (828C0250, 828CD4E8) в список НХЛ дописываются 30 и 31.
+//    Код, где зашиты 30 команд НХЛ и начало АХЛ с 30, правится подменами ниже и врезками:
+//    827DFB40 «команда НХЛ?» (< 30); фарм-клубы — массив объекта лиги +520 на 30 команд
+//    (номер франшизы фарм-клуба + 1; из базы — «teamid + 1 − 2»), +640 — «загружены»,
+//    +644 — teamid[30]: элементы 30/31 хранятся снаружи (LeagueExtra); «фарм-клуб − 30»
+//    при отправке лишних игроков в АХЛ (828CD928) → − 32; меню франшизы заполняет список
+//    АХЛ номерами i + 30 (827C2BA8) → i + 32; 828A6080 ищет teamid среди 60 команд → 62.
 
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <mutex>
 #include <string>
+#include <unordered_map>
 
 #include <rex/cvar.h>
 #include <rex/logging.h>
@@ -37,8 +48,25 @@ REXCVAR_DEFINE_INT32(nhl_teams, 30, "NHL13",
 extern "C" void __imp__sub_82809330(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__sub_8289A868(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__sub_82819268(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__sub_8289AF40(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__sub_8289AF68(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__sub_8289B040(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__sub_8289B070(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__sub_8289AB80(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__sub_8289AAA0(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__sub_828A8338(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__sub_828C0250(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__sub_828CD4E8(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__sub_827C2BA8(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__sub_828A6080(PPCContext& ctx, uint8_t* base);
 extern "C" void sub_828FD590(PPCContext& ctx, uint8_t* base);  // список команд: добавить
+extern "C" void sub_828FD5D8(PPCContext& ctx, uint8_t* base);  // список команд: записать i-й
 extern "C" void sub_828FE278(PPCContext& ctx, uint8_t* base);  // узел: задать команды
+extern "C" void sub_8289AFB8(PPCContext& ctx, uint8_t* base);  // фарм-клуб общий у 2+ команд?
+extern "C" void sub_828FC250(PPCContext& ctx, uint8_t* base);  // итератор команд: создать
+extern "C" void sub_828FC2A0(PPCContext& ctx, uint8_t* base);  // итератор команд: удалить
+extern "C" void sub_8290A8B8(PPCContext& ctx, uint8_t* base);  // сведения о команде франшизы
+extern "C" void sub_829043C0(PPCContext& ctx, uint8_t* base);  // сведения о команде базы
 
 namespace {
 
@@ -126,6 +154,124 @@ uint32_t FindNode(uint8_t* base, uint32_t node, uint32_t id, int depth = 0) {
   return 0;
 }
 
+uint8_t Load8(uint8_t* base, uint32_t addr) {
+  return *Host(base, addr);
+}
+
+int32_t NhlTeams() {
+  return ThirtyTwo() ? 32 : 30;
+}
+
+// Команды 30/31 в массивах объекта лиги на 30 команд (+520 фарм-клубы, +644 teamid).
+constexpr int kExtra = 2;
+
+struct LeagueExtra {
+  int32_t affiliate[kExtra] = {0, 0};
+  uint32_t teamid[kExtra] = {0xFFFFFFFFu, 0xFFFFFFFFu};
+};
+
+std::mutex g_extra_mutex;
+std::unordered_map<uint32_t, LeagueExtra> g_extra;
+
+LeagueExtra GetExtra(uint32_t league) {
+  std::lock_guard<std::mutex> lock(g_extra_mutex);
+  auto it = g_extra.find(league);
+  return it == g_extra.end() ? LeagueExtra{} : it->second;
+}
+
+template <typename F>
+void EditExtra(uint32_t league, F&& f) {
+  std::lock_guard<std::mutex> lock(g_extra_mutex);
+  f(g_extra[league]);
+}
+
+bool AffiliatesLoaded(uint8_t* base, uint32_t league) {
+  return Load8(base, league + 640) != 0;
+}
+
+bool IsExtraIndex(int32_t idx) {
+  return ThirtyTwo() && idx >= 30 && idx < 30 + kExtra;
+}
+
+// Байт из сведений о команде (франшизы — 8290A8B8 по номеру, базы — 829043C0 по teamid):
+// +8 — teamid, +190 — фарм-клуб. Итератор и структура — во временной области гостевого
+// стека ниже текущего кадра; регистры-результаты вызывающий восстанавливает сам.
+int8_t GuestTeamInfoByte(PPCContext& ctx, uint8_t* base, bool franchise, uint32_t team, uint32_t offset) {
+  const uint64_t saved_r1 = ctx.r1.u64;
+  const uint32_t iter = (ctx.r1.u32 - 0x200) & ~0xFu;
+  const uint32_t info = iter + 0x20;  // до 0x120 байт
+  std::memset(Host(base, iter), 0, 0x140);
+  ctx.r1.u64 = iter - 0x80;
+  ctx.r3.u64 = iter;
+  sub_828FC250(ctx, base);
+  ctx.r3.u64 = iter;
+  ctx.r4.u64 = team;
+  ctx.r5.u64 = info;
+  if (franchise) {
+    sub_8290A8B8(ctx, base);
+  } else {
+    sub_829043C0(ctx, base);
+  }
+  const int8_t v = static_cast<int8_t>(Load8(base, info + offset));
+  ctx.r3.u64 = iter;
+  sub_828FC2A0(ctx, base);
+  ctx.r1.u64 = saved_r1;
+  return v;
+}
+
+// Список лиги при создании франшизы — НХЛ из меню: ровно teamid 0…29 по порядку.
+bool IsMenuNhlList(uint8_t* base, uint32_t list) {
+  if (Load32(base, list) != 30) {
+    return false;
+  }
+  for (uint32_t i = 0; i < 30; ++i) {
+    if (Load32(base, list + 4 + 4 * i) != i) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Аргументы r3…r10 подменённой функции — сохранить перед своими гостевыми вызовами.
+struct SavedArgs {
+  uint64_t r[8];
+  explicit SavedArgs(const PPCContext& ctx)
+      : r{ctx.r3.u64, ctx.r4.u64, ctx.r5.u64, ctx.r6.u64, ctx.r7.u64, ctx.r8.u64, ctx.r9.u64, ctx.r10.u64} {}
+  void Restore(PPCContext& ctx) const {
+    ctx.r3.u64 = r[0];
+    ctx.r4.u64 = r[1];
+    ctx.r5.u64 = r[2];
+    ctx.r6.u64 = r[3];
+    ctx.r7.u64 = r[4];
+    ctx.r8.u64 = r[5];
+    ctx.r9.u64 = r[6];
+    ctx.r10.u64 = r[7];
+  }
+};
+
+void AppendExtraTeams(PPCContext& ctx, uint8_t* base, uint32_t league) {
+  const uint32_t list = league + 16;
+  if (!ThirtyTwo() || !IsMenuNhlList(base, list)) {
+    return;
+  }
+  const SavedArgs args(ctx);
+  for (uint32_t k = 0; k < kExtra; ++k) {
+    ctx.r3.u64 = list;
+    ctx.r4.u64 = 30 + k;
+    sub_828FD590(ctx, base);
+  }
+  EditExtra(league, [](LeagueExtra& e) {
+    for (int k = 0; k < kExtra; ++k) {
+      e.teamid[k] = 30 + k;
+    }
+  });
+  args.Restore(ctx);
+  static int logged = 0;
+  if (logged++ < 4) {
+    REXLOG_INFO("[nhl13] league {:08X}: NHL list 30 -> {} teams", league, Load32(base, list));
+  }
+}
+
 }  // namespace
 
 // li rX, 1350 — число игр в буфере календаря (заполнение нулями и предел для вызовов).
@@ -193,7 +339,9 @@ extern "C" void sub_82809330(PPCContext& ctx, uint8_t* base) {
     ctx.r1.u64 = sp;
   }
   ctx.r3.u64 = saved_r3;
-  REXLOG_INFO("[nhl13] NHL structure: 32 teams, divisions 6+5+5");
+  if (logged <= 3) {
+    REXLOG_INFO("[nhl13] NHL structure: 32 teams, divisions 6+5+5");
+  }
 }
 
 // Сборные Матча звёзд (строки 30/31) во франшизу не добавляются при 32 командах.
@@ -202,4 +350,339 @@ extern "C" void sub_8289A868(PPCContext& ctx, uint8_t* base) {
     return;
   }
   __imp__sub_8289A868(ctx, base);
+}
+
+// --- Номера франшизы при 32 командах (пункт 4 в начале файла) ---
+
+// «Команда НХЛ?» по номеру франшизы: 0 ≤ номер < 30 → < 32.
+extern "C" void sub_827DFB40(PPCContext& ctx, uint8_t* base) {
+  (void)base;
+  const int32_t idx = ctx.r3.s32;
+  ctx.r3.u64 = (idx >= 0 && idx < NhlTeams()) ? 1 : 0;
+}
+
+// Список команды НХЛ перед записью команд франшизы — с 30 и 31.
+extern "C" void sub_828C0250(PPCContext& ctx, uint8_t* base) {
+  AppendExtraTeams(ctx, base, ctx.r3.u32);
+  __imp__sub_828C0250(ctx, base);
+}
+
+extern "C" void sub_828CD4E8(PPCContext& ctx, uint8_t* base) {
+  AppendExtraTeams(ctx, base, ctx.r3.u32);
+  __imp__sub_828CD4E8(ctx, base);
+}
+
+// Фарм-клуб команды НХЛ (номер франшизы + 1; −1 — не загружены).
+extern "C" void sub_8289AF40(PPCContext& ctx, uint8_t* base) {
+  const uint32_t league = ctx.r3.u32;
+  const int32_t idx = ctx.r4.s32;
+  if (IsExtraIndex(idx)) {
+    ctx.r3.s64 = AffiliatesLoaded(base, league) ? GetExtra(league).affiliate[idx - 30] : -1;
+    return;
+  }
+  __imp__sub_8289AF40(ctx, base);
+}
+
+// Команды НХЛ с данным фарм-клубом: номера в out[], r3 — сколько.
+extern "C" void sub_8289AF68(PPCContext& ctx, uint8_t* base) {
+  const uint32_t league = ctx.r3.u32;
+  const int32_t affiliate = ctx.r4.s32;
+  const uint32_t out = ctx.r5.u32;
+  __imp__sub_8289AF68(ctx, base);
+  if (!ThirtyTwo() || !AffiliatesLoaded(base, league)) {
+    return;
+  }
+  uint32_t n = ctx.r3.u32;
+  const LeagueExtra e = GetExtra(league);
+  for (int k = 0; k < kExtra; ++k) {
+    if (e.affiliate[k] == affiliate) {
+      Store32(base, out + 4 * n, 30 + k);
+      ++n;
+    }
+  }
+  ctx.r3.u64 = n;
+}
+
+// Общий ли фарм-клуб команды idx с другими (8289AFB8 по её фарм-клубу).
+extern "C" void sub_8289B040(PPCContext& ctx, uint8_t* base) {
+  const uint32_t league = ctx.r3.u32;
+  const int32_t idx = ctx.r4.s32;
+  if (IsExtraIndex(idx)) {
+    if (!AffiliatesLoaded(base, league)) {
+      ctx.r3.u64 = 0;
+      return;
+    }
+    ctx.r4.s64 = GetExtra(league).affiliate[idx - 30];
+    sub_8289AFB8(ctx, base);
+    return;
+  }
+  __imp__sub_8289B040(ctx, base);
+}
+
+// Команда НХЛ — её фарм-клуб в *out (r3 = 1); иначе — команды НХЛ с фарм-клубом idx.
+extern "C" void sub_8289B070(PPCContext& ctx, uint8_t* base) {
+  const uint32_t league = ctx.r3.u32;
+  const int32_t idx = ctx.r4.s32;
+  const uint32_t out = ctx.r5.u32;
+  if (IsExtraIndex(idx)) {
+    if (!AffiliatesLoaded(base, league)) {
+      ctx.r3.u64 = 0;
+      return;
+    }
+    Store32(base, out, static_cast<uint32_t>(GetExtra(league).affiliate[idx - 30]));
+    ctx.r3.u64 = 1;
+    return;
+  }
+  __imp__sub_8289B070(ctx, base);
+}
+
+// Номер команды НХЛ по teamid (массив +644 на 30; −1 — нет).
+extern "C" void sub_8289AB80(PPCContext& ctx, uint8_t* base) {
+  const uint32_t league = ctx.r3.u32;
+  const uint32_t teamid = ctx.r4.u32;
+  __imp__sub_8289AB80(ctx, base);
+  if (!ThirtyTwo() || ctx.r3.s32 != -1) {
+    return;
+  }
+  const LeagueExtra e = GetExtra(league);
+  for (int k = 0; k < kExtra; ++k) {
+    if (e.teamid[k] == teamid) {
+      ctx.r3.u64 = 30 + k;
+      return;
+    }
+  }
+}
+
+// Фарм-клубы по командам франшизы (leagueteams.ahlaffiliate) — и для 30/31.
+extern "C" void sub_8289AAA0(PPCContext& ctx, uint8_t* base) {
+  const uint32_t league = ctx.r3.u32;
+  __imp__sub_8289AAA0(ctx, base);
+  if (!ThirtyTwo()) {
+    return;
+  }
+  const uint64_t r3 = ctx.r3.u64;
+  int32_t aff[kExtra];
+  for (int k = 0; k < kExtra; ++k) {
+    aff[k] = GuestTeamInfoByte(ctx, base, true, 30 + k, 190);
+  }
+  EditExtra(league, [&](LeagueExtra& e) {
+    for (int k = 0; k < kExtra; ++k) {
+      e.affiliate[k] = aff[k];
+    }
+  });
+  ctx.r3.u64 = r3;
+}
+
+// Фарм-клубы по базе: exhibitionteams.ahlaffiliate = teamid + 1, во франшизе — номер + 1;
+// оригинал вычитает 2 (АХЛ с 30), при 32 командах номер АХЛ = teamid — разницы нет.
+extern "C" void sub_828A8338(PPCContext& ctx, uint8_t* base) {
+  const uint32_t league = ctx.r3.u32;
+  __imp__sub_828A8338(ctx, base);
+  if (!ThirtyTwo()) {
+    return;
+  }
+  const uint64_t r3 = ctx.r3.u64;
+  for (uint32_t i = 0; i < 30; ++i) {
+    const uint32_t a = league + 520 + 4 * i;
+    Store32(base, a, Load32(base, a) + 2);
+  }
+  int32_t aff[kExtra];
+  for (int k = 0; k < kExtra; ++k) {
+    aff[k] = GuestTeamInfoByte(ctx, base, false, 30 + k, 190);
+  }
+  EditExtra(league, [&](LeagueExtra& e) {
+    for (int k = 0; k < kExtra; ++k) {
+      e.affiliate[k] = aff[k];
+    }
+  });
+  ctx.r3.u64 = r3;
+  static int logged = 0;
+  if (logged++ < 2) {
+    REXLOG_INFO("[nhl13] league {:08X}: affiliates +2, teams 30/31 -> {} {}", league, aff[0], aff[1]);
+  }
+}
+
+// Меню франшизы: список АХЛ — номера франшизы i + 30 (и копия рядом) → i + 32.
+extern "C" void sub_827C2BA8(PPCContext& ctx, uint8_t* base) {
+  const uint32_t self = ctx.r3.u32;
+  const int32_t league = ctx.r5.s32;
+  __imp__sub_827C2BA8(ctx, base);
+  if (!ThirtyTwo() || league != 1) {
+    return;
+  }
+  for (const uint32_t list : {self + 5896 + 484, self + 2992 + 484}) {
+    if (Load32(base, list) != 30) {
+      continue;
+    }
+    bool shifted = true;
+    for (uint32_t i = 0; i < 30 && shifted; ++i) {
+      shifted = Load32(base, list + 4 + 4 * i) == i + 30;
+    }
+    if (shifted) {
+      for (uint32_t i = 0; i < 30; ++i) {
+        Store32(base, list + 4 + 4 * i, i + 32);
+      }
+    }
+  }
+}
+
+// teamid → номер франшизы: перебор только первых 60 команд (последний клуб АХЛ — 61).
+extern "C" void sub_828A6080(PPCContext& ctx, uint8_t* base) {
+  const uint32_t teamid = ctx.r4.u32;
+  __imp__sub_828A6080(ctx, base);
+  if (ThirtyTwo() && ctx.r3.s32 == 60 && teamid == 61) {
+    ctx.r3.u64 = 61;
+  }
+}
+
+// Врезки (nhl13_team_hooks.toml): чтение фарм-клуба команды НХЛ из массива +520 в
+// 828C0250 (r11 ← [r30 + 520 + 4·r29]) и 828CD4E8 (r11 ← [r29 + 520 + 4·r15]).
+void Nhl13AffiliateAt(PPCRegister& value, PPCRegister& index, PPCRegister& league) {
+  if (IsExtraIndex(index.s32)) {
+    value.s64 = GetExtra(league.u32).affiliate[index.s32 - 30];
+  }
+}
+
+// 828CD928 addi r23, r11, -30: номер АХЛ (с 1) фарм-клуба команды r16 — для лишних
+// игроков; при 32 командах АХЛ начинается с 32.
+void Nhl13AffiliateAhl(PPCRegister& ahl, PPCRegister& value, PPCRegister& index, PPCRegister& league) {
+  if (!ThirtyTwo()) {
+    return;
+  }
+  const int32_t idx = index.s32;
+  const int32_t v = IsExtraIndex(idx) ? GetExtra(league.u32).affiliate[idx - 30] : value.s32;
+  ahl.s64 = v - 32;
+}
+
+// Кэш сведений о командах НХЛ (0x83987B64): записи 30/31 — за счётчиком (+4116).
+namespace {
+constexpr uint32_t kTeamCacheRecord = 136;
+constexpr uint32_t kTeamCacheExtra = 4116;  // исходный размер объекта
+constexpr uint32_t kTeamCacheFlags = 4080;
+
+uint32_t TeamCacheOffset(int32_t idx) {
+  return kTeamCacheExtra + static_cast<uint32_t>(idx - 30) * kTeamCacheRecord;
+}
+
+void ClearExtraCacheFlags(uint8_t* base, uint32_t cache) {
+  for (int k = 0; k < kExtra; ++k) {
+    *Host(base, cache + kTeamCacheFlags + 30 + k) = 0;
+  }
+}
+}  // namespace
+
+extern "C" void __imp__sub_8291FFC0(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__sub_82917CB0(PPCContext& ctx, uint8_t* base);
+
+// 82920020: li r3, 4116 — размер объекта.
+void Nhl13TeamCacheBytes(PPCRegister& r) {
+  if (ThirtyTwo()) {
+    r.u64 = kTeamCacheExtra + kExtra * kTeamCacheRecord;
+  }
+}
+
+// mulli rX, rI, 136 — смещение записи команды.
+void Nhl13TeamCacheOffset(PPCRegister& offset, PPCRegister& index) {
+  if (IsExtraIndex(index.s32)) {
+    offset.u64 = TeamCacheOffset(index.s32);
+  }
+}
+
+// 82917CD8: mulli r10, r29, 34 — то же в словах (дальше + 9 + k, · 4).
+void Nhl13TeamCacheWords(PPCRegister& words, PPCRegister& index) {
+  if (IsExtraIndex(index.s32)) {
+    words.u64 = TeamCacheOffset(index.s32) / 4;
+  }
+}
+
+// Конструктор: обнулить и записи 30/31 с их флагами.
+extern "C" void sub_8291FFC0(PPCContext& ctx, uint8_t* base) {
+  const uint32_t cache = ctx.r3.u32;
+  __imp__sub_8291FFC0(ctx, base);
+  if (ThirtyTwo()) {
+    std::memset(Host(base, cache + kTeamCacheExtra), 0, kExtra * kTeamCacheRecord);
+    ClearExtraCacheFlags(base, cache);
+  }
+}
+
+// Сброс флагов «посчитано» (30) — и для 30/31.
+extern "C" void sub_82917CB0(PPCContext& ctx, uint8_t* base) {
+  const uint32_t cache = ctx.r3.u32;
+  __imp__sub_82917CB0(ctx, base);
+  if (ThirtyTwo()) {
+    ClearExtraCacheFlags(base, cache);
+  }
+}
+
+// Врезки «АХЛ с 30» (nhl13_team_hooks.toml): при 32 командах АХЛ начинается с 32.
+void Nhl13AhlShift(PPCRegister& r) {  // номер − 30 → − 32
+  if (ThirtyTwo()) {
+    r.s64 -= 2;
+  }
+}
+
+void Nhl13AhlUnshift(PPCRegister& r) {  // teamid − 2 → teamid
+  if (ThirtyTwo()) {
+    r.s64 += 2;
+  }
+}
+
+void Nhl13AhlBase(PPCRegister& r) {  // li 30 → 32
+  if (ThirtyTwo()) {
+    r.u64 = 32;
+  }
+}
+
+// cmpwi crN, rX, 30 по командам НХЛ → сравнение с числом команд.
+void Nhl13NhlBound(PPCRegister& r, PPCCRRegister& cr) {
+  if (ThirtyTwo()) {
+    const int32_t v = r.s32, n = NhlTeams();
+    cr.lt = v < n;
+    cr.gt = v > n;
+    cr.eq = v == n;
+  }
+}
+
+void Nhl13StatsCacheCount(PPCRegister& r) {
+  if (ThirtyTwo() && r.s32 > 30) {
+    static int logged = 0;
+    if (logged++ < 2) {
+      REXLOG_INFO("[nhl13] StatsCache: {} team rows -> 30", r.s32);
+    }
+    r.u64 = 30;
+  }
+}
+
+namespace {
+void CompareInto(PPCCRRegister& cr, int32_t v, int32_t n) {
+  cr.lt = v < n;
+  cr.gt = v > n;
+  cr.eq = v == n;
+}
+}  // namespace
+
+// cmpwi crN, rX, 60 по профи-командам (НХЛ + АХЛ) → НХЛ + 30.
+void Nhl13ProBound(PPCRegister& r, PPCCRRegister& cr) {
+  if (ThirtyTwo()) {
+    CompareInto(cr, r.s32, NhlTeams() + 30);
+  }
+}
+
+// Число команд НХЛ из списка меню (30) → число команд НХЛ франшизы.
+void Nhl13NhlCount(PPCRegister& r) {
+  if (ThirtyTwo() && r.s32 == 30) {
+    r.u64 = static_cast<uint64_t>(NhlTeams());
+  }
+}
+
+// li rX, 29 — последняя команда НХЛ.
+void Nhl13NhlLast(PPCRegister& r) {
+  if (ThirtyTwo()) {
+    r.u64 = static_cast<uint64_t>(NhlTeams() - 1);
+  }
+}
+
+// Для сгенерированных врезок (src/nhl13_team_sites.cpp, tools/team_hooks.py).
+bool Nhl13ThirtyTwo() {
+  return ThirtyTwo();
 }
