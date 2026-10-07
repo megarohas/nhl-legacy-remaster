@@ -5,7 +5,7 @@
     python tools/roster lines                       # звенья DailyFaceoff + players.json → lines.json
     python tools/roster match                       # players.json + база → match.json
     python tools/roster write  [--db-in DB] [--db-out DB] [--rating-lines]   # → game/work/roster/nhlng.db
-    python tools/roster report                      # → game/work/roster/report.md
+    python tools/roster report                      # → game/work/roster/report.md, report-lines.md
     python tools/roster all    [--offline]          # всё подряд
     python tools/roster all --offline --work roster-lines   # всё в другую папку: game/work/roster-lines/
 

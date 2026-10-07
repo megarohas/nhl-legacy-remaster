@@ -1,14 +1,18 @@
-"""Этап report: players.json + match.json + write.json → game/work/roster/report.md.
+"""Этап report: players.json + match.json + write.json → game/work/roster/report.md;
+lines.json + write.json + выходная база → report-lines.md.
 
-Что сопоставилось и как, кто новый (в чьей строке), кому не хватило места, какие поля не
-заполнены или заполнены заглушкой, что стало с ушедшими из НХЛ игроками 2012 года.
+report.md — что сопоставилось и как, кто новый (в чьей строке), кому не хватило места, какие
+поля не заполнены или заполнены заглушкой, что стало с ушедшими из НХЛ игроками 2012 года.
+report-lines.md — звенья 32 клубов так, как они записаны в базе (имена и OVR из базы), откуда
+они (DailyFaceoff или рейтинг), что из источника не сопоставилось и что достроено по рейтингу.
 """
 import os
 import time
 from collections import Counter, defaultdict
 
 from .common import SLOT_TEAM, TEAM_NAMES, read_json
-from .dbview import NHL
+from .dbview import FLAGS, NHL, View
+from .lines_real import GROUP_NAME as GROUP
 
 HOW = {'artid': 'artid = ID EA', 'birth': 'фамилия + дата рождения', 'name': 'имя + почти та же дата',
        'birth+similar': 'дата рождения + похожая фамилия'}
@@ -61,6 +65,12 @@ def run(paths, log=print):
         f"(страниц {c['nhlratings_pages']}) |")
     add(f"| Wikipedia (List of current NHL captains and alternate captains) | капитаны и ассистенты | "
         f"{c['letters_found']} букв, {c['captains_teams']} клубов |")
+    info = wr.get('lines_info') or {}
+    real = [a for a, i in info.items() if i['source'] != 'rating']
+    ln = read_json(paths.lines) or {}
+    n_un = sum(len(ln['teams'][a]['unmatched']) for a in real if a in (ln.get('teams') or {}))
+    add(f'| dailyfaceoff.com (line-combinations) | звенья: 4 тройки, 3 пары, вратари, PP1/PP2, PK1/PK2 | '
+        f'{len(real)} клубов из 32, не сопоставлено игроков {n_un} (подробно — report-lines.md) |')
     add('')
     add('## Сопоставление')
     add('')
@@ -205,3 +215,170 @@ def run(paths, log=print):
         f.write('\n'.join(L) + '\n')
     log(f'report: {len(L)} строк -> {paths.report}')
     assert all(s in NHL for s in by_team)
+    run_lines(paths, log)
+
+
+# --- звенья ------------------------------------------------------------------------------------
+def _when(iso):
+    """'2026-10-06T15:36:43.017Z' → '06.10.2026 15:36 UTC'."""
+    if not iso or len(iso) < 16:
+        return iso or '—'
+    return f'{iso[8:10]}.{iso[5:7]}.{iso[0:4]} {iso[11:16]} UTC'
+
+
+def _slot(s):
+    """'l1rd' → 'l1rd'; 'pp2 sk4' (4-й игрок пятёрки источника) → 'PP2 №4'."""
+    unit, _, k = s.partition(' sk')
+    return f'{unit.upper()} №{k}' if k else s
+
+
+def db_lines(paths):
+    """Из выходной базы: {клуб: {место: (строка био, имя, OVR)}} для 32 клубов НХЛ."""
+    from .match import load_db
+    db, _ = load_db(paths, paths.db_out)
+    v = View(db)
+    out = defaultdict(dict)
+    for e in v.entries:
+        if e['team'] not in NHL:
+            continue
+        r = v.row_of_gid.get(v.link_gid.get(e['playerindex']))
+        for f in FLAGS:
+            if e[f]:
+                out[e['team']][f] = (r, v.name(r), v.overall(r))
+    return out
+
+
+def run_lines(paths, log=print):
+    wr, ln = read_json(paths.written), read_json(paths.lines) or {}
+    if not wr:
+        raise SystemExit('нет write.json — сначала write')
+    info = wr.get('lines_info') or {}
+    src = ln.get('teams') or {}
+    nhl_of_row = {o['row']: o['nhl_id'] for o in wr['players']}
+    lines = db_lines(paths)
+    L = []
+    add = L.append
+    real = [a for a in TEAM_NAMES if (info.get(a) or {}).get('source', 'rating') != 'rating']
+    rating = [a for a in TEAM_NAMES if a not in real]
+    unmatched = [(a, u) for a in real for u in (src.get(a) or {}).get('unmatched', [])]
+    fuzzy = [(a, u) for a in real for u in (src.get(a) or {}).get('fuzzy', [])]
+    filled = {a: info[a].get('filled', []) for a in real}
+    n_ev = sum(1 for a in real for x in filled[a] if ' ' not in x['slot'])
+    n_st = sum(1 for a in real for x in filled[a] if ' ' in x['slot'])
+    add('# Звенья НХЛ 2026/27 в nhlng.db: реальные сочетания')
+    add('')
+    add(f"Собрано {time.strftime('%d.%m.%Y %H:%M')}. Источник — DailyFaceoff "
+        f"(`dailyfaceoff.com/teams/{{slug}}/line-combinations`, разбор {ln.get('generated', '—')}); база — "
+        f"`{wr['db_out']}`. Имена и OVR — как записаны в базе (`firstname`/`lastname`, `p_overall`/`g_overall`); "
+        '`*` — место достроено по рейтингу.')
+    add('')
+    add(f'- Клубов со звеньями из источника: **{len(real)}** из 32' + (f"; по рейтингу: {', '.join(rating)}" if rating
+                                                                      else '') + '.')
+    add(f'- Игроков источника не сопоставлено: **{len(unmatched)}**'
+        + (': ' + '; '.join(f"{u['name']} ({a}) — {u['why']}" for a, u in unmatched) if unmatched else '') + '.')
+    add(f'- Достроено по рейтингу: мест в тройках, парах и воротах — {n_ev}, игроков в PP/PK — {n_st} (ниже по клубам).')
+    add(f'- Сопоставлены не по точному имени: {len(fuzzy)}'
+        + (' — ' + '; '.join(f"{u['name']} → {u['player']} ({a})" for a, u in fuzzy) if fuzzy else '') + '.')
+    add('- Тройки, пары, вратари, PP1/PP2, PK1/PK2 — из источника (одеты те же 20). 4 на 3 (`pp4_*`) — центр, лучший '
+        'в атаке крайний и «синяя линия» своей пятёрки PP; 3 на 5 (`pk3_*`) — центр и пара своей четвёрки PK; '
+        'овертайм, буллиты, лишние (`x1`/`x2`) — по рейтингу из одетых (`lines.build_real`).')
+    add('- Седьмой защитник источника (группа d4, когда клуб играет 11 + 7) не одет: в NHL 13 — 12 нападающих и '
+        '6 защитников, место в 4-й тройке — нападающему по рейтингу.')
+    probs = wr.get('problems') or []
+    add(f"- Проверки write (в том числе 71 место по одному владельцу, 20 одетых = rosterstatus, амплуа по местам): "
+        f"{'OK' if not probs else f'{len(probs)} проблем (report.md)'}.")
+    add('')
+    add('## Сводка')
+    add('')
+    add('| Слот | Клуб | Звенья | Обновлено | Кто составил | Не сопоставлено | Достроено |')
+    add('|---|---|---|---|---|---|---|')
+    for slot in sorted(SLOT_TEAM):
+        abbr = SLOT_TEAM[slot]
+        i = info.get(abbr) or {'source': 'rating'}
+        s = src.get(abbr) or {}
+        if i['source'] == 'rating':
+            add(f"| {slot} | {abbr} {TEAM_NAMES[abbr]} | по рейтингу{': ' + i['why'] if i.get('why') else ''} | — | — | — | — |")
+            continue
+        un = ', '.join(u['name'] for u in s.get('unmatched', [])) or '—'
+        fl = ', '.join(f"{_slot(x['slot'])}: {x['name']}" for x in i.get('filled', [])) or '—'
+        old = ' (давно — звенья прошлого сезона?)' if s.get('stale') else ''
+        add(f"| {slot} | {abbr} {TEAM_NAMES[abbr]} | DailyFaceoff | {_when(i.get('updated'))}{old} | "
+            f"{i.get('by') or '—'} | {un} | {fl} |")
+    add('')
+    mismatch = []
+    for slot in sorted(SLOT_TEAM):
+        abbr = SLOT_TEAM[slot]
+        held = lines.get(slot, {})
+        want = (wr.get('lines') or {}).get(abbr) or {}
+        for f in FLAGS:
+            if f not in held or nhl_of_row.get(held[f][0]) != want.get(f):
+                mismatch.append(f'{abbr} {f}')
+        i = info.get(abbr) or {'source': 'rating'}
+        s = src.get(abbr) or {}
+        star = {x['nhl_id'] for x in i.get('filled', []) if ' ' not in x['slot'] and x['slot'] in held
+                and nhl_of_row.get(held[x['slot']][0]) == x['nhl_id']}
+        unit_star = {(x['slot'].split()[0], x['nhl_id']) for x in i.get('filled', []) if ' ' in x['slot']}
+
+        def who(f, unit=None):
+            if f not in held:
+                return '—'
+            r, name, ovr = held[f]
+            pid = nhl_of_row.get(r)
+            mark = '*' if (unit is None and pid in star) or (unit and (unit, pid) in unit_star) else ''
+            return f'{name} {ovr}{mark}'
+
+        add(f'## {slot} {abbr} {TEAM_NAMES[abbr]}')
+        add('')
+        if i['source'] == 'rating':
+            add('Звенья — **по рейтингу** (lines.build)' + (f": {i['why']}" if i.get('why') else
+                                                            ': источника нет') + '.')
+        else:
+            link = f" ([источник]({i['url']}))" if i.get('url') else ''
+            add(f"DailyFaceoff, обновлено {_when(i.get('updated'))}; составил: {i.get('by') or '—'}{link}.")
+        add('')
+        add('| | LW | C | RW | LD | RD |')
+        add('|---|---|---|---|---|---|')
+        for k in (1, 2, 3, 4):
+            d = [who(f'l{k}ld'), who(f'l{k}rd')] if k < 4 else ['', '']
+            add(f"| {k} | {who(f'l{k}lw')} | {who(f'l{k}c')} | {who(f'l{k}rw')} | {d[0]} | {d[1]} |")
+        add('')
+        add(f"Вратари: {who('g1')}, {who('g2')}.")
+        add('')
+        add('| | LW | C | RW | LD | RD |')
+        add('|---|---|---|---|---|---|')
+        for k in (1, 2):
+            u = f'pp{k}'
+            add(f"| PP{k} | {who(f'{u}lw', u)} | {who(f'{u}c', u)} | {who(f'{u}rw', u)} | {who(f'{u}ld', u)} | "
+                f"{who(f'{u}rd', u)} |")
+        for k in (1, 2):
+            u = f'pk{k}'
+            add(f"| PK{k} | {who(f'pk4_{k}lw', u)} | {who(f'pk4_{k}c', u)} | | {who(f'pk4_{k}ld', u)} | "
+                f"{who(f'pk4_{k}rd', u)} |")
+        add('')
+        notes = []
+        for u in s.get('unmatched', []) if i['source'] != 'rating' else []:
+            where = ', '.join(GROUP.get(g, g) for g in u['groups'])
+            notes.append(f"не сопоставлен: {u['name']}{' #' + str(u['num']) if u.get('num') else ''} ({where}) — {u['why']}")
+        for x in i.get('dropped', []):
+            notes.append(f"не поставлен: {x['name']} ({GROUP.get(x['where'], x['where'])}) — {x['why']}")
+        for x in i.get('filled', []):
+            notes.append(f"достроено по рейтингу: {_slot(x['slot'])} — {x['name']}")
+        for u in s.get('fuzzy', []) if i['source'] != 'rating' else []:
+            notes.append(f"не по точному имени: {u['name']} → {u['player']} ({u['how']})")
+        dressed = {nhl_of_row.get(r) for r, _, _ in held.values()}
+        for q in s.get('injured', []) if i['source'] != 'rating' else []:
+            if q.get('nhl_id') in dressed:
+                notes.append(f"в звене, но у DailyFaceoff в травмированных: {q['name']} ({q.get('injury')})")
+        for n in notes:
+            add(f'- {n}')
+        if notes:
+            add('')
+    if mismatch:
+        add('## Расхождения базы и write.json')
+        add('')
+        add(', '.join(mismatch))
+        add('')
+    with open(paths.report_lines, 'w', encoding='utf-8', newline='\n') as f:
+        f.write('\n'.join(L) + '\n')
+    log(f'report: звенья — {len(real)} клубов из источника, не сопоставлено {len(unmatched)}'
+        + (f', РАСХОЖДЕНИЙ С БАЗОЙ {len(mismatch)}' if mismatch else '') + f' -> {paths.report_lines}')

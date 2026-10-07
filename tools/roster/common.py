@@ -71,6 +71,7 @@ class Paths:
         self.matched = os.path.join(self.work, 'match.json')
         self.written = os.path.join(self.work, 'write.json')
         self.report = os.path.join(self.work, 'report.md')
+        self.report_lines = os.path.join(self.work, 'report-lines.md')
         self.registry = os.path.join(self.work, 'artid-registry.json')
         # artid новых игроков общие для всех папок: в новой папке таблица берётся из основной
         self.registry_main = os.path.join(self.game, 'work', 'roster', 'artid-registry.json')
