@@ -15,9 +15,12 @@
 3. Рейтинги NHL 27 (ratings.py) и стиль.
 4. exhibitionrostertable целиком пересобирается: составы 32 клубов НХЛ со звеньями (lines.py) и
    буквами, место каждого ушедшего из клуба АХЛ/Европы/юниоров занимает ушедший из НХЛ игрок
-   того же амплуа (размеры и звенья этих команд не меняются), key = команда × 40 + место,
-   внутри команды — по возрастанию playerindex (как в исходной базе). Ушедшие из НХЛ, кому
-   места нет, остаются без команды (как 41 такой игрок исходной базы).
+   того же амплуа — с номером, звеньями, буквой и условиями места (контракт, права, юниорский
+   клуб) прежнего, так что размеры и звенья этих команд не меняются; key = команда × 40 +
+   место, внутри команды — по возрастанию playerindex (как в исходной базе). Ушедшие из НХЛ,
+   кому места нет, остаются без клуба и контракта: `team` = 0 (как у 41 игрока исходной базы)
+   или, если он есть в сборной/легендах и т. п., эта команда + 1 (как у 309 игроков сборных без
+   клуба в исходной базе).
 5. exhibitionfreeagents — без занятых игроков; exhibitionplayers — новые связи, если нужны.
 Потом — проверки (verify ниже) и пересчёт CRC.
 """
@@ -27,6 +30,8 @@ import unicodedata
 import zlib
 from collections import Counter, defaultdict
 
+from tdb import Tdb
+
 from . import lines as lines_mod
 from .codes import NONE, country_code, state_code
 from .common import SEASON, SEASON_YEAR, SLOT_TEAM, fit_utf8, norm, read_json, team_slot, write_json
@@ -35,6 +40,13 @@ from .match import load_db
 from .ratings import BASE, SK_BIAS, TRAITS, Model, age, clamp_rating
 
 ART_MIN, ART_MAX = 9803, 16383          # свободные artid: портреты на диске — до p9802, поле — 14 бит
+# «условия» места в клубе: переходят к тому, кто занимает место ушедшего в НХЛ (юниору — без
+# контракта, игроку АХЛ — двусторонний контракт с правами клуба НХЛ и т. п.)
+SLOT_TERMS = ['proteam', 'contractstatus', 'contractdollars', 'contractlength', 'contractis2way',
+              'contractismultiyear', 'contractneedsentrylevel', 'yearufa', 'extensionlength', 'extensiondollars',
+              'extensionis2way', 'juniorteam', 'juniorleague', 'junioryearlost']
+CONTRACT = ['proteam', 'contractlength', 'contractdollars', 'contractstatus', 'contractis2way', 'contractismultiyear',
+            'contractneedsentrylevel', 'extensionlength', 'extensiondollars', 'extensionis2way']
 STATS = ['stockcareerseasonplayerstats', 'stockcareerplayoffplayerstats', 'stockcareerseasongoaliestats',
          'stockcareerplayoffgoaliestats']
 TIER = {0: 'ушедший из НХЛ', 1: 'свободный агент 2012', 2: 'без команды', 3: 'клуб (АХЛ/Европа/юниоры)'}
@@ -45,6 +57,7 @@ class Writer:
     def __init__(self, paths, log=print):
         self.paths, self.log = paths, log
         self.db, self.meta_path = load_db(paths)
+        self.orig = Tdb(bytes(self.db.d), self.db.meta)      # исходные значения (db меняется по ходу)
         self.v = View(self.db)
         data = read_json(paths.players)
         mt = read_json(paths.matched)
@@ -401,14 +414,18 @@ class Writer:
             ne['playerstyle'] = db.get(t_ai, 'p_style' if t_ai == S else 'g_style', row_ai)
             refill.append(ne)
             db.set(B, 'team', r, e['team'] + 1)
-            db.set(B, 'proteam', r, 0)
             db.set(B, 'jersey', r, e['jersey'])
+            for f in SLOT_TERMS:            # условия места — как у ушедшего (по исходной базе)
+                db.set(B, f, r, self.orig.get(B, f, r_old))
             self.events.append({'team': e['team'], 'what': 'место ушедшего в НХЛ', 'player': v.name(r),
                                 'instead': v.name(r_old)})
-        # остальные ушедшие из НХЛ — без команды и контракта (как 41 игрок исходной базы)
+        # остальные ушедшие из НХЛ — без клуба и контракта. Как в исходной базе: у игрока без клуба,
+        # но в сборной (легендах и т. п.), `team` = эта команда + 1, у совсем без команды — 0
         for r in displaced:
-            for f in ('team', 'proteam', 'contractlength', 'contractdollars', 'contractstatus', 'contractis2way',
-                      'contractismultiyear', 'extensionlength', 'extensiondollars', 'extensionis2way'):
+            special = sorted(t for t in v.teams_of[r] if t in SPECIAL)
+            nat = [t for t in special if t in range(128, 149)]
+            db.set(B, 'team', r, (nat or special)[0] + 1 if special else 0)
+            for f in CONTRACT:
                 db.set(B, f, r, 0)
         self.teamless = displaced
         # составы НХЛ
@@ -526,9 +543,10 @@ class Writer:
             if v2.g('team', r) != ts[0] + 1:
                 bad.append(f"{v2.name(r)}: team {v2.g('team', r)} ≠ клуб {ts[0]} + 1")
         touched = {self.row_of[p['nhl_id']] for p in self.players} | set(self.displaced)
-        for r in touched:      # у кого из тронутых команда без записи в клубе (контракт с чужой командой)
-            if v2.g('team', r) and r not in club_of:
-                bad.append(f"{v2.name(r)}: team {v2.g('team', r)} без записи в клубе")
+        for r in touched:      # команда в био — клуб игрока, а без клуба — его особая команда или 0
+            team = v2.g('team', r)
+            if team and r not in club_of and team - 1 not in v2.teams_of[r]:
+                bad.append(f"{v2.name(r)}: team {team} — команды нет среди его записей")
         for team in NHL:
             te = [e for e in es if e['team'] == team]
             for f in FLAGS:
