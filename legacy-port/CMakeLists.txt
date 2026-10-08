@@ -20,6 +20,7 @@ set(NHLLEGACY_SOURCES
     src/nhllegacy_input_lock.cpp
     src/nhllegacy_fencewait.cpp
     src/nhllegacy_composite.cpp
+    src/nhllegacy_dbtrace.cpp
 )
 
 if(WIN32)
