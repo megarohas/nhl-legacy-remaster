@@ -1185,7 +1185,10 @@ def open_db(path, meta=None):
 
 
 def row_index(db, table):
-    return {db.get(table, 'game_id', r): r for r in range(db.by_name[table]['rows'])}
+    """game_id → строка, только живые записи (tdb.Tdb.live_rows). В сейве игры (ROSTER, франшиза) за current —
+    запас из байтов 0xDB с одним game_id на все строки, у франшизы ещё и удалённые записи; в базах игр и
+    наших все строки живые — индекс тот же, что по range(rows)."""
+    return {db.get(table, 'game_id', r): r for r in db.live_rows(table)}
 
 
 SK_FIELDS = ('sticktapecolor', 'skatesocktuck', 'jerseytuck', 'visortype', 'visorcolor')
@@ -1409,6 +1412,8 @@ def cmd_roster(paths, a):
     с экипировкой у всех полевых в памяти значения EA 2012 года), а сохранённый состав загружает
     целиком. Новое значение ставится, только если в составе сейчас старое из отчёта: ручные правки
     пользователя в игре (там уже другое) не трогаются. Без --write — только подсчёт.
+    Строки по game_id — только живые записи сейва (row_index): запас за current (0xDB) и удалённые
+    записи не в счёт.
     """
     from tdb import SaveFile
     from tdb_read import load_meta
@@ -1430,7 +1435,11 @@ def cmd_roster(paths, a):
     for c in changes:
         t, f, gid = c['table'], c['field'], c['game_id']
         if t not in index:
-            index[t] = {db.get(t, 'game_id', r): r for r in range(db.by_name[t]['rows'])}
+            index[t] = row_index(db, t)
+            dead = len(db.dead_rows(t))
+            if dead:
+                print(f'  {t}: строк {db.by_name[t]["rows"]}, из них не записи {dead} (запас за current, '
+                      f'удалённые) — не в счёт')
         r = index[t].get(gid)
         if r is None:
             missing += 1

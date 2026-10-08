@@ -34,10 +34,13 @@ def main():
     meta = load_meta(a.meta)
     old = Tdb(open(a.old, 'rb').read(), meta)
     new = Tdb(open(a.new, 'rb').read(), meta)
-    if old.by_name[B]['rows'] != new.by_name[B]['rows']:
+    # только живые записи (tdb.Tdb.live_rows): у баз конвейера это все строки, у базы из сейва — без запаса
+    # за current и удалённых
+    live = old.live_rows(B)
+    if old.by_name[B]['rows'] != new.by_name[B]['rows'] or live != new.live_rows(B):
         raise SystemExit('разное число игроков — базы не от одного прогона')
     changes = []
-    for r in range(old.by_name[B]['rows']):
+    for r in live:
         if old.get(B, 'game_id', r) != new.get(B, 'game_id', r):
             raise SystemExit(f'строка {r}: разные game_id — базы не от одного прогона')
         for f in FIELDS:
