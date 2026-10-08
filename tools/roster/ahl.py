@@ -15,6 +15,7 @@ import urllib.parse
 import zlib
 
 from .codes import PROVINCE_NAMES, PROVINCES, STATE_NAMES, STATES
+from . import common
 from .common import AHL_CLUBS, SEASON_YEAR, TEAM_NAMES, norm, read_json, write_json
 
 WIKI_RAW = 'https://en.wikipedia.org/wiki/{}?action=raw'      # robots.txt закрывает /w/, /wiki/ — открыт
@@ -32,6 +33,11 @@ SYNTH = 90_000_000
 # Сила игроков АХЛ без рейтинга (шкала NHL 27): в исходной базе NHL 13 медиана АХЛ — 76 (НХЛ — 83),
 # четверти 74 и 78; поправки — возраст и игры в НХЛ.
 AHL_OVR = 76
+AHL_SHIFT = 0
+if common.GAME.name == 'legacy':
+    # NHL Legacy: в её шкале лиги вне НХЛ ниже (НХЛ та же — 82): медиана АХЛ 2015/16 — 68; оценки по
+    # статистике (statsrating, шкала NHL 13) у игроков АХЛ сдвигаются на столько же (как у Liiga)
+    AHL_OVR, AHL_SHIFT = 68, -8
 
 
 # --- разбор wikitext --------------------------------------------------------------------------
@@ -220,6 +226,8 @@ def players(cache, bios, base_record, entry_from_landing, landing, log=print):
                 p = wiki_record(club, slot, e)
             p['ahl'] = {'club': club['abbr'], 'parent': club['parent'], 'nhl_contract': nhl_contract(club, e['contract']),
                         'contract': e['contract']}
+            if AHL_SHIFT:
+                p['ahl']['shift'] = AHL_SHIFT
             p['letter'] = e['letter'] if e['letter'] in ('C', 'A') else None
             p['omitted'] = e['injured']
             out.append(p)

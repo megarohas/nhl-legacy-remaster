@@ -18,7 +18,7 @@ game/work/roster/nhlng.db (или --work/nhlng.db); в game/userdata/ ничег
 
 NHL Legacy: --game legacy (или NHL_GAME=legacy) — база tools/nhl32.py --game legacy
 (game/work/legacy-data/nhl32/nhlng.db), папки — в game/work/legacy-data/ (roster, своя таблица artid);
-кэш сети — общий. --ahl32 для Legacy нет. Подробно — docs/legacy-data.md.
+кэш сети — общий. --ahl32 у Legacy — база nhl32 --game legacy --ahl32 (CV/HSK на 224/225). Подробно — docs/legacy-data.md.
 """
 import argparse
 import os
@@ -63,8 +63,6 @@ def main():
     if a.game and a.game.lower() in gameprofile.GAMES:      # --game legacy — игра, а не каталог
         profile, a.game = a.game.lower(), None
     game = set_game(profile or gameprofile.default_name())
-    if game.name == 'legacy' and a.ahl32:
-        ap.error('--ahl32 для NHL Legacy не сделан (docs/legacy-data.md)')
     paths = Paths(a.game, a.work)
     paths.ahl = a.ahl32
     paths.stats_ratings = a.stats_ratings

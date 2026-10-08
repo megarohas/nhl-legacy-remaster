@@ -35,7 +35,7 @@ if LEGACY:
     ALLSTAR = (222, 223)
     NATIONAL = range(133, 154)
     SPECIAL = set(NATIONAL) | set(ALLSTAR) | set(range(214, 222))
-    CLUBS = (set(range(32, 133)) | set(range(154, 214))) - set(ALLSTAR)
+    CLUBS = (set(range(32, 133)) | set(range(154, 214)) | set(common.AHL_CLUBS)) - set(ALLSTAR)
     GENERIC_HEAD = common.GAME.generic_heads[0]
 
 

@@ -46,8 +46,11 @@ def game_dir():
 
 def set_game(name):
     """Игра конвейера (до импорта этапов: dbview и др. берут номера строк и поля при импорте)."""
-    global GAME
+    global GAME, AHL_CLUBS
     GAME = gameprofile.get(name)
+    if GAME.name == 'legacy':
+        # NHL Legacy (база tools/nhl32.py --game legacy --ahl32): фарм-клубы — на Custom 02/03 = 224/225
+        AHL_CLUBS = dict(zip(GAME.custom[2:4], AHL_CLUBS.values()))
     return GAME
 
 

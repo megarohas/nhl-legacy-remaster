@@ -282,6 +282,8 @@ def apply(players, landing, log=print, only=None):
         elif p.get('league') and p['league'].get('shift'):
             # NHL Legacy: лиги вне НХЛ в её шкале ниже, чем в NHL 13 (league.SHIFT) — оценка сдвигается
             est['ovr'] = round(est['ovr'] + p['league']['shift'], 1)
+        elif p.get('ahl') and p['ahl'].get('shift'):
+            est['ovr'] = round(est['ovr'] + p['ahl']['shift'], 1)     # то же для клубов АХЛ (ahl.AHL_SHIFT)
         new = int(round(conf * est['ovr'] + (1 - conf) * before['ovr']))
         p['rating_before'] = before
         p['rating'] = dict(rt, ovr=new, source='stats')

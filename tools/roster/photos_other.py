@@ -30,6 +30,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from . import common
 from .common import SEASON, TOOLS, UA, read_json, write_json
 
 NHL_LATEST = 'https://assets.nhle.com/mugs/nhl/latest/{}.png'
@@ -41,10 +42,15 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None                               # 302 на заглушку «нет фото» — не идём
 
 
-def _ph():
+def _ph(game=None):
+    """playerhead; для другой игры (Legacy) — с её папками портретов и шаблонами (photos.use_game)."""
     if TOOLS not in sys.path:
         sys.path.insert(0, TOOLS)
     import playerhead
+    game = game or common.GAME.name
+    if game != 'nhl13':
+        import photos
+        photos.use_game(game)
     return playerhead
 
 
@@ -273,8 +279,8 @@ p{max-width:900px;color:var(--mute)} .g{display:grid;grid-template-columns:repea
 def _build_one(job):
     """(nhl_id, artid, png, out_root) → (nhl_id, artid, статус, файлы): оба размера p<artid>.big, как
     tools/photos.py build_one, но в свою папку."""
-    nid, artid, png, root = job
-    ph = _ph()
+    nid, artid, png, root, game = job
+    ph = _ph(game)
     try:
         mug = ph.png_read(png)
         files = []
@@ -306,8 +312,9 @@ def build(paths, log=print, jobs=6):
         raise SystemExit('нет write.json — сначала write')
     d = photo_dir(paths.game)
     manifest = read_json(os.path.join(d, '_other.json'), {}) or {}
-    root = os.path.join(paths.game, 'work', 'photos-other', os.path.basename(os.path.normpath(paths.work)))
-    work = [(o['nhl_id'], o['artid'], os.path.join(d, f"{o['nhl_id']}.png"), root) for o in wr['players']
+    base = ('work',) if common.GAME.name == 'nhl13' else ('work', 'legacy-data')
+    root = os.path.join(paths.game, *base, 'photos-other', os.path.basename(os.path.normpath(paths.work)))
+    work = [(o['nhl_id'], o['artid'], os.path.join(d, f"{o['nhl_id']}.png"), root, common.GAME.name) for o in wr['players']
             if str(o['nhl_id']) in manifest and o.get('artid') and os.path.exists(os.path.join(d, f"{o['nhl_id']}.png"))]
     t0 = time.time()
     with ProcessPoolExecutor(max_workers=jobs) as pool:
