@@ -95,6 +95,8 @@ class Writer:
         self.spare = bool(self.fa_players)    # доноры из клубов — только неодетые сверх CLUB_MIN
         self.skin_on = getattr(paths, 'skin', False)   # --skin: голова под тон кожи на фото (skin.py)
         self.skin_rows, self.skin_info = [], None
+        self.payroll_max = getattr(paths, 'payroll_max', None)   # --payroll-max: ведомости под потолок (cap_payroll)
+        self.payroll = None
 
     # --- 1. строки игроков -----------------------------------------------------------------
     def spare_rows(self):
@@ -697,6 +699,47 @@ class Writer:
                     n += 1
         return n
 
+    def cap_payroll(self, max_mln, min_salary=850_000):
+        """--payroll-max: контракт у нас — заглушка по OVR (contract), и ведомости клубов НХЛ выходят 94–135 млн
+        при потолке 2026/27 в 104 млн. NHL Legacy с начала 2-го сезона поднимает потолок до самой дорогой ведомости,
+        а клуб игрока сверх потолка дальше не пускает. Если ведомость состава клуба (exhibitionrostertable) больше
+        max_mln, все контракты клуба (по proteam) выше минималки умножаются на один коэффициент. Минималка
+        (min_salary, 2026/27 — 850 тыс.) остаётся минималкой. Коэффициент — наибольший, при котором ведомость
+        ≤ max_mln. Настоящие кэп-хиты — этап контрактов (CapWages, docs/research-data-sources.md)."""
+        db, unit = self.db, 5000
+        low, limit = min_salary // unit, int(max_mln * 1e6 // unit)
+        row_of = {g: r for r, g in enumerate(db.column(B, 'game_id'))}
+        link = dict(zip(db.column(P, 'index'), db.column(P, 'playerid')))
+        roster = defaultdict(list)
+        for e in range(db.by_name[R]['rows']):
+            t = db.get(R, 'team', e)
+            b = row_of.get(link.get(db.get(R, 'playerindex', e)))
+            if t in NHL and b is not None:
+                roster[t].append(b)
+        pay = {r: db.get(B, 'contractdollars', r) for r in range(db.by_name[B]['rows'])}
+        org = defaultdict(list)
+        for r, x in pay.items():
+            t = db.get(B, 'proteam', r) - 1
+            if t in roster and x > low:
+                org[t].append(r)
+        out = {}
+        for t in sorted(roster):
+            scaled = lambda k: {r: max(low, round(pay[r] * k)) for r in org[t]}
+            total = lambda new: sum(new.get(r, pay[r]) for r in roster[t])
+            before = total({})
+            if before <= limit:
+                continue
+            lo, hi = 0.0, 1.0
+            for _ in range(40):
+                mid = (lo + hi) / 2
+                lo, hi = (mid, hi) if total(scaled(mid)) <= limit else (lo, mid)
+            new = scaled(lo)
+            for r, x in new.items():
+                db.set(B, 'contractdollars', r, x)
+            out[club_abbr(t)] = {'before': round(before * unit / 1e6, 2), 'after': round(total(new) * unit / 1e6, 2),
+                                 'k': round(lo, 4), 'contracts': len(new)}
+        return out
+
     # --- проверки ----------------------------------------------------------------------------
     def verify(self):
         db = self.db
@@ -813,6 +856,8 @@ class Writer:
         self.write_table_rows(R, self.entries)
         self.write_table_rows(F, [{'playerindex': l} for l in self.fa_keep])
         self.write_links()
+        if self.payroll_max:
+            self.payroll = self.cap_payroll(self.payroll_max)
         removed = self.clean_stats()
         if LEGACY:
             removed['stockteamsalaryextras (обнулено значений)'] = self.clear_salary_extras()
@@ -855,6 +900,10 @@ def run(paths, log=print, real_lines=True):
         sheet_path = os.path.join(paths.work, 'skin-sheet.html')
         skin.sheet(sheet_path, paths.game, [r for r in w.skin_rows if not r['scan']], w.skin_info)
         log(f"  тон кожи: {w.skin_info['counts']} -> {sheet_path}")
+    if w.payroll is not None:
+        summary['payroll'] = {'max_mln': w.payroll_max, 'clubs': w.payroll}
+        log(f'  ведомости ≤ {w.payroll_max:g} млн: ужато клубов {len(w.payroll)} — '
+            + ', '.join(f"{a} {c['before']:.1f}→{c['after']:.1f}" for a, c in w.payroll.items()))
     write_json(paths.written, summary)
     n_new = len(w.new)
     log(f'write: {len(w.out)} игроков ({len(w.out) - n_new} сопоставлено, {n_new} в строках доноров, '

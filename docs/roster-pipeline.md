@@ -58,6 +58,8 @@ python tools/roster photos --work roster-custom           # фото не из �
 liiga.fi, `league.py`), этап `photos` (портреты лиг и NHL latest → кадр портретов НХЛ,
 `photos_other.py`, лист `photos-sheet.html`).
 
+`write --payroll-max МЛН` (`write.cap_payroll`) нужна потому, что контракты — заглушка по OVR и возрасту. Ведомость состава клуба НХЛ (сумма `contractdollars` × 5000 $ по `exhibitionrostertable`; так её считает и игра, сверено в NHL Legacy) выходит 94–135 млн. Если она больше МЛН, все контракты клуба (по `proteam`) выше минималки 850 тыс. умножаются на один коэффициент. В итоге получается наибольшая ведомость, которая ≤ МЛН. Сводка — `write.json` → `payroll`. Без флага база прежняя; для NHL Legacy `build-all.sh` ставит 100 (потолок 2026/27 — 104 млн, [legacy-data.md](legacy-data.md)). Настоящие кэп-хиты — CapWages ([research-data-sources.md](research-data-sources.md) §2): платный API или разбор страниц клубов, решение за пользователем.
+
 ### Клубы АХЛ (--ahl32)
 
 Фарм-клубы Сиэтла и Вегаса — Coachella Valley Firebirds (строка 220) и Henderson Silver Knights

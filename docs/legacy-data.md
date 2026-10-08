@@ -139,7 +139,7 @@ python tools/nhl32.py $L/db/nhlng.db $W/nhlng.db $L/fe/loc/nhl_eng_us.db $W/nhl_
 ## Составы 2026/27 (`tools/roster --game legacy`)
 
 ```bash
-python tools/roster all --offline --game legacy --stats-ratings --fa --skin --league liiga
+python tools/roster all --offline --game legacy --stats-ratings --fa --skin --league liiga --payroll-max 100
 #   → game/work/legacy-data/roster/nhlng.db (+ nhlng-meta.xml, отчёты); вход — база nhl32 выше
 #   (--ahl32 --db-in game/work/legacy-data/nhl32-ahl32/nhlng.db --work roster-ahl32 — с CV/HSK)
 python tools/roster photos --game legacy             # фото не из НХЛ (Liiga…) → кадр НХЛ (сеть — только недостающие)
@@ -150,6 +150,8 @@ cd tools && python -m roster.equipment --game legacy apply ../game/work/legacy-d
 # в out: nhlng-equip.db → out/db/nhlng.db, nhlng-meta.xml рядом; nhl_eng_us.db из nhl32 → out/fe/loc/NHL_ENG_US.db;
 #        photos-all/fe → out/fe
 ```
+
+`--payroll-max 100`: контракты конвейера — заглушка по OVR, и ведомости клубов выходили 94–135 млн. Потолок 2026/27 — 104 млн, его ставит врезка legacy-port. Игра считает ведомость по составу НХЛ (`exhibitionrostertable`), это legacy-port сверил на экране Be a GM: у ANA «Cap Value $99.050M» — ровно сумма по 26 строкам состава. Со 2-го сезона игра поднимает потолок до самой дорогой ведомости, а клуб пользователя сверх потолка дальше не пускает. Поэтому у клубов дороже 100 млн контракты (по `proteam`) выше минималки 850 тыс. ужимаются одним коэффициентом до 100 млн: так получилось у 28 клубов, у ANA/VAN/CGY/SEA ведомость 94–99 млн. Настоящие кэп-хиты — CapWages: платный API или разбор страниц, решение за пользователем ([research-data-sources.md](research-data-sources.md) §2).
 
 Кэш сети (`game/work/roster-cache/`) — общий с NHL 13: данные не зависят от игры. Своё у Legacy: папка
 `game/work/legacy-data/roster/`, таблица artid новых (`artid-registry.json` там же; у `--work` другой
