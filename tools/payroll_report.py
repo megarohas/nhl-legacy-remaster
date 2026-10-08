@@ -20,7 +20,7 @@ from tdb import Tdb  # noqa: E402
 from tdb_read import load_meta  # noqa: E402
 
 B = 'exhibitionplayerbiotable'
-FIELDS = ['contractdollars']
+FIELDS = ['contractdollars', 'contractis2way']
 
 
 def main():
