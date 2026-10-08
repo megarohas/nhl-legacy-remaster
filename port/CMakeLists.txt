@@ -23,6 +23,7 @@ set(NHL13_SOURCES
     src/nhl13_team_sites.cpp
     src/nhl13_heapguard.cpp
     src/nhl13_composite.cpp
+    src/nhl13_fencewait.cpp
 )
 
 if(WIN32)
