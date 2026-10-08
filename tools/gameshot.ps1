@@ -74,8 +74,10 @@ function Focus-Game($h) {
     $t1 = [GT]::GetWindowThreadProcessId($fg, [ref]$pid0)
     $t2 = [GT]::GetCurrentThreadId()
     [GT]::AttachThreadInput($t2, $t1, $true) | Out-Null
-    [GT]::keybd_event(0x12, 0x38, 0, [UIntPtr]::Zero)          # Alt — снять запрет смены переднего окна
-    [GT]::keybd_event(0x12, 0x38, 2, [UIntPtr]::Zero)
+    # F24 — снять запрет смены переднего окна (любой ввод от нашего процесса). Раньше был Alt: он уходил в
+    # переднее окно, а там может быть другая игра (NHL 13 другого агента); F24 ни на что не назначен.
+    [GT]::keybd_event(0x87, 0, 0, [UIntPtr]::Zero)
+    [GT]::keybd_event(0x87, 0, 2, [UIntPtr]::Zero)
     [GT]::BringWindowToTop($h) | Out-Null
     $ok = [GT]::SetForegroundWindow($h)
     [GT]::AttachThreadInput($t2, $t1, $false) | Out-Null
