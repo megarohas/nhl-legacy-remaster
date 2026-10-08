@@ -181,6 +181,15 @@ cd tools && python -m roster.equipment --game legacy apply ../game/work/legacy-d
 с `team` 94) или остатки прошлого сезона (календарь, статистика матчей, `leaguestates`). Перебирать сейв — по
 `Tdb.live_rows(таблица)`: `[0, current)` без удалённых (docs/save-editing.md, «Живые записи»).
 
+**Сила новых клубов Liiga** (коммит 09.10.2026, `ratings.Model.calibrate`). У Legacy сохранённый OVR вне НХЛ ниже
+атрибутов: у Liiga базы на 9,3, у SHL на 8,5, у DEL на 9,4. Клубы Liiga, которые пересобирает конвейер,
+строились по связи NHL 27 (атрибуты ≈ OVR) и выходили на 10,5 пункта атрибутов слабее: 63,5 при 74,0 у
+исходной Liiga, 75,0 у SHL и 73,1 у DEL. Теперь медиана OVR и связь OVR с атрибутами берутся по игрокам
+Liiga базы, атрибут полевых 74,8, вратарей 75,1. Клубы НХЛ (атрибуты EA NHL 27 как есть) не трогались: атрибут
+полевых 80,7 при 82,6 у исходной НХЛ Legacy, OVR 82,3 при 81,7. У NHL 13 OVR ≈ атрибуты во всех лигах,
+калибровки Liiga там нет. Кандидаты: `game/work/legacy-data/out-liiga/db/` (основная база) и
+`out-cvhsk-liiga/` (накладка --ahl32: CV/HSK и Liiga); `out/` и `out-ahl32` пока прежние.
+
 Кэш сети (`game/work/roster-cache/`) — общий с NHL 13: данные не зависят от игры. Своё у Legacy: папка
 `game/work/legacy-data/roster/`, таблица artid новых (`artid-registry.json` там же; у `--work` другой
 папки — та же таблица), замеры иконок голов (`roster-cache/skin/legacy/`).
