@@ -41,7 +41,8 @@
 | [tools/ppcdis.py](tools/ppcdis.py) | Мини-дизассемблер PowerPC для разведки по образу |
 | [tools/xmatch.py](tools/xmatch.py) | Сопоставление кода двух образов серии (NHL 13 → Legacy, NHL 12): функции и места врезок по маскированным сигнатурам и графу вызовов |
 | [tools/tdb_read.py](tools/tdb_read.py) | Читалка баз EA TDB v6 (только чтение) |
-| [tools/tdb.py](tools/tdb.py) | Запись полей TDB, пересчёт CRC базы и обёртки сейва |
+| [tools/tdb.py](tools/tdb.py) | Запись полей TDB, пересчёт CRC базы и обёртки сейва (NHL 13 и сжатые zlib сейвы NHL Legacy — ZlibV4) |
+| [tools/gameprofile.py](tools/gameprofile.py) | Профиль игры для инструментов (`--game nhl13|legacy`): пути архивов и cache:, схема базы, строки лиг и особых команд, свободные номера арта, поля рейтингов; проверка, что база — от той игры |
 | [tools/locdb.py](tools/locdb.py) | Строки локализации (Хаффман): выгрузка и правка |
 | [tools/year_hooks.py](tools/year_hooks.py) | Поиск годов-констант в коде и врезки сдвига года для порта |
 | [tools/nhl32.py](tools/nhl32.py) | НХЛ на 32 команды: перенос двух команд, дивизионы, календарь на 84 игры |
