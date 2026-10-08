@@ -12,7 +12,9 @@ HEADER — файл-заголовок контейнера (CON/LIVE/PIRS), ч�
 L0 — 0xCC хешей SHA-1, каждый на 0x1000 байт данных; L1 — хеши таблиц L0, а по
 смещению 0xFDC — хеш L1 следующей части. SHA-1 таблицы L1 первой части — корневой
 хеш в заголовке. Внутри — файловая система GDF (XDVDFS), секторы по 0x800.
-Адресация блоков — как в Xenia (svod_container_device.cc).
+Адресация блоков — как в Xenia (svod_container_device.cc). Раскладки: EGDF (флаг 0x40,
+установка с диска и часть GoD — магия GDF на 0x2000, блоки сдвинуты на 0x1000) и GoD без
+EGDF (Iso2God и т. п. — игровой раздел диска с сектора 0, магия на 0x12000, иногда XSF).
 """
 import argparse, hashlib, os, struct, sys
 
@@ -41,16 +43,22 @@ class Svod:
         self.file_count, = struct.unpack('>I', h[0x39D:0x3A1])
         data_dir = header_path + '.data'
         self.files = [open(os.path.join(data_dir, f'Data{i:04d}'), 'rb') for i in range(self.file_count)]
-        if not self.egdf:
-            raise NotImplementedError('поддержана только раскладка EGDF')
-        root = self.read_raw(0, 0x2000, 0x20)
+        if self.egdf:
+            # установка с диска и GoD с флагом EGDF: магия GDF сразу за L1 и L0, блоки сдвинуты на 0x1000
+            self.layout, self.block_shift, magic_at = 'EGDF', 2, 0x2000
+        else:
+            # GoD без EGDF (Iso2God и т. п.): данные — игровой раздел диска с сектора 0,
+            # магия GDF в секторе 32 -> 0x12000 в Data0000; в начале бывает заголовок XSF
+            xsf = self.read_raw(0, 0x2000, 3) == b'XSF'
+            self.layout, self.block_shift, magic_at = ('XSF' if xsf else 'GDF'), 0, 0x12000
+        root = self.read_raw(0, magic_at, 0x20)
         if root[:20] != MEDIA_MAGIC:
-            raise ValueError('нет сигнатуры GDF по смещению 0x2000')
+            raise ValueError(f'нет сигнатуры GDF по смещению 0x{magic_at:X} (раскладка {self.layout})')
         self.root_sector, self.root_size = struct.unpack('<II', root[20:28])
 
     def locate(self, block):
         """Сектор GDF -> (номер части, смещение в ней)."""
-        true_block = block - self.start_block * 2 + 2  # EGDF: сдвиг на 0x1000
+        true_block = block - self.start_block * 2 + self.block_shift  # EGDF: сдвиг на 0x1000
         file_index, file_block = divmod(true_block, BLOCKS_PER_FILE)
         l0_count = file_block // BLOCKS_PER_L0 + 1
         offset = file_block * BLOCK + (l0_count + 1) * HASH_BLOCK
@@ -143,7 +151,7 @@ def main():
     s = Svod(a.header)
     if a.cmd == 'info':
         print(f'{s.magic.decode()} «{s.name}» title {s.title_id:08X}, тип {s.content_type:08X}, '
-              f'частей {s.file_count}, EGDF {s.egdf}, start_block {s.start_block}, '
+              f'частей {s.file_count}, раскладка {s.layout}, start_block {s.start_block}, '
               f'корень GDF: сектор {s.root_sector}, {s.root_size} байт')
     elif a.cmd == 'verify':
         errors, checked = s.verify(lambda i, n: print(f'  {i}/{n}', end='\r', flush=True))
