@@ -7,6 +7,7 @@
                                                       # комплекты из элементов конструктора по SPEC (раскладка cache:)
     python czkit.py sheet SPEC.json OUTDIR OUT.png    # лист превью уже собранных комплектов SPEC
     python czkit.py verify OUTDIR NEW=CONTAINER…      # собранное против контейнера (kitpaint.verify)
+    … --game legacy                                   # у любой команды: элементы и контейнеры NHL Legacy (ниже)
 
 Устройство конструктора (разбор 08.10.2026, подробно — docs/uniforms.md §11). Все файлы — nocacherender.big, RW4
 (.rx2), раскладка UV — как у комплектов EA стиля 1 (Reebok Edge):
@@ -54,7 +55,13 @@ SPEC (JSON, пример — game/work/uniforms/kitsrc-cz/SEA.json):
   logos — как в kitpaint: [{"svg", "center": [x, y], "size": [w, h], "rotate"}] в координатах cm.
 
 Только стандартная библиотека (+ Chrome/Edge без окна для SVG и листов — как в kitpaint). kitpaint, teamart,
-playerhead — как библиотеки, не меняются.
+playerhead — как библиотеки.
+
+Другая игра: --game {nhl13,legacy} (или NHL_GAME, tools/gameprofile.py) у всех команд — элементы конструктора,
+сетки и контейнеры из её распакованных архивов (у NHL Legacy cz-файлы почти все байт в байт как в NHL 13); кеш чистых
+карт кроя — в папке работы игры (Legacy: game/work/legacy-data/art/czwork/clean). Номер арта другой длины (Legacy:
+100/101) — контейнер kitpaint.default_container (3-значный комплект EA той же структуры). SPEC может наследовать
+другой ("base", teamart.load_spec): {"base": "…/kitsrc-cz/SEA.json", "kits": {"home": {"kit": "1_100_0"}, …}}.
 """
 import json, math, os, shutil, struct, sys, tempfile
 
@@ -90,7 +97,9 @@ def archive_of(rel):
 
 def source(rel):
     """Разжатый файл игры: распакованное дерево game/extracted/big/<архив>/, кеш game/work/uniforms/templates/,
-    иначе — образ диска (с записью в кеш)."""
+    иначе — образ диска (с записью в кеш). Другая игра (teamart.set_game) — из её распакованных архивов."""
+    if ta.game_name() != 'nhl13':
+        return kp.profile_source(rel)
     g = kp.game_dir()
     arc = archive_of(rel)
     for p in (os.path.join(g, 'extracted', 'big', arc, *rel.split('/')),
@@ -194,7 +203,10 @@ def clean_jersey_maps(t, logos=CLEAN_LOGOS, log=print):
     if key in _CLEAN:
         nm, sm, cal = _CLEAN[key]
         return nm.copy(), sm.copy(), dict(cal)
-    cdir = os.path.join(kp.game_dir(), 'work', 'uniforms', 'czwork', 'clean')
+    if ta.game_name() == 'nhl13':
+        cdir = os.path.join(kp.game_dir(), 'work', 'uniforms', 'czwork', 'clean')
+    else:
+        cdir = ta.GAME.work_dir('art', 'czwork', 'clean')
     tag = f'{t}_' + '-'.join(map(str, logos))
     paths = [os.path.join(cdir, f'{tag}_{k}') for k in ('nm.png', 'sm.png', 'cal.json')]
     if all(os.path.exists(p) for p in paths):                     # кеш на диске (медиана — ~30 с на крой)
@@ -1065,8 +1077,9 @@ def make_font(fs, palette):
 
 
 def build(spec_path, outdir, only=None, preview=None, work=None, log=print):
-    """Комплекты по SPEC → файлы в OUTDIR (раскладка cache:); work — PNG слоёв; preview — лист <team>.png."""
-    spec = json.load(open(spec_path, encoding='utf-8'))
+    """Комплекты по SPEC → файлы в OUTDIR (раскладка cache:); work — PNG слоёв; preview — лист <team>.png.
+    Контейнер другой длины номера, чем у комплекта, заменяется на kitpaint.default_container."""
+    spec = ta.load_spec(spec_path)
     base = os.path.dirname(os.path.abspath(spec_path))
     palette = spec.get('colors', {})
     svgs = {k: kp.svg_load(v, base) for k, v in spec.get('svg', {}).items()}
@@ -1075,7 +1088,7 @@ def build(spec_path, outdir, only=None, preview=None, work=None, log=print):
         if only and name not in only:
             continue
         new = kp.Kit.parse(ks['kit'])
-        cont = kp.Kit.parse(ks.get('container', spec.get('container', '1_28_0')))
+        cont = kp.default_container(kp.Kit.parse(ks.get('container', spec.get('container', '1_28_0'))), new)
         log(f'{spec.get("team", "")} {name}: {new} (контейнер {cont})')
         js = ks['jersey']
         jl, cal = make_jersey(js, svgs, palette, log)
@@ -1147,7 +1160,7 @@ def sheet(spec_path, outdir, out_png, only=None, log=print):
     """Лист клуба: на комплект — вид спереди/сзади (с примером номера), развёртка свитера, превью меню, шрифт, шорты,
     гетры; подписи — элементы конструктора и цвета зон."""
     import html as H
-    spec = json.load(open(spec_path, encoding='utf-8'))
+    spec = ta.load_spec(spec_path)
     palette = spec.get('colors', {})
     tmp = tempfile.mkdtemp(prefix='czkit_s_')
     cnt = [0]
@@ -1205,9 +1218,11 @@ def sheet(spec_path, outdir, out_png, only=None, log=print):
 # ---------------------------------------------------------------- команды
 
 def main():
-    if len(sys.argv) < 3:
+    game, argv = ta.split_game(sys.argv[1:])
+    if len(argv) < 2:
         sys.exit(__doc__)
-    cmd, args = sys.argv[1], sys.argv[2:]
+    ta.set_game(game)
+    cmd, args = argv[0], argv[1:]
     if cmd == 'catalog':
         catalog(args[0])
     elif cmd == 'build':
