@@ -22,6 +22,8 @@
 | [docs/research.md](docs/research.md) | Соседние рекомпилы (NHL 14, 3 on 3, Skate 3…) и что из них взято |
 | [docs/modding.md](docs/modding.md) | Моды базы через cache: — игроки (nhlng.db) и названия (локализация) |
 | [docs/music.md](docs/music.md) | Музыка: банк audio/music (EALayer3), EA Trax, как игра выбирает трек, замена саундтрека |
+| [docs/team-editor.md](docs/team-editor.md) | Встроенный редактор команд: кто отсекает обычные команды, что ломает сохранение, вариант «форма-донор» |
+| [docs/fe-background.md](docs/fe-background.md) | Фон меню (анимация Apt): синий → любой цвет, tools/febg.py |
 | [docs/teams.md](docs/teams.md) | Команды, лиги, ссылки на команду и календари в базе; НХЛ на 32 команды |
 | [docs/graphics-settings.md](docs/graphics-settings.md) | Настройки графики порта: cvar'ы рантайма, апскейл, RTV/ROV, задержка ввода, лаунчер |
 | `port/` | Проект порта ReXGlue (сгенерированный код — не в git) |
