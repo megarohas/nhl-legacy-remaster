@@ -134,6 +134,15 @@ function Do-Keys([string]$keys) {
     $f = Focus-Game $h
     Write-Output "focus: $f"
     foreach ($k in ($keys -split '\s+' | Where-Object { $_ })) {
+        # Фокус проверяется перед КАЖДОЙ клавишей: рядом может идти другая игра (NHL 13 другого агента),
+        # которая забирает фокус, — без своего окна впереди SendInput ушёл бы в чужое окно. Не вышло за
+        # 3 попытки — клавиша не отправляется (NO_FOCUS).
+        $ok = $false
+        for ($try = 0; $try -lt 3 -and -not $ok; $try++) {
+            $ok = ([GT]::GetForegroundWindow() -eq $h) -or (Focus-Game $h)
+            if (-not $ok) { Start-Sleep -Milliseconds 700 }
+        }
+        if (-not $ok -or [GT]::GetForegroundWindow() -ne $h) { Write-Output "NO_FOCUS: клавиша $k не отправлена"; return $false }
         $mods = @(); $main = $k
         if ($k -like 'Shift+*') { $mods = @(0x10); $main = $k.Substring(6) }
         $code = Key-Code $main
