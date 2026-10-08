@@ -10,6 +10,12 @@
                                      # сбоку — NHL 13 / NHL 10 / итог (PIT и TOR дома и в гостях)
     python jersey10.py info          # варианты свитера NHL 13 ↔ NHL 10
 
+У всех команд — опция --game {nhl13,legacy} (или NHL_GAME, tools/gameprofile.py): чьи свитера, шорты и скелет брать и
+куда писать по умолчанию (NHL 13 — game/work/models/jersey10, Legacy — game/work/legacy-data/models/jersey10). У NHL
+Legacy сетки свитеров и скелет — байт в байт как у NHL 13, шорты _3 — те же вершины, но полосы вместо списка
+треугольников. Лист превью у Legacy — «Legacy, оригинал / Legacy с модом / NHL 13 с модом» (готовые свитера NHL 13 —
+game/work/models/jersey10/out, с текстурами и шортами NHL 13; --no-nhl13 — без этой колонки).
+
 У NHL 10 и NHL 13 сетка свитера одна и та же (те же вершины, треугольники, UV; позиции основного варианта — до долей
 мм), а веса нижнего края спины разные: у NHL 13 край на 30–60 % привязан к скруткам бёдер (кости 115/121) и в
 посадке катания облегает зад, у NHL 10 — к тазу и позвоночнику и отстаёт. Сборка: сетка, UV, индексы, позиции —
@@ -305,7 +311,10 @@ def read_multi(data, path=''):
     vbs, ibs = f.find(rm.TYPE_VB), f.find(rm.TYPE_IB)
     out = []
     for k, (svb, sib) in enumerate(zip(vbs, ibs)):
-        sd = decls[min(k, len(decls) - 1)]
+        # объявление — с тем же шагом, что у буфера (у головы Legacy два: 32 и 36 — шапочка волос с двумя UV),
+        # иначе — по порядку
+        same = [d for d in decls if f.body(d)[9] == rm.u32(f.body(svb), 0x20) >> 16]
+        sd = same[0] if len(same) == 1 else decls[min(k, len(decls) - 1)]
         db = f.body(sd)
         ne = db[8]
         els = [rm.Element(*struct.unpack_from('>3I', db, 16 + 12 * q)) for q in range(ne)]
@@ -550,7 +559,7 @@ _TX = {}
 
 
 def ptex(rel, name):
-    key = (rel, name)
+    key = (rel, name) if rm.is_nhl13() else (rm.PROFILE.name, rel, name)
     if key not in _TX:
         import teamart as ta
         import kitpaint as kp
@@ -566,9 +575,10 @@ _PM = {}
 
 
 def pmesh(rel):
-    if rel not in _PM:
-        _PM[rel] = rm.Mesh.game(rel)
-    return _PM[rel]
+    key = rel if rm.is_nhl13() else (rm.PROFILE.name, rel)
+    if key not in _PM:
+        _PM[key] = rm.Mesh.game(rel)
+    return _PM[key]
 
 
 def kit_parts(kit, jersey_mesh=None, jersey_pos=None, jersey_tex=None, lod=2, sock_t=0, pant_type=0):
@@ -601,12 +611,13 @@ _HEAD = {}
 
 
 def head_parts():
-    if 'h' not in _HEAD:
+    key = 'h' if rm.is_nhl13() else rm.PROFILE.name
+    if key not in _HEAD:
         subs = read_multi(rm.source(f'rendering/player/player_{PREVIEW_HEAD}.rx2'), 'head')
         tx = ptex(f'rendering/player/texlib_{PREVIEW_HEAD}.rx2', 'head_')
-        _HEAD['h'] = [(sm, None, tx if sm.nv > 1000 else None, None, (60, 45, 35) if sm.nv <= 1000 else None)
+        _HEAD[key] = [(sm, None, tx if sm.nv > 1000 else None, None, (60, 45, 35) if sm.nv <= 1000 else None)
                       for sm in subs]
-    return _HEAD['h']
+    return _HEAD[key]
 
 
 def render_player(parts, yaw, frame, w, h, pose=None, bg=(58, 60, 68, 255), with_head=True, mask_of=None):
@@ -680,7 +691,7 @@ def nhl10_source(rel):
         p = os.path.join(root, 'big', arc, *rel.split('/'))
         if os.path.exists(p):
             return open(p, 'rb').read()
-    cache = os.path.join(rm.game_dir(), 'work', 'models', 'jersey10', 'src', 'nhl10', *rel.split('/'))
+    cache = os.path.join(rm.models_dir(), 'jersey10', 'src', 'nhl10', *rel.split('/'))
     if os.path.exists(cache):
         return open(cache, 'rb').read()
     for arc in NHL10_ARCS:
@@ -713,13 +724,15 @@ _SK10 = {}
 
 def nhl10_bone_map():
     """Кости NHL 10 (123, порядок как у NHL 12) → кости NHL 13 по суставам позы привязки. Своего места нет у кости 80
-    NHL 10 (перед ворота, 0; 1,614; 0,065 — у NHL 13 такой нет): она отдаётся кости 4 (верх позвоночника)."""
-    if 'map' not in _SK10:
+    NHL 10 (перед ворота, 0; 1,614; 0,065 — у NHL 13 такой нет): она отдаётся кости 4 (верх позвоночника). У NHL
+    Legacy скелет игрока — байт в байт как у NHL 13 (номера костей те же)."""
+    key = 'map' if rm.is_nhl13() else (rm.PROFILE.name, 'map')
+    if key not in _SK10:
         s10 = rm.Skeleton(nhl10_source(rm.SKELETON), 'nhl10:' + rm.SKELETON)
         mp, far = bone_map(s10, rm.Skeleton.game())
         mp[80] = 4
-        _SK10['map'], _SK10['far'] = mp, far
-    return _SK10['map']
+        _SK10[key], _SK10['far'] = mp, far
+    return _SK10[key]
 
 
 def nhl10_jersey_rel(rel13):
@@ -1008,7 +1021,7 @@ def hem_clearance_fix(m, m_orig, pants, skel, poses=HEM_POSES, margin=HEM_MARGIN
 # ---------------------------------------------------------------- сборка
 
 def jersey_out_dir():
-    return os.path.join(rm.game_dir(), 'work', 'models', 'jersey10', 'out')
+    return os.path.join(rm.models_dir(), 'jersey10', 'out')
 
 
 def parse_jersey(rel):
@@ -1101,9 +1114,10 @@ SKATE_VIEWS = (('сзади', 180.0), ('сбоку', 90.0), ('сзади-сбо�
 SKATE_FRAME = (-0.62, 0.50, 0.62, 1.55)
 
 
-def pose_sheet(cards, notes, out_png, w=236, h=200, log=print):
+def pose_sheet(cards, notes, out_png, w=236, h=200, log=print, sheet_title='Нижний край свитера сзади — как в NHL 10'):
     """Лист: cards — [(заголовок, поза, виды [(имя, yaw)], кадр, [(подпись, parts)])]; на всех состояниях, кроме
-    первого, — красный контур свитера первого (NHL 13) в той же позе и виде."""
+    первого, — красный контур свитера первого (NHL 13) в той же позе и виде. Состояние (подпись, parts, игра) другой
+    игры рисуется с её головой (rw4mesh.game_profile)."""
     import base64
     import teamart as ta
     outdir = os.path.dirname(out_png)
@@ -1119,10 +1133,15 @@ def pose_sheet(cards, notes, out_png, w=236, h=200, log=print):
         figs = []
         for vn, yaw in views:
             edge = None
-            for si, (lab, parts) in enumerate(states):
+            for si, st in enumerate(states):
+                lab, parts = st[0], st[1]
                 if si == 0:
                     img, vis, bgm = render_player(parts, yaw, frame, w, h, pose=pose, mask_of=0)
                     edge = outline_pts(vis, bgm, w, h)
+                elif len(st) > 2 and st[2] != rm.PROFILE.name:
+                    with rm.game_profile(st[2]):
+                        img = render_player(parts, yaw, frame, w, h, pose=pose)
+                    draw_pts(img, edge, (255, 70, 70, 255))
                 else:
                     img = render_player(parts, yaw, frame, w, h, pose=pose)
                     draw_pts(img, edge, (255, 70, 70, 255))
@@ -1139,7 +1158,7 @@ def pose_sheet(cards, notes, out_png, w=236, h=200, log=print):
             '.card{background:#303138;padding:8px;border-radius:6px;margin-bottom:8px}'
             '.row{display:flex;gap:3px;flex-wrap:wrap}figure{margin:0}'
             'figcaption{font-size:11px;color:#aaa;text-align:center}p{margin:3px 0;font-size:12px;color:#bbb}'
-            '</style></head><body><h1>Нижний край свитера сзади — как в NHL 10</h1>'
+            f'</style></head><body><h1>{sheet_title}</h1>'
             + ''.join(f'<p>{n}</p>' for n in notes) + ''.join(html_cards) + '</body></html>')
     width = 24 + 16 + ncols * (w + 3)
     height = 56 + 20 * len(notes) + len(cards) * (h + 58) + 30
@@ -1153,9 +1172,62 @@ def nhl10_parts(kit, rel13, mp):
     return kit_parts(kit, jersey_mesh=jm)
 
 
+def other_game_preview(out, png, with13=True):
+    """Лист другой игры (Legacy): её свитер / её свитер с модом / NHL 13 с модом (готовые файлы NHL 13 из
+    game/work/models/jersey10/out, с текстурами, шортами и головой NHL 13) — те же карточки, что у NHL 13."""
+    gname = rm.PROFILE.title
+    out13 = os.path.join(rm.nhl13_models_dir(), 'jersey10', 'out')
+    with13 = with13 and os.path.isdir(out13)
+
+    def result(rel, d):
+        p = os.path.join(d, *rel.split('/'))
+        return rm.Mesh.load(p) if os.path.exists(p) else rm.Mesh.game(rel)
+
+    def states(kit, rel, pants=None):
+        ps = [(f'{gname}, оригинал', kit_parts(kit, jersey_mesh=rm.Mesh.game(rel) if pants else None)),
+              (f'{gname} с модом', kit_parts(kit, jersey_mesh=result(rel, out)))]
+        if with13:
+            with rm.game_profile('nhl13'):
+                p13 = kit_parts(kit, jersey_mesh=result(rel, out13))
+                pr13 = rm.Mesh.game(pants) if pants else None
+            ps.append(('NHL 13 с модом', p13, 'nhl13'))
+        if pants:
+            pr = rm.Mesh.game(pants)
+            for k, st in enumerate(ps):
+                parts = list(st[1])
+                parts[1] = (pr13 if len(st) > 2 else pr, None, parts[1][2], None, None)
+                ps[k] = (st[0], parts) + tuple(st[2:])
+        return ps
+    base = 'rendering/jersey/jersey_0_1_2_0_1_2.rx2'
+    cards = []
+    for lab, kit in PREVIEW_KITS:
+        cards.append((lab, 'skate', SKATE_VIEWS, SKATE_FRAME, states(kit, base)))
+    kit = PREVIEW_KITS[3][1]
+    for pn in ('skate_deep', 'skate_push', 'stride_mild'):
+        cards.append((PREVIEW_KITS[3][0], pn, SKATE_VIEWS, SKATE_FRAME, states(kit, base)))
+    cards.append((PREVIEW_KITS[3][0] + ', стоя', 'bind', (('сзади', 180.0), ('сбоку', 90.0)), (-0.62, 0.62, 0.62, 1.5),
+                  states(kit, base)))
+    for t in (1, 3):
+        cards.append((f'{PREVIEW_KITS[3][0]}, заправка {t}', 'skate', SKATE_VIEWS[:2], SKATE_FRAME,
+                      states(kit, f'rendering/jersey/jersey_0_1_2_{t}_1_2.rx2', 'rendering/pant/pant_0_0_1_2.rx2')))
+    man = os.path.join(out, 'manifest.json')
+    nfiles = 0
+    if os.path.exists(man):
+        nfiles = sum(1 for r in json.load(open(man, encoding='utf-8'))['files'].values() if r.get('bytes_changed'))
+    notes = [f'{gname}: сетки свитеров и скелет — байт в байт как у NHL 13, веса заднего нижнего края — от NHL 10 '
+             '(как в NHL 13); шорты дальней детализации у Legacy — те же вершины, но полосы, поэтому _3 пересобраны.',
+             f'Красный контур — свитер «{gname}, оригинал» в той же позе. «NHL 13 с модом» — готовые свитера NHL 13 '
+             '(game/work/models/jersey10/out) с текстурами, шортами и головой NHL 13.',
+             f'Файлов: {nfiles} (16 вариантов полевых × 3 детализации, без изменений не пишутся); вратарские — без '
+             'изменений.']
+    pose_sheet(cards, notes, png, sheet_title=f'Нижний край свитера сзади — как в NHL 10: {gname}')
+
+
 def cmd_preview(args):
     out = rm.opt(args, '--out', jersey_out_dir())
-    png = rm.opt(args, '--png', os.path.join(rm.game_dir(), 'work', 'models', 'preview', 'jersey10', 'sheet.png'))
+    png = rm.opt(args, '--png', os.path.join(rm.models_dir(), 'preview', 'jersey10', 'sheet.png'))
+    if not rm.is_nhl13():
+        return other_game_preview(out, png, with13=not rm.flag(args, '--no-nhl13'))
     mp = nhl10_bone_map()
     base = 'rendering/jersey/jersey_0_1_2_0_1_2.rx2'
 
@@ -1308,7 +1380,7 @@ def cmd_check(args):
 
 
 def main():
-    args = sys.argv[1:]
+    args = rm.take_game(sys.argv[1:])
     if not args:
         print(__doc__)
         return
