@@ -12,6 +12,11 @@
                                                          # растушёвка — по замерам EA (--legacy — сборка от 08.10 утра)
     python teamart.py alias SRC_ARTID DST_ARTID OUTDIR   # копия файлов формы команды под другой artid
                                                          # (имена растров внутри переписываются; та же длина номера)
+    Опция --game {nhl13,legacy} (или NHL_GAME, tools/gameprofile.py) у всех команд — из архивов какой игры брать
+    шаблоны; по умолчанию NHL 13, как раньше. Для NHL Legacy (docs/logos-arenas.md, «NHL Legacy») build берёт
+    шаблоны и контейнеры из её архивов, размеры t/d/r — по замерам её логотипов, шайбу — в её стиле (тёмная грань,
+    логотип с белой каймой внутри кольца «National Hockey League»); alias для Legacy не сделан.
+    SPEC может наследовать другой: {"base": "путь к SPEC", "artid": 100, …} — свои ключи поверх (docs там же).
 
 Где что лежит (подробности — docs/logos-arenas.md):
   * Интерфейс — fe/ion/artassets/<набор>/<буква><artid>.big, номер = exhibitionteams.artid:
@@ -37,6 +42,74 @@ import json, math, os, shutil, struct, subprocess, sys, tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import playerhead as ph  # noqa: E402  (BIGF, XPR2, RefPack, тайлинг, DXT5, PNG)
+import gameprofile       # noqa: E402  (профиль игры: NHL 13 или NHL Legacy)
+
+# ---------------------------------------------------------------- игра (откуда шаблоны)
+
+GAME = None   # профиль игры (gameprofile.Profile), из архивов которой берутся шаблоны; None — NHL 13, как до профиля
+
+
+def set_game(name=None):
+    """Игра для шаблонов: 'nhl13' или 'legacy' (None — NHL_GAME или nhl13). Действует на весь модуль (и на kitpaint,
+    czkit — они берут шаблоны через teamart)."""
+    global GAME
+    GAME = gameprofile.get(name)
+    return GAME
+
+
+def game_name():
+    return GAME.name if GAME is not None else 'nhl13'
+
+
+def split_game(argv):
+    """--game ИГРА / --game=ИГРА из списка аргументов (ручной разбор команд) → (имя игры, остальные аргументы)."""
+    name, rest, i = gameprofile.default_name(), [], 0
+    while i < len(argv):
+        a = argv[i]
+        if a == '--game' and i + 1 < len(argv):
+            name = argv[i + 1]
+            i += 2
+            continue
+        if a.startswith('--game='):
+            name = a.split('=', 1)[1]
+        else:
+            rest.append(a)
+        i += 1
+    if name not in gameprofile.GAMES:
+        raise SystemExit(f'--game {name}: такой игры нет (есть {", ".join(gameprofile.GAMES)})')
+    return name, rest
+
+
+def _merge(base, over):
+    out = dict(base)
+    for k, v in over.items():
+        out[k] = _merge(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+    return out
+
+
+def _abs_files(spec, root):
+    """Пути файлов SPEC → абсолютные от папки root: "svg": "x.svg" (teamart) и "svg": {имя: {"file": …}} (kitpaint,
+    czkit; "svg" у логотипов в kits — имя, а не путь, не трогается)."""
+    spec = dict(spec)
+    sv = spec.get('svg')
+    if isinstance(sv, str):
+        spec['svg'] = os.path.normpath(os.path.join(root, sv))
+    elif isinstance(sv, dict):
+        spec['svg'] = {k: (dict(v, file=os.path.normpath(os.path.join(root, v['file'])))
+                           if isinstance(v, dict) and isinstance(v.get('file'), str) else v) for k, v in sv.items()}
+    return spec
+
+
+def load_spec(path):
+    """SPEC (JSON). С ключом "base" — путь к другому SPEC (от этого файла): берётся он (с его "base"), а сверху —
+    ключи этого (словари сливаются вглубь: {"kits": {"home": {"kit": "1_100_0"}}} меняет только номер). Пути файлов
+    базы ("svg", "file") — от её папки. Без "base" — json как есть."""
+    spec = json.load(open(path, encoding='utf-8'))
+    if 'base' not in spec:
+        return spec
+    bpath = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(path)), spec.pop('base')))
+    base = _abs_files(load_spec(bpath), os.path.dirname(bpath))
+    return _merge(base, _abs_files(spec, os.path.dirname(os.path.abspath(path))))
 
 # ---------------------------------------------------------------- общие мелочи
 
@@ -726,11 +799,29 @@ def html_for_ea(kind, spec, uri, scale=1.0):
     raise ValueError(kind)
 
 
-def logo_only(spec, size, box, cx, cy, tmpdir, name):
-    """Плоский логотип (без тени и блика) в квадрате size×size → RGBA."""
+def html_for_r_legacy(spec, uri, scale=1.0):
+    """r в стиле NHL Legacy: логотип в кадре t (тот же размер и центр 128, 128 — как html_for_ea('t')), под ним
+    слабое отражение (R_LEGACY: зазор, непрозрачность в начале, длина затухания)."""
+    l, t, w, h = _place(spec, 188, 196, 128, 128, scale_fit=scale)
+    bx, by, bw, bh = spec['box']
+    vx, vy, vw, vh = spec['viewbox']
+    k = w / vw
+    bottom = t + (by - vy + bh) * k                 # низ рисунка
+    g, op, ln = R_LEGACY['gap'], R_LEGACY['opacity'], R_LEGACY['length']
+    top2 = 2 * bottom - (t + h) + g                 # зеркальная копия: низ рисунка → bottom + g
+    grad = f'linear-gradient(180deg,rgba(0,0,0,{op}) 0px,rgba(0,0,0,0) {ln}px)'
+    refl = (f'<div class="a" style="left:0;top:{bottom + g:.2f}px;width:256px;height:{512 - bottom - g:.2f}px;'
+            f'overflow:hidden;-webkit-mask-image:{grad};mask-image:{grad};">'
+            f'<img class="a" src="{uri}" style="left:{l:.2f}px;top:{top2 - bottom - g:.2f}px;width:{w:.2f}px;'
+            f'height:{h:.2f}px;transform:scaleY(-1);"></div>')
+    return 256, 512, page(256, 512, refl + logo_layers(uri, l, t, w, h, gloss=0.22, shadow='0 2px 3px rgba(0,0,0,0.75)'))
+
+
+def logo_only(spec, size, box, cx, cy, tmpdir, name, extra=''):
+    """Плоский логотип (без тени и блика) в квадрате size×size → RGBA. extra — CSS картинки (кайма у шайбы Legacy)."""
     l, t, w, h = _place(spec, box, box, cx, cy)
     png = os.path.join(tmpdir, name)
-    render_html(page(size, size, logo_layers(spec['_uri'], l, t, w, h)), png, size, size)
+    render_html(page(size, size, logo_layers(spec['_uri'], l, t, w, h, extra=extra)), png, size, size)
     return ph.png_read(png)[2]
 
 
@@ -847,24 +938,50 @@ PUCKS = {
             'r_rim': 44.5, 'rim': (150, 154, 160), 'r_logo': 38.0},
     'ahl': {'template': 'rendering/puck/puck_150_cm.rx2', 'center': (127.5, 172.0), 'r_clear': 107.0,
             'face': (34, 38, 37), 'r_logo': 94.0},
+    # NHL Legacy: шайбы клубов НХЛ перерисованы (замер puck_0…29 Legacy): грань ровного цвета (21, 22, 21), по краю —
+    # светлое кольцо (радиус 92) и надписи «National Hockey League» / «Official Game Puck», внутри — тонкий круг
+    # радиуса 74 с центром (127, 172); логотип клуба прямо на грани, наибольший радиус 41…65 (медиана 52), почти у всех
+    # — со светлой каймой. Шаблон — шайба «Питтсбурга» (вне круга у всех 30 одинаково): круг до радиуса 70
+    # закрашивается цветом грани, логотип вписывается в радиус 52, кайма — белая, 1 px.
+    'nhl_legacy': {'template': 'rendering/puck/puck_23_cm.rx2', 'center': (127.0, 172.0), 'r_clear': 70.0,
+                   'face': (21, 22, 21), 'r_logo': 52.0, 'keyline': (1.0, '#F4F4F4')},
 }
 
 
-def fit_logo(spec, size, r_logo, tmpdir, name):
+def keyline_css(keyline):
+    """Кайма вокруг логотипа (CSS filter: четыре тени без размытия): (толщина px, цвет) или None → ''."""
+    if not keyline:
+        return ''
+    k, col = keyline
+    return ('filter:' + ' '.join(f'drop-shadow({dx:g}px {dy:g}px 0 {col})'
+                                 for dx, dy in ((k, 0), (-k, 0), (0, k), (0, -k))) + ';')
+
+
+def fit_logo(spec, size, r_logo, tmpdir, name, extra=''):
     """Плоский логотип в квадрате size×size с центром посередине: наибольший радиус рисунка = r_logo."""
     c = size / 2
     box = 2 * r_logo
-    logo = logo_only(spec, size, box, c, c, tmpdir, name)
+    logo = logo_only(spec, size, box, c, c, tmpdir, name, extra)
     r = max_radius(logo, size, size, c, c)
     if r > 0:
-        logo = logo_only(spec, size, box * r_logo / r, c, c, tmpdir, name)
+        logo = logo_only(spec, size, box * r_logo / r, c, c, tmpdir, name, extra)
     return logo
 
 
-def puck_rgba_league(spec, tmpdir):
-    """Шайба по spec["league"] (nhl | ahl, PUCKS): логотип по центру грани (127.5, 172), вписан по
-    наибольшему радиусу. Прежняя puck_rgba — НХЛ, центр (128, 169), рамка 70×70."""
+def puck_style(spec):
+    """Стиль шайбы (PUCKS) по spec["league"] и игре: у Legacy — свой стиль клубов НХЛ («nhl_legacy»)."""
     style = spec.get('league', 'nhl')
+    if game_name() == 'nhl13':
+        return style
+    if style + '_' + game_name() not in PUCKS:
+        raise SystemExit(f'шайба лиги {style} для {GAME.title} не сделана (нет PUCKS["{style}_{game_name()}"])')
+    return style + '_' + game_name()
+
+
+def puck_rgba_league(spec, tmpdir):
+    """Шайба по spec["league"] (nhl | ahl, PUCKS; у Legacy — nhl_legacy): логотип по центру грани, вписан по
+    наибольшему радиусу. Прежняя puck_rgba — НХЛ, центр (128, 169), рамка 70×70."""
+    style = puck_style(spec)
     P = PUCKS[style]
     tpl = Rw4.load(extracted(P['template']))
     t = tpl.textures[0]
@@ -887,7 +1004,7 @@ def puck_rgba_league(spec, tmpdir):
                 if k:
                     for c in range(3):
                         out[o + c] = int(P['face'][c] * k + out[o + c] * (1 - k) + 0.5)
-    logo = fit_logo(spec, 256, P['r_logo'], tmpdir, 'puck_logo.png')
+    logo = fit_logo(spec, 256, P['r_logo'], tmpdir, 'puck_logo.png', keyline_css(P.get('keyline')))
     # логотип 256×256 (центр 128, 128) → в точку (cx, cy) текстуры
     dx, dy = int(round(cx - 128)), int(round(cy - 128))
     lay = bytearray(w * h * 4)
@@ -930,15 +1047,28 @@ def measure_box(svg_uri, viewbox, tmpdir):
 # h 98…182 (150), площадь 8 493…23 997 (17 111); d — w 66…105 (87), h 50…88 (78,5), площадь 2 404…6 006 (4 267).
 # Свой логотип масштабируется к медианной площади, но не выше max_h и не шире max_w.
 SIZE_TARGET = {'t': dict(area=17111, max_w=191, max_h=170), 'd': dict(area=4267, max_w=105, max_h=86)}
+# NHL Legacy (замер её 0…29): t перерисованы мельче — площадь 6 001…22 824 (медиана 14 980), рамка w 137…212
+# (медиана 163), h 97…182 (146, у перерисованных ≤ 169); d — почти как в NHL 13: площадь медиана 4 400, h ≤ 91.
+SIZE_TARGET_LEGACY = {'t': dict(area=14980, max_w=191, max_h=166), 'd': dict(area=4400, max_w=105, max_h=88)}
+# r у Legacy (перерисованные 24 из 30) — логотип в кадре t (центр 128, 128, размер как у t) и слабое отражение:
+# альфа ≤ 0,1…0,35 на ~40 px, начинается в 10–20 px под логотипом.
+R_LEGACY = dict(gap=10, opacity=0.22, length=40)
+
+
+def size_target():
+    return SIZE_TARGET_LEGACY if game_name() == 'legacy' else SIZE_TARGET
+
+
 # Растушёвка c и w — альфа оригиналов EA, где логотип закрывает всю сцену (у всех одинаковая): w — круг с
 # центром (125, 128), 50 % на радиусе ~67, ноль к ~124; c — скруглённый прямоугольник 84×73 от (7, 6) с
-# мягким краем ~14 px. Маска = поточечный максимум альфы этих файлов.
+# мягким краем ~14 px. Маска = поточечный максимум альфы этих файлов. (У Legacy эти файлы — те же.)
 EA_MASKS = {'w': ('teamlogoswide', 'w', (2, 4, 5)), 'c': ('teamlogoscalendar', 'c', (1, 3, 11))}
 _MASK_CACHE = {}
 
 
 def ea_mask(kind, game=None):
-    if kind not in _MASK_CACHE:
+    key = kind if game_name() == 'nhl13' else (game_name(), kind)
+    if key not in _MASK_CACHE:
         folder, letter, nums = EA_MASKS[kind]
         best = None
         for n in nums:
@@ -946,8 +1076,8 @@ def ea_mask(kind, game=None):
             w, h, rgba = lg.decode()
             a = rgba[3::4]
             best = bytearray(a) if best is None else bytearray(max(x, y) for x, y in zip(best, a))
-        _MASK_CACHE[kind] = (w, h, bytes(best))
-    return _MASK_CACHE[kind]
+        _MASK_CACHE[key] = (w, h, bytes(best))
+    return _MASK_CACHE[key]
 
 
 def apply_mask(rgba, w, h, mask):
@@ -1005,6 +1135,13 @@ def rx_template(kind, num):
 
 
 def extracted(rel, game=None):
+    """Распакованный файл игры. NHL 13 — game/extracted/big/{cacherender|cache}/… (game — другой каталог игры);
+    другая игра (set_game) — из её распакованных архивов по профилю (первый архив, где файл есть)."""
+    if game is None and game_name() != 'nhl13':
+        p = GAME.extracted(rel)
+        if not p:
+            raise SystemExit(f'{rel}: нет в распакованных архивах {GAME.title} ({GAME.big})')
+        return p
     g = game or ph.game_dir()
     root = 'cacherender' if rel.startswith('rendering/') else 'cache'
     return os.path.join(g, 'extracted', 'big', root, *rel.split('/'))
@@ -1022,8 +1159,10 @@ def build(spec_path, outdir, only=None, preview=None, ea_fit=False):
     league: nhl | ahl (наборы по умолчанию: у АХЛ без r и spot; шаблон шайбы — при ea_fit).
     Рамка рисунка (box) считается сама, если её нет.
     ea_fit=True — размеры t/d/r по замерам EA (SIZE_TARGET), растушёвка c/w — маской EA (EA_MASKS), шайба —
-    puck_rgba_league (центр грани, лига); по умолчанию — прежняя сборка (html_for, puck_rgba)."""
-    spec = json.load(open(spec_path, encoding='utf-8'))
+    puck_rgba_league (центр грани, лига); по умолчанию — прежняя сборка (html_for, puck_rgba).
+    Игра (set_game) — откуда шаблоны и чьи замеры: у NHL Legacy t/d — SIZE_TARGET_LEGACY, r — html_for_r_legacy,
+    шайба — PUCKS["nhl_legacy"] (только с ea_fit). SPEC может наследовать другой ("base", load_spec)."""
+    spec = load_spec(spec_path)
     base = os.path.dirname(os.path.abspath(spec_path))
     svg = svg_text(os.path.join(base, spec['svg']), tuple(spec.get('strip_paths', ())))
     spec['viewbox'] = _svg_viewbox(svg)
@@ -1048,9 +1187,9 @@ def build(spec_path, outdir, only=None, preview=None, ea_fit=False):
                 tpl = UiLogo.load(ui_template(kind))
                 base = 't' if kind == 'r' else kind
                 scale = 1.0
-                if ea_fit and base in SIZE_TARGET:
+                if ea_fit and base in size_target():
                     if base not in scales:
-                        tg = SIZE_TARGET[base]
+                        tg = size_target()[base]
                         for _ in range(4):              # рендер → замер → поправка (тень добавляет пару px)
                             W, H, html = html_for_ea(base, spec, uri, scale)
                             png = os.path.join(tmp, f'{base}_fit.png')
@@ -1063,7 +1202,10 @@ def build(spec_path, outdir, only=None, preview=None, ea_fit=False):
                         scales[base] = scale
                         print(f'{base}: масштаб {scale:.3f} (рамка {bw}×{bh}, площадь {area})')
                     scale = scales[base]
-                W, H, html = html_for_ea(kind, spec, uri, scale) if ea_fit else html_for(kind, spec, uri)
+                if ea_fit and kind == 'r' and game_name() == 'legacy':
+                    W, H, html = html_for_r_legacy(spec, uri, scale)
+                else:
+                    W, H, html = html_for_ea(kind, spec, uri, scale) if ea_fit else html_for(kind, spec, uri)
                 png = os.path.join(tmp, f'{kind}.png')
                 render_html(html, png, W, H)
                 _, _, rgba = ph.png_read(png)
@@ -1147,6 +1289,9 @@ def alias_uniforms(src, dst, outdir, game=None):
     import unchunk
     if len(str(src)) != len(str(dst)):
         raise SystemExit('номера должны быть одной длины (имена растров внутри файлов)')
+    if game_name() != 'nhl13':
+        raise SystemExit(f'alias для {GAME.title} не сделан (читает образ диска NHL 13); форму под свой номер '
+                         'собирают tools/czkit.py и tools/kitpaint.py с --game')
     g = game or ph.game_dir()
     made = []
     for arc in sorted({a for a, _ in UNIFORM_SETS}):
@@ -1243,9 +1388,11 @@ def cmd_roundtrip(args):
 
 
 def main():
-    if len(sys.argv) < 3:
+    game, argv = split_game(sys.argv[1:])
+    if len(argv) < 2:
         sys.exit(__doc__)
-    cmd, args = sys.argv[1], sys.argv[2:]
+    set_game(game)
+    cmd, args = argv[0], argv[1:]
     if cmd == 'info':
         cmd_info(args)
     elif cmd == 'decode':
