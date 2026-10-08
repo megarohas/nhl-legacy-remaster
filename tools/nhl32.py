@@ -1,6 +1,6 @@
 """НХЛ на 32 команды: Seattle Kraken и Vegas Golden Knights — новые клубы на пустых слотах.
 
-    python nhl32.py DB_IN DB_OUT LOC_IN LOC_OUT [--seed N] [--meta META_IN META_OUT] [--ahl32]
+    python nhl32.py DB_IN DB_OUT LOC_IN LOC_OUT [--seed N] [--meta META_IN META_OUT] [--ahl32] [--game legacy]
 
 Почему так (разбор — docs/teams.md):
 - Календарь НХЛ (nhlschedule) хранит номер команды в лиге 5 битами (0–31), а команды
@@ -38,12 +38,16 @@
   переезжает на Восток (16 + 16, 6 + 5 + 5 — как у НХЛ), календарь АХЛ — 32 × 76 игр,
   exhibitionteams.ahlaffiliate расширяется до 8 бит (номер 220 + 1 в 6 бит не влезает). Во
   франшизе нужен порт с nhl_ahl_teams = 32 (docs/ahl32.md) — без него такую базу не ставить.
+- --game legacy (tools/gameprofile.py) — то же для базы NHL Legacy 2015/16 (legacy_config ниже): сборные
+  переезжают на Custom 222/223, дивизионы — нынешние 8/8/8/8 (у Legacy их уже 4), арт 100/101, ещё и
+  календарь следующих сезонов nhlfutureschedule; --ahl32 для Legacy не сделан (docs/legacy-data.md).
 """
-import argparse, random, re, struct, sys
+import argparse, copy, random, re, struct, sys
 from collections import Counter, defaultdict
 from tdb import Tdb, DEFAULT_META
 from tdb_read import load_meta
 from locdb import LocDb
+import gameprofile
 
 SWAP = {30: 218, 31: 219}          # новый клуб НХЛ ← пустая заготовка «Custom Team 00/01»
 ALLSTAR_ROWS = (218, 219)          # сборные Матча звёзд после обмена
@@ -182,6 +186,55 @@ META_WIDEN_AHL32 = {
     'leaguescoutvisits': ['team'],
 }
 
+AUDIOID2_NONE = 0                  # exhibitionteams.audioid2 «нет второго звука» (у Legacy — 4095)
+FUTURE_SCHEDULE = None             # Legacy: nhlfutureschedule — календарь следующих сезонов (+ его Матч звёзд)
+
+
+# --- NHL Legacy (--game legacy; docs/legacy-data.md) ------------------------------------------
+# Те же шаги, другие номера. База Legacy — сезон 2015/16: НХЛ уже в 4 дивизионах (3 Pacific,
+# 4 Central — Запад; 5 Atlantic, 6 Metropolitan — Восток), сборные Матча звёзд — строки 30/31
+# («Green / Red», «Black / Blue»), заготовки Custom Team — 222…251 (220/221 — команды EASHL, их не
+# трогать), «EA SPORTS Arena» — 181, Tappara/TPS — 88/89, арт 98/99 занят (Vaasan Sport, KooKoo) —
+# у новых клубов 100/101, прожекторы 46/47 (texlib_0…45 есть в игре), у команды 3 цвета, audioid2
+# «нет» = 4095. Календарь второго и следующих сезонов франшизы — своя таблица nhlfutureschedule
+# (1230 игр + Матч звёзд), её тоже переписываем на 32 × 84.
+def legacy_config():
+    new = copy.deepcopy(NEW_TEAMS)
+    new[30].update(kit=88, art=100, spotlight=46, third=(104, 162, 185),     # Shadow Blue
+                   # у Tappara в Legacy ещё тёмно-синие 1D2A3C/0F1C4F и красно-оранжевый C5431D
+                   equip={0x253B73: 0x001628, 0x1D2A3C: 0x001628, 0x0F1C4F: 0x001628, 0xE35B17: 0x99D9D9,
+                          0xDE5818: 0x99D9D9, 0xC5431D: 0x99D9D9, 0x202020: 0x001628})
+    new[31].update(kit=89, art=101, spotlight=47, third=(200, 16, 46))        # красный Вегаса
+    widen = {t: list(f) for t, f in META_WIDEN.items() if t != 'leagueretirementtable'}   # у Legacy уже 8 бит
+    widen['leagueplayerbiotable'] = widen['leagueplayerbiotable'] + ['tradeblockteam']   # новое поле Legacy
+    return dict(
+        SWAP={30: 222, 31: 223}, ALLSTAR_ROWS=(222, 223), TEMPLATE_ARENA=181, NEW_TEAMS=new,
+        ALLSTAR_NAMES={222: ('EAS', 'Eastern', 'Eastern All-Stars'), 223: ('WES', 'Western', 'Western All-Stars')},
+        DIVISIONS={
+            3: [0, 4, 11, 13, 25, 28, 30, 31],     # Pacific: ANA CGY EDM LA SJ VAN + SEA VGK
+            4: [1, 6, 7, 9, 14, 16, 22, 24],       # Central: WPG CHI COL DAL MIN NSH UTA(ARZ) STL
+            5: [2, 3, 10, 12, 15, 20, 26, 27],     # Atlantic: BOS BUF DET FLA MTL OTT TB TOR
+            6: [5, 8, 17, 18, 19, 21, 23, 29],     # Metropolitan: CAR CBJ NJ NYI NYR PHI PIT WSH
+        },
+        CONFERENCE={3: WEST, 4: WEST, 5: EAST, 6: EAST},
+        # фарм-клуб — общий с соседом по региону (как в NHL 13): Stockton Heat (бывший Abbotsford Heat,
+        # «Калгари»), Texas Stars («Даллас»)
+        AHL_AFFILIATE={30: 56 + 1, 31: 58 + 1},
+        # Матч звёзд: в исходной Legacy — 31 января «30 против 31» (nhlschedule), 25 января «31 против 30»
+        # (nhlfutureschedule); при 32 командах — 32/33 (≥ числа команд — сборные), home/away → 6 бит
+        ALLSTAR=((0, 30), (32, 33)),
+        FUTURE_SCHEDULE=('nhlfutureschedule', ((0, 24), (33, 32))),
+        META_WIDEN=widen,
+        AUDIOID2_NONE=4095,
+    )
+
+
+def configure(game):
+    """Константы под игру: nhl13 — как в модуле (по умолчанию), legacy — legacy_config()."""
+    if game == 'legacy':
+        globals().update(legacy_config())
+
+
 def swap_map(encoding):
     m = {}
     for a, b in SWAP.items():
@@ -252,7 +305,7 @@ def fill_team(db, row, spec, league, leaguegroup, arena_template, arena_fields=N
         db.set_string(t, f, row, v)
     for f, v in (('active', 1), ('table', 0), ('state', 0), ('league', league), ('leaguegroup', leaguegroup),
                  ('artid', spec['art']), ('spotlight', spec['spotlight']), ('audioid', spec['audio']),
-                 ('audioid2', 0), ('rivalteam', spec['rival'] + 1), ('rivalteam2', 0)):
+                 ('audioid2', AUDIOID2_NONE), ('rivalteam', spec['rival'] + 1), ('rivalteam2', 0)):
         db.set(t, f, row, v)
     if 'tunnel' in spec:
         db.set(t, 'tunnel', row, spec['tunnel'])
@@ -308,7 +361,9 @@ def fill_team(db, row, spec, league, leaguegroup, arena_template, arena_fields=N
     # записей нет и быть не может, как у заготовок)
     for r in range(db.by_name['stockteamcolorstable']['rows']):
         if db.get('stockteamcolorstable', 'team', r) == row:
-            rgb = spec['primary'] if db.get('stockteamcolorstable', 'colorid', r) == 0 else spec['secondary']
+            cid = db.get('stockteamcolorstable', 'colorid', r)
+            # у Legacy у команды по 3 цвета (colorid 0, 1, 2): третий — spec['third'], если задан
+            rgb = spec['primary'] if cid == 0 else spec.get('third', spec['secondary']) if cid >= 2 else spec['secondary']
             for c, v in zip('rgb', rgb):
                 db.set('stockteamcolorstable', f'color_{c}', r, v)
     return dict(arena=new_arena, jerseys=len(j), equipment=len(q))
@@ -517,11 +572,12 @@ def write_schedule(db, table, plan):
 ALLSTAR = ((0, 26), (33, 32))
 SEASON_MONTHS = [8, 9, 10, 11, 0, 1, 2, 3, 4, 5, 6, 7]
 
-def add_allstar(db, table):
+def add_allstar(db, table, allstar=None):
+    allstar = allstar or ALLSTAR
     rows = [((db.get(table, 'month', r), db.get(table, 'day', r)), (db.get(table, 'home', r), db.get(table, 'away', r)))
             for r in range(db.by_name[table]['rows'])]
-    assert not any(d == ALLSTAR[0] for d, _ in rows), 'в день Матча звёзд есть игры'
-    rows.append(ALLSTAR)
+    assert not any(d == allstar[0] for d, _ in rows), 'в день Матча звёзд есть игры'
+    rows.append(allstar)
     rows.sort(key=lambda x: (SEASON_MONTHS.index(x[0][0]), x[0][1]))
     db.widen(table, ['home', 'away'], 6)
     db.resize(table, len(rows))
@@ -567,10 +623,17 @@ def main():
     ap.add_argument('--meta', nargs=2, metavar=('META_IN', 'META_OUT'), help='схема nhlng-meta.xml: вместимость таблиц франшизы')
     ap.add_argument('--seed', type=int, default=2026)
     ap.add_argument('--ahl32', action='store_true', help='АХЛ на 32: фарм-клубы Сиэтла и Вегаса (порт с nhl_ahl_teams = 32)')
+    gameprofile.add_argument(ap)
     a = ap.parse_args()
     sys.stdout.reconfigure(encoding='utf-8')
+    P = gameprofile.get(a.game)
+    if P.name == 'legacy' and a.ahl32:
+        sys.exit('--ahl32 для NHL Legacy не сделан: состав АХЛ 2015/16 другой (docs/legacy-data.md)')
+    configure(P.name)
     rng = random.Random(a.seed)
-    db = Tdb(open(a.db_in, 'rb').read(), load_meta(DEFAULT_META))
+    data = open(a.db_in, 'rb').read()
+    gameprofile.check_db(P, data, a.db_in)
+    db = Tdb(data, load_meta(DEFAULT_META if P.name == 'nhl13' else P.meta))
     names = {r: db.get_string('exhibitionteams', 'fullname', r) for r in list(SWAP) + list(SWAP.values())}
     print('переезд:', {f'{b}→{a_}': names[b] for a_, b in SWAP.items()})
     for k, v in move_teams(db).items():
@@ -587,6 +650,14 @@ def main():
             # состоянием лиги 52 = 0 — строки в календаре быть не должно (docs/ahl32.md)
             add_allstar(db, table)
     print(f'календарь НХЛ: {len(plan)} игр в {len(days)} игровых днях')
+    if FUTURE_SCHEDULE:
+        # Legacy: календарь следующих сезонов — те же 84 игры по своим игровым дням и свой Матч звёзд
+        table, allstar = FUTURE_SCHEDULE
+        days, counts = game_days(db, table)
+        plan = schedule(pair_games(rng), days, counts, rng)
+        write_schedule(db, table, plan)
+        add_allstar(db, table, allstar)
+        print(f'календарь следующих сезонов ({table}): {len(plan)} игр в {len(days)} игровых днях')
     if a.ahl32:
         print('АХЛ, новые клубы:', fill_ahl_teams(db))
         realign_ahl(db)
