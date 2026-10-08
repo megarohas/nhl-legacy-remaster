@@ -64,6 +64,13 @@ POS_NAME = {v: k for k, v in POS_CODE.items()}
 class View:
     def __init__(self, db):
         self.db = db
+        # Конвейер нумерует строки по range(rows): у базы игры и наших баз все строки — записи. База из
+        # сейва (запас за current, удалённые записи — tdb.Tdb.live_rows) дала бы фантомов — не читаем.
+        for t in (B, S, G, P, R, F):
+            dead = db.dead_rows(t)
+            if dead:
+                raise ValueError(f'{t}: {len(dead)} строк — не записи (удалённые или запас за current, как в '
+                                 f'сейве игры); конвейеру нужна база, где все строки — записи')
         self.nbio = db.by_name[B]['rows']
         self.gid = db.column(B, 'game_id')
         self.row_of_gid = {g: r for r, g in enumerate(self.gid)}
