@@ -1,0 +1,18 @@
+# Манифест кодогена ReXGlue для своего порта NHL Legacy (docs/legacy-port.md).
+
+[project]
+name = "nhllegacy"
+sdk_version = "0.10.0"
+game_root = "../game/other/legacy/disc"
+
+[entrypoint]
+file_path = "../game/other/legacy/disc/default.xex"
+out_directory_path = "generated/default"
+includes = ["nhllegacy_functions.toml"]
+# Пара setjmp/longjmp CRT EA. setjmp 0x830801C0: проверка слота-хука 0x83E022E0 (статически 0,
+# в BSS) — lis/lwz/cmpwi/mtctr/bnectr — затем сохранение f14-f31, r13-r31, VMX; без явного
+# адреса генератор считает bnectr концом функции и теряет сохранение — загрузка падает.
+# longjmp 0x8307E1B0: восстановление с lfd f14,0(r7). Адреса — те же, что у nhl-legacy-recomp
+# и у нашего tools/xmatch.py (от пары NHL 13 0x82C9D9B0 / 0x82C9BCB0).
+setjmp_address = 0x830801C0
+longjmp_address = 0x8307E1B0

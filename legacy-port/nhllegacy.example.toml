@@ -1,0 +1,46 @@
+# Настройки запуска порта NHL Legacy (cvar'ы ReXGlue). build.cmd копирует этот файл в папку
+# сборки как nhllegacy.toml, если там ещё нет своего. Приоритет: правки из окна F4 и консоли >
+# командная строка --имя=значение > этот файл > умолчания. Файл читается только при старте;
+# «Save to config» в F4 перезаписывает его целиком (без комментариев). Описание — docs/legacy-port.md.
+
+# Рендер: плагин rexgpu-xenos (D3D12; в сборке со своим SDK — и Vulkan, см. ниже).
+gpu_plugin = "xenos"
+# Путь EDRAM: с RTV (хостовые render target'ы) 3D матча чёрное — нужен ROV на D3D12 или FSI на
+# Vulkan (опыт NHL Legacy у puckhead73 и нашего NHL 13).
+render_target_path_d3d12 = "rov"
+# Чтение resolve процессором: "some" — копия только при промахе кэша (быстро); композиции шлемов,
+# перчаток и вратарской амуниции порт сам переводит в "full" (nhl_composite_readback = true).
+readback_resolve = "some"
+# Игра читает нулевую страницу (запись файлов, 82705510) и недопустимые fetch-константы.
+protect_zero = false
+gpu_allow_invalid_fetch_constants = true
+
+# Ввод через XInput: DualSense/DualShock — через DS4Windows (виртуальный Xbox 360). Клавиатура как
+# геймпад — --mnk_mode=true (Start — Return, A — Space, B — Backspace, стик — WASD).
+input_backend = "xinput"
+
+# Файлы игры: содержимое диска NHL Legacy (default.xex и *.big). Пусто — папка game рядом с exe.
+game_data_root = "S:/Claude/megarohas_nhl13/game/other/legacy/disc"
+
+# Сейвы, кэш шейдеров и раздел cache:\ (cache/guest — сюда же кладутся моды-данные).
+# Пусто — папка userdata рядом с exe. НЕ общая с NHL 13 (game/userdata).
+user_data_root = "S:/Claude/megarohas_nhl13/legacy-port/userdata"
+
+# update: (патч с диска $SystemUpdate — это обновление системы, не игры) не подключаем.
+
+# Лог каждого запуска — сюда, перезаписывается при старте.
+log_file = "S:/Claude/megarohas_nhl13/legacy-port/out/game.log"
+
+# Анизотропная фильтрация: 5 = 16x (по умолчанию 3 = 4x).
+anisotropic_override = 5
+
+# Масштаб внутреннего разрешения (1–8, только с перезапуском): 2 = 2560×1440 вместо 1280×720.
+resolution_scale = 1
+
+# ─── Только сборка со своим SDK (win-amd64-release; docs/sdk-build.md) ───────────────────────
+# Vulkan вместо D3D12: gpu_backend = "vulkan" и путь EDRAM "fsi" (с любым другим матч чёрный).
+# gpu_backend = "vulkan"
+# render_target_path_vulkan = "fsi"
+# FSR 1 / CAS при выводе кадра (D3D12 и Vulkan): "bilinear" (по умолчанию) | "cas" | "fsr".
+# present_effect = "fsr"
+# present_fsr_sharpness_reduction = 0.2

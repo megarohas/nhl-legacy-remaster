@@ -35,5 +35,16 @@ __pycache__/
 /port-ffx/
 # свой саундтрек пользователя (tools/music.py) — не в git
 best_of_nhl/
-# Прототип порта NHL Legacy (docs/legacy-port-feasibility.md): код игры и чужой код — только локально
-/legacy-port/
+# Порт NHL Legacy (docs/legacy-port.md): в git — только свой код и сборка проекта; кодоген (производное
+# от кода игры), сборка, сейвы, образы и разведка прототипа (docs/legacy-port-feasibility.md) — только локально
+/legacy-port/*
+!/legacy-port/src/
+!/legacy-port/scripts/
+!/legacy-port/CMakeLists.txt
+!/legacy-port/CMakePresets.json
+!/legacy-port/build.cmd
+!/legacy-port/nhllegacy_*.toml
+!/legacy-port/nhllegacy.example.toml
+!/legacy-port/generated/
+/legacy-port/generated/*
+!/legacy-port/generated/rexglue.cmake
