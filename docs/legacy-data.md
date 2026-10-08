@@ -40,9 +40,8 @@ bash game/work/legacy-data/uninstall-legacy-data.sh          # снять (чу�
 АХЛ на 32 (legacy-port их готовит); «Играть сейчас» и без них. У CV/HSK с 09.10.2026 сила как у соседей по
 АХЛ (`tools/roster/ratings.py`, коммит 35cd8fe). У Legacy сохранённый OVR игроков АХЛ на ~9 ниже их
 атрибутов, а новые игроки строились по связи NHL 27 и выходили на 12 пунктов атрибутов слабее. Теперь
-атрибут полевых 77,0 при 76,7 у соседей, OVR 68,5 при 67,8. Кандидат —
-`game/work/legacy-data/out-ahl32-cvhsk/`: в нём изменены только строки игроков CV/HSK, `out-ahl32` пока
-прежний.
+атрибут полевых 77,0 при 76,7 у соседей, OVR 68,5 при 67,8. Изменены только строки игроков CV/HSK. С 09.10
+это в `out-ahl32` (вместе с Liiga, ниже).
 
 Пересборка всего с нуля — `bash game/work/legacy-data/build-all.sh [этап…] [--ahl32]` (этапы base, roster,
 photos, equip, collect, fonts, music, models, art; сеть — только докачка недостающих портретов лиг).
@@ -187,8 +186,11 @@ cd tools && python -m roster.equipment --game legacy apply ../game/work/legacy-d
 исходной Liiga, 75,0 у SHL и 73,1 у DEL. Теперь медиана OVR и связь OVR с атрибутами берутся по игрокам
 Liiga базы, атрибут полевых 74,8, вратарей 75,1. Клубы НХЛ (атрибуты EA NHL 27 как есть) не трогались: атрибут
 полевых 80,7 при 82,6 у исходной НХЛ Legacy, OVR 82,3 при 81,7. У NHL 13 OVR ≈ атрибуты во всех лигах,
-калибровки Liiga там нет. Кандидаты: `game/work/legacy-data/out-liiga/db/` (основная база) и
-`out-cvhsk-liiga/` (накладка --ahl32: CV/HSK и Liiga); `out/` и `out-ahl32` пока прежние.
+калибровки Liiga там нет. 09.10.2026 03:00 основная база с этой правкой (md5 958f4b6d) поставлена в `out/db/` и
+в CACHE порта. Прежняя (fceb2d42) лежит в `game/work/legacy-data/backup-cache/`. Накладка `out-ahl32` (CV/HSK и
+Liiga, 34dfe267) обновлена, в CACHE её не ставили. Установщик теперь пускает установку и при запущенной
+игре, если её `user_data_root` (из командной строки или `nhllegacy.toml`) — другая папка, например тестовая
+копия legacy-port.
 
 Кэш сети (`game/work/roster-cache/`) — общий с NHL 13: данные не зависят от игры. Своё у Legacy: папка
 `game/work/legacy-data/roster/`, таблица artid новых (`artid-registry.json` там же; у `--work` другой
