@@ -7,7 +7,11 @@
                                                         # копия до правки — game/work/backup-saves/
 
 DIR — папка конвейера составов с players.json (адрес портрета) и write.json (строка базы и
-artid каждого игрока); по умолчанию game/work/roster-lines. Портреты НХЛ: 336×336 PNG с
+artid каждого игрока); по умолчанию game/work/roster-lines.
+--game legacy (tools/gameprofile.py, или NHL_GAME=legacy): портреты под NHL Legacy — папка по artid
+как в её generalhelpers.big (≤ 4000, ≤ 8000, ≤ 60000 → p8001_12000, у NHL 13 — ≤ 12000), шаблоны —
+из архивов Legacy (большие — nocache, малые — cache), вывод — game/work/legacy-data/photos-all,
+папка конвейера по умолчанию — game/work/legacy-data/roster. Портреты НХЛ: 336×336 PNG с
 прозрачным фоном; нет фото — CDN отвечает 302 на default-skater.png: редирект не проходим,
 игрок остаётся с силуэтом игры (отметка .default). Пауза между запросами — 1 с.
 Фото принадлежат НХЛ: только для личного использования, лежат в game/ (вне git).
@@ -16,6 +20,7 @@ import http.client, json, os, sys, time, urllib.error, urllib.request
 from concurrent.futures import ProcessPoolExecutor
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import gameprofile  # noqa: E402
 import playerhead  # noqa: E402
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
@@ -34,8 +39,36 @@ def arg(name, default=None):
     return sys.argv[sys.argv.index(name) + 1] if name in sys.argv else default
 
 
+def use_game(name):
+    """Портреты другой игры: архивы с оригиналами и папка по artid (playerhead.py написан под NHL 13).
+    Вызывается при импорте (и в процессах пула — sys.argv у них тот же)."""
+    if name != 'legacy':
+        return 16383
+    playerhead.KINDS['big'] = ('playerheads', 'nocache.big', ('other', 'legacy', 'big', 'nocache'))
+    playerhead.KINDS['small'] = ('playerheadssmall', 'cache.big', ('other', 'legacy', 'big', 'cache'))
+
+    def folder_for(artid):
+        # generalhelpers.big Legacy: «push 60000» на месте 12000 у NHL 13 — до 60000 всё в p8001_12000
+        if artid <= 4000:
+            return 'p0_4000'
+        if artid <= 8000:
+            return 'p4001_8000'
+        if artid <= 60000:
+            return 'p8001_12000'
+        return 'silhouettes'
+    playerhead.folder_for = folder_for
+    return 59999                                  # 60000+ — силуэты Legacy
+
+
+GAME = gameprofile.get(arg('--game') if arg('--game') in gameprofile.GAMES else None)   # --game у roster — и каталог
+ART_MAX = use_game(GAME.name)
+if GAME.name == 'legacy':
+    OUT = os.path.join(ROOT, 'game', 'work', 'legacy-data', 'photos-all')
+
+
 def work_dir():
-    return arg('--work', os.path.join(ROOT, 'game', 'work', 'roster-lines'))
+    default = ('roster-lines',) if GAME.name == 'nhl13' else ('legacy-data', 'roster')
+    return arg('--work', os.path.join(ROOT, 'game', 'work', *default))
 
 
 def load(name):
@@ -125,9 +158,9 @@ def cmd_build():
     jobs = int(arg('--jobs', '6'))
     players = load('write.json')['players']
     work = [(p['nhl_id'], p['artid'], p.get('name', '')) for p in players if p.get('artid')]
-    bad = [w for w in work if not 0 < w[1] <= 16383]
+    bad = [w for w in work if not 0 < w[1] <= ART_MAX]
     if bad:
-        sys.exit(f'artid вне 1…16383: {bad[:5]}')
+        sys.exit(f'artid вне 1…{ART_MAX}: {bad[:5]}')
     t0 = time.time()
     result = []
     with ProcessPoolExecutor(max_workers=jobs) as pool:
@@ -183,8 +216,14 @@ def cmd_save():
     from tdb_read import load_meta
     d = os.path.normpath(sys.argv[2])
     fn = os.path.join(d, os.path.basename(d))
-    meta = load_meta(os.path.join(ROOT, 'game', 'userdata', 'cache', 'guest', 'db', 'nhlng-meta.xml'))
-    backup_fn = os.path.join(ROOT, 'game', 'work', 'backup-saves', os.path.basename(d), os.path.basename(d))
+    if GAME.name == 'nhl13':
+        meta = load_meta(os.path.join(ROOT, 'game', 'userdata', 'cache', 'guest', 'db', 'nhlng-meta.xml'))
+        backups = os.path.join(ROOT, 'game', 'work', 'backup-saves')
+    else:          # Legacy: схема — та, что ставится в cache: (game/work/legacy-data/out/db), сейв — ZlibV4
+        out_meta = os.path.join(GAME.out, 'db', 'nhlng-meta.xml')
+        meta = load_meta(out_meta if os.path.exists(out_meta) else GAME.meta)
+        backups = os.path.join(GAME.work, 'backup-saves')
+    backup_fn = os.path.join(backups, os.path.basename(d), os.path.basename(d))
     raw = open(backup_fn if os.path.exists(backup_fn) else fn, 'rb').read()
     sf = SaveFile(raw, meta)
     db = sf.db
@@ -217,7 +256,7 @@ def cmd_save():
     out = sf.bytes()
     check = SaveFile(out, meta)
     assert not check.verify(), check.verify()
-    backup = os.path.join(ROOT, 'game', 'work', 'backup-saves', os.path.basename(d))
+    backup = os.path.join(backups, os.path.basename(d))
     if not os.path.exists(backup):
         shutil.copytree(d, backup)
     open(fn, 'wb').write(out)

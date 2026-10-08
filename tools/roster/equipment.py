@@ -108,7 +108,8 @@ if not __package__:                     # python tools/roster/equipment.py …
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     __package__ = 'roster'
 
-from .common import TEAM_NAMES, Http, Paths, read_json  # noqa: E402
+from . import common  # noqa: E402
+from .common import TEAM_NAMES, Http, Paths, read_json, set_game  # noqa: E402
 from .common import write_json as _write_json  # noqa: E402
 
 
@@ -134,6 +135,8 @@ def read_json_retry(path, default=None, tries=40):
             time.sleep(0.25)
 
 DEFAULT_WORK = 'roster-expanded-ahl32'
+DEFAULT_WORK_LEGACY = 'roster'           # --game legacy: game/work/legacy-data/roster
+VISOR_EXEMPT_T = 'stockplayervisorexempttable'   # NHL Legacy: game_id игроков, кому можно играть без визора
 PHOTO_DIR = ('photos', 'action')        # внутри roster-cache
 COMMONS_DIR = ('photos', 'commons')
 STORE_DIR = 'equipment'
@@ -1242,8 +1245,13 @@ def cmd_apply(paths, a):
     db.fix()
     problems = verify_out(src, db, log)
     problems += same_tables(src, db)
+    exempt = None
+    if not problems and a.visor_rule and 'visor' in fields and VISOR_EXEMPT_T in db.by_name:
+        exempt = visor_exempt(db, rows)       # NHL Legacy: таблица «можно без визора» — по тому же правилу
     doubts = visor_doubts(st, rows) if a.visor_rule else []
     print(f'игроков {len(rows)}; без строки экипировки {len(missing)}')
+    if exempt is not None:
+        print(f"  {VISOR_EXEMPT_T}: убрано {exempt['removed']}, добавлено {exempt['added']}, строк {exempt['rows']}")
     if doubts:
         print('  на фото без визора, но не из троих (визор оставлен по правилу): '
               + ', '.join(f'{x["name"]} ({x["team"]}, {x["conf"]})' for x in doubts))
@@ -1271,8 +1279,28 @@ def cmd_apply(paths, a):
                               'min_conf': a.min_conf, 'fields': fields, 'visor_rule': a.visor_rule,
                               'jersey_rule': a.jersey_rule, 'changed': dict(changed), 'same': dict(same),
                               'no_visor': NO_VISOR if a.visor_rule else None, 'visor_doubts': doubts,
+                              **({'visor_exempt': exempt} if exempt is not None else {}),
                               'changes': log})
         print(f'отчёт → {a.report}')
+
+
+def visor_exempt(db, rows):
+    """NHL Legacy: stockplayervisorexempttable — game_id тех, кому можно без визора (у Legacy 1779 строк:
+    пришедшие в НХЛ до правила 2013 года). Строки игроков конвейера — новые люди на строках доноров и
+    игроки 2015 года через 11 лет: исключение остаётся только у тех, кто по правилу без визора (NO_VISOR),
+    у остальных полевых конвейера снимается; прочие строки таблицы не трогаются. Таблица — по game_id."""
+    t = VISOR_EXEMPT_T
+    cur = db.column(t, 'game_id')
+    skaters = {p['game_id'] for p, table, r, c, n in rows if table == SKATER_T and r is not None}
+    keep = {p['game_id'] for p, table, r, c, n in rows if table == SKATER_T and r is not None and p['nhl_id'] in NO_VISOR}
+    new = sorted((set(cur) - skaters) | keep)
+    out = {'removed': len((set(cur) & skaters) - keep), 'added': len(keep - set(cur)), 'rows': len(new)}
+    if new != cur:
+        db.resize(t, len(new))
+        for i, g in enumerate(new):
+            db.set(t, 'game_id', i, g)
+        db.fix()
+    return out
 
 
 def same_tables(src, db):
@@ -1385,7 +1413,12 @@ def cmd_roster(paths, a):
     from tdb import SaveFile
     from tdb_read import load_meta
     from .common import ref_meta
-    meta_path = a.meta or os.path.join(paths.game, 'userdata', 'cache', 'guest', 'db', 'nhlng-meta.xml')
+    if common.GAME.name == 'nhl13':
+        meta_path = a.meta or os.path.join(paths.game, 'userdata', 'cache', 'guest', 'db', 'nhlng-meta.xml')
+    else:       # Legacy: схема, поставленная в cache: порта (или собранная в out/), сейв — ZlibV4 (tdb.SaveFile)
+        inst = common.GAME.install
+        meta_path = a.meta or next((p for p in (os.path.join(inst, 'db', 'nhlng-meta.xml') if inst else '',
+                                                os.path.join(common.GAME.out, 'db', 'nhlng-meta.xml')) if p and os.path.exists(p)), '')
     if not os.path.exists(meta_path):
         meta_path = ref_meta()
     raw = open(a.save, 'rb').read()
@@ -1631,8 +1664,10 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog='python -m roster.equipment', description=__doc__.splitlines()[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter,
                                  epilog='\n'.join(__doc__.splitlines()[2:]))
-    ap.add_argument('--game', help='каталог game/ (по умолчанию — основной копии репозитория)')
-    ap.add_argument('--work', default=DEFAULT_WORK, help=f'папка конвейера с write.json (по умолчанию {DEFAULT_WORK})')
+    ap.add_argument('--game', help='каталог game/ (по умолчанию — основной копии репозитория) или игра: nhl13, legacy '
+                                   '(NHL Legacy, tools/gameprofile.py; иначе NHL_GAME, по умолчанию nhl13)')
+    ap.add_argument('--work', help=f'папка конвейера с write.json (по умолчанию {DEFAULT_WORK}, у Legacy — '
+                                   f'game/work/legacy-data/{DEFAULT_WORK_LEGACY})')
     sub = ap.add_subparsers(dest='cmd', required=True)
     s = sub.add_parser('fetch')
     s.add_argument('--team')
@@ -1688,6 +1723,12 @@ def main(argv=None):
         s.add_argument('--jersey-rule', action='store_true', help='свитер не заправлен у всех (НХЛ 2026/27)')
         s.add_argument('--meta', help='nhlng-meta.xml (по умолчанию рядом с базой или анкер)')
     a = ap.parse_args(argv)
+    import gameprofile
+    profile = None
+    if a.game and a.game.lower() in gameprofile.GAMES:      # --game legacy — игра, а не каталог
+        profile, a.game = a.game.lower(), None
+    game = set_game(profile or gameprofile.default_name())
+    a.work = a.work or (DEFAULT_WORK if game.name == 'nhl13' else DEFAULT_WORK_LEGACY)
     paths = Paths(a.game, a.work)
     {'fetch': cmd_fetch, 'todo': cmd_todo, 'zoom': cmd_zoom, 'commons': cmd_commons, 'csheet': cmd_csheet,
      'meta': cmd_meta, 'record': cmd_record, 'status': cmd_status, 'sheet': cmd_sheet, 'apply': cmd_apply,
