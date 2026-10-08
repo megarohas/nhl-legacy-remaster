@@ -10,6 +10,15 @@
     python sticktape.py preview [--round …] [--preview DIR]   # лист превью по готовым файлам
     python sticktape.py check [--round …]             # проверки собранного
 
+У всех команд — опция --game {nhl13,legacy} (или NHL_GAME, tools/gameprofile.py): из архивов какой игры брать сетки и
+куда писать по умолчанию (NHL 13 — game/work/models/tape, Legacy — game/work/legacy-data/models/tape). У NHL Legacy
+есть ещё реквизит (без костей, rendering/prop/): вратарская клюшка goaliestick_{left,right}_0 и лента
+goaliesticktape_{left,right}_0 — та же сетка, что goaliestick_H_2 (вид goalieprop, правится как вратарские), и
+клюшка на льду droppedstick_0 — один файл из 6 подсеток: у каждой из двух клюшек (left — зеркало right по y) древко с
+крюком stick_<side>_shaft_, лента крюка stick_<side>_heel_tape_ (та же, что у playersticktape_H_2) и набалдашник
+stick_<side>_shaft_tape_ (вид dropped, правится как полевые: подсетки — rw4mesh.Mesh(sub=k)). Лист превью у Legacy —
+«Legacy, оригинал / Legacy с модом / NHL 13 с модом» (готовые файлы NHL 13 из game/work/models/tape).
+
 Устройство (разбор 08.10.2026, подробно — docs/player-models.md §9). Геометрия клюшки у всех игроков одна:
 rendering/playerstick/playerstick_H_V.rx2 (H — 0/1, зеркальные левый и правый хват; V — 2 и 4: _4 — та же сетка,
 растянутая вдвое по y и z мира, то есть вдвое толще и длиннее по крюку; путь для отрисовки игра собирает только с _2,
@@ -47,9 +56,16 @@ STICK = 'rendering/playerstick/playerstick_{h}_{v}.rx2'
 TAPE = 'rendering/playerstick/playersticktape_{h}_{v}.rx2'
 GSTICK = 'rendering/goaliestick/goaliestick_{h}_{v}.rx2'
 GTAPE = 'rendering/goaliestick/goaliesticktape_{h}_{v}.rx2'
-KINDS = {'player': (STICK, TAPE), 'goalie': (GSTICK, GTAPE)}
-KIND_DIR = {'player': 'playerstick', 'goalie': 'goaliestick'}
+GPSTICK = 'rendering/prop/goaliestick_{side}_0.rx2'        # NHL Legacy: реквизит (без костей), H = 0 left, 1 right
+GPTAPE = 'rendering/prop/goaliesticktape_{side}_0.rx2'
+KINDS = {'player': (STICK, TAPE), 'goalie': (GSTICK, GTAPE), 'goalieprop': (GPSTICK, GPTAPE)}
+KIND_DIR = {'player': 'playerstick', 'goalie': 'goaliestick', 'goalieprop': 'prop'}
+SIDES = ('left', 'right')
 PAIRS = [(k, h, v) for k in ('player', 'goalie') for v in (2, 4) for h in (0, 1)]
+PROP_PAIRS = [('goalieprop', h, 0) for h in (0, 1)]
+DROPPED = 'rendering/prop/droppedstick_0.rx2'               # NHL Legacy: две клюшки на льду, по 3 подсетки
+KINDS['dropped'] = (DROPPED, DROPPED)
+KIND_DIR['dropped'] = 'prop'
 UV_GAP = 0.012                              # отступ рисунка крюка от рисунка набалдашника по UV-u
 
 
@@ -63,6 +79,108 @@ def v_mul(a, k):
 
 def lerp(a, b, t):
     return [a[k] + (b[k] - a[k]) * t for k in range(3)]
+
+
+def pairs():
+    """Пары клюшка + лента игры: у NHL 13 — PAIRS, у другой игры — ещё реквизит, если он есть в её архивах."""
+    if rm.is_nhl13():
+        return PAIRS
+    return PAIRS + [p for p in PROP_PAIRS if all(rm.game_has(rel) for rel in pair_rels(*p))]
+
+
+def has_dropped():
+    return not rm.is_nhl13() and rm.game_has(DROPPED)
+
+
+def kinds_default():
+    ks = list(dict.fromkeys(k for k, _, _ in pairs()))
+    return ','.join(ks + (['dropped'] if has_dropped() else []))
+
+
+def dropped_subs(data):
+    """Подсетки droppedstick_0 по именам шейдеров stick_<side>_<part>_ → {side: {part: k}}; part — shaft (древко с
+    крюком и островком носка), heel_tape (лента крюка), shaft_tape (набалдашник)."""
+    import re
+    f = rm.Rw4File(data, DROPPED)
+    out = {}
+    for k, sh in enumerate(f.find(rm.TYPE_SHADER)):
+        b = f.body(sh)
+        mm = re.match(r'stick_(left|right)_(shaft|heel_tape|shaft_tape)_$', b[12:b.index(b'\0', 12)].decode('latin1'))
+        if mm:
+            out.setdefault(mm.group(1), {})[mm.group(2)] = k
+    if any(set(out.get(sd, {})) != {'shaft', 'heel_tape', 'shaft_tape'} for sd in SIDES):
+        raise SystemExit(f'{DROPPED}: подсетки {out} — разбор не подходит')
+    return out
+
+
+def dropped_pair(data, side):
+    """Пара «древко + лента крюка» одной клюшки droppedstick_0 (side — left/right); UV-u набалдашника — из его
+    подсетки (у клюшки в руке он в той же сетке, что лента)."""
+    subs = dropped_subs(data)[side]
+    st = rm.Mesh(data, DROPPED, sub=subs['shaft'])
+    tp = rm.Mesh(data, DROPPED, sub=subs['heel_tape'])
+    kn = rm.Mesh(data, DROPPED, sub=subs['shaft_tape'])
+    pair = Pair(SIDES.index(side), 0, stick=st, tape=tp, kind='dropped')
+    pair.uv_max = min(u for u, _ in kn.uv) - UV_GAP
+    pair.subs, pair.side = subs, side
+    return pair
+
+
+def build_dropped(rounding, log=print):
+    """droppedstick_0: обе клюшки — как полевые (build_pair); лента — новая подсетка, островок носка древка стянут.
+    → (файл, {side: отчёт})."""
+    data = rm.source(DROPPED)
+    reps = {}
+    for side in SIDES:
+        pair = dropped_pair(data, side)
+        tb, sb, rp = build_pair(pair, rounding)
+        squeezed = rm.Mesh(sb, DROPPED, sub=pair.subs['shaft'])
+        m = rm.Mesh(tb, DROPPED, sub=pair.subs['shaft'])        # файл с новой лентой — в нём же стянуть носок
+        for i in pair.island:
+            m.set_pos(i, squeezed.pos[i])
+        data = m.bytes()
+        reps[side] = rp
+        log(f'  {DROPPED} [{side}]: лента {rp["tape_vertices"][0]} → {rp["tape_vertices"][1]} вершин, новых колец '
+            f'{len(rp["new_rings_mm"])} (от кольца {rp["anchor_ring"]}), радиусы {rp["radii_mm"]} мм при высоте '
+            f'{rp["blade_height_mm"]}; UV-u ×{rp["uv_u_scale"]}; стянуто {rp["stick_island_vertices"]} вершин носка')
+    return data, reps
+
+
+def check_dropped(out, log=print):
+    """Проверка собранного droppedstick_0: у каждой клюшки — как у пары (check_pair), набалдашники — байт в байт как
+    были и перекодируются байт в байт."""
+    src = rm.source(DROPPED)
+    new = open(os.path.join(out, *DROPPED.split('/')), 'rb').read()
+    man = json.load(open(os.path.join(out, 'manifest.json'), encoding='utf-8'))['files'].get(DROPPED, {})
+    ok = True
+    for side in SIDES:
+        pair = dropped_pair(src, side)
+        nt = rm.Mesh(new, DROPPED, sub=pair.subs['heel_tape'])
+        ns = rm.Mesh(new, DROPPED, sub=pair.subs['shaft'])
+        anchor = man.get(side, {}).get('anchor_ring', len(pair.rings) - 2)
+        good, line = check_pair(pair, nt, ns, anchor, f'{DROPPED} [{side}, лента]', f'[{side}, древко]')
+        kb = pair.subs['shaft_tape']
+        k0, k1 = rm.Mesh(src, DROPPED, sub=kb), rm.Mesh(new, DROPPED, sub=kb)
+        if (k0.nv != k1.nv or k0.indices != k1.indices
+                or any(k0.vertex_raw(i) != k1.vertex_raw(i) for i in range(k0.nv))):
+            good = False
+            line += f' — набалдашник [{side}] изменился'
+        if rm.reencode_check(k1) or not k1.layout_ok():
+            good = False
+            line += f' — набалдашник [{side}] не перекодируется байт в байт'
+        ok &= good
+        log(line)
+    return ok
+
+
+def kind_prefix(kind):
+    """Начало путей файлов вида (записи manifest.json при сборке части видов)."""
+    return {'goalieprop': 'rendering/prop/goaliestick', 'dropped': DROPPED}.get(kind, f'rendering/{KIND_DIR[kind]}/')
+
+
+def pair_rels(kind, h, v):
+    """Пути клюшки и ленты пары."""
+    return tuple(x.format(h=h, v=v, side=SIDES[h]) for x in KINDS[kind])
 
 
 def components(m):
@@ -102,7 +220,7 @@ class Pair:
 
     def __init__(self, h, v, stick=None, tape=None, kind='player'):
         self.h, self.v, self.kind = h, v, kind
-        self.rel_stick, self.rel_tape = (x.format(h=h, v=v) for x in KINDS[kind])
+        self.rel_stick, self.rel_tape = pair_rels(kind, h, v)
         self.stick = stick or rm.Mesh.game(self.rel_stick)
         self.tape = tape or rm.Mesh.game(self.rel_tape)
         st, tp = self.stick, self.tape
@@ -984,7 +1102,7 @@ def build_pair(pair, rounding=None, uv_max=None, use_rails=True):
             idx.append(rm.STRIP_RESTART)
         idx += list(t)
     tape_bytes = tp.rebuilt(b''.join(vb), idx)
-    st2 = rm.Mesh(st.bytes(), st.path)
+    st2 = rm.Mesh(st.bytes(), st.path, st.sub)
     for i in pair.island:
         st2.set_pos(i, out_p(pair.O))
     rep = {'tape_vertices': [tp.nv, len(vb)], 'tape_indices': [tp.ni, len(idx)], 'new_triangles': len(tris) - n_old,
@@ -1010,7 +1128,7 @@ def prescale_mesh(m, a):
 def make_pair(kind, h, v):
     """Пара клюшка + лента для правки; у толстой _4 разбор и правка — в её «обычном» виде (y, z пополам), так что
     скругление носка у _4 — то же, что у _2, растянутое вместе с клюшкой."""
-    rel_s, rel_t = (x.format(h=h, v=v) for x in KINDS[kind])
+    rel_s, rel_t = pair_rels(kind, h, v)
     st, tp = rm.Mesh.game(rel_s), rm.Mesh.game(rel_t)
     a = PRESCALE.get(v)
     if a:
@@ -1037,7 +1155,7 @@ def opt(args, name, default=None):
 
 
 def cmd_info(args):
-    for kind, h, v in PAIRS:
+    for kind, h, v in pairs():
         p = Pair(h, v, kind=kind)
         print(f'{p.rel_stick} + {p.rel_tape}: колец ленты на крюке {len(p.rings)} '
               f'(UV-u {p.ring_u[0]:.3f}…{p.ring_u[-1]:.3f}), вершин в кольце {len(p.roles)}; островок носка '
@@ -1052,7 +1170,7 @@ def out_dir(variant):
 
 def cmd_build(args):
     variants = opt(args, '--round', ROUND_DEFAULT).split(',')
-    kinds = opt(args, '--kinds', 'player,goalie').split(',')
+    kinds = opt(args, '--kinds', kinds_default()).split(',')
     goalie_round = rm.flag(args, '--goalie-round')
     prev = opt(args, '--preview', os.path.join(rm.models_dir(), 'preview', 'tape'))
     no_prev = rm.flag(args, '--no-preview')
@@ -1066,10 +1184,10 @@ def cmd_build(args):
                 old = json.load(open(mf, encoding='utf-8'))
                 if old.get('variant') == var:
                     summary['files'] = {k: v_ for k, v_ in old.get('files', {}).items()
-                                        if not any(k.startswith(f'rendering/{KIND_DIR[kd]}/') for kd in kinds)}
+                                        if not any(k.startswith(kind_prefix(kd)) for kd in kinds)}
             except ValueError:
                 pass
-        for kind, h, v in PAIRS:
+        for kind, h, v in pairs():
             if kind not in kinds:
                 continue
             pair = make_pair(kind, h, v)
@@ -1084,14 +1202,20 @@ def cmd_build(args):
             print(f'  [{ROUND_NAMES[var]}] {pair.rel_tape}: вершин {rp["tape_vertices"][0]} → {rp["tape_vertices"][1]}, '
                   f'новых колец {len(rp["new_rings_mm"])} (от кольца {rp["anchor_ring"]}), радиусы '
                   f'{rp["radii_mm"]} мм при высоте {rp["blade_height_mm"]}; UV-u ×{rp["uv_u_scale"]}')
+        if 'dropped' in kinds and has_dropped():               # клюшка на льду — как полевые
+            data, reps = build_dropped(ROUNDS[var], log=lambda s, n=ROUND_NAMES[var]: print(f'  [{n}]' + s[1:]))
+            pth = os.path.join(out, *DROPPED.split('/'))
+            os.makedirs(os.path.dirname(pth), exist_ok=True)
+            open(pth, 'wb').write(data)
+            summary['files'][DROPPED] = dict({'sha1': hashlib.sha1(data).hexdigest(), 'size': len(data)}, **reps)
         json.dump(summary, open(os.path.join(out, 'manifest.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
         print(f'файлы [{ROUND_NAMES[var]}]: {out}')
     if not no_prev:
-        preview([v for v in variants], prev)
+        preview([v for v in variants], prev, nhl13=not rm.flag(args, '--no-nhl13'))
 
 
 def main():
-    args = sys.argv[1:]
+    args = rm.take_game(sys.argv[1:])
     if not args:
         print(__doc__)
         return
@@ -1102,7 +1226,8 @@ def main():
         cmd_build(args)
     elif cmd == 'preview':
         preview(opt(args, '--round', ROUND_DEFAULT).split(','),
-                opt(args, '--preview', os.path.join(rm.models_dir(), 'preview', 'tape')))
+                opt(args, '--preview', os.path.join(rm.models_dir(), 'preview', 'tape')),
+                nhl13=not rm.flag(args, '--no-nhl13'))
     elif cmd == 'check':
         good = True
         for var in opt(args, '--round', ROUND_DEFAULT).split(','):
@@ -1192,39 +1317,94 @@ def _silhouette(stick, tape, cam):
 PREVIEW_VIEWS = ('сбоку', 'сверху', 'носок крупно')
 
 
-def preview(variants, prevdir, log=print):
+def load_pair(outdir, pair):
+    return (rm.Mesh.load(os.path.join(outdir, *pair.rel_stick.split('/'))),
+            rm.Mesh.load(os.path.join(outdir, *pair.rel_tape.split('/'))))
+
+
+def preview(variants, prevdir, log=print, nhl13=True):
     """Лист prevdir/sheet.png: для обычной (_2) и толстой (_4) клюшки левого хвата, белой и чёрной ленты — виды
     «сбоку», «сверху», «носок крупно»: исходная, затем варианты variants (ключи ROUNDS: none, strong, bottom1, …);
-    красный контур — силуэт исходной. Картинки — prevdir/tape_<V>_<цвет>_<вид>_<вариант>.png."""
+    красный контур — силуэт исходной. Картинки — prevdir/tape_<V>_<цвет>_<вид>_<вариант>.png. У другой игры (Legacy)
+    с nhl13 — ещё колонки «NHL 13 с модом»: готовые файлы NHL 13 (game/work/models/tape/out-<вариант>) с текстурами
+    NHL 13 (tape_<V>_<цвет>_<вид>_nhl13_<вариант>.png)."""
     import base64
     import teamart as ta
     os.makedirs(prevdir, exist_ok=True)
+    other = not rm.is_nhl13()
+    gname = rm.PROFILE.title
     cards = []
     for v in (2, 4):
         pair = Pair(0, v)
         cams = dict(blade_views(pair))
-        built = {var: (rm.Mesh.load(os.path.join(out_dir(var), *pair.rel_stick.split('/'))),
-                       rm.Mesh.load(os.path.join(out_dir(var), *pair.rel_tape.split('/')))) for var in variants}
+        built = {var: load_pair(out_dir(var), pair) for var in variants}
+        b13 = {}
+        if other and nhl13:
+            for var in variants:
+                d13 = os.path.join(rm.nhl13_models_dir(), 'tape', 'out' if var == 'none' else f'out-{var}')
+                if os.path.exists(os.path.join(d13, *pair.rel_tape.split('/'))):
+                    b13[var] = load_pair(d13, pair)
         edges = {vn: _silhouette(pair.stick, pair.tape, cams[vn]) for vn in PREVIEW_VIEWS}
         for color, cname in ((1, 'белая'), (0, 'чёрная')):
             rows = []
             for k, vn in enumerate(PREVIEW_VIEWS):
                 cam = cams[vn]
                 cells = []
-                for var in ['orig'] + list(variants):
+                for var in ['orig'] + list(variants) + [('nhl13', x) for x in b13]:
+                    if isinstance(var, tuple):                # NHL 13 с модом — сетки и текстуры NHL 13
+                        with rm.game_profile('nhl13'):
+                            img = render_blade(*b13[var[1]], cam, color)
+                    else:
+                        s_, t_ = (pair.stick, pair.tape) if var == 'orig' else built[var]
+                        img = render_blade(s_, t_, cam, color)
+                    if var != 'orig':
+                        for x, y in edges[vn]:
+                            o = (y * img.w + x) * 4
+                            img.px[o:o + 4] = bytes((255, 60, 60, 255))
+                    tag = f'nhl13_{var[1]}' if isinstance(var, tuple) else var
+                    fn = f'tape_{v}_{color}_{k}_{tag}.png'
+                    img.save(os.path.join(prevdir, fn))
+                    if not other:
+                        lab = 'до' if var == 'orig' else ROUND_NAMES[var]
+                    elif isinstance(var, tuple):
+                        lab = f'NHL 13 с модом ({ROUND_NAMES[var[1]]})'
+                    else:
+                        lab = f'{gname}, оригинал' if var == 'orig' else f'{gname} с модом ({ROUND_NAMES[var]})'
+                    cells.append((fn, lab, cam.w, cam.h))
+                rows.append((vn, cells))
+            cards.append((f'клюшка _{v} ({"обычная" if v == 2 else "толстая: вдвое толще и длиннее по крюку"}), '
+                          f'лента {cname}', rows))
+            log(f'  превью: _{v}, лента {cname}')
+    if other and has_dropped():                       # клюшка на льду (реквизит, у NHL 13 его нет) — правая
+        pair = dropped_pair(rm.source(DROPPED), 'right')
+        cams = dict(blade_views(pair))
+        built = {}
+        for var in variants:
+            p = os.path.join(out_dir(var), *DROPPED.split('/'))
+            if os.path.exists(p):
+                data = open(p, 'rb').read()
+                built[var] = (rm.Mesh(data, DROPPED, sub=pair.subs['shaft']),
+                              rm.Mesh(data, DROPPED, sub=pair.subs['heel_tape']))
+        edges = {vn: _silhouette(pair.stick, pair.tape, cams[vn]) for vn in PREVIEW_VIEWS}
+        for color, cname in ((1, 'белая'), (0, 'чёрная')):
+            rows = []
+            for k, vn in enumerate(PREVIEW_VIEWS):
+                cam = cams[vn]
+                cells = []
+                for var in ['orig'] + [x for x in variants if x in built]:
                     s_, t_ = (pair.stick, pair.tape) if var == 'orig' else built[var]
                     img = render_blade(s_, t_, cam, color)
                     if var != 'orig':
                         for x, y in edges[vn]:
                             o = (y * img.w + x) * 4
                             img.px[o:o + 4] = bytes((255, 60, 60, 255))
-                    fn = f'tape_{v}_{color}_{k}_{var}.png'
+                    fn = f'tape_dropped_{color}_{k}_{var}.png'
                     img.save(os.path.join(prevdir, fn))
-                    cells.append((fn, 'до' if var == 'orig' else ROUND_NAMES[var], cam.w, cam.h))
+                    cells.append((fn, f'{gname}, оригинал' if var == 'orig' else f'{gname} с модом ({ROUND_NAMES[var]})',
+                                  cam.w, cam.h))
                 rows.append((vn, cells))
-            cards.append((f'клюшка _{v} ({"обычная" if v == 2 else "толстая: вдвое толще и длиннее по крюку"}), '
-                          f'лента {cname}', rows))
-            log(f'  превью: _{v}, лента {cname}')
+            cards.append((f'клюшка на льду {DROPPED} (реквизит, у NHL 13 его нет; правая), лента {cname}', rows))
+            log(f'  превью: клюшка на льду, лента {cname}')
 
     def uri(fn):
         return 'data:image/png;base64,' + base64.b64encode(open(os.path.join(prevdir, fn), 'rb').read()).decode()
@@ -1250,9 +1430,11 @@ def preview(variants, prevdir, log=print):
             '.vrow{display:flex;gap:6px;align-items:flex-end;margin-bottom:4px}'
             '.vn{width:86px;font-size:12px;color:#ccc;align-self:center}figure{margin:0}'
             'figcaption{font-size:11px;color:#aaa;text-align:center}p{margin:4px 0 8px;color:#bbb}'
-            '</style></head><body><h1>Обмотка крюка: лента до носка и скругление носка</h1>'
-            f'<p>Варианты: {names}. Красный контур — силуэт исходного крюка. Клюшка с текстурой Reebok 11K '
-            '(texlib_50); геометрия у всех клюшек одна, «модели» — только текстуры; правый хват — зеркало левого. '
+            '</style></head><body><h1>Обмотка крюка: лента до носка и скругление носка'
+            + (f' — {gname}' if other else '') + '</h1>'
+            f'<p>Варианты: {names}. Красный контур — силуэт исходного крюка. Клюшка с текстурой '
+            + ('Reebok 11K (texlib_50)' if not other else f'texlib_{PREVIEW_STICK} своей игры')
+            + '; геометрия у всех клюшек одна, «модели» — только текстуры; правый хват — зеркало левого. '
             'Пятка, высота и длина крюка до скругления не менялись.</p>' + ''.join(body) + '</body></html>')
     sheet = os.path.join(prevdir, 'sheet.png')
     ta.render_html(html, sheet, 1480, 80 + len(cards) * 625)
@@ -1321,7 +1503,7 @@ def check(out, rounded=False, log=print):
     якоря, новые — не перевёрнуты, у крюка не осталось открытого края у носка (только стык у пятки); новые вершины не
     выходят за исходный контур носка; у клюшки изменены только позиции вершин островка носка (стянуты в точку)."""
     ok = True
-    for kind, h, v in PAIRS:
+    for kind, h, v in pairs():
         pair = Pair(h, v, kind=kind)
         rel_t, rel_s = pair.rel_tape, pair.rel_stick
         if not os.path.exists(os.path.join(out, *rel_t.split('/'))):
@@ -1330,64 +1512,72 @@ def check(out, rounded=False, log=print):
         ns = rm.Mesh.load(os.path.join(out, *rel_s.split('/')))
         man = json.load(open(os.path.join(out, 'manifest.json'), encoding='utf-8'))['files'].get(rel_t, {})
         anchor = man.get('anchor_ring', len(pair.rings) - 2)
-        msgs = []
-        for m in (nt, ns):
-            if rm.reencode_check(m) or not m.layout_ok():
-                msgs.append(f'{m.path}: не перекодируется байт в байт')
-        tp, st = pair.tape, pair.stick
-        ring_of = {i: k for k, rr in enumerate(pair.rings) for i in rr.values()}
-        for i in range(tp.nv):
-            same = (nt.pos[i] == tp.pos[i] and nt.nrm[i] == tp.nrm[i] and nt.bones[i] == tp.bones[i]
-                    and nt.weights[i] == tp.weights[i] and abs(nt.uv[i][1] - tp.uv[i][1]) < 1e-9)
-            if not same or (i not in ring_of and nt.uv[i] != tp.uv[i]):
-                msgs.append(f'лента: вершина {i} изменилась')
-                break
-        used = set(i for t in nt.tris for i in t)
-        orphan = [i for i, k in ring_of.items() if k > anchor]
-        if any(i in used for i in orphan):
-            msgs.append('лента: кольца после якоря всё ещё в треугольниках')
-        dropped = [t for t in tp.tris if all(i in ring_of and ring_of[i] >= anchor for i in t)
-                   and any(ring_of[i] > anchor for i in t)]
-        keep = {_tri_key(t) for t in tp.tris} - {_tri_key(t) for t in dropped}
-        have = {_tri_key(t) for t in nt.tris}
-        if not keep <= have:
-            msgs.append(f'лента: пропало {len(keep - have)} исходных треугольников')
-        new_tris = [t for t in nt.tris if _tri_key(t) not in keep]
-        flipped = 0                                   # перевёрнутые: грань смотрит против нормалей своих вершин
-        for t in new_tris:
-            a_, b_, c_ = (nt.pos[i] for i in t)
-            fn = rm.v_cross(rm.v_sub(b_, a_), rm.v_sub(c_, a_))
-            if rm.v_dot(fn, fn) > 1e-14 and rm.v_dot(fn, [sum(nt.nrm[i][k] for i in t) for k in range(3)]) <= 0:
-                flipped += 1
-        if flipped:
-            msgs.append(f'лента: перевёрнутых треугольников {flipped}')
-        blade_new = [i for i in pair.blade if i not in orphan] + list(range(tp.nv, nt.nv))
-        b1 = boundary_loops(nt, blade_new)
-        heel = len(pair.segment_pattern()) // 2
-        if b1 != heel:
-            msgs.append(f'лента: открытых рёбер у крюка {b1} (ожидалось {heel} — только стык у пятки)')
-        over = _outline_overshoot(pair, nt, tp.nv, anchor)
-        if over > 0.6:
-            msgs.append(f'лента: выходит за исходный контур носка на {over:.2f} мм')
-        isl = set(pair.island)
-        for i in range(st.nv):
-            if i in isl:
-                if math.dist(ns.pos[i], pair.O) > 1e-3:
-                    msgs.append(f'клюшка: вершина носка {i} не стянута')
-                    break
-            elif ns.vertex_raw(i) != st.vertex_raw(i):
-                msgs.append(f'клюшка: вершина {i} вне носка изменилась')
-                break
-        if ns.indices != st.indices:
-            msgs.append('клюшка: индексы изменились')
-        ok &= not msgs
-        log(f'  {rel_t}: вершин {tp.nv} → {nt.nv}, треугольников {len(tp.tris)} → {len(nt.tris)} '
-            f'(новых {len(new_tris)}, перевёрнутых {flipped}); у крюка открыт только стык у пятки: '
-            f'{"да" if b1 == heel else "нет"}; '
-            f'за исходный контур — {over:.2f} мм; {rel_s}: стянуто {len(isl)} вершин носка'
-            + ('' if not msgs else ' — ' + '; '.join(msgs)))
+        good, line = check_pair(pair, nt, ns, anchor, rel_t, rel_s)
+        ok &= good
+        log(line)
+    if not rm.is_nhl13() and os.path.exists(os.path.join(out, *DROPPED.split('/'))):
+        ok &= check_dropped(out, log)
     log('  итог: ' + ('всё в порядке' if ok else 'есть замечания'))
     return ok
+
+
+def check_pair(pair, nt, ns, anchor, rel_t, rel_s):
+    """Проверки одной пары (см. check): nt, ns — собранные лента и клюшка. → (всё ли в порядке, строка отчёта)."""
+    msgs = []
+    for m in (nt, ns):
+        if rm.reencode_check(m) or not m.layout_ok():
+            msgs.append(f'{m.path}: не перекодируется байт в байт')
+    tp, st = pair.tape, pair.stick
+    ring_of = {i: k for k, rr in enumerate(pair.rings) for i in rr.values()}
+    for i in range(tp.nv):
+        same = (nt.pos[i] == tp.pos[i] and nt.nrm[i] == tp.nrm[i] and nt.bones[i:i + 1] == tp.bones[i:i + 1]
+                and nt.weights[i:i + 1] == tp.weights[i:i + 1] and abs(nt.uv[i][1] - tp.uv[i][1]) < 1e-9)
+        if not same or (i not in ring_of and nt.uv[i] != tp.uv[i]):
+            msgs.append(f'лента: вершина {i} изменилась')
+            break
+    used = set(i for t in nt.tris for i in t)
+    orphan = [i for i, k in ring_of.items() if k > anchor]
+    if any(i in used for i in orphan):
+        msgs.append('лента: кольца после якоря всё ещё в треугольниках')
+    dropped = [t for t in tp.tris if all(i in ring_of and ring_of[i] >= anchor for i in t)
+               and any(ring_of[i] > anchor for i in t)]
+    keep = {_tri_key(t) for t in tp.tris} - {_tri_key(t) for t in dropped}
+    have = {_tri_key(t) for t in nt.tris}
+    if not keep <= have:
+        msgs.append(f'лента: пропало {len(keep - have)} исходных треугольников')
+    new_tris = [t for t in nt.tris if _tri_key(t) not in keep]
+    flipped = 0                                   # перевёрнутые: грань смотрит против нормалей своих вершин
+    for t in new_tris:
+        a_, b_, c_ = (nt.pos[i] for i in t)
+        fn = rm.v_cross(rm.v_sub(b_, a_), rm.v_sub(c_, a_))
+        if rm.v_dot(fn, fn) > 1e-14 and rm.v_dot(fn, [sum(nt.nrm[i][k] for i in t) for k in range(3)]) <= 0:
+            flipped += 1
+    if flipped:
+        msgs.append(f'лента: перевёрнутых треугольников {flipped}')
+    blade_new = [i for i in pair.blade if i not in orphan] + list(range(tp.nv, nt.nv))
+    b1 = boundary_loops(nt, blade_new)
+    heel = len(pair.segment_pattern()) // 2
+    if b1 != heel:
+        msgs.append(f'лента: открытых рёбер у крюка {b1} (ожидалось {heel} — только стык у пятки)')
+    over = _outline_overshoot(pair, nt, tp.nv, anchor)
+    if over > 0.6:
+        msgs.append(f'лента: выходит за исходный контур носка на {over:.2f} мм')
+    isl = set(pair.island)
+    for i in range(st.nv):
+        if i in isl:
+            if math.dist(ns.pos[i], pair.O) > 1e-3:
+                msgs.append(f'клюшка: вершина носка {i} не стянута')
+                break
+        elif ns.vertex_raw(i) != st.vertex_raw(i):
+            msgs.append(f'клюшка: вершина {i} вне носка изменилась')
+            break
+    if ns.indices != st.indices:
+        msgs.append('клюшка: индексы изменились')
+    return not msgs, (f'  {rel_t}: вершин {tp.nv} → {nt.nv}, треугольников {len(tp.tris)} → {len(nt.tris)} '
+                      f'(новых {len(new_tris)}, перевёрнутых {flipped}); у крюка открыт только стык у пятки: '
+                      f'{"да" if b1 == heel else "нет"}; '
+                      f'за исходный контур — {over:.2f} мм; {rel_s}: стянуто {len(isl)} вершин носка'
+                      + ('' if not msgs else ' — ' + '; '.join(msgs)))
 
 
 if __name__ == '__main__':
