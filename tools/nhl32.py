@@ -81,7 +81,7 @@ AHL_NEW = {
     221: dict(short='Henderson', full='Henderson Silver Knights', abbr='HSK', nick='Silver Knights',
               parent=31, rival=220, strategy=58, kit=51, art=101, spotlight=34, tunnel=34, audio=56,
               primary=(162, 170, 173), secondary=(19, 19, 19), equip={},
-              arena=dict(name="Lee's Family Forum", city='Henderson, NV', capacity=6000)),
+              arena=dict(name="Lee's Family Forum", city='Henderson, NV', capacity=5567)),
 }
 # Арена клуба АХЛ: копия Cedar Park Center (модель арены АХЛ 145, красная линия «шашками»), звук
 # арены и города — общий (255), без кричалок.
@@ -166,6 +166,14 @@ META_WIDEN = {
     'leaguerookiedata': ['draftteam'],
     'leaguecontractoffers': ['teamnotification'],
     'leagueretirementtable': ['team'],
+    'leaguegamemodesvars': ['team'],
+    'leaguescoutvisits': ['team'],
+}
+# --ahl32: поля [−1…62], куда может попасть номер клуба АХЛ (у Henderson — 63: отставки, свободные
+# агенты, переменные режимов, скаутинг; docs/ahl32.md §7), — 7 бит (−1…126).
+META_WIDEN_AHL32 = {
+    'leagueretirementtable': ['team'],
+    'leaguefreeagentdata': ['originalteamid', 'signedteamid'],
     'leaguegamemodesvars': ['team'],
     'leaguescoutvisits': ['team'],
 }
@@ -523,6 +531,15 @@ def patch_meta(text, ahl32=False):
             block, k = pat.subn(lambda f: f.group(1) + 'depth="6"' + f.group(2) + 'rangehigh="62"' + f.group(3), block)
             assert k == 1, (table, field)
         text = text[:m.start()] + block + text[m.end():]
+    if ahl32:
+        for table, fields in META_WIDEN_AHL32.items():
+            m = re.search(r'<table name="%s".*?</table>' % table, text, re.S)
+            block = m.group(0)
+            for field in fields:
+                pat = re.compile(r'(<field name="%s"[^>]*?)depth="6"([^>]*?)rangehigh="62"([^>]*?rangelow="-1")' % field)
+                block, k = pat.subn(lambda f: f.group(1) + 'depth="7"' + f.group(2) + 'rangehigh="126"' + f.group(3), block)
+                assert k == 1, (table, field)
+            text = text[:m.start()] + block + text[m.end():]
     return text
 
 def main():
