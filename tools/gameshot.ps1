@@ -5,11 +5,12 @@
 # вперёд). Снимок — PrintWindow с флагами 3 (клиентская часть, полное содержимое D3D12) из DPI-aware
 # процесса: при масштабе Windows 125 % окно 1280×720 логических = 1600×900 пикселей.
 # Замок game/work/status/game.lock (правила общие для агентов) берёт и снимает вызывающий.
-#   -Do start  [-Log путь] [-Extra '--x=y',…]   запустить (если nhl13.exe уже запущен — ALREADY_RUNNING)
+#   -Do start  [-Log путь] [-Extra '--x=y',…]   запустить (если игра уже запущена — ALREADY_RUNNING)
 #   -Do shot   -Out файл.png                    снимок окна
 #   -Do key    -Keys "Return Space Shift+Down"  нажать по очереди (-HoldMs удержание, -GapMs пауза)
 #   -Do stop                                    закрыть: taskkill без /F, через 30 с — /F
 #   -Do info                                    pid, окно, размер, в фокусе ли
+#   -Game legacy                                порт NHL Legacy (legacy-port/): процесс nhllegacy, свой exe и лог
 # Пример: powershell -ExecutionPolicy Bypass -File tools\gameshot.ps1 -Do shot -Out game\work\x.png
 param(
     [Parameter(Mandatory = $true)][ValidateSet('start', 'shot', 'key', 'stop', 'info')][string]$Do,
@@ -19,9 +20,16 @@ param(
     [int]$GapMs = 600,
     [string]$Log = 'S:/Claude/megarohas_nhl13/port/out/gameshot.log',
     [string]$Exe = 'S:\Claude\megarohas_nhl13\port-ffx\out\build\win-amd64-release\nhl13.exe',
-    [string[]]$Extra = @()
+    [string[]]$Extra = @(),
+    [ValidateSet('nhl13', 'legacy')][string]$Game = 'nhl13'
 )
 $ErrorActionPreference = 'Stop'
+$Proc = 'nhl13'
+if ($Game -eq 'legacy') {
+    $Proc = 'nhllegacy'
+    if (-not $PSBoundParameters.ContainsKey('Exe')) { $Exe = 'S:\Claude\megarohas_nhl13\legacy-port\out\build\win-amd64-release\nhllegacy.exe' }
+    if (-not $PSBoundParameters.ContainsKey('Log')) { $Log = 'S:/Claude/megarohas_nhl13/legacy-port/out/gameshot.log' }
+}
 Add-Type -AssemblyName System.Drawing
 Add-Type @"
 using System;
@@ -49,7 +57,7 @@ public static class GT {
 [GT]::SetProcessDPIAware() | Out-Null          # физические пиксели окна (масштаб Windows 125 %)
 
 function Get-GameWindow {
-    $p = Get-Process -Name nhl13 -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+    $p = Get-Process -Name $Proc -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
     if (-not $p) { return $null }
     return $p
 }
@@ -98,7 +106,7 @@ switch ($Do) {
         Write-Output ("pid {0} hwnd {1} client {2}x{3} title '{4}' fg {5}" -f $p.Id, $p.MainWindowHandle, $r.Right, $r.Bottom, $p.MainWindowTitle, ([GT]::GetForegroundWindow() -eq $p.MainWindowHandle))
     }
     'start' {
-        if (Get-Process -Name nhl13 -ErrorAction SilentlyContinue) { Write-Output 'ALREADY_RUNNING'; exit 2 }
+        if (Get-Process -Name $Proc -ErrorAction SilentlyContinue) { Write-Output 'ALREADY_RUNNING'; exit 2 }
         $args2 = @("--log_file=$Log", '--mnk_mode=true') + $Extra
         $p = Start-Process -FilePath $Exe -ArgumentList $args2 -WorkingDirectory (Split-Path -Parent $Exe) -PassThru
         Write-Output "STARTED pid $($p.Id): $Exe $($args2 -join ' ')"
@@ -140,15 +148,15 @@ switch ($Do) {
         }
     }
     'stop' {
-        $p = Get-Process -Name nhl13 -ErrorAction SilentlyContinue
+        $p = Get-Process -Name $Proc -ErrorAction SilentlyContinue
         if (-not $p) { Write-Output 'NOT_RUNNING'; exit 0 }
-        & taskkill /IM nhl13.exe | Out-Null
+        & taskkill /IM "$Proc.exe" | Out-Null
         for ($i = 0; $i -lt 30; $i++) {
             Start-Sleep -Seconds 1
-            if (-not (Get-Process -Name nhl13 -ErrorAction SilentlyContinue)) { Write-Output "CLOSED after $($i+1)s"; exit 0 }
+            if (-not (Get-Process -Name $Proc -ErrorAction SilentlyContinue)) { Write-Output "CLOSED after $($i+1)s"; exit 0 }
         }
-        & taskkill /F /IM nhl13.exe | Out-Null
+        & taskkill /F /IM "$Proc.exe" | Out-Null
         Start-Sleep -Seconds 2
-        Write-Output "KILLED (/F): $(if (Get-Process -Name nhl13 -ErrorAction SilentlyContinue) {'still running!'} else {'gone'})"
+        Write-Output "KILLED (/F): $(if (Get-Process -Name $Proc -ErrorAction SilentlyContinue) {'still running!'} else {'gone'})"
     }
 }
