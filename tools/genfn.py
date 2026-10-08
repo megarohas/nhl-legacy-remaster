@@ -5,14 +5,18 @@
 
 GENDIR — папка сгенерированного кода ReXGlue (port/generated/default,
 legacy-port/generated/default…): файлы *_recomp.N.cpp с DEFINE_REX_FUNC(sub_XXXXXXXX) и
-комментарием с исходной инструкцией перед каждой строкой. Индекс начал функций кладётся в
-GENDIR/_fnindex.txt (пересоздаётся, если старше register.cpp).
+комментарием с исходной инструкцией перед каждой строкой. Индекс начал функций кладётся во
+временную папку (%TEMP%/genfn, по пути GENDIR; пересоздаётся, если старше register.cpp) — в папки
+сгенерированного кода инструмент ничего не пишет.
 """
-import bisect, glob, os, re, sys
+import bisect, glob, hashlib, os, re, sys, tempfile
 
 
 def index(gen):
-    path = os.path.join(gen, '_fnindex.txt')
+    cache = os.path.join(tempfile.gettempdir(), 'genfn')
+    os.makedirs(cache, exist_ok=True)
+    key = hashlib.sha1(os.path.abspath(gen).lower().encode('utf-8')).hexdigest()[:16]
+    path = os.path.join(cache, key + '.txt')
     reg = glob.glob(os.path.join(gen, '*_register.cpp'))
     stale = not os.path.exists(path) or (reg and os.path.getmtime(reg[0]) > os.path.getmtime(path))
     if stale:
