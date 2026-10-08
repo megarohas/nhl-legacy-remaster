@@ -42,14 +42,16 @@ exhibitionskaterequipment.skatesocktuck (0…3, у игры — байт +690 з
 (смещения — от начала данных), 0x00020005 — D3DVertexBuffer (+0x18 — номер секции данных << 2 | 3,
 +0x20 — шаг << 16, +0x24 — число вершин), 0x00020007 — D3DIndexBuffer (+0x18 — номер секции данных, +0x1C —
 размер, +0x20 — число индексов), 0x00020009 — вызов отрисовки (число вершин, первый индекс, число индексов),
-0x00EF0004 — имя шейдера экспорта (nhl_export_shader). Рамок/сфер в файле нет — позиции можно менять, ничего
-больше не пересчитывая.
+0x00EF0004 — шейдер экспорта (+8 — тип примитива, +12 — имя nhl_export_shader). Рамок/сфер в файле нет — позиции
+можно менять, ничего больше не пересчитывая.
 
 Вершина (32 байта, одинакова у всех сеток экипировки): позиция FLOAT16_4 (x, y, z, 1; метры, поза привязки, Y вверх,
 +Z — вперёд, к носку конька), нормаль и касательная DEC3N (10 бит на X, Y, Z от младших битов слова, /511; старшие
 2 бита — 0), UV USHORT2N, индексы костей USHORT4 (номер кости × 3 — номер регистра матрицы 3×4), веса UBYTE4N
-(в файле байты в обратном порядке: вес X — последний байт слова). Индексы — 16 бит, полосы треугольников, 0xFFFF —
-разрыв полосы; у нечётных треугольников полосы порядок обхода обратный. Сетки NHL 10 (шаг 40: позиция FLOAT3 —
+(в файле байты в обратном порядке: вес X — последний байт слова). Индексы — 16 бит; тип примитива — слово +8 секции
+0x00EF0004 (D3DPRIMITIVETYPE): 6 — полосы треугольников, 0xFFFF — разрыв полосы, у нечётных треугольников полосы
+порядок обхода обратный; 4 — список (тройки подряд) — так у дальней детализации _3 гетр, коньков и шорт NHL 13 и у
+goaliesock_1_4 (у Legacy те же сетки — полосы); Mesh.tris — по типу. Сетки NHL 10 (шаг 40: позиция FLOAT3 —
 float32, веса USHORT4N — 4 × u16 в порядке файла) тоже разбираются и кодируются обратно байт в байт (pos_f32,
 w_u16); set_skin — кости и веса вершины (сумма весов ровно 255 / 65535).
 
@@ -70,7 +72,7 @@ TYPE_VB = 0x00020005         # D3DVertexBuffer + шаг и число верши
 TYPE_IB = 0x00020007         # D3DIndexBuffer + число индексов
 TYPE_DRAW = 0x00020009       # вызов отрисовки
 TYPE_BINDPOSE = 0x00070003   # матрицы скелета (skeleton_bindpose_*)
-TYPE_SHADER = 0x00EF0004     # имя шейдера экспорта
+TYPE_SHADER = 0x00EF0004     # шейдер экспорта: +8 — тип примитива (4 — список, 6 — полосы), +12 — имя
 TYPE_NAMES = 0x00EC0010      # имена растров
 
 # D3DDECLTYPE Xbox 360: биты 0–5 — формат выборки Xenos, 6–9 — знак/целое, 10–21 — перестановка компонент
@@ -90,6 +92,10 @@ USAGE = {0: 'position', 1: 'blendweight', 2: 'blendindices', 3: 'normal', 4: 'ps
          7: 'binormal', 10: 'color'}
 
 STRIP_RESTART = 0xFFFF
+# тип примитива — слово +8 секции 0x00EF0004 (D3DPRIMITIVETYPE Xbox 360): почти у всех сеток — полосы; у дальней
+# детализации (_3) гетр, коньков и шорт NHL 13 и у goaliesock_1_4 — список треугольников (у Legacy те же сетки — полосы)
+PRIM_TRIANGLELIST = 4
+PRIM_TRIANGLESTRIP = 6
 
 
 def u32(b, o):
@@ -313,12 +319,37 @@ def strip_triangles(idx):
     return tris
 
 
+def list_triangles(idx):
+    """Список треугольников (тройки индексов подряд, обход — как в файле) → [(a, b, c)] без вырожденных."""
+    tris = []
+    for k in range(0, len(idx) - 2, 3):
+        a, b, c = idx[k], idx[k + 1], idx[k + 2]
+        if a != b and b != c and a != c and STRIP_RESTART not in (a, b, c):
+            tris.append((a, b, c))
+    return tris
+
+
+def triangles(idx, prim=PRIM_TRIANGLESTRIP):
+    """Индексы → треугольники по типу примитива (слово +8 секции шейдера): 4 — список, 6 — полосы."""
+    if prim == PRIM_TRIANGLESTRIP:
+        return strip_triangles(idx)
+    if prim == PRIM_TRIANGLELIST:
+        return list_triangles(idx)
+    raise ValueError(f'тип примитива {prim} не разбирался (4 — список треугольников, 6 — полосы)')
+
+
+def shader_prim(body):
+    """Тип примитива из тела секции 0x00EF0004 (слово +8; у секции без него — полосы)."""
+    return u32(body, 8) if len(body) >= 12 else PRIM_TRIANGLESTRIP
+
+
 class Mesh:
     """Одна сетка .rx2 (один буфер вершин и один буфер индексов — так у всех сеток экипировки игроков). Атрибуты
     раскладываются в списки; правка — set_pos/set_nrm/set_tan пишет в raw только изменённые вершины, остальное в
     файле — байт в байт как было. sub=k — k-я подсетка файла из нескольких (буферы вершин и индексов, вызовы
     отрисовки и шейдеры — по порядку; объявление вершин — общее или своё у каждой; так устроен реквизит
-    rendering/prop/droppedstick_0 у NHL Legacy); bytes() — весь файл."""
+    rendering/prop/droppedstick_0 у NHL Legacy); bytes() — весь файл. tris — треугольники по типу примитива prim
+    (слово +8 секции шейдера: 6 — полосы, 4 — список)."""
 
     def __init__(self, data, path='', sub=None):
         self.f = f = Rw4File(data, path)
@@ -369,10 +400,12 @@ class Mesh:
         if sub is not None:
             shaders = shaders[sub:sub + 1]
         self.shader = ''
+        self.prim = PRIM_TRIANGLESTRIP            # тип примитива; без секции шейдера — полосы
         if shaders:
             b = f.body(shaders[0])
             self.shader = b[12:b.index(b'\0', 12)].decode('latin1')
-        self.tris = strip_triangles(self.indices)
+            self.prim = shader_prim(b)
+        self.tris = triangles(self.indices, self.prim)
         self._decode()
 
     @classmethod
@@ -505,8 +538,16 @@ class Mesh:
             v[self.e_bw.off:self.e_bw.off + 4] = bytes(q[::-1])
         return bytes(v)
 
+    def _check_indices(self, indices, nv):
+        """Новые индексы — в пределах буфера вершин; у списка треугольников — тройки без разрывов полос."""
+        if indices and max(i for i in indices if i != STRIP_RESTART) >= nv:
+            raise ValueError('индекс за пределами нового буфера вершин')
+        if self.prim == PRIM_TRIANGLELIST and (len(indices) % 3 or STRIP_RESTART in indices):
+            raise ValueError(f'{self.path}: список треугольников — нужны тройки индексов без 0xFFFF (не полосы)')
+
     def rebuilt(self, vb, indices):
-        """Файл с другим буфером вершин vb (байты, кратно шагу) и индексами indices — те же секции в том же порядке;
+        """Файл с другим буфером вершин vb (байты, кратно шагу) и индексами indices (тот же тип примитива prim — полосы
+        или список) — те же секции в том же порядке;
         меняются: размеры и смещения двух секций данных (вершины с добивкой нулями до 32 байт, индексы — до 16),
         размер данных в заголовке (+0x54), в D3DVertexBuffer — размер в словах и число вершин, в D3DIndexBuffer —
         размер и число индексов, в записи вызова — числа вершин и индексов. rebuilt(свои буферы) == исходный файл
@@ -522,8 +563,7 @@ class Mesh:
                 or f.data_size != self.vsec.size + self.isec.size):
             raise ValueError(f'{self.path}: раскладка данных не «вершины, затем индексы» — пересборка не поддержана')
         nv = len(vb) // st
-        if indices and max(i for i in indices if i != STRIP_RESTART) >= nv:
-            raise ValueError('индекс за пределами нового буфера вершин')
+        self._check_indices(indices, nv)
         vb = bytes(vb) + bytes((-len(vb)) % 32)               # секция вершин — с добивкой до 32 байт
         ib = struct.pack('>%dH' % len(indices), *indices)
         ib += bytes((-len(ib)) % 16)
@@ -555,8 +595,7 @@ class Mesh:
         if len(vb) % st:
             raise ValueError('буфер вершин не кратен шагу')
         nv = len(vb) // st
-        if indices and max(i for i in indices if i != STRIP_RESTART) >= nv:
-            raise ValueError('индекс за пределами нового буфера вершин')
+        self._check_indices(indices, nv)
         vb = bytes(vb) + bytes((-len(vb)) % 32)
         ib = struct.pack('>%dH' % len(indices), *indices)
         ib += bytes((-len(ib)) % 16)
@@ -1822,7 +1861,8 @@ def cmd_info(paths):
             continue
         lo, hi = m.bounds()
         w = Weld(m)
-        print(f'{p}: {m.nv} вершин (шаг {m.stride}), {len(m.tris)} треугольников из {m.ni} индексов полос, '
+        kind = 'полос' if m.prim == PRIM_TRIANGLESTRIP else 'списка треугольников'
+        print(f'{p}: {m.nv} вершин (шаг {m.stride}), {len(m.tris)} треугольников из {m.ni} индексов {kind}, '
               f'{w.np} точек после сварки; шейдер {m.shader}')
         print('   вершина: ' + ', '.join(f'{e.uname} {e.tname} +{e.off}' for e in m.elements))
         print('   рамка, м: ' + ' '.join(f'{a:.3f}…{b:.3f}' for a, b in zip(lo, hi)))

@@ -309,6 +309,7 @@ def read_multi(data, path=''):
     f = rm.Rw4File(data, path)
     decls = f.find(rm.TYPE_VDECL)
     vbs, ibs = f.find(rm.TYPE_VB), f.find(rm.TYPE_IB)
+    shaders = f.find(rm.TYPE_SHADER)            # тип примитива подсетки — у её шейдера (по порядку, как rw4mesh.Mesh)
     out = []
     for k, (svb, sib) in enumerate(zip(vbs, ibs)):
         # объявление — с тем же шагом, что у буфера (у головы Legacy два: 32 и 36 — шапочка волос с двумя UV),
@@ -326,7 +327,8 @@ def read_multi(data, path=''):
         isec = f.sections[rm.u32(ib, 0x18)]
         ni = rm.u32(ib, 0x20)
         idx = list(struct.unpack_from('>%dH' % ni, f.raw, f.abs_off(isec)))
-        tris = rm.strip_triangles(idx)
+        prim = rm.shader_prim(f.body(shaders[k])) if k < len(shaders) else rm.PRIM_TRIANGLESTRIP
+        tris = rm.triangles(idx, prim)
         g = {e.usage: e for e in els}
         pos, nrm, tan, uv, bones, weights = [], [], [], [], [], []
         raw = f.raw
