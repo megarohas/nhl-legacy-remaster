@@ -289,6 +289,7 @@ class LocDb:
         return out
 
 def main():
+    sys.stdout.reconfigure(encoding='utf-8')  # в канал Windows пишет в cp1251 — падает на «’», «℠»
     cmd, db_path, meta_path = sys.argv[1:4]
     loc = LocDb(open(db_path, 'rb').read(), load_meta(meta_path))
     if cmd == 'dump':
