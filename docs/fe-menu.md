@@ -167,11 +167,16 @@ $V tools/menuplayers.py screens OUTDIR               # лист «на экра�
   картинками (средняя яркость силуэта 0,26–0,55): локальный контраст, экспозиция ×0,86, S-кривая, светлые
   ≤ 0,94, насыщенность ×0,85, «свет сверху» (к низу кадра темнее до −22 %), холодные тени; «размытая» копия
   — светлые горизонтальные шлейфы + чёткий игрок.
-- **Фамилия** — шрифт пунктов меню NHL 12 (её `EAHelveticaNeueHv-Mod.ttf`, DIN), наклон, «металл» с
-  бликом и царапинами, отражение, 62 %; позади игрока, место в верхней части кадра подбирается, чтобы
-  силуэт её меньше закрывал, и не левее x = 74 кадра — правее панели «NHL 13 Features» (она до x ≈ 742
-  экрана, кадр — с 684) при любом проезде. Легенды — картинки NHL 12 + фамилия в их текстуре (по тем же
-  правилам, в координатах сцены).
+- **Фамилия** — крупный «металл» шрифтом пунктов меню NHL 12 (её `EAHelveticaNeueHv-Mod.ttf`, DIN): наклон,
+  градиент с бликом, царапины, тёмная кромка 2 px (читается и на ярком прожекторе), отражение; часть
+  композиции фона, позади игрока, 80 %. Два варианта раскладки (`build --names top|free`):
+  - **top** (ставится): над головой — силуэт игрока не выше y = 116 кадра (игрок на ~10 % меньше), фамилия в
+    полосе y ≈ 18…88 правее панели «NHL 13 Features» (x ≥ 74 кадра) и целиком в видимой части кадра в
+    худший момент проезда — буквы ничто не закрывает; легенды NHL 12 уменьшаются внутри своих текстур
+    (низ и срез картинки остаются на месте, Apt не меняется), фамилия — в той же полосе;
+  - **free** (запас): игрок как есть, фамилия позади в свободной зоне по силуэту (закрыто ≤ 8 % букв), если
+    места нет — тем же металлом поверх игрока (у Сорокина и четырёх легенд выходит на грудь — хуже).
+  Лист сравнения — `game/work/menu12/preview/names-variants.jpg`.
 - **Сборка**: шаблон — файлы места 8 NHL 12 (тот же ролик с частицами льда), меняется только текстура
   DXT5 1024×1024; цвета колец — основной цвет клуба из `exhibitionteams` (слишком тёмный/серый — второй,
   светлота ≥ 0,42), `PushLong` в байткоде фона на месте.
@@ -182,20 +187,23 @@ $V tools/menuplayers.py screens OUTDIR               # лист «на экра�
 cd /s/Claude/megarohas_nhl13
 V=game/work/menu12/venv/Scripts/python.exe
 $V tools/menuplayers.py build game/work/menu12/players/spec.json game/work/menu12/build/players
+$V tools/menuplayers.py build game/work/menu12/players/spec.json game/work/menu12/build/players-free --names free
 python tools/menu12.py build game/work/menu12/out/nhl12 --players-dir game/work/menu12/build/players
 python tools/menu12.py build game/work/menu12/out/tint-245C99 --players-dir game/work/menu12/build/players --tint 245C99
-bash game/work/menu12/install-menu12.sh            # или: install-menu12.sh tint-245C99
+python tools/menu12.py build game/work/menu12/out/nhl12-names-free --players-dir game/work/menu12/build/players-free
+bash game/work/menu12/install-menu12.sh            # или: install-menu12.sh tint-245C99 | nhl12-names-free
 bash game/work/menu12/uninstall-menu12.sh          # откат: прежние файлы из game/work/menu12/backup
 ```
 
 - Ставится в `cache:` (`game/userdata/cache/guest/`): фон главного меню, `menu.big`, `main.big`,
-  58 картинок игроков, 14 картинок легенд. Прежнее (фон «b» главного меню из
+  `nhl_proshopnotification.big`, 58 картинок игроков, 14 картинок легенд (76 файлов). Прежнее (фон «b» главного меню из
   [fe-background.md](fe-background.md)) сохраняется в `game/work/menu12/backup/` и возвращается откатом.
 - `install-ahl32.sh` и `install-art.sh` ставят вариант фона «b» в те же папки — теперь они пропускают
   файлы из `game/work/menu12/installed-menu12.txt`, то есть меню NHL 12 не затирают.
-- Варианты: `out/nhl12` — арена как в NHL 12 (тёмно-серая, холодный лёд), **ставится по умолчанию**;
-  `out/tint-245C99` — серые текстуры арены тонированы в приглушённый синий #245C99 (как фон «b» остальных
-  меню), держится готовым.
+- Варианты: `out/nhl12` — арена как в NHL 12 (тёмно-серая, холодный лёд), фамилии «top», **ставится по
+  умолчанию**; `out/tint-245C99` — серые текстуры арены тонированы в приглушённый синий #245C99 (как фон «b»
+  остальных меню); `out/nhl12-names-free` — фамилии «free». Оба запасных держатся готовыми:
+  `bash game/work/menu12/install-menu12.sh tint-245C99` (или `nhl12-names-free`).
 
 ## 7. Формат Apt — дополнения к fe-background.md
 

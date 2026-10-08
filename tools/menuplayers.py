@@ -756,7 +756,7 @@ def core_box(alpha):
     return int(cols.min()), int(rows.min()), int(cols.max()) + 1, int(rows.max()) + 1
 
 
-def compose(cut, e, anim=2):
+def compose(cut, e, anim=2, top_reserve=None):
     """Вырезка → кадр 600×760 и маска «плохих» обрезов (видимых на экране).
 
     Как у NHL 12: игрок во весь рост кадра. Левый и верхний края кадра на экране видны всегда — силуэт
@@ -775,6 +775,7 @@ def compose(cut, e, anim=2):
     SW, SH = cut.size
     fit = e.get('fit') or 'auto'
     M = 10                                                     # поле у видимых краёв кадра
+    MT = top_reserve if top_reserve is not None else M         # верхнее поле (под фамилию — больше)
     c0, _, c1, _ = core_box(alpha)
     cw, ccx = c1 - c0, (c0 + c1) / 2
     # голова: середина верхних 10 % силуэта (у наклонившегося игрока — сбоку от «ядра»)
@@ -799,14 +800,14 @@ def compose(cut, e, anim=2):
         # по высоте тела (~724 px; по пояс — 700); «ядро» (туловище и ноги, без рук и клюшки) — не шире
         # видимой в худший момент проезда части кадра и с центром на 42 % её ширины; за край экрана может
         # уходить до 35 % ядра (обрез краем экрана допустим), голова — видна с запасом
-        s = min((700 if sides['bottom'] else 724) / bh, 0.95 * vis / max(1, cw))
+        s = min((700 if sides['bottom'] else 724) / bh, 0.95 * vis / max(1, cw), (FRAME_H - MT + 30) / bh)
         for _ in range(60):
             oy = (FRAME_H - SH * s) if sides['bottom'] else (748 - y1 * s)
             ox = 0.42 * vis - ccx * s
             ox = max(ox, M - left_visible(s, oy) * s)
             if sides['right']:                                 # срез справа — уводим за правый край кадра
                 ox = max(ox, FRAME_W - SW * s)
-            top_ok = fy0 * s + oy >= M
+            top_ok = fy0 * s + oy >= MT
             core_right = c1 * s + ox                           # правый край ядра — в видимой части
             head_ok = hx * s + ox <= vis - 80                  # голова — в видимой части с запасом
             if top_ok and head_ok and core_right <= vis + 0.35 * cw * s:
@@ -901,7 +902,7 @@ def surname(e):
     return last.upper()
 
 
-def render_name(text, max_w=360, max_cap=84, shear=0.21):
+def render_name(text, max_w=360, max_cap=84, shear=0.21, reflect=True, outline=True):
     """Фамилия «металлом», как mainMenuPlayerNames (остатки NHL 11 в архивах NHL 12): шрифт пунктов меню
     NHL 12 («EA HelveticaNeue Hv» из её cache.big — DIN), наклон, градиент, царапины, отражение. → RGBA."""
     import numpy as np
@@ -916,7 +917,7 @@ def render_name(text, max_w=360, max_cap=84, shear=0.21):
         if w <= max_w and cap <= max_cap:
             break
         size = int(size * min(max_w / w, max_cap / cap, 0.97))
-    W, H = int(w) + 8, int((y1 - y0) * 1.7) + 8
+    W, H = int(w) + 8, int((y1 - y0) * (1.7 if reflect else 1.0)) + 12
     mask = Image.new('L', (W, H), 0)
     d = ImageDraw.Draw(mask)
     x = 4 + cap * shear
@@ -942,10 +943,19 @@ def render_name(text, max_w=360, max_cap=84, shear=0.21):
                 scratches[py, px] = rng.uniform(0.15, 0.45)
     lum = np.clip(metal + scratches - 0.06 * rng.random((H, W)), 0, 1)
     rgb = np.stack([lum * 0.97, lum * 0.99, lum * 1.03], 2)
+    if outline:
+        # тёмная кромка (2 px), как у литых металлических букв: читается и на ярком прожекторе
+        from scipy import ndimage
+        grown = ndimage.grey_dilation(m, size=(5, 5))
+        edge = np.clip(grown - m, 0, 1) * 0.70
+        a_new = m + edge * (1 - m)
+        k = (edge * (1 - m) / np.maximum(a_new, 1e-4))[..., None]      # доля кромки в пикселе
+        rgb = rgb * (1 - k) + np.array([0.05, 0.06, 0.08], np.float32) * k
+        m = np.clip(a_new, 0, 1)
     # отражение: перевёрнутая нижняя часть с затуханием
     refl = np.zeros_like(m)
     span = H - int(base) - 2
-    if span > 4:
+    if span > 4 and reflect:
         flip = m[int(base) - span:int(base)][::-1]
         fade = np.linspace(0.32, 0.0, span, dtype=np.float32)[:, None]
         refl[int(base) + 2:int(base) + 2 + span] = flip * fade
@@ -953,6 +963,21 @@ def render_name(text, max_w=360, max_cap=84, shear=0.21):
     out = np.concatenate([np.clip(rgb, 0, 1), alpha[..., None]], 2)
     img = Image.fromarray((out * 255 + 0.5).astype(np.uint8), 'RGBA')
     return img.filter(ImageFilter.SMOOTH_MORE) if False else img
+
+
+
+
+# Раскладка фамилии (крупный «металл» шрифтом NHL 12, часть композиции фона, как mainMenuPlayerNames NHL 11):
+#   top  — полоса над головой: верх силуэта игрока не выше TOP_RESERVE, фамилия в полосе TOP_BAND позади игрока
+#          (буквы ничто не закрывает, игрок чуть меньше);
+#   free — игрок как есть, фамилия позади в свободной зоне по силуэту (закрыто ≤ FREE_MAX_COVER букв), если
+#          места нет — тем же металлом поверх игрока (без плашки).
+# Всегда правее панели «NHL 13 Features» (x ≥ NAME_X_MIN кадра) и целиком в видимой части кадра при проезде.
+NAME_LAYOUT = 'top'
+TOP_RESERVE = 116
+TOP_BAND_Y = 18
+TOP_CAP = 70
+FREE_MAX_COVER = 0.08
 
 
 # фамилия — правее панели «NHL 13 Features» (она вверху слева, до x ≈ 742 экрана; кадр — с 684)
@@ -982,25 +1007,101 @@ def best_name_pos(fig_alpha, name_alpha, xs=(NAME_X_MIN, NAME_X_MIN + 30, NAME_X
     return best[1], best[2], best[3]
 
 
-def with_name(frame, e, opacity=0.62, pos=None, player=None):
-    """Фамилия позади игрока: слой имени (полупрозрачный), сверху — игрок. Место — где её меньше всего
-    закрывает силуэт (best_name_pos по силуэту player или самого кадра), если не задано pos/e['name_pos']."""
-    from PIL import Image
+def name_visible_x(anim, origin_x=0):
+    """Допустимый диапазон x фамилии (кадр или сцена со сдвигом origin_x): правее панели и в видимой части
+    кадра в худший момент проезда."""
+    return origin_x + NAME_X_MIN, origin_x + VIS_END.get(anim, 476) - 6
+
+
+def place_name(fig, label, anim, layout=None, origin=(0, 0), y_range=None):
+    """Фамилия для картинки: (RGBA, (x, y) в координатах fig, режим 'behind'|'front', доля закрытых букв).
+    fig — альфа силуэта (H×W, 0…1) в координатах картинки; origin — где у картинки x/y кадра 600×760
+    (у легенд — сдвиг их картинки на сцене минус FRAME_POS)."""
     import numpy as np
-    name = render_name(surname(e))
-    a = np.asarray(name).astype(np.float32)
-    if pos is None:
-        pos = e.get('name_pos')
-    if pos is None:
-        fig = np.asarray(player or frame)[..., 3].astype(np.float32) / 255
-        x, y, cover = best_name_pos(fig, a[..., 3] / 255)
-        pos = (x, y)
-    a[..., 3] *= opacity
-    name = Image.fromarray(a.astype(np.uint8), 'RGBA')
-    base = Image.new('RGBA', (FRAME_W, FRAME_H), (0, 0, 0, 0))
-    base.alpha_composite(name, (int(pos[0]), int(pos[1])))
-    base.alpha_composite(frame)
-    return base
+    layout = layout or NAME_LAYOUT
+    lo, hi = name_visible_x(anim)
+    ox, oy = origin
+    if layout == 'top':
+        nm = render_name(label, max_w=min(360, hi - lo), max_cap=TOP_CAP)
+        x, y = lo, TOP_BAND_Y
+        a = np.asarray(nm)[..., 3].astype(np.float32) / 255
+        cover = _cover(fig, a, x - ox, y - oy)
+        return nm, (x - ox, y - oy), 'behind', cover
+    y0, y1 = y_range or (18, 470)
+    best_front = None
+    for max_w in (360, 320, 280, 250):
+        nm = render_name(label, max_w=min(max_w, hi - lo))
+        a = np.asarray(nm)[..., 3].astype(np.float32) / 255
+        nh, nw = a.shape
+        cands = []
+        for y in range(y0, y1 - nh // 2, 6):
+            for x in range(lo, max(lo, hi - nw) + 1, 8):
+                cv = _cover(fig, a, x - ox, y - oy)
+                cands.append((cv + 0.0006 * (y - y0) + 0.0002 * (x - lo), cv, x, y))
+        cands.sort()
+        if cands and cands[0][1] <= FREE_MAX_COVER:
+            _, cv, x, y = cands[0]
+            return nm, (x - ox, y - oy), 'behind', cv
+        if best_front is None and cands:
+            best_front = (nm, a)
+    # места нет — поверх игрока тем же металлом: где меньше всего закрывает голову (верхние 22 % силуэта)
+    nm, a = best_front
+    nh, nw = a.shape
+    head = np.zeros_like(fig)
+    ys = np.nonzero(fig.max(1) > 0.5)[0]
+    if len(ys):
+        t0 = ys.min()
+        head[t0:t0 + int(0.22 * (ys.max() - t0 + 1))] = fig[t0:t0 + int(0.22 * (ys.max() - t0 + 1))]
+    best = None
+    for y in range(y0, y1 - nh // 2, 6):
+        for x in range(lo, max(lo, hi - nw) + 1, 8):
+            cv = _cover(head, a, x - ox, y - oy)
+            sc = cv + 0.0004 * abs(y - 120)
+            if best is None or sc < best[0]:
+                best = (sc, x, y)
+    _, x, y = best
+    return nm, (x - ox, y - oy), 'front', _cover(fig, a, x - ox, y - oy)
+
+
+def _cover(fig, a, x, y):
+    """Доля «чернил» фамилии a (h×w), лежащая на силуэте fig, если фамилия стоит в (x, y) картинки fig."""
+    import numpy as np
+    nh, nw = a.shape
+    H, W = fig.shape
+    xa, ya = max(0, x), max(0, y)
+    xb, yb = min(W, x + nw), min(H, y + nh)
+    tot = float(a.sum()) or 1.0
+    if xb <= xa or yb <= ya:
+        return 0.0
+    return float((fig[ya:yb, xa:xb] * a[ya - y:yb - y, xa - x:xb - x]).sum()) / tot
+
+
+def put_name(img, nm, pos, mode, opacity=0.80, front_opacity=0.85):
+    """Фамилия на картинку: behind — под силуэтом (картинка поверх), front — поверх тем же металлом."""
+    import numpy as np
+    from PIL import Image
+    a = np.asarray(nm).astype(np.float32)
+    a[..., 3] *= (opacity if mode == 'behind' else front_opacity)
+    layer = Image.new('RGBA', img.size, (0, 0, 0, 0))
+    layer.alpha_composite(Image.fromarray(a.astype(np.uint8), 'RGBA'), (int(pos[0]), int(pos[1])))
+    if mode == 'behind':
+        layer.alpha_composite(img)
+        return layer
+    out = img.copy()
+    out.alpha_composite(layer)
+    return out
+
+
+def with_name(frame, e, anim=2, player=None, layout=None):
+    """Фамилия на картинке игрока (place_name по силуэту player или самого кадра). Положение и режим можно
+    задать в spec: "name_pos": [x, y], "name_mode": "behind"|"front"."""
+    import numpy as np
+    fig = np.asarray(player or frame)[..., 3].astype(np.float32) / 255
+    nm, pos, mode, cover = place_name(fig, surname(e), anim, layout or e.get('name_layout'))
+    if e.get('name_pos'):
+        pos = tuple(e['name_pos'])
+    mode = e.get('name_mode') or mode
+    return put_name(frame, nm, pos, mode)
 
 
 # ---------------------------------------------------------------- лист «на экране меню»
@@ -1145,15 +1246,120 @@ def legend_name_pos(src, label):
     return x, y
 
 
-def build_legends(outdir, labels=None, log=print):
+def legend_name_into_movie(src, dst, label, anim, layout='free', placement=None):
+    """Фамилия в текстуру картинки легенды NHL 12: по её силуэту (place_name в координатах текстуры).
+    placement — уже найденное (nm, pos, mode) — для размытой копии того же места."""
+    import numpy as np
+    from PIL import Image
+    mv = febg.FeMovie.load(src)
+    t, shape, (tx, ty) = image_placement(mv)
+    w, h = t.fetch.width, t.fetch.height
+    img = Image.frombytes('RGBA', (w, h), t.decode())
+    if placement is None:
+        fig = np.asarray(img)[..., 3].astype(np.float32) / 255
+        # координаты кадра 600×760 в текстуре легенды: кадр на сцене — в FRAME_POS, текстура — в (tx, ty)
+        origin = (round(tx - FRAME_POS[0]), round(ty - FRAME_POS[1]))
+        nm, pos, mode, cover = place_name(fig, label, anim, layout, origin=origin)
+        placement = (nm, pos, mode)
+    nm, pos, mode = placement
+    out = put_name(img, nm, pos, mode)
+    arr = np.array(out)
+    bw, bh = int(round(shape.bounds[2])), int(round(shape.bounds[3]))
+    arr[bh:, :, :] = 0
+    arr[:, bw:, :] = 0
+    arr[..., :3] = np.where(arr[..., 3:4] > 0, arr[..., :3], 0)
+    xpr = t.encode(arr.tobytes())
+    big = ph.Bigf(mv.big.raw)
+    big.put(t.name, ph.refpack_compress(xpr) if mv.raw[t.name][1] else xpr)
+    data = febg.build_bigf(big)
+    febg.FeMovie(data)
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    open(dst, 'wb').write(data)
+    return len(data), placement
+
+
+def legend_top_transform(img, shape, tx, ty):
+    """Как уменьшить картинку легенды внутри её текстуры, чтобы верх силуэта на экране был не выше
+    FRAME_POS[1] + TOP_RESERVE (полоса под фамилию), а низ (у среза краем — сам срез) остался на месте:
+    → (масштаб, сдвиг x, сдвиг y) в пикселях текстуры. Apt не меняется: фигура и её место те же."""
+    import numpy as np
+    bw, bh = int(round(shape.bounds[2])), int(round(shape.bounds[3]))
+    al = np.asarray(img)[:bh, :bw, 3]
+    ys, xs = np.nonzero(al > 64)
+    if not len(ys):
+        return 1.0, 0, 0
+    T, B = int(ys.min()), int(ys.max()) + 1
+    c0, _, c1, _ = core_box(al)
+    cx = (c0 + c1) / 2
+    target = FRAME_POS[1] + TOP_RESERVE - ty                   # верх силуэта в координатах текстуры
+    if T >= target:
+        return 1.0, 0, 0
+    sc = (B - target) / max(1, B - T)
+    return sc, round(cx * (1 - sc)), round(B * (1 - sc))
+
+
+def apply_transform(img, shape, sc, dx, dy):
+    from PIL import Image
+    if sc >= 0.999:
+        return img
+    bw, bh = int(round(shape.bounds[2])), int(round(shape.bounds[3]))
+    part = img.crop((0, 0, bw, bh))
+    small = part.resize((max(1, round(bw * sc)), max(1, round(bh * sc))), Image.LANCZOS)
+    out = Image.new('RGBA', img.size, (0, 0, 0, 0))
+    out.paste(small, (dx, dy), small)
+    return out
+
+
+def legend_top_into_movie(src, dst, label, anim, plan=None):
+    """Легенда в раскладке «top»: картинка уменьшена в текстуре (legend_top_transform), фамилия — в полосе над
+    головой (place_name 'top'). plan — (масштаб, dx, dy, фамилия, место) с чёткой картинки — для размытой."""
+    import numpy as np
+    from PIL import Image
+    mv = febg.FeMovie.load(src)
+    t, shape, (tx, ty) = image_placement(mv)
+    w, h = t.fetch.width, t.fetch.height
+    img = Image.frombytes('RGBA', (w, h), t.decode())
+    if plan is None:
+        sc, dx, dy = legend_top_transform(img, shape, tx, ty)
+        fig = np.asarray(apply_transform(img, shape, sc, dx, dy))[..., 3].astype(np.float32) / 255
+        origin = (round(tx - FRAME_POS[0]), round(ty - FRAME_POS[1]))
+        nm, pos, mode, cover = place_name(fig, label, anim, 'top', origin=origin)
+        plan = (sc, dx, dy, nm, pos, mode)
+    sc, dx, dy, nm, pos, mode = plan
+    out = put_name(apply_transform(img, shape, sc, dx, dy), nm, pos, mode)
+    arr = np.array(out)
+    bw, bh = int(round(shape.bounds[2])), int(round(shape.bounds[3]))
+    arr[bh:, :, :] = 0
+    arr[:, bw:, :] = 0
+    arr[..., :3] = np.where(arr[..., 3:4] > 0, arr[..., :3], 0)
+    xpr = t.encode(arr.tobytes())
+    big = ph.Bigf(mv.big.raw)
+    big.put(t.name, ph.refpack_compress(xpr) if mv.raw[t.name][1] else xpr)
+    data = febg.build_bigf(big)
+    febg.FeMovie(data)
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    open(dst, 'wb').write(data)
+    return len(data), plan
+
+
+def build_legends(outdir, labels=None, log=print, legend_anims=None, layout=None):
     labels = labels or LEGENDS
+    layout = layout or NAME_LAYOUT
+    legend_anims = legend_anims or {sl['asset']: (1 if sl['anim1'] == 3 else sl['anim1'])
+                                    for sl in slots_of(DEFAULT_BG) if sl['list'] == 'm_backgroundLegends'}
     base = os.path.join(GAME, 'other', 'nhl12', 'big', 'cache')
     for k, label in sorted(labels.items()):
         src = os.path.join(base, *LEGENDS_REL.format(k).split('/'))
-        pos = legend_name_pos(src, label)
-        n1 = name_into_movie(src, os.path.join(outdir, *LEGENDS_REL.format(k).split('/')), label, pos=pos)
-        n2 = name_into_movie(os.path.join(base, *LEGENDS_BLUR_REL.format(k).split('/')),
-                             os.path.join(outdir, *LEGENDS_BLUR_REL.format(k).split('/')), label, pos=pos)
+        anim = legend_anims.get(k, 1)
+        dst1 = os.path.join(outdir, *LEGENDS_REL.format(k).split('/'))
+        src2 = os.path.join(base, *LEGENDS_BLUR_REL.format(k).split('/'))
+        dst2 = os.path.join(outdir, *LEGENDS_BLUR_REL.format(k).split('/'))
+        if layout == 'top':
+            n1, plan = legend_top_into_movie(src, dst1, label, anim)
+            n2, _ = legend_top_into_movie(src2, dst2, label, anim, plan=plan)
+        else:
+            n1, placement = legend_name_into_movie(src, dst1, label, anim)
+            n2, _ = legend_name_into_movie(src2, dst2, label, anim, placement=placement)
         log(f'легенда {k}: {label} ({n1} + {n2} байт)')
 
 
@@ -1163,6 +1369,11 @@ def patch_background(bg_src, bg_dst, colors, anim3_to=1):
     влево из x = 100 в 0, правый край кадра всё время за экраном."""
     edits = []
     for s in slots_of(bg_src):
+        if s['list'] == 'm_backgroundLegends':
+            # легенды: тип 3 уводит картинку влево под панель Features — так же 3 → 1
+            if anim3_to is not None and s['anim1'] == 3 and s['anim1_ins'] and s['anim1_ins'][0] == 'PushByte':
+                edits.append((s['anim1_ins'][1], bytes([0xB5, 3]), bytes([0xB5, anim3_to])))
+            continue
         if s['list'] != 'm_backgroundPlayers':
             continue
         if s['asset'] in colors and s['color_off'] is not None:
@@ -1224,16 +1435,18 @@ def cmd_build(args):
             continue
         anim = anims.get(e['slot'], 2)
         cut = cutout(e)
-        player, s, bad = compose(cut, e, anim)
+        layout = e.get('name_layout') or opt(args, '--names', NAME_LAYOUT)
+        player, s, bad = compose(cut, e, anim, top_reserve=TOP_RESERVE if (names and layout == 'top') else None)
         player = tone(player, e.get('tone', 1.0))
         if names:
             import numpy as np
-            nm = np.asarray(render_name(surname(e)))[..., 3].astype(np.float32) / 255
-            nx, ny, _ = best_name_pos(np.asarray(player)[..., 3].astype(np.float32) / 255, nm)
-            e = dict(e, name_pos=e.get('name_pos') or (nx, ny))
-        frame = with_name(player, e) if names else player
+            fig = np.asarray(player)[..., 3].astype(np.float32) / 255
+            nm, npos, nmode, ncover = place_name(fig, surname(e), anim, layout)
+            npos = tuple(e.get('name_pos') or npos)
+            nmode = e.get('name_mode') or nmode
+        frame = put_name(player, nm, npos, nmode) if names else player
         blur = streaks(player)
-        blur = with_name(blur, e) if names else blur
+        blur = put_name(blur, nm, npos, nmode) if names else blur
         tag = f"{e['slot']:02d}_{e['nhl_id']}"
         frame.save(os.path.join(prev, tag + '.png'))
         np.save(os.path.join(prev, tag + '_bad.npy'), bad)
@@ -1251,7 +1464,8 @@ def cmd_build(args):
                       f"кольца #{c:06X}  ({n1} + {n2} байт){flag}")
         print(report[-1], flush=True)
     if not only and names and '--no-legends' not in args:
-        build_legends(outdir, {int(k): v for k, v in spec.get('legends', {}).items()} or None)
+        build_legends(outdir, {int(k): v for k, v in spec.get('legends', {}).items()} or None,
+                      layout=opt(args, '--names', NAME_LAYOUT))
     if not only:
         n = patch_background(bg, os.path.join(outdir, *BG_REL.split('/')), ring)
         print(f'фон: {n} правок (цвета колец, анимация 3 → 1) → {os.path.join(outdir, *BG_REL.split("/"))}')
