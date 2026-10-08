@@ -10,10 +10,12 @@
 #   -Do key    -Keys "Return Space Shift+Down"  нажать по очереди (-HoldMs удержание, -GapMs пауза)
 #   -Do stop                                    закрыть: taskkill без /F, через 30 с — /F
 #   -Do info                                    pid, окно, размер, в фокусе ли
+#   -Do seq    -Steps "wait:25;shot:a.png;key:Return Space;wait:6;shot:b.png"   шаги по очереди
+#   -Half                                       снимки в половину размера (меньше файл)
 #   -Game legacy                                порт NHL Legacy (legacy-port/): процесс nhllegacy, свой exe и лог
 # Пример: powershell -ExecutionPolicy Bypass -File tools\gameshot.ps1 -Do shot -Out game\work\x.png
 param(
-    [Parameter(Mandatory = $true)][ValidateSet('start', 'shot', 'key', 'stop', 'info')][string]$Do,
+    [Parameter(Mandatory = $true)][ValidateSet('start', 'shot', 'key', 'stop', 'info', 'seq')][string]$Do,
     [string]$Out = '',
     [string]$Keys = '',
     [int]$HoldMs = 150,
@@ -21,7 +23,9 @@ param(
     [string]$Log = 'S:/Claude/megarohas_nhl13/port/out/gameshot.log',
     [string]$Exe = 'S:\Claude\megarohas_nhl13\port-ffx\out\build\win-amd64-release\nhl13.exe',
     [string[]]$Extra = @(),
-    [ValidateSet('nhl13', 'legacy')][string]$Game = 'nhl13'
+    [ValidateSet('nhl13', 'legacy')][string]$Game = 'nhl13',
+    [string]$Steps = '',
+    [switch]$Half
 )
 $ErrorActionPreference = 'Stop'
 $Proc = 'nhl13'
@@ -97,6 +101,53 @@ function Key-Code([string]$k) {
     throw "неизвестная клавиша $k"
 }
 
+function Do-Shot([string]$path) {
+    $p = Get-GameWindow
+    if (-not $p) { Write-Output 'NO_WINDOW'; return $false }
+    $h = $p.MainWindowHandle
+    $c = New-Object GT+RECT
+    [GT]::GetClientRect($h, [ref]$c) | Out-Null
+    $bmp = New-Object System.Drawing.Bitmap $c.Right, $c.Bottom
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $hdc = $g.GetHdc()
+    $ok = [GT]::PrintWindow($h, $hdc, 3)          # PW_CLIENTONLY | PW_RENDERFULLCONTENT
+    $g.ReleaseHdc($hdc); $g.Dispose()
+    $dir = Split-Path -Parent $path
+    if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Force $dir | Out-Null }
+    if ($Half) {
+        $small = New-Object System.Drawing.Bitmap ([int]($c.Right / 2)), ([int]($c.Bottom / 2))
+        $g2 = [System.Drawing.Graphics]::FromImage($small)
+        $g2.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBilinear
+        $g2.DrawImage($bmp, 0, 0, $small.Width, $small.Height)
+        $g2.Dispose(); $bmp.Dispose(); $bmp = $small
+    }
+    $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+    Write-Output "SHOT $path ($($bmp.Width)x$($bmp.Height), PrintWindow=$ok)"
+    $bmp.Dispose()
+    return $true
+}
+
+function Do-Keys([string]$keys) {
+    $p = Get-GameWindow
+    if (-not $p) { Write-Output 'NO_WINDOW'; return $false }
+    $h = $p.MainWindowHandle
+    $f = Focus-Game $h
+    Write-Output "focus: $f"
+    foreach ($k in ($keys -split '\s+' | Where-Object { $_ })) {
+        $mods = @(); $main = $k
+        if ($k -like 'Shift+*') { $mods = @(0x10); $main = $k.Substring(6) }
+        $code = Key-Code $main
+        foreach ($m in $mods) { Send-Vk $m $false }
+        Send-Vk $code $false
+        Start-Sleep -Milliseconds $HoldMs
+        Send-Vk $code $true
+        foreach ($m in $mods) { Send-Vk $m $true }
+        Write-Output "key $k"
+        Start-Sleep -Milliseconds $GapMs
+    }
+    return $true
+}
+
 switch ($Do) {
     'info' {
         $p = Get-GameWindow
@@ -112,40 +163,26 @@ switch ($Do) {
         Write-Output "STARTED pid $($p.Id): $Exe $($args2 -join ' ')"
     }
     'shot' {
-        $p = Get-GameWindow
-        if (-not $p) { Write-Output 'NO_WINDOW'; exit 1 }
-        $h = $p.MainWindowHandle
-        $c = New-Object GT+RECT
-        [GT]::GetClientRect($h, [ref]$c) | Out-Null
-        $bmp = New-Object System.Drawing.Bitmap $c.Right, $c.Bottom
-        $g = [System.Drawing.Graphics]::FromImage($bmp)
-        $hdc = $g.GetHdc()
-        $ok = [GT]::PrintWindow($h, $hdc, 3)          # PW_CLIENTONLY | PW_RENDERFULLCONTENT
-        $g.ReleaseHdc($hdc); $g.Dispose()
-        $dir = Split-Path -Parent $Out
-        if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Force $dir | Out-Null }
-        $bmp.Save($Out, [System.Drawing.Imaging.ImageFormat]::Png)
-        $bmp.Dispose()
-        Write-Output "SHOT $Out ($($c.Right)x$($c.Bottom), PrintWindow=$ok)"
+        $r = Do-Shot $Out
+        if (-not ($r -contains $true)) { $r | Where-Object { $_ -isnot [bool] }; exit 1 }
+        $r | Where-Object { $_ -isnot [bool] }
+    }
+    'seq' {
+        # Шаги через «;»: wait:СЕКУНДЫ, shot:ФАЙЛ.png, key:КЛАВИШИ (как у -Keys). Без окна — выход 1.
+        foreach ($st in ($Steps -split ';' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) {
+            $kind, $arg = $st -split ':', 2
+            switch ($kind) {
+                'wait' { Start-Sleep -Milliseconds ([int]([double]$arg * 1000)) }
+                'shot' { $r = Do-Shot $arg; $r | Where-Object { $_ -isnot [bool] }; if (-not ($r -contains $true)) { exit 1 } }
+                'key' { $r = Do-Keys $arg; $r | Where-Object { $_ -isnot [bool] }; if (-not ($r -contains $true)) { exit 1 } }
+                default { throw "шаг $st?" }
+            }
+        }
     }
     'key' {
-        $p = Get-GameWindow
-        if (-not $p) { Write-Output 'NO_WINDOW'; exit 1 }
-        $h = $p.MainWindowHandle
-        $f = Focus-Game $h
-        Write-Output "focus: $f"
-        foreach ($k in ($Keys -split '\s+' | Where-Object { $_ })) {
-            $mods = @(); $main = $k
-            if ($k -like 'Shift+*') { $mods = @(0x10); $main = $k.Substring(6) }
-            $code = Key-Code $main
-            foreach ($m in $mods) { Send-Vk $m $false }
-            Send-Vk $code $false
-            Start-Sleep -Milliseconds $HoldMs
-            Send-Vk $code $true
-            foreach ($m in $mods) { Send-Vk $m $true }
-            Write-Output "key $k"
-            Start-Sleep -Milliseconds $GapMs
-        }
+        $r = Do-Keys $Keys
+        $r | Where-Object { $_ -isnot [bool] }
+        if (-not ($r -contains $true)) { exit 1 }
     }
     'stop' {
         $p = Get-Process -Name $Proc -ErrorAction SilentlyContinue
