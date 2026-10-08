@@ -340,6 +340,7 @@ sleeps/s of … us asked, … us actual (max …)`.
 | `vk-fbo-gamma8` | `vk-fbo` + `--gamma_render_target_as_unorm16=false` | табло без мусора? | бандинг в тёмных градиентах |
 | `d3d12-rov` | `--gpu_backend=d3d12 --render_target_path_d3d12=rov` | ≈ FSI, для сравнения бэкендов | нет |
 | `vk-fsi-noocc` | `--occlusion_query_enable=false` | если запросы есть — ниже загрузка потока эмуляции и GPU | вспышки ламп |
+| `vk-fsi-quick` | `--readback_resolve=none --occlusion_query_enable=false --readback_memexport=false` | три быстрые победы раздела 6 одним запуском, без консоли | мусор на льду/стёклах/табло, вспышки ламп, частицы; если что-то сломалось — разделить |
 
 Новые пути (`fbo`, `rtv`) — по два запуска: первый прогревает кэш пайплайнов. Сравнение:
 `perfwatch.ps1 -MatchOnly -Compare <папка1>,<папка2>,…`. FPS perfwatch не видит: для честного счёта — оверлей

@@ -6,6 +6,8 @@
 # Варианты (подробно — docs/performance.md, «План A/B»):
 #   vk-fsi        как сейчас: Vulkan, EDRAM через fragment shader interlock (из nhl13.toml)
 #   vk-fsi-noocc  то же, без запросов видимости на хосте (occlusion_query_enable=false)
+#   vk-fsi-quick  как сейчас + сразу три «быстрые победы»: readback_resolve=none,
+#                 occlusion_query_enable=false, readback_memexport=false (docs/performance.md, раздел 6)
 #   vk-fbo        Vulkan, хостовые render target'ы (render_target_path_vulkan ≠ "fsi")
 #   vk-fbo-noest  то же, но execute_unclipped_draw_vs_on_cpu=false (умолчание SDK) — проверка табло
 #   vk-fbo-gamma8 то же, что vk-fbo, + gamma_render_target_as_unorm16=false — проверка табло
@@ -23,7 +25,7 @@
 
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet("vk-fsi", "vk-fsi-noocc", "vk-fbo", "vk-fbo-noest", "vk-fbo-gamma8", "d3d12-rov", "d3d12-rtv")]
+    [ValidateSet("vk-fsi", "vk-fsi-noocc", "vk-fsi-quick", "vk-fbo", "vk-fbo-noest", "vk-fbo-gamma8", "d3d12-rov", "d3d12-rtv")]
     [string]$Variant,
     [string]$Exe = "S:\Claude\megarohas_nhl13\port-ffx\out\build\win-amd64-release\nhl13.exe",
     [string[]]$Extra = @()
@@ -40,6 +42,7 @@ $gameArgs = @("--log_file=$log")
 switch ($Variant) {
     "vk-fsi" { }
     "vk-fsi-noocc" { $gameArgs += "--occlusion_query_enable=false" }
+    "vk-fsi-quick" { $gameArgs += @("--readback_resolve=none", "--occlusion_query_enable=false", "--readback_memexport=false") }
     "vk-fbo" { $gameArgs += @("--render_target_path_vulkan=fbo", "--execute_unclipped_draw_vs_on_cpu=true") }
     "vk-fbo-noest" { $gameArgs += @("--render_target_path_vulkan=fbo", "--execute_unclipped_draw_vs_on_cpu=false") }
     "vk-fbo-gamma8" { $gameArgs += @("--render_target_path_vulkan=fbo", "--execute_unclipped_draw_vs_on_cpu=true", "--gamma_render_target_as_unorm16=false") }
