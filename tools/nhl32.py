@@ -54,18 +54,19 @@ TEMPLATE_ARENA = 168               # «EA SPORTS Arena»: нейтральная
 # текстуры формы (рендер берёт artid команды, меню — teamartid комплекта; у EA они равны),
 # spotlight — логотип прожекторов, audio — номер звука (свободный: без записей). kit_style — своя
 # форма (tools/kitpaint.py, файлы *_1_98/99_0/1): комплекты переводятся на стиль 1 (Reebok Edge),
-# варианты 0 (дом) и 1 (выезд), номера на шлеме — как у основных комплектов EA. primary — яркий
+# варианты 0 (дом) и 1 (выезд), номера на шлеме — как у основных комплектов EA; kit_third — ещё
+# третий комплект (вариант 2, tools/czkit.py: *_1_98/99_2). primary — яркий
 # цвет-акцент (им подсвечивается логотип в меню, он же на табло), secondary — второй: у EA так же
 # (Питтсбург — золото и чёрный, Лос-Анджелес — серебро, Providence — золото и чёрный).
 NEW_TEAMS = {
     30: dict(short='Seattle', full='Seattle Kraken', abbr='SEA', nick='Kraken', rival=28, strategy=28, kit=86,
-             art=98, spotlight=45, audio=32, kit_style=1,
+             art=98, spotlight=45, audio=32, kit_style=1, kit_third=True,
              primary=(153, 217, 217), secondary=(0, 22, 40),       # ледяной голубой, глубоководный синий
              # Tappara: синий, оранжевый, чёрный шлем → глубоководный синий, ледяной голубой
              equip={0x253B73: 0x001628, 0xE35B17: 0x99D9D9, 0xDE5818: 0x99D9D9, 0x202020: 0x001628},
              arena=dict(name='Climate Pledge Arena', city='Seattle, WA', capacity=17151)),
     31: dict(short='Vegas', full='Vegas Golden Knights', abbr='VGK', nick='Golden Knights', rival=13, strategy=13, kit=87,
-             art=99, spotlight=46, audio=33, kit_style=1,
+             art=99, spotlight=46, audio=33, kit_style=1, kit_third=True,
              primary=(185, 151, 91), secondary=(51, 63, 72),        # золото Вегаса, стальной серый
              # TPS: чёрный шлем, серый → стальной серый, золото
              equip={0x202020: 0x333F48, 0xB3B3B3: 0xB9975B},
@@ -283,6 +284,14 @@ def fill_team(db, row, spec, league, leaguegroup, arena_template, arena_fields=N
                 db.set(js, f, new, v)
     j = [r for r in range(db.by_name[js]['rows']) if db.get(js, 'teamid', r) == spec['kit']]
     append_copies(db, js, j, kit)
+    if spec.get('kit_third'):
+        def third(new, src):
+            kit(new, src)
+            for f, v in (('variant', 2), ('fevariant', 2), ('jerseyindex', 2), ('locstring', 2), ('isdefault', 0),
+                         ('islightcolor', 0)):
+                db.set(js, f, new, v)
+        append_copies(db, js, j[:1], third)
+        j = j + j[:1]
     # цвета экипировки (шлемы, перчатки…): строки kit, перекрашенные по equip; team — номер + 1
     e = 'stockteamequipmenttable'
     def recolor(new, src, row=row, m=spec['equip']):
