@@ -25,7 +25,7 @@
 | [docs/team-editor.md](docs/team-editor.md) | Встроенный редактор команд: кто отсекает обычные команды, что ломает сохранение, вариант «форма-донор» |
 | [docs/fe-fonts.md](docs/fe-fonts.md) | Шрифты интерфейса (TrueType в fe/ion/fonts): какой для чего, замена своим; шрифт меню NHL 12 — стоит в игре, установка и откат |
 | [docs/fe-background.md](docs/fe-background.md) | Фон меню (анимация Apt): синий → любой цвет, tools/febg.py |
-| [docs/player-models.md](docs/player-models.md) | 3D-модели игроков: из чего собран игрок, детализации, формат сетки RW4, гетры (skatesocktuck) и правка голени, клюшка и обмотка до носка |
+| [docs/player-models.md](docs/player-models.md) | 3D-модели игроков: из чего собран игрок, детализации, формат сетки RW4, гетры (skatesocktuck) и правка голени, клюшка и обмотка до носка, нижний край свитера сзади как в NHL 10 |
 | [docs/player-equipment.md](docs/player-equipment.md) | Экипировка игроков по фото (НХЛ + Wikimedia Commons): обмотка клюшки, гетры, свитер, визор — поля базы и охват |
 | [docs/teams.md](docs/teams.md) | Команды, лиги, ссылки на команду и календари в базе; НХЛ на 32 команды |
 | [docs/graphics-settings.md](docs/graphics-settings.md) | Настройки графики порта: cvar'ы рантайма, апскейл, RTV/ROV, задержка ввода, лаунчер |
@@ -47,6 +47,7 @@
 | [tools/fefont.py](tools/fefont.py) | Замена шрифтов интерфейса: свой TTF/OTF в «скелет» шрифта игры с теми же именами и метриками или шрифт как есть (`--keep`, так поставлен шрифт NHL 12); проверка символов строк и имён, превью |
 | [tools/music.py](tools/music.py) | Свой саундтрек: MP3/FLAC/WAV → банк музыки игры, названия и обложки EA Trax (через ffmpeg) |
 | [tools/rw4mesh.py](tools/rw4mesh.py) | Сетки игроков RW4 ⇄ OBJ для Blender, правка голени гетр, проверка зазоров, превью |
+| [tools/jersey10.py](tools/jersey10.py) | Нижний край свитера сзади как в NHL 10: веса края от NHL 10 на сетках NHL 13 (все варианты и детализации), поправка против шорт, проверки в позах катания, лист превью |
 | [tools/sticktape.py](tools/sticktape.py) | Обмотка клюшки до самого носка крюка и скругление носка: полевые и вратарские, обе руки, `_2`/`_4`, проверки, лист превью |
 | [tools/perfwatch.ps1](tools/perfwatch.ps1), [tools/perf_ab.ps1](tools/perf_ab.ps1) | Пассивный замер GPU/CPU по потокам во время игры; запуск A/B-вариантов рендера аргументами |
 | [tools/gameshot.ps1](tools/gameshot.ps1) | Проверка в игре без геймпада: запуск сборки, снимок окна (PrintWindow), нажатия клавиатурой через `--mnk_mode` |
