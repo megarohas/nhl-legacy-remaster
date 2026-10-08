@@ -626,22 +626,22 @@ def png_read(path):
                 out[y * w * 4:(y + 1) * w * 4] = line
                 continue
             for xx in range(pw):
-                if bd == 16:                             # исходные значения — для tRNS, выход — старший байт
-                    raw = [int.from_bytes(line[(xx * chans + c) * 2:(xx * chans + c) * 2 + 2], 'big') for c in range(chans)]
-                    s = [v >> 8 for v in raw]
+                if bd == 16:                             # исходные значения (orig) — для tRNS, выход — старший байт
+                    orig = [int.from_bytes(line[(xx * chans + c) * 2:(xx * chans + c) * 2 + 2], 'big') for c in range(chans)]
+                    s = [v >> 8 for v in orig]
                 elif bd == 8:
-                    raw = s = list(line[xx * chans:xx * chans + chans])
+                    orig = s = list(line[xx * chans:xx * chans + chans])
                 else:
                     bit = xx * bd
                     v = (line[bit >> 3] >> (8 - bd - (bit & 7))) & ((1 << bd) - 1)
-                    raw = [v]
+                    orig = [v]
                     s = [v if ct == 3 else v * 255 // ((1 << bd) - 1)]
                 if ct == 0:
-                    a = 0 if trns and raw[0] == int.from_bytes(trns[:2], 'big') else 255
+                    a = 0 if trns and orig[0] == int.from_bytes(trns[:2], 'big') else 255
                     px = (s[0], s[0], s[0], a)
                 elif ct == 2:
                     key = [int.from_bytes(trns[i:i + 2], 'big') for i in (0, 2, 4)] if trns else None
-                    px = (s[0], s[1], s[2], 0 if key == raw else 255)
+                    px = (s[0], s[1], s[2], 0 if key == orig else 255)
                 elif ct == 3:
                     i = s[0]
                     px = (plte[i * 3], plte[i * 3 + 1], plte[i * 3 + 2], trns[i] if trns and i < len(trns) else 255)
