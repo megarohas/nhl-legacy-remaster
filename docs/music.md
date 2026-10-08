@@ -166,11 +166,14 @@ Shootout, Tutorial, Credits), `music_player_id` проходит дерево `m
   14 Польша, 15 Россия, 16 Словакия, 17 Швеция, 18 Швейцария, 19 Великобритания,
   20 Украина, 21 США — по порядку, не на слух);
 - `MenuTunes` — случайная из 16 EA Trax, на которые на экране EA Trax стоит «вкл»
-  (`SetPlayableSongIDs`); 14 вторых версий — отдельными списками того же `MenuTunes`
-  (5 и 9 звуков под другим параметром события) — когда именно звучат, не выяснено;
+  (`SetPlayableSongIDs`); 14 вторых версий — в уточняющих списках (вид 2) по режиму матча
+  `music_match_type`: Credits — 77, 83, 208, 218, 220 (титры), Tutorial — остальные 9
+  (обучение); устройство дерева — [§9](#9-nhl-legacy);
 - повторы режут пулы `music_repetitionpools.bin`: MenuMusicPool 15, GoalTunesPool 10,
   EndOfPeriodPool 10, PenaltyTunesPool 4, OffPlayTunesPool 35, TeamIntroPool 8,
-  EndGamePool 8 (по смыслу — сколько последних не повторять).
+  EndGamePool 8 (по смыслу — сколько последних не повторять). В пул звук попадает по
+  «типу» своей записи в `music_musicboxdata.bin` (7-е слово записи = номер пула); размер
+  пула — не вместимость: у MenuMusicPool 15 — 30 звуков.
 
 «Своя музыка» Xbox 360 (`Custom Music`: плейлисты с жёсткого диска приставки на любые
 категории и команды, `UserMusicArbiter` глушит музыку игры) в порте не работает: XMP в
@@ -270,9 +273,12 @@ OUT/fe/ion/artassets/eatrax_thumbs/e<N>_thumb.big
   банков звука не проверено. Запасной вариант — обёртка `chunklzx` с кусками метода 0.
 - Обложки: 16 байт хвоста BIGF остаются от оригинала, как у фото игроков
   ([player-photos.md](player-photos.md)) — тоже ещё не проверено в игре.
-- Когда звучат вторые версии песен — не выяснено (по умолчанию заменяются вместе).
-- Больше 16 песен: нужны новые id в `.sbr`, записи в `.bin`, новые узлы дерева выбора и,
-  вероятно, правка экрана EA Trax и сейва настроек — не делалось.
+- Вторые версии песен звучат, судя по дереву выбора, в титрах и в обучении (§4) — на слух
+  не проверено (по умолчанию заменяются вместе).
+- Больше 16 песен в NHL 13 инструмент не делает. Для Legacy делает (§9): новый id в `.sbr`,
+  запись в `.bin`, id в список MenuTunes дерева выбора. По коду NHL 13 устроен так же
+  (число песен — из записей с тегом Index, под флаги «вкл» в настройках 25 байт), но не
+  проверялось.
 - Кириллица в названиях — зависит от шрифта меню.
 
 ## 8. Подмена на уровне порта (не делалось)
@@ -286,3 +292,153 @@ OUT/fe/ion/artassets/eatrax_thumbs/e<N>_thumb.big
 - **Перехват потока** — подменять при `NtCreateFile` путь `music_samples.sbs` или
   декодированные сэмплы в декодере EALayer3 (он — перекомпилированный код игры). Смысла
   мало: формат и так собирается без потерь.
+
+## 9. NHL Legacy
+
+Разбор от 08.10.2026 по диску Legacy (`game/other/legacy`: распакованные архивы `big/`, образ
+`xex/default.bin`) и сборка «Best of NHL» для неё. Тот же инструмент с `--game legacy`
+(профиль [tools/gameprofile.py](../tools/gameprofile.py)). **В игре не проверялось** — что
+смотреть, ниже.
+
+### Отличия от NHL 13
+
+Банк того же устройства и кодека, файлы те же (`audioboot.big` → `audio/music/*`, поток —
+`nocache.big`); в архиве, как у NHL 13, `.sbr`, `…musicboxdata.bin`, `…graffitidata.bin` и
+`…eventsubscr.bin` сжаты `chunklzx`, остальные — нет; в `cache:` build кладёт их без сжатия
+(как и для NHL 13, §7).
+
+| | NHL 13 | NHL Legacy |
+|---|---|---|
+| звуков | 195, id 1…263 | 239, id 634…1004 |
+| поток | EALayer3 v1b, 44,1 кГц, стерео; блок D до 9671 байт | то же у всех 239; блок D до 8455 (у сборки предел — 8455) |
+| `music_samples.sbs` | 358 429 052 | 297 564 220 |
+| EA Trax | 16 (Index 0…15); Artist, Album, Title, AssetID; FirstBoot у 4 | **10** (Index 0…9, id 694, 700…703, 706, 708, 726, 728, 729); **тега Album нет**; FirstBoot у trax0, trax1, trax9; `loc_*` — `eatrax16_*` (в базах строк нет и их) |
+| вторые версии | 14 других мастеров | 10, **байт-в-байт копии** тех же песен: 711, 716–719, 721, 722, 989–991 |
+| шапка `MBX0` | число записей в 0x8C | в 0xA4 (у события 4 параметра); адрес пары — в 0x10 у обеих |
+| дерево выбора | 40 записей | 73: ещё песни на гол по команде хозяев (`music_home_team_id`, 23 звука) и режим NHL 94 (`music_match_type` = NHL94, 42 звука, в меню — 925…930) |
+| пулы повторов | MenuMusicPool 15, GoalTunes 10, EndOfPeriod 10, PenaltyTunes 4, OffPlayTunes 35, TeamIntro 8, EndGame 8 | 22, 10, 16, 6, 59, 12, 9 |
+| обложки | `eatrax/e0…e15` | `e0…e21` (от 22 песен NHL 15), в ходу e0…e9 |
+
+Остальное как в NHL 13: `music_eventdef.csi`, `music_moduledef.xml` — те же байты; у
+события те же параметры, у `music_match_type` есть ещё значение 16 = NHL94.
+
+### Дерево выбора (`music_graffitidata.bin`, обе игры)
+
+«GRF0X360»: шапка 0x1C байт (в 0x14 — число корзин хеш-таблицы, оно же число записей),
+корзины по 8 байт (сколько записей, смещение первой или FFFFFFFF), записи по 16 байт
+(параметр, значение, вид, смещение списка), списки (число и id по возрастанию); смещения — от
+0x1C, всё подряд. Параметры и значения — из `music_eventsubscr.bin`: 1 `music_context`
+(5 = MenuTunes), 2 `music_home_team_id`, 6 `music_home_team_country`, 7
+`music_focus_player_type`, 9 `music_match_type` (1 Normal, 2 Shootout, 4 Tutorial, 8 Credits,
+у Legacy 16 NHL94), 10 `music_player_id`. Вид 1 — список категории, вид 2 — уточнения; по
+устройству игра берёт пересечение: гимн — «IntroNationalAnthem (вид 2) ∩ страна», меню в
+титрах — «MenuTunes (вид 2) ∩ Credits». У Legacy в титрах — вторые версии trax3 и trax6
+(718, 722), в обучении — остальных восьми. Разбор и пересборка без правок — байт в байт у
+обеих игр (класс `Graffiti` в инструменте).
+
+### Сколько песен может быть в EA Trax (по коду Legacy)
+
+- Экран EA Trax — класс `CEATrax` (vtable `0x8203DC24`): GetSongIDs `0x8299DD60`, GetSongInfo
+  `0x8299DE18`, SetPlayableSongIDs `0x8299E088` (у NHL 13 — `0x8277FD38`, `0x8277FDF0`,
+  `0x82780050`). Число песен — сколько записей в таблице тегов «Index» (`0x82D7ACD0`), песня
+  i — запись с `Index` = i (поэтому слоты — подряд с 0), массив флагов «вкл» выделяется под
+  это число. GetSongInfo берёт Title, Artist, **Album** и AssetID — `loc_*` не читает.
+- Флаги «вкл» копируются в настройки профиля без ограничения числа (`0x829F9D88`, смещение
+  +1231; у NHL 13 — +1363); следующее поле настроек — через 25 байт в обеих играх.
+- На том же движке NHL 15 держала 22 песни — их обложки e0…e21 остались в архиве.
+
+Поэтому `build` у Legacy дополняет EA Trax слотами `trax10…trax21`: новый id — пропуск в
+диапазоне песен (695, 696, 697…: песни NHL 15, которых в банке нет), поток — в конец `.sbs`,
+`.sbr` пересобирается как у EA (таблица по id, поля, значения подряд), запись в `.bin` — по
+образцу trax0 (тип 1 = MenuMusicPool; VolumeType, Index, Artist, Title, AssetID = номер
+слота, Album; без FirstBoot и `loc_*`), id — в список MenuTunes вида 1 дерева выбора (его
+build тогда пишет рядом с банком). Пулы повторов не правятся: размер пула — не вместимость
+(§4). Если слотов снова 10 — дерево прошлой сборки build удаляет.
+
+### Сборка «Best of NHL» (собрано)
+
+```bash
+python tools/music.py --game legacy unpack          # банк из game/other/legacy/big → game/work/legacy-data/music/orig
+python tools/music.py --game legacy build best_of_nhl       # → game/work/legacy-data/out (~1,5 мин)
+python tools/music.py --game legacy check --deep --compare "trax0=best_of_nhl/Animal Alpha - Bundy.mp3"
+```
+
+Те же песни, названия, альбом и обложки, что у NHL 13 (`best_of_nhl/tracks.txt`, тот же
+порядок): trax0…trax9 — на места песен Legacy (и вместо их вторых версий), trax10…trax15 —
+новые слоты.
+
+| слот | id | песня | длина |
+|---|---|---|---:|
+| trax0 | 694 (+711) | Animal Alpha — Bundy (FirstBoot) | 3:45 |
+| trax1 | 700 (+716) | Priestess — Talk to Her (FirstBoot) | 3:08 |
+| trax2 | 701 (+717) | Gatsbys American Dream — Theatre | 2:49 |
+| trax3 | 702 (+718, титры) | Living Things — Born Under the Gun | 2:32 |
+| trax4 | 703 (+719) | Good Riddance — Darkest Days | 2:40 |
+| trax5 | 706 (+721) | Jet — Get What You Need | 4:04 |
+| trax6 | 708 (+722, титры) | Modern Day Zero — Down | 3:31 |
+| trax7 | 726 (+989) | Millencolin — Done Is Done | 3:50 |
+| trax8 | 728 (+990) | Avenged Sevenfold — Afterlife | 4:02 |
+| trax9 | 729 (+991) | Fall Out Boy — Our Lawyer Made Us Change the Name of This Song So We Wouldn't Get Sued (FirstBoot) | 3:07 |
+| trax10 | 695, новый | American Head Charge — Loyalty | 3:25 |
+| trax11 | 696, новый | Mashlin — The Shore | 3:54 |
+| trax12 | 697, новый | Avenged Sevenfold — Bat Country | 5:12 |
+| trax13 | 698, новый | Cinder — Soul Creation | 3:48 |
+| trax14 | 699, новый | Apocalyptica — Grace (feat. Tomoyasu Hotei) | 4:08 |
+| trax15 | 704, новый | From First to Last — Two as One | 3:18 |
+
+`game/work/legacy-data/out` (раскладка `cache:`; список — `game/work/legacy-data/music/files.txt`):
+
+| файл | байт | было в игре |
+|---|---:|---:|
+| `audio/music/music_samples.sbs` | 302 342 764 | 297 564 220 |
+| `audio/music/music_samples.sbr` | 5 082 | 4 962 |
+| `audio/music/music_musicboxdata.bin` | 20 780 | 19 352 |
+| `audio/music/music_graffitidata.bin` | 3 424 | 3 400 |
+| `fe/ion/artassets/eatrax/e0…e15.big` | 15 600…18 032 | 39 152…39 472 |
+| `fe/ion/artassets/eatrax_thumbs/e0…e15_thumb.big` | 2 608…3 056 | 3 312…3 696 |
+
+`.sbs` больше оригинала на 1,6 %: смещения в `.sbr` — 32 бита, поток читается по смещению
+(предела размера в коде и данных не видно; у NHL 13 стоит 322 МБ). Запасной вариант без
+новых слотов (только trax0…trax9, `.sbs` меньше оригинала) — `game/work/legacy-data/music/out-10`
+(`best10/tracks.txt` там же).
+
+**Проверено** (отчёты — `game/work/legacy-data/music/`):
+
+- `check --deep` (`check.txt`): 245 звуков, битых 0, пересечений 0; id в `.sbr` и `.bin` одни
+  и те же; Index 0…15 подряд, все 16 — в списке MenuTunes; все id дерева есть в банке;
+  крупнейший блок D во всём банке — 8234 байта (родной поток EA), у наших — до 7665.
+- `--compare` шести потоков с исходниками (trax0, вторая версия 711, trax9, trax10, trax12,
+  trax15): длина совпадает до сэмпла, сдвиг 0, уровень тот же (73,4…80,8 дБ); стыки блоков D
+  и стык «47 сэмплов PCM → MP3»: шум разницы у стыка к соседнему — медиана 0,97, максимум
+  2,4…4,3 (щелчок или потерянная гранула дали бы десятки). Сигнал/шум к исходнику 18–22 дБ — это
+  сам LAME -V2 по уже сжатым MP3: декод потока банка совпадает с декодом MP3 от LAME бит в
+  бит, а 47 сэмплов PCM-начала — с его сэмплами 1105…1151 (`lossless.txt`).
+- Сверка с оригиналом (`verify.txt`): 219 из 239 потоков игры — байт в байт прежние, заменены
+  20 (10 песен и их копии); в `.bin` изменены только записи песен EA Trax и добавлены 6;
+  в дереве изменена одна запись (MenuTunes вида 1: +695…699, 704), шапка и корзины те же.
+- Все 16 потоков — байт в байт те же, что в NHL 13 `game/work/music/out-best` (кодер
+  детерминирован).
+
+**Не проверено:** всё в игре; что 16 песен (а не 10) примут экран EA Trax и сохранение
+настроек (по коду — да); включены ли новые песни по умолчанию в уже существующем профиле;
+показывает ли экран Legacy альбом.
+
+### Что проверить в игре
+
+1. Поставить содержимое `game/work/legacy-data/out` (только файлы из `files.txt`) в `cache:`
+   порта (`legacy-port/userdata/cache/guest`) при закрытой игре. В логе порта игра должна
+   открыть из `cache:` `audio\music\music_samples.sbr`, `…musicboxdata.bin`,
+   `…graffitidata.bin`, а с музыкой меню — `music_samples.sbs`.
+2. Главное меню: играет песня из Best of NHL (не Vinyl Theatre/Panic! At The Disco…); если
+   есть всплывающее «сейчас играет» — «исполнитель — название», альбом «Best of NHL».
+3. Экран EA SPORTS Trax: 16 песен с нашими названиями и синими обложками «BEST OF NHL #N»;
+   список прокручивается до 16-й (From First to Last), переключатели вкл/выкл работают,
+   «Play» играет выбранную, падений нет.
+4. Оставить включённой одну новую песню (например, trax12 Bat Country) → в меню играет она:
+   новый слот попал в выбор музыки.
+5. Перезапустить игру: переключатели EA Trax сохранились, прочие настройки (звук, управление)
+   не сбились — проверка, что 16 флагов помещаются в настройках.
+6. По желанию: музыка титров и обучения — тоже наши песни (вторые версии).
+
+Если новые слоты мешают (падение на экране EA Trax, пустые строки, сбитые настройки) — ставить
+`game/work/legacy-data/music/out-10` (10 песен на местах игры, без новых слотов).
