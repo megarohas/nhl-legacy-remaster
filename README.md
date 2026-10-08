@@ -29,6 +29,7 @@
 | [docs/player-equipment.md](docs/player-equipment.md) | Экипировка игроков по фото (НХЛ + Wikimedia Commons): обмотка клюшки, гетры, свитер, визор — поля базы и охват |
 | [docs/teams.md](docs/teams.md) | Команды, лиги, ссылки на команду и календари в базе; НХЛ на 32 команды |
 | [docs/graphics-settings.md](docs/graphics-settings.md) | Настройки графики порта: cvar'ы рантайма, апскейл, RTV/ROV, задержка ввода, лаунчер |
+| [docs/performance.md](docs/performance.md) | Производительность: замеры GPU/CPU в игре, цена FSI против хостовых RT, спин потока рендера (исправлен), подвисания от пайплайнов, план A/B |
 | `port/` | Проект порта ReXGlue (сгенерированный код — не в git) |
 | [tools/svod.py](tools/svod.py) | Проверка и распаковка контейнеров SVOD (установка с диска, GoD) |
 | [tools/stfs.py](tools/stfs.py) | Проверка и распаковка пакетов STFS (апдейты, сейвы) |
@@ -46,6 +47,8 @@
 | [tools/music.py](tools/music.py) | Свой саундтрек: MP3/FLAC/WAV → банк музыки игры, названия и обложки EA Trax (через ffmpeg) |
 | [tools/rw4mesh.py](tools/rw4mesh.py) | Сетки игроков RW4 ⇄ OBJ для Blender, правка голени гетр, проверка зазоров, превью |
 | [tools/sticktape.py](tools/sticktape.py) | Обмотка клюшки до самого носка крюка и скругление носка: полевые и вратарские, обе руки, `_2`/`_4`, проверки, лист превью |
+| [tools/perfwatch.ps1](tools/perfwatch.ps1), [tools/perf_ab.ps1](tools/perf_ab.ps1) | Пассивный замер GPU/CPU по потокам во время игры; запуск A/B-вариантов рендера аргументами |
+| [tools/stackpeek.py](tools/stackpeek.py) | Чем занят поток игры: стек через ReadProcessMemory без остановки, адреса → функции гостя |
 | `game/` | Локальные файлы игры, не в git |
 | `ref/` | Клоны репозиториев puckhead73 для справки, не в git |
 
