@@ -11,6 +11,10 @@ read_db находит её сама.
 Из кода:
     meta = load_meta(путь_к_meta); d, T = read_db(путь_к_db, meta)
     column(d, T['exhibitionplayerbiotable'], 'year')
+    column(d, T['leaguerostertable'], 'team', live_only=True)   # сейв: только живые записи
+
+Строк у таблиц alloc 2/6 — max (места); в сейвах игры записи из них — только live_rows: [0, current)
+без удалённых (список свободных, tdb.py «Живые записи»). Командная строка считает только живые.
 """
 import struct, sys, xml.etree.ElementTree as ET
 from collections import Counter
@@ -51,12 +55,31 @@ def read_db(path, meta):
         out[tname] = (rows, reclen, rb, fds, fmeta)
     return d, out
 
-def column(d, tinfo, fname):
+def live_rows(d, tinfo):
+    """Номера живых записей таблицы: [0, current) без удалённых. Заголовок: +0x16 current, +0x18 число
+    удалённых, +0x1A голова списка свободных (0xFFFF — пусто); у удалённой записи первые 16 бит — номер
+    следующей. Список испорчен (цикл, номер за max, длина не та) — ValueError."""
+    rows, reclen, rb, fds, fmeta = tinfo
+    base = rb - 0x28 - 16 * len(fds)
+    E = '>' if d[4] == 1 else '<'
+    maxr, cur, n, r = struct.unpack(E + 'HHHH', d[base + 0x14:base + 0x1C])
+    dead = set()
+    while r != 0xFFFF:
+        if r >= maxr or r in dead or len(dead) == n:
+            raise ValueError(f'список удалённых записей испорчен (запись {r}, max {maxr}, счётчик {n})')
+        dead.add(r)
+        r = struct.unpack(E + 'H', d[rb + r * reclen:rb + r * reclen + 2])[0]
+    if len(dead) != n:
+        raise ValueError(f'в списке удалённых {len(dead)} записей, в счётчике {n}')
+    return [x for x in range(cur) if x not in dead]
+
+def column(d, tinfo, fname, live_only=False):
+    """Значения поля по строкам range(rows); live_only — только живых записей (live_rows)."""
     rows, reclen, rb, fds, fmeta = tinfo
     for kind, bitoff, fid, w in fds:
         if fmeta.get(fid, (fid,))[0] == fname:
             vals = []
-            for r in range(rows):
+            for r in (live_rows(d, tinfo) if live_only else range(rows)):
                 rec = int.from_bytes(d[rb+r*reclen: rb+(r+1)*reclen], 'big')
                 total = reclen*8
                 vals.append((rec >> (total - bitoff - w)) & ((1 << w) - 1))
@@ -69,8 +92,10 @@ if __name__ == '__main__':
     meta = load_meta(sys.argv[1])
     d, T = read_db(sys.argv[2], meta)
     if len(sys.argv) == 3:
-        for name, (rows, reclen, *_ ) in sorted(T.items()):
-            print(f'{name}\t{rows}\t{reclen}')
+        for name, tinfo in sorted(T.items()):
+            rows, reclen = tinfo[:2]
+            live = len(live_rows(d, tinfo))
+            print(f'{name}\t{rows}\t{reclen}' + (f'\tживых {live}' if live != rows else ''))
     else:
-        vals = column(d, T[sys.argv[3]], sys.argv[4])
+        vals = column(d, T[sys.argv[3]], sys.argv[4], live_only=True)
         print(len(vals), 'значений; частые:', Counter(vals).most_common(20))

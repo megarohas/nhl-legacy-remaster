@@ -1,6 +1,7 @@
 """База EA TDB v6 и сейв RosterFile (NHL 12/13, NHL Legacy — ZlibV4): чтение, запись полей, пересчёт CRC.
 
     python tdb.py verify  FILE                          # все CRC базы и обёртки сейва
+    python tdb.py live    FILE [TABLE …]                # записи таблиц: max, current, удалённые, живые
     python tdb.py states  FILE                          # leaguestates: type/key -> value
     python tdb.py setstate FILE OUT TYPE KEY VALUE [TYPE KEY VALUE …]
     python tdb.py set     FILE OUT TABLE FIELD ROW VALUE
@@ -8,6 +9,15 @@
 FILE — `.db` или внутренний файл сейва (`RosterFile`, `Dynasty`…: заголовок 0x2C байт,
 база длиной u32@0x24, у франшизы после базы ещё хвост своих данных). Схема полей —
 `nhlng-meta.xml` (по умолчанию из ref/nhl-modding-studio, анкер NHL 13 для Xbox 360).
+
+Живые записи. Заголовок таблицы: +0x14 max (мест), +0x16 current (занято с начала, вместе с удалёнными),
++0x18 — число удалённых, +0x1A — голова списка свободных (0xFFFF — пусто), всё u16. У удалённой записи
+первые 16 бит — номер следующей свободной; они накрывают поля начала записи (у leaguerostertable — team,
+биты 4…10), остальные поля — от прежней записи. Записи — строки [0, current) без удалённых (`live_rows`);
+[current, max) — запас: в сейвах игры там байты 0xDB или остатки прежних записей (франшиза в межсезонье).
+`rows` таблиц alloc 2/6 = max (физические места: get/set по номеру, resize, widen); перебирать таблицы сейва
+надо по `live_rows`, иначе считаются и фантомы. У баз игр и всех наших баз max = current и удалённых нет —
+там `live_rows` = range(rows).
 
 Суммы (nhl-modding-studio, docs/formats/tdb-v6-format-spec.md §2):
 - внутри базы — CRC-32/MPEG-2: заголовок [0..0x14] → 0x14; у каждой таблицы prior_crc
@@ -113,22 +123,58 @@ class Tdb:
         start = t['records'] + row * t['reclen'] + off // 8
         self.d[start:start + width // 8] = raw + bytes(width // 8 - len(raw))
 
+    def counts(self, table):
+        """Счётчики заголовка таблицы: (max, current, удалённых, голова списка свободных)."""
+        b = self.by_name[table]['block']
+        return struct.unpack(self.E + 'HHHH', self.d[b + 0x14:b + 0x1C])
+
     def deleted(self, table):
-        """Номера удалённых записей таблицы (список свободных): в заголовке +0x18 (u16) — их число, +0x1A —
-        голова списка; у удалённой записи первые 16 бит — номер следующей (0xFFFF — конец), они перекрывают
-        поля из начала записи (у leaguerostertable — team). В базах игр их нет, в сейвах франшизы есть:
-        считая по таблицам сейва, эти строки надо пропускать (column и get их не отличают)."""
+        """Номера удалённых записей таблицы (список свободных) в порядке цепочки: в заголовке +0x18 (u16) —
+        их число, +0x1A — голова списка; у удалённой записи первые 16 бит — номер следующей (0xFFFF — конец),
+        они перекрывают поля из начала записи (у leaguerostertable — team). В базах игр их нет, в сейвах
+        франшизы есть: считая по таблицам сейва, эти строки надо пропускать (get и column их не отличают;
+        перебирать — по live_rows). Цепочка проверяется: звеньев столько, сколько в счётчике, без повторов,
+        номера < max; иначе ValueError (такой сейв читать как обычно нельзя)."""
         t = self.by_name[table]
-        n, r = struct.unpack(self.E + 'HH', self.d[t['block'] + 0x18:t['block'] + 0x1C])
-        out = []
-        while r != 0xFFFF and len(out) < n:
+        maxr, cur, n, r = self.counts(table)
+        out, seen = [], set()
+        while r != 0xFFFF:
+            if r >= maxr or r in seen or len(out) == n:
+                why = (f'номер {r} за max {maxr}' if r >= maxr else f'цикл на записи {r}' if r in seen
+                       else f'звеньев больше счётчика {n}')
+                raise ValueError(f'{table}: список удалённых записей испорчен — {why}')
+            seen.add(r)
             out.append(r)
             s = t['records'] + r * t['reclen']
             r = struct.unpack(self.E + 'H', self.d[s:s + 2])[0]
+        if len(out) != n:
+            raise ValueError(f'{table}: в списке удалённых {len(out)} записей, в счётчике {n}')
         return out
 
-    def column(self, table, field):
-        return [self.get(table, field, r) for r in range(self.by_name[table]['rows'])]
+    def live_rows(self, table):
+        """Номера живых записей по возрастанию: [0, current) без удалённых. Индексы и подсчёты по сейву —
+        только по ним; у баз игр и наших баз это все строки (range(rows))."""
+        maxr, cur, n, head = self.counts(table)
+        if not n:
+            return list(range(cur))
+        dead = set(self.deleted(table))
+        return [r for r in range(cur) if r not in dead]
+
+    def dead_rows(self, table):
+        """Строки range(rows), которые не записи: удалённые и запас [current, max)."""
+        live = set(self.live_rows(table))
+        return [r for r in range(self.by_name[table]['rows']) if r not in live]
+
+    def is_live(self, table, row):
+        """Строка — живая запись (для одной строки; в цикле — live_rows один раз)."""
+        maxr, cur, n, head = self.counts(table)
+        return 0 <= row < cur and (not n or row not in self.deleted(table))
+
+    def column(self, table, field, live_only=False):
+        """Значения поля по строкам range(rows); live_only — только живых записей (по live_rows, номера строк
+        тогда не совпадают с позицией в списке)."""
+        rows = self.live_rows(table) if live_only else range(self.by_name[table]['rows'])
+        return [self.get(table, field, r) for r in rows]
 
     def record(self, table, row):
         t = self.by_name[table]
@@ -367,13 +413,31 @@ class ZlibV4:
         return bad
 
 def states(db):
+    """leaguestates: [(строка, type, key, value, tier)] — только живые записи (в сейве франшизы за current —
+    запас 0xDB и остатки прежних состояний, их type/key игра не видит)."""
     t = 'leaguestates'
-    rows = zip(db.column(t, 'type'), db.column(t, 'key'), db.column(t, 'value'), db.column(t, 'tier'))
-    return [(i, ty, k, v, tier) for i, (ty, k, v, tier) in enumerate(rows)]
+    g = lambda f, r: db.get(t, f, r)
+    return [(r, g('type', r), g('key', r), g('value', r), g('tier', r)) for r in db.live_rows(t)]
+
+def live_report(db, tables=None):
+    """Строки отчёта `live`: таблицы, где не все строки range(rows) — живые записи (или перечисленные)."""
+    out = [f'{"таблица":34} {"alloc":>5} {"max":>6} {"current":>7} {"удалён.":>7} {"живых":>6}']
+    total = dict(deleted=0, spare=0)
+    for t in db.tables:
+        name = t['name']
+        maxr, cur, n, head = db.counts(name)
+        live = len(db.live_rows(name))
+        total['deleted'] += n
+        total['spare'] += t['rows'] - cur
+        if (tables and name in tables) or (not tables and live != t['rows']):
+            out.append(f'{name:34} {db.u32(t["block"] + 4):5} {maxr:6} {cur:7} {n:7} {live:6}')
+    out.append(f'итого: удалённых записей {total["deleted"]}, строк запаса за current {total["spare"]} '
+               f'(у alloc 2/6 rows = max)')
+    return out
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument('cmd', choices=['verify', 'states', 'setstate', 'set'])
+    ap.add_argument('cmd', choices=['verify', 'live', 'states', 'setstate', 'set'])
     ap.add_argument('file')
     ap.add_argument('args', nargs='*')
     ap.add_argument('--meta', default=DEFAULT_META)
@@ -386,6 +450,9 @@ def main():
         print('\n'.join(bad) if bad else f'OK: все CRC сходятся ({len(s.db.tables)} таблиц'
               + (f', обёртка {kind}{z}, хвост {len(s.tail)} байт)' if kind else ')'))
         sys.exit(1 if bad else 0)
+    if a.cmd == 'live':
+        print('\n'.join(live_report(s.db, set(a.args))))
+        return
     if a.cmd == 'states':
         for i, ty, k, v, tier in states(s.db):
             print(f'{i:4} type {ty:3} key {k:4} tier {tier}  value {v}')
@@ -401,6 +468,9 @@ def main():
             s.db.set('leaguestates', 'value', rows[(ty, k)], v)
     else:
         table, field, row, value = rest
+        if not s.db.is_live(table, int(row)):
+            maxr, cur, n, head = s.db.counts(table)
+            sys.exit(f'{table}: строка {row} — не запись (current {cur}, удалённых {n}): игра её не читает')
         s.db.set(table, field, int(row), int(value))
     open(out, 'wb').write(s.bytes())
     print(f'записано -> {out}')
