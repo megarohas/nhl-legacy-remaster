@@ -22,6 +22,12 @@
                                                        # привязки и при сгибе стопы (не проткнула ли деталь гетру)
     python rw4mesh.py objs [--obj DIR]                 # OBJ исходных гетр и деталей рядом (для Blender)
 
+У всех команд — опция --game {nhl13,legacy} (или NHL_GAME, tools/gameprofile.py): из архивов какой игры брать сетки
+(NHL Legacy — распакованные game/other/legacy/big/<архив>/, имена строчные) и куда писать по умолчанию (NHL 13 —
+game/work/models/…, Legacy — game/work/legacy-data/models/…). По умолчанию — NHL 13, всё как до профиля. У Legacy
+preview рисует ещё колонку «NHL 13 с модом» (готовые гетры NHL 13 из --nhl13-out DIR, по умолчанию
+game/work/models/out, — с коньками, шортами и текстурами NHL 13; --no-nhl13 — без неё).
+
 Где что лежит (разбор 08.10.2026, подробно — docs/player-models.md). Тело игрока в матче — набор отдельных сеток
 на общем скелете (122 кости, rendering/skeleton_bindpose/skeleton_bindpose_player.rx2 в boot.big): голова
 (rendering/player/player_<headid>), шлем, свитер (rendering/jersey/jersey_…), шорты (rendering/pant/pant_…), гетры
@@ -51,8 +57,10 @@ w_u16); set_skin — кости и веса вершины (сумма весо�
 czkit, playerhead — как библиотеки, не меняются.
 """
 import json, math, os, struct, sys
+from contextlib import contextmanager
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import gameprofile  # noqa: E402
 
 RW4_MAGIC = b'\x89RW4xb2\x00'
 TYPE_DATA = 0x00010031       # буфер (вершины, индексы, пиксели); смещение — от начала данных
@@ -93,6 +101,43 @@ def game_dir():
     return ph.game_dir()
 
 
+# ---------------------------------------------------------------- игра (профиль)
+
+PROFILE = gameprofile.get()      # из архивов какой игры брать сетки; по умолчанию — NHL_GAME или nhl13
+
+
+def use_game(name):
+    """Игра для всех функций модуля (и для sticktape, jersey10): 'nhl13' или 'legacy'."""
+    global PROFILE
+    PROFILE = gameprofile.get(name)
+    return PROFILE
+
+
+@contextmanager
+def game_profile(name):
+    """На время блока — другая игра (картинки «NHL 13 с модом» рядом с Legacy)."""
+    old = PROFILE
+    use_game(name)
+    try:
+        yield PROFILE
+    finally:
+        use_game(old.name)
+
+
+def is_nhl13():
+    return PROFILE.name == 'nhl13'
+
+
+def take_game(args):
+    """Опция --game (gameprofile.add_argument) из списка аргументов команды: включает игру, → остальные аргументы."""
+    import argparse
+    ap = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+    gameprofile.add_argument(ap)
+    ns, rest = ap.parse_known_args(args)
+    use_game(ns.game)
+    return rest
+
+
 # ---------------------------------------------------------------- файлы игры
 
 def archive_of(rel):
@@ -106,12 +151,29 @@ def archive_of(rel):
 
 
 def src_dir():
+    if not is_nhl13():
+        return PROFILE.work_dir('models', 'src')
     return os.path.join(game_dir(), 'work', 'models', 'src')
+
+
+def game_has(rel):
+    """Есть ли файл rel в архивах игры (NHL 13 — в оглавлении архива диска, Legacy — среди распакованных)."""
+    if not is_nhl13():
+        return PROFILE.extracted(rel) is not None
+    import kitpaint as kp
+    _, entries, _ = kp._disc_entries(archive_of(rel))
+    return rel in entries
 
 
 def source(rel):
     """Разжатый файл игры по пути архива: game/extracted/big/<архив>/…, кеш game/work/models/src/…, иначе — образ
-    диска game/extracted/disc/<архив>.big (с записью в кеш)."""
+    диска game/extracted/disc/<архив>.big (с записью в кеш). NHL Legacy — распакованные архивы
+    game/other/legacy/big/<архив>/… (первый по порядку профиля, где файл есть: renderboot раньше cacherender)."""
+    if not is_nhl13():
+        p = PROFILE.extracted(rel)
+        if p is None:
+            raise SystemExit(f'{rel}: нет в распакованных архивах {PROFILE.title} ({PROFILE.big})')
+        return unchunk_any(open(p, 'rb').read())
     g = game_dir()
     arc = archive_of(rel)
     for p in (os.path.join(g, 'extracted', 'big', arc, *rel.split('/')), os.path.join(src_dir(), *rel.split('/'))):
@@ -254,14 +316,17 @@ def strip_triangles(idx):
 class Mesh:
     """Одна сетка .rx2 (один буфер вершин и один буфер индексов — так у всех сеток экипировки игроков). Атрибуты
     раскладываются в списки; правка — set_pos/set_nrm/set_tan пишет в raw только изменённые вершины, остальное в
-    файле — байт в байт как было."""
+    файле — байт в байт как было. sub=k — k-я подсетка файла из нескольких (буферы вершин и индексов, вызовы
+    отрисовки и шейдеры — по порядку; объявление вершин — общее или своё у каждой; так устроен реквизит
+    rendering/prop/droppedstick_0 у NHL Legacy); bytes() — весь файл."""
 
-    def __init__(self, data, path=''):
+    def __init__(self, data, path='', sub=None):
         self.f = f = Rw4File(data, path)
         self.path = path
+        self.sub = sub
         raw = f.raw
         # объявление вершин
-        sd = f.one(TYPE_VDECL)
+        sd = f.one(TYPE_VDECL) if sub is None else f.find(TYPE_VDECL)[min(sub, len(f.find(TYPE_VDECL)) - 1)]
         db = f.body(sd)
         self.decl_head = struct.unpack_from('>4I', db, 0)
         ne, stride = db[8], db[9]
@@ -269,7 +334,8 @@ class Mesh:
         if 16 + 12 * ne != len(db):
             raise ValueError(f'{path}: объявление вершин {len(db)} байт на {ne} элементов')
         # буфер вершин
-        sv = f.one(TYPE_VB)
+        sv = f.one(TYPE_VB) if sub is None else f.find(TYPE_VB)[sub]
+        self.vbh = sv
         vb = f.body(sv)
         fetch0 = u32(vb, 0x18)
         if fetch0 & 3 != 3:
@@ -281,7 +347,8 @@ class Mesh:
                              f'секция {self.vsec.index} 0x{self.vsec.size:X})')
         self.vo = f.abs_off(self.vsec)
         # буфер индексов
-        si = f.one(TYPE_IB)
+        si = f.one(TYPE_IB) if sub is None else f.find(TYPE_IB)[sub]
+        self.ibh = si
         ib = f.body(si)
         self.ib_common = u32(ib, 0)
         if self.ib_common & 0x80000000:
@@ -295,8 +362,12 @@ class Mesh:
         if max(i for i in self.indices if i != STRIP_RESTART) >= self.nv:
             raise ValueError(f'{path}: индекс за пределами буфера вершин')
         draws = f.find(TYPE_DRAW)
+        if sub is not None:                       # вызов этой подсетки: слова 5 и 6 — номера секций индексов и вершин
+            draws = [d for d in draws if struct.unpack_from('>6I', f.body(d), 0)[5] == sv.index] or draws[sub:sub + 1]
         self.draw = struct.unpack_from('>6I', f.body(draws[0]), 0) if draws else None
         shaders = f.find(TYPE_SHADER)
+        if sub is not None:
+            shaders = shaders[sub:sub + 1]
         self.shader = ''
         if shaders:
             b = f.body(shaders[0])
@@ -305,12 +376,12 @@ class Mesh:
         self._decode()
 
     @classmethod
-    def load(cls, path):
-        return cls(open(path, 'rb').read(), path)
+    def load(cls, path, sub=None):
+        return cls(open(path, 'rb').read(), path, sub)
 
     @classmethod
-    def game(cls, rel):
-        return cls(source(rel), rel)
+    def game(cls, rel, sub=None):
+        return cls(source(rel), rel, sub)
 
     def elem(self, usage, typ=None):
         for e in self.elements:
@@ -439,7 +510,9 @@ class Mesh:
         меняются: размеры и смещения двух секций данных (вершины с добивкой нулями до 32 байт, индексы — до 16),
         размер данных в заголовке (+0x54), в D3DVertexBuffer — размер в словах и число вершин, в D3DIndexBuffer —
         размер и число индексов, в записи вызова — числа вершин и индексов. rebuilt(свои буферы) == исходный файл
-        (проверка layout_ok)."""
+        (проверка layout_ok). У подсетки (sub) — rebuilt_sub: остальные подсетки не меняются."""
+        if self.sub is not None:
+            return self.rebuilt_sub(vb, indices)
         f = self.f
         st = self.stride
         if len(vb) % st:
@@ -471,6 +544,48 @@ class Mesh:
             struct.pack_into('>I', raw, sd.off + 0x04, nv)
             struct.pack_into('>I', raw, sd.off + 0x0C, len(indices))
         return bytes(raw) + vb + ib
+
+    def rebuilt_sub(self, vb, indices):
+        """Файл из нескольких подсеток с другим буфером вершин и индексами этой подсетки: секции данных (у таких
+        файлов — подряд, без промежутков: сначала все буферы вершин, затем все индексы) раскладываются заново в
+        прежнем порядке, их смещения и размеры — в таблице секций; размер данных в заголовке (+0x54); в
+        D3DVertexBuffer, D3DIndexBuffer и вызове отрисовки этой подсетки — размеры и числа (как в rebuilt)."""
+        f = self.f
+        st = self.stride
+        if len(vb) % st:
+            raise ValueError('буфер вершин не кратен шагу')
+        nv = len(vb) // st
+        if indices and max(i for i in indices if i != STRIP_RESTART) >= nv:
+            raise ValueError('индекс за пределами нового буфера вершин')
+        vb = bytes(vb) + bytes((-len(vb)) % 32)
+        ib = struct.pack('>%dH' % len(indices), *indices)
+        ib += bytes((-len(ib)) % 16)
+        raw = bytearray(f.raw[:f.data_start])
+        table = u32(raw, 0x30)
+        bodies, pos = [], 0
+        for sec in sorted((x for x in f.sections if x.type == TYPE_DATA), key=lambda x: x.off):
+            if sec.off != pos:
+                raise ValueError(f'{self.path}: секции данных не подряд — пересборка не поддержана')
+            pos += sec.size
+            body = vb if sec is self.vsec else ib if sec is self.isec else f.body(sec)
+            struct.pack_into('>I', raw, table + 24 * sec.index, sum(len(b) for b in bodies))
+            struct.pack_into('>I', raw, table + 24 * sec.index + 8, len(body))
+            bodies.append(body)
+        if pos != f.data_size:
+            raise ValueError(f'{self.path}: секции данных не занимают всю область данных')
+        struct.pack_into('>I', raw, 0x54, sum(len(b) for b in bodies))
+        o = self.vbh.off
+        w1 = u32(raw, o + 0x1C)
+        struct.pack_into('>I', raw, o + 0x1C, (w1 & ~(0xFFFFFF << 2)) | ((len(vb) // 4) << 2))
+        struct.pack_into('>I', raw, o + 0x24, nv)
+        o = self.ibh.off
+        struct.pack_into('>I', raw, o + 0x1C, len(ib))
+        struct.pack_into('>I', raw, o + 0x20, len(indices))
+        for sd in f.find(TYPE_DRAW):
+            if u32(raw, sd.off + 0x14) == self.vbh.index:
+                struct.pack_into('>I', raw, sd.off + 0x04, nv)
+                struct.pack_into('>I', raw, sd.off + 0x0C, len(indices))
+        return bytes(raw) + b''.join(bodies)
 
     def layout_ok(self):
         """Пересборка своими же буферами даёт исходный файл байт в байт."""
@@ -1392,7 +1507,7 @@ _TEXC = {}
 
 
 def preview_tex(rel, name):
-    key = (rel, name)
+    key = (rel, name) if is_nhl13() else (PROFILE.name, rel, name)
     if key not in _TEXC:
         import teamart as ta
         import kitpaint as kp
@@ -1501,9 +1616,17 @@ VAR_COLORS = ('#ff6b6b', '#4dabf7', '#69db7c', '#ffd43b')
 VAR_NAMES = ('0 Full — заправлена', '1 None — поверх ботинка', '2 Front — язык наружу', '3 Back — сзади в ботинке')
 
 
-def preview(afters, outdir, variants=(0, 1, 2, 3), log=print, w=260, h=300):
+def leg_parts(t):
+    """Шорты, ботинок, шнуровка и деталь конька варианта t (ближняя детализация) — для render_leg."""
+    return {'pant': Mesh.game('rendering/pant/pant_1_0_0_2.rx2'), 'boot': Mesh.game(BOOT.format(lod=2)),
+            'lace': Mesh.game('rendering/skate/skatelace_2.rx2'),
+            'tongue': Mesh.game(TONGUE.format(t=t, lod=2)) if t != 1 else None}
+
+
+def preview(afters, outdir, variants=(0, 1, 2, 3), log=print, w=260, h=300, before_label='до', title=None):
     """Картинки до/после: по варианту — спереди и сбоку; на «после» — контур гетры «до» (красный, по фону);
-    лист outdir/sheet.png с графиками среднего радиуса и сечениями. afters — [(подпись, {вариант: Mesh LOD _2})]."""
+    лист outdir/sheet.png с графиками среднего радиуса и сечениями. afters — [(подпись, {вариант: Mesh LOD _2})] или
+    [(подпись, {…}, игра)]: колонка другой игры рисуется с её шортами, коньками и текстурами (game_profile)."""
     import teamart as ta
     import base64
     os.makedirs(outdir, exist_ok=True)
@@ -1513,7 +1636,7 @@ def preview(afters, outdir, variants=(0, 1, 2, 3), log=print, w=260, h=300):
              'lace': Mesh.game('rendering/skate/skatelace_2.rx2')}
     before = {t: Mesh.game(SOCK.format(t=t, lod=2)) for t in range(4)}
     files = {}
-    tags = [('before', 'до')] + [(f'after{k}', lab) for k, (lab, _) in enumerate(afters)]
+    tags = [('before', before_label)] + [(f'after{k}', af[0]) for k, af in enumerate(afters)]
     fw = PREVIEW_VIEWS[0][2][2] - PREVIEW_VIEWS[0][2][0]
     for t in variants:
         pp = dict(parts, tongue=Mesh.game(TONGUE.format(t=t, lod=2)) if t != 1 else None)
@@ -1523,8 +1646,16 @@ def preview(afters, outdir, variants=(0, 1, 2, 3), log=print, w=260, h=300):
             b, vis, bgm = render_leg(before[t], t, yaw, frame, vw, h, parts=pp, want_mask=True)
             edge = outline_against(vis, bgm, vw, h)
             imgs = [b]
-            for lab, res in afters:
-                a = render_leg(res[t], t, yaw, frame, vw, h, parts=pp) if t in res else b.copy()
+            for af in afters:
+                res = af[1]
+                other = af[2] if len(af) > 2 and af[2] != PROFILE.name else None
+                if t not in res:
+                    a = b.copy()
+                elif other:
+                    with game_profile(other):
+                        a = render_leg(res[t], t, yaw, frame, vw, h, parts=leg_parts(t))
+                else:
+                    a = render_leg(res[t], t, yaw, frame, vw, h, parts=pp)
                 draw_points(a, edge, (255, 70, 70, 255))
                 imgs.append(a)
             for (st, _), img in zip(tags, imgs):
@@ -1539,12 +1670,12 @@ def preview(afters, outdir, variants=(0, 1, 2, 3), log=print, w=260, h=300):
         return [mean_radius([sl.outer(axes[0], y, 2 * math.pi * a / SHIN_NA) for a in range(SHIN_NA)]) * 1000
                 for y in ys]
     pb = {t: mean_prof(before[t]) for t in range(4)}
-    pas = [{t: (mean_prof(res[t]) if t in res else pb[t]) for t in range(4)} for _, res in afters]
+    pas = [{t: (mean_prof(af[1][t]) if t in af[1] else pb[t]) for t in range(4)} for af in afters]
     tgt = [sum(pb[t][i] for t in range(4)) / 4 if all(pb[t][i] > 0 for t in range(4)) else 0 for i in range(len(ys))]
-    charts = [('до', _svg_chart([(VAR_NAMES[t], VAR_COLORS[t], None, pb[t]) for t in range(4)]
+    charts = [(before_label, _svg_chart([(VAR_NAMES[t], VAR_COLORS[t], None, pb[t]) for t in range(4)]
                                 + [('цель', '#ffffff', '3,3', tgt)], ys))]
-    for (lab, _), pa in zip(afters, pas):
-        charts.append((lab, _svg_chart([(VAR_NAMES[t], VAR_COLORS[t], None, pa[t]) for t in range(4)]
+    for af, pa in zip(afters, pas):
+        charts.append((af[0], _svg_chart([(VAR_NAMES[t], VAR_COLORS[t], None, pa[t]) for t in range(4)]
                                        + [('цель', '#ffffff', '3,3', tgt)], ys)))
     hs = (0.28, 0.34, 0.40, 0.46, 0.52)
     sec = []
@@ -1576,10 +1707,10 @@ def preview(afters, outdir, variants=(0, 1, 2, 3), log=print, w=260, h=300):
         for i, y in enumerate(ys):
             if y in (0.30, 0.36, 0.42, 0.48):
                 nums.append(f'{y:.2f} м: {pb[t][i]:.0f} → ' + ' / '.join(f'{pa[t][i]:.0f}' for pa in pas))
-        labs = ' / '.join(lab for lab, _ in afters)
+        labs = ' / '.join(af[0] for af in afters)
         cards.append(f'<div class="card"><h2 style="color:{VAR_COLORS[t]}">{VAR_NAMES[t]}</h2>'
                      f'<div class="row">{"".join(figs)}</div>'
-                     f'<p>средний радиус голени, мм (до → {labs}): {"; ".join(nums)}</p></div>')
+                     f'<p>средний радиус голени, мм ({before_label} → {labs}): {"; ".join(nums)}</p></div>')
     legend = ' '.join(f'<span style="color:{VAR_COLORS[t]}">■ {VAR_NAMES[t]}</span>' for t in range(4))
     chart_html = ''.join(f'<div><b>средний радиус, мм — {lab}</b><br>{svg}</div>' for lab, svg in charts)
     sec_lab = afters[0][0] if afters else ''
@@ -1592,11 +1723,11 @@ def preview(afters, outdir, variants=(0, 1, 2, 3), log=print, w=260, h=300):
             'p{margin:4px 0 0;font-size:12px;color:#bbb}svg text{fill:#bbb;font-size:10px}'
             '.charts{display:flex;gap:14px;flex-wrap:wrap;background:#303138;padding:8px;border-radius:6px}'
             '</style></head><body>'
-            '<h1>Голень (гетра): до и после автоправки</h1>'
-            '<p>Красный контур на «после» — силуэт гетры «до». Ботинок, шнуровка, язык/задник конька и шорты не '
-            'менялись. Высоты — от низа лезвия, м; радиус — от оси голени (колено → голеностоп).</p>'
+            f'<h1>{title or "Голень (гетра): до и после автоправки"}</h1>'
+            f'<p>Красный контур на «после» — силуэт гетры «{before_label}». Ботинок, шнуровка, язык/задник конька '
+            'и шорты не менялись. Высоты — от низа лезвия, м; радиус — от оси голени (колено → голеностоп).</p>'
             f'{"".join(cards)}'
-            f'<div class="charts">{chart_html}<div><b>сечения: пунктир — до, линия — {sec_lab}'
+            f'<div class="charts">{chart_html}<div><b>сечения: пунктир — {before_label}, линия — {sec_lab}'
             ' (вверх — вперёд, вправо — наружу)</b><br>' + sec_svg + '</div></div>'
             f'<p>{legend}</p></body></html>')
     side_w = int(round(w * (PREVIEW_VIEWS[1][2][2] - PREVIEW_VIEWS[1][2][0]) / fw))
@@ -1613,6 +1744,14 @@ def preview(afters, outdir, variants=(0, 1, 2, 3), log=print, w=260, h=300):
 # ---------------------------------------------------------------- команды
 
 def models_dir():
+    """Папка работы с моделями: NHL 13 — game/work/models, Legacy — game/work/legacy-data/models."""
+    if not is_nhl13():
+        return PROFILE.work_dir('models')
+    return os.path.join(game_dir(), 'work', 'models')
+
+
+def nhl13_models_dir():
+    """Готовые сборки NHL 13 (для колонки «NHL 13 с модом» на листах Legacy)."""
     return os.path.join(game_dir(), 'work', 'models')
 
 
@@ -1636,6 +1775,8 @@ def lod_siblings(rel):
     mm = re.match(r'(.*_)2\.rx2$', rel)
     if not mm:
         return []
+    if not is_nhl13():
+        return [mm.group(1) + f'{k}.rx2' for k in (0, 3) if game_has(mm.group(1) + f'{k}.rx2')]
     import kitpaint as kp
     _, entries, _ = kp._disc_entries(archive_of(rel))
     return [mm.group(1) + f'{k}.rx2' for k in (0, 3) if mm.group(1) + f'{k}.rx2' in entries]
@@ -1654,6 +1795,16 @@ def find_src_for_obj(obj_path, name):
     cands = [n for n in (name, obj_name(obj_path)) if n]
     for n in cands:
         n = n.split('.')[0]
+        if not is_nhl13():
+            hits = set()
+            for arc in PROFILE.archive_order:
+                root = os.path.join(PROFILE.big, arc)
+                for dp, _, fs in os.walk(os.path.join(root, 'rendering')):
+                    hits.update(os.path.relpath(os.path.join(dp, f), root).replace(os.sep, '/')
+                                for f in fs if f.lower() == n.lower() + '.rx2')
+            if len(hits) == 1:
+                return hits.pop()
+            continue
         for arc in ('cacherender', 'nocacherender', 'boot'):
             _, entries, _ = kp._disc_entries(arc)
             hits = [r for r in entries if r.endswith('/' + n + '.rx2')]
@@ -1675,7 +1826,8 @@ def cmd_info(paths):
               f'{w.np} точек после сварки; шейдер {m.shader}')
         print('   вершина: ' + ', '.join(f'{e.uname} {e.tname} +{e.off}' for e in m.elements))
         print('   рамка, м: ' + ' '.join(f'{a:.3f}…{b:.3f}' for a, b in zip(lo, hi)))
-        print('   кости (номер: вершин с весом): ' + ', '.join(f'{b}: {n}' for b, n in m.bone_usage().items()))
+        if m.bones:                                 # у сеток-реквизита (rendering/prop/…) костей нет
+            print('   кости (номер: вершин с весом): ' + ', '.join(f'{b}: {n}' for b, n in m.bone_usage().items()))
 
 
 def cmd_roundtrip(args):
@@ -1750,11 +1902,12 @@ def cmd_shin(args):
     if objdir:
         export_objs(objdir, res, log=print)
     if not no_prev:
-        afters = [(f'после (сила {strength:g})', {t: res[SOCK.format(t=t, lod=2)] for t in variants})]
+        lab = f'после (сила {strength:g})' if is_nhl13() else f'{PROFILE.title} с модом (сила {strength:g})'
+        afters = [(lab, {t: res[SOCK.format(t=t, lod=2)] for t in variants})]
         for cs in compare:
             r2, _ = shin_build(cs, variants, lods=(2,), log=lambda *a: None, taper=taper)
             afters.append((f'сила {cs:g}', {t: r2[SOCK.format(t=t, lod=2)] for t in variants}))
-        preview(afters, prev, variants)
+        preview(afters, prev, variants, **preview_labels())
 
 
 def export_objs(objdir, res=None, log=print):
@@ -1774,21 +1927,42 @@ def export_objs(objdir, res=None, log=print):
     log(f'OBJ: {objdir}')
 
 
-def cmd_preview(args):
-    out = opt(args, '--out', os.path.join(models_dir(), 'out'))
-    prev = opt(args, '--preview', os.path.join(models_dir(), 'preview'))
-    variants = tuple(int(x) for x in opt(args, '--variants', '0,1,2,3').split(','))
+def preview_labels():
+    """Подписи листа: у NHL 13 — «до»/«после» как раньше, у другой игры — с её названием."""
+    if is_nhl13():
+        return {}
+    return {'before_label': f'{PROFILE.title}, оригинал',
+            'title': f'Голень (гетра), {PROFILE.title}: оригинал, с модом и NHL 13 с модом'}
+
+
+def load_socks(out, variants):
     after = {}
     for t in variants:
         p = os.path.join(out, *SOCK.format(t=t, lod=2).split('/'))
         if os.path.exists(p):
             after[t] = Mesh.load(p)
+    return after
+
+
+def cmd_preview(args):
+    out = opt(args, '--out', os.path.join(models_dir(), 'out'))
+    prev = opt(args, '--preview', os.path.join(models_dir(), 'preview'))
+    variants = tuple(int(x) for x in opt(args, '--variants', '0,1,2,3').split(','))
+    nhl13_out = opt(args, '--nhl13-out', os.path.join(nhl13_models_dir(), 'out'))
+    with13 = not flag(args, '--no-nhl13') and os.path.isdir(nhl13_out)
+    after = load_socks(out, variants)
     lab = 'после'
     mp = os.path.join(out, 'manifest.json')
     if os.path.exists(mp):
         st = json.load(open(mp, encoding='utf-8')).get('strength')
         lab = f'сила {st:g}' if st is not None else lab
-    preview([(lab, after)], prev, variants)
+    afters = [(lab, after)]
+    if not is_nhl13():
+        afters = [(f'{PROFILE.title} с модом' + (f' ({lab})' if lab != 'после' else ''), after)]
+        if with13:                                    # готовые гетры NHL 13 — с текстурами и коньками NHL 13
+            with game_profile('nhl13'):
+                afters.append(('NHL 13 с модом', load_socks(nhl13_out, variants), 'nhl13'))
+    preview(afters, prev, variants, **preview_labels())
 
 
 def cmd_import(args):
@@ -1816,7 +1990,7 @@ def cmd_import(args):
 
 
 def main():
-    args = sys.argv[1:]
+    args = take_game(sys.argv[1:])
     if not args:
         print(__doc__)
         return
