@@ -65,9 +65,27 @@ void CallLocked(const char* name, GuestFn& cached, PPCContext& ctx, uint8_t* bas
     CallLocked(#name, original, ctx, base);              \
   }
 
-NHL13_LOCKED_IMPORT(__imp__XamInputGetState)
+// port-fr (тесты): виртуальный геймпад из nhl13_pad.txt (src/nhl13_pad.cpp)
+void Nhl13PadAfterGetState(PPCContext& ctx, uint8_t* base, uint32_t user, uint32_t state);
+bool Nhl13PadKeystroke(PPCContext& ctx, uint8_t* base);
+
+extern "C" void __imp__XamInputGetState(PPCContext& ctx, uint8_t* base) {
+  static GuestFn original = nullptr;
+  const uint32_t user = ctx.r3.u32;
+  const uint32_t state = ctx.r5.u32;
+  CallLocked("__imp__XamInputGetState", original, ctx, base);
+  Nhl13PadAfterGetState(ctx, base, user, state);
+}
+
+extern "C" void __imp__XamInputGetKeystrokeEx(PPCContext& ctx, uint8_t* base) {
+  static GuestFn original = nullptr;
+  if (Nhl13PadKeystroke(ctx, base)) {
+    return;
+  }
+  CallLocked("__imp__XamInputGetKeystrokeEx", original, ctx, base);
+}
+
 NHL13_LOCKED_IMPORT(__imp__XamInputGetCapabilities)
-NHL13_LOCKED_IMPORT(__imp__XamInputGetKeystrokeEx)
 NHL13_LOCKED_IMPORT(__imp__XamInputSetState)
 
 #endif

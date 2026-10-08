@@ -25,6 +25,7 @@ set(NHL13_SOURCES
     src/nhl13_composite.cpp
     src/nhl13_fencewait.cpp
     src/nhl13_schedule.cpp
+    src/nhl13_pad.cpp
 )
 
 if(WIN32)
