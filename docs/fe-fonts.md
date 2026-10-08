@@ -220,11 +220,135 @@ python tools/fefont.py coverage game/work/fe-font/out
 Превью — `game/work/fe-font/preview/`. Настоящий шрифт NHL 12 (выше) их заменяет: у NHL 12 «чаши»
 O C D Q квадратнее, чем у Bahnschrift, и не нужна разрядка.
 
+## NHL Legacy
+
+Шрифт меню NHL 12 для NHL Legacy (агент legacy-data-fe, 08.10.2026). Порт Legacy и общий
+профиль игры — [legacy-port-feasibility.md](legacy-port-feasibility.md), `tools/gameprofile.py`.
+
+### Чем шрифты Legacy отличаются от NHL 13
+
+- **Где лежат.** Новый архив `cacheboot.big`, папка `fe/ion/fonts/` (распаковано в
+  `game/other/legacy/big/cacheboot/fe/ion/fonts/`, имена строчные). Там те же три файла меню и
+  `rockeb.ttf`. `fonts.txt` и `rockeb.ttf` побайтно такие же, как в NHL 12 и NHL 13. Подписи над
+  игроками на льду — `cacherender.big:rendering/indicator/indicatorfont.ttf` (77 Bold Condensed),
+  этот файл одинаков во всех трёх играх. Рядом лежит `indicatorfont94.ttf` — шрифт «NHL '94» для
+  ретро-режима.
+- **Рисунок свой.** Внутри не Helvetica (как в NHL 13) и не шрифт NHL 12, а свой квадратный гротеск
+  того же семейства, что у NHL 12:
+  - «Con Bold» и «Med» — один рисунок, тоньше, чем у NHL 12;
+  - «Hv» — жирный, внешне близок к «Hv» NHL 12;
+  - прописные 700, строчные 500 (у NHL 12 — 644 и 500, у NHL 13 — 674 и 487).
+
+  Имена в таблице `name` те же, что в NHL 13. Отличие одно: у «Con Bold» подсемейство `Regular`, вес
+  500, ширина 5 (в NHL 13 — `Condensed Bold`, 700 и 3). Размеры файлов: 90 864 (Con Bold),
+  90 456 (Med), 86 616 (Hv) байт.
+- **Набор символов.** Как в NHL 13, плюс Ę ę (U+0118/0119): 328 символов у «Con Bold» и «Med», 326 у
+  «Hv». В «Hv» нет ℠ и табуляции.
+- **`font_extents.txt` посчитан по самим файлам.** У «Con Bold» — 952/221, а не по 77 Bold Condensed,
+  как в NHL 13 (`python tools/fefont.py extents --game legacy` — 0 расхождений по всем трём
+  блокам). Вертикальные метрики Legacy (hhea 714/−286/200, win 952/221 и 951/234) те же, что в
+  NHL 13. Сборка их сохраняет, поэтому `font_extents.txt` Legacy остаётся верным и в `cache:` не
+  нужен.
+- **Табло матча.** Ролики `cacheoverlay.big` ссылаются на «EA HelveticaNeue Con Bold» (около 30
+  роликов, ещё около 10 — на «Med» и «Hv»). Поэтому табло меняется вместе с меню. В оригинале
+  Legacy оно тоже квадратное, так что разница видна в основном по толщине: в моде буквы и цифры
+  жирнее.
+
+### Предел размера файла: в коде его нет
+
+Загрузчик шрифтов один и тот же в NHL 13 и Legacy (найден по строкам `Font File Buffer` и
+`FontsBuf` в образе, `legacy-port/strusers.py`):
+
+- Legacy `82826020` (NHL 13 — `82F605C0`) читает `fonts.txt` целиком в буфер `FontsBuf`
+  (размер + 1). По строкам он собирает путь и для каждого файла вызывает `828251C0` (NHL 13 —
+  `82F604E0`).
+- Тот открывает файл и берёт его размер. Под **ровно этот размер** выделяется буфер
+  `Font File Buffer` (`825AB6D8` → менеджер памяти). Затем файл читается и шрифт создаётся из памяти
+  (`82824FF0`).
+
+Постоянного буфера под шрифт нет. Пулы памяти заданы текстом конфигурации внутри xex
+(`AddAllocator`/`AddCategoryAllocator`, Legacy `0x820DA1A0`/`0x820DB6C0`). Категория `RWFONT` берёт
+память по очереди из `GlobalSBA` (блоки до 256 байт), `RWFontPP` (2,5 МБ на Xenon), `GlobalPP` и
+`GlobalOverflow`, `allowfail=0` — исчерпание пула шрифтов уходит в общую кучу.
+
+Правило «не больше оригинала» в `fefont.py` остаётся как запас. Сборка NHL 12 его выполняет с
+запасом: 80,7 / 80,7 / 80,9 КБ против 90,9 / 90,5 / 86,6 КБ у Legacy, всего 242 КБ вместо 268 КБ.
+Хинтинг игра не применяет (см. выше), поэтому вариант без хинтинга не понадобился.
+
+### Сборка
+
+```bash
+D=game/other/nhl12/big/cache/fe/ion/fonts
+O=game/work/legacy-data/fe/fonts/out-nhl12
+python tools/fefont.py build $O --game legacy --keep --add ℠ \
+    --face conbold=$D/eahelveticaneueconbol-mod.ttf --face med=$D/eahelveticaneuemed-mod.ttf \
+    --face hv=$D/eahelveticaneuehv-mod.ttf
+mkdir -p game/work/legacy-data/out/fe/ion/fonts && cp $O/fe/ion/fonts/*.ttf game/work/legacy-data/out/fe/ion/fonts/
+python game/work/legacy-data/fe/check_font.py        # проверки сборки (ниже)
+python tools/fefont.py coverage --game legacy $O --all-loc --db game/userdata/cache/guest/db/nhlng.db
+python tools/fefont.py compare --game legacy game/work/legacy-data/out game/work/legacy-data/fe/preview/compare_fonts.png \
+    --col "NHL 12 — оригинал=$D" --col "NHL 13 с модом (стоит в игре)=game/work/fonts/out-nhl12" \
+    --col "NHL Legacy — оригинал=game" --col "NHL Legacy с модом=game/work/legacy-data/out"
+python tools/fefont.py preview --game legacy $O game/work/legacy-data/fe/preview
+```
+
+Результат для `cache:` Legacy — `game/work/legacy-data/out/fe/ion/fonts/eahelveticaneue{conbol,med,hv}-mod.ttf`
+(имена строчные, как в архиве; игра просит `EAHelveticaNeue…-Mod.ttf`, папка `cache:` порта на
+Windows регистр не различает). Список файлов — `game/work/legacy-data/fe/files.txt`. Ставит
+legacy-data своим скриптом, при закрытой игре; подхватывается при следующем запуске.
+
+Что получается — вариант «1:1», как в NHL 13:
+
+- Глифы, ширины и хинтинг NHL 12 — байт в байт. От Legacy взяты таблица `name`, вес, ширина,
+  `fsSelection`, `macStyle` и вертикальные метрики.
+- **®** остаётся крупным, как в самих NHL 12 и Legacy. В NHL 13 его уменьшали под маленький ® NHL 13.
+- **℠** собран из S и M в рамке ™. Через `--add` он есть и в «Hv», хотя в оригинальном «Hv» Legacy
+  его не было: в базе ℠ встречается 4 раза (например, «Xcel Energy Center ℠»).
+- **Ę ę** — глифы самой Legacy, другого рисунка: прописные выше на 8 %. В строках игры они встречаются
+  только в польских сетевых строках OSDK других языков, в английской локализации, базе и составах
+  2026/27 их нет.
+- Относительно Legacy текст ниже на 8 % (прописные 644 против 700). Средняя ширина та же (×0,99),
+  прописные уже (×0,93), цифры шире на 3–4,5 %. Пункты меню и заголовки из плашек не вылезут; длинные
+  ряды цифр стоит посмотреть.
+
+### Проверено
+
+- `check_font.py` по всем трём файлам:
+  - не больше оригиналов Legacy, контрольные суммы таблиц и `checkSumAdjustment` верны;
+  - `name` — Legacy байт в байт; вес, ширина, `fsSelection`, `macStyle` и вертикальные метрики — Legacy;
+  - строки `font_extents.txt` по формуле — как у оригиналов;
+  - все символы Legacy есть;
+  - глифы (332/332, 332/332, 325/325), ширины и `fpgm`/`prep`/`cvt` — NHL 12 байт в байт;
+  - рисунок общих символов совпадает со сборкой, что стоит в NHL 13 (`game/work/fonts/out-nhl12`),
+    кроме ®.
+- `coverage --game legacy`: проверены английская локализация и база, которые стоят в `cache:` порта
+  Legacy, и составы 2026/27 (`--db` с базой NHL 13). Все символы, которые есть в шрифтах Legacy, есть
+  и в сборке. С `--all-loc` (все 8 файлов локализации Legacy) нет только символов, которых нет и в
+  оригинале (Ą Ć Ł Ń Ő Ś Ű Ż и иероглифы списка языков).
+- Превью — `game/work/legacy-data/fe/preview/`: `compare_fonts.png` в четыре колонки (NHL 12 /
+  NHL 13 с модом / Legacy / Legacy с модом) и `*_before_after.png` со всеми символами (красным —
+  Ę ę из оригинала).
+- **В игре** (legacy-data, 08.10.2026 20:18–20:21, порт `legacy-port`, D3D12 ROV): три файла
+  подхватились — в логе нет `FAILED` для `cache:\fe\ion\fonts\EAHelveticaNeue…-Mod.ttf`, падений нет.
+  Снимки — `game/work/legacy-data/ingame/` (`t1-orig-*` — оригинал, `t2-font-*` — с модом):
+  - Play Now → Select Teams: заголовок, «COYOTES®», «DUCKS™», «VS», нижняя панель подсказок;
+  - Starting Lineups;
+  - табло: жирнее оригинала.
+- NHL 13 (без `--game`): `fefont.py` до и после правок даёт побайтно одно и то же. Проверены сборки,
+  отчёты, `coverage`, `compare`, `preview` и прочие команды — см. сообщение коммита.
+
+### Что проверить в игре
+
+- Главное меню: пункты («Hv»), выделение, бегущая строка EA Trax.
+- Live the Life и Be a GM — длинные тексты «Med» в окнах.
+- Таблицы статистики — ряды цифр (цифры NHL 12 на 3–4,5 % шире, чем у Legacy).
+- Арена «Xcel Energy Center ℠».
+
 ## Не проверено
 
 - Кернинг: у шрифтов NHL 12 и NHL 13 его нет, применяет ли интерфейс таблицу `kern` своих шрифтов
   (у `TextFormat` в Apt есть флаг `kerning`, встречается `kerning="1"` в `nhlbackgroundcard.big`).
-- Жёсткий буфер под файлы шрифтов (строки `Font File Buffer`, `FontsBuf`, пул `RWFontPP` 2,6 МБ) —
-  сборки не больше оригиналов, предел не искали.
+- Жёсткий буфер под файлы шрифтов: в коде его нет, буфер выделяется по размеру файла (раздел
+  «NHL Legacy», загрузчик тот же, что в NHL 13). Сборки всё равно не больше оригиналов.
 - Тексты с `Arial` (отладочные экраны) по-прежнему без шрифта: `arial.ttf` в `fonts.txt` есть, файла нет.
 - Вариант «под NHL 13» (`out-nhl12-cap`) в игре не запускался (тот же шрифт крупнее на 4,7 %).
