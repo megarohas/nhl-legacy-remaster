@@ -30,6 +30,7 @@
 | [docs/teams.md](docs/teams.md) | Команды, лиги, ссылки на команду и календари в базе; НХЛ на 32 команды |
 | [docs/graphics-settings.md](docs/graphics-settings.md) | Настройки графики порта: cvar'ы рантайма, апскейл, RTV/ROV, задержка ввода, лаунчер |
 | [docs/performance.md](docs/performance.md) | Производительность: замеры GPU/CPU в игре, цена FSI против хостовых RT, спин потока рендера (исправлен), подвисания от пайплайнов, план A/B |
+| [docs/legacy-port-feasibility.md](docs/legacy-port-feasibility.md) | Перенос наработок в NHL Legacy (2015): что находится автоматически, сколько работы по каждой, как друзьям играть в Legacy на ПК, план |
 | `port/` | Проект порта ReXGlue (сгенерированный код — не в git) |
 | [tools/svod.py](tools/svod.py) | Проверка и распаковка контейнеров SVOD (установка с диска, GoD) |
 | [tools/stfs.py](tools/stfs.py) | Проверка и распаковка пакетов STFS (апдейты, сейвы) |
@@ -38,6 +39,7 @@
 | [tools/unchunk.py](tools/unchunk.py) | Разжатие EA `chunklzx` / `chunkzip` внутри `.big` |
 | [tools/big.py](tools/big.py) | Архивы EA `.big`: BigEB v3 и BIG4 (NHL 10), RefPack и chunk-сжатие, весь диск по папкам пулом процессов |
 | [tools/ppcdis.py](tools/ppcdis.py) | Мини-дизассемблер PowerPC для разведки по образу |
+| [tools/xmatch.py](tools/xmatch.py) | Сопоставление кода двух образов серии (NHL 13 → Legacy, NHL 12): функции и места врезок по маскированным сигнатурам и графу вызовов |
 | [tools/tdb_read.py](tools/tdb_read.py) | Читалка баз EA TDB v6 (только чтение) |
 | [tools/tdb.py](tools/tdb.py) | Запись полей TDB, пересчёт CRC базы и обёртки сейва |
 | [tools/locdb.py](tools/locdb.py) | Строки локализации (Хаффман): выгрузка и правка |
