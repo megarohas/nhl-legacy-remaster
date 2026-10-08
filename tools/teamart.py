@@ -7,8 +7,9 @@
     python teamart.py render SVG OUT.png W H [--strip 4,5]
                                                          # SVG → PNG через Chrome/Edge без окна (прозрачный фон);
                                                          # --strip — номера <path>, которые убрать (знак ®)
-    python teamart.py build SPEC.json OUTDIR [--only t,s,d,c,w,r,center,puck,banner,spot] [--preview DIR]
-                                                         # исходник (SVG) → все наборы под artid из SPEC
+    python teamart.py build SPEC.json OUTDIR [--only t,s,d,c,w,r,center,puck,banner,spot] [--preview DIR] [--legacy]
+                                                         # исходник (SVG) → все наборы под artid из SPEC; размеры и
+                                                         # растушёвка — по замерам EA (--legacy — сборка от 08.10 утра)
     python teamart.py alias SRC_ARTID DST_ARTID OUTDIR   # копия файлов формы команды под другой artid
                                                          # (имена растров внутри переписываются; та же длина номера)
 
@@ -660,6 +661,71 @@ def html_for(kind, spec, uri):
     raise ValueError(kind)
 
 
+def html_for_ea(kind, spec, uri, scale=1.0):
+    """Как html_for, но под замеры EA: t/d/r — с поправкой размера scale (подбирается по SIZE_TARGET в
+    build(..., ea_fit=True)), r — тем же кадром, что t; c и w — без CSS-маски (растушёвка — маской EA,
+    EA_MASKS, после рендера)."""
+    c1, c2 = spec['colors'][0], spec['colors'][1]
+    if kind == 't':        # 256×256: логотип по центру, тень и блик
+        l, t, w, h = _place(spec, 188, 196, 128, 128, scale_fit=scale)
+        return 256, 256, page(256, 256, logo_layers(uri, l, t, w, h, gloss=0.22, shadow='0 2px 3px rgba(0,0,0,0.75)'))
+    if kind == 'd':        # 128×128
+        l, t, w, h = _place(spec, 108, 100, 64, 64, scale_fit=scale)
+        return 128, 128, page(128, 128, logo_layers(uri, l, t, w, h, gloss=0.22, shadow='0 1px 2px rgba(0,0,0,0.75)'))
+    if kind == 'r':        # 256×512: логотип как t (тот же размер, центр y=150) + отражение снизу
+        l, t, w, h = _place(spec, 188, 196, 128, 150, scale_fit=scale)
+        bx, by, bw, bh = spec['box']
+        vx, vy, vw, vh = spec['viewbox']
+        k = w / vw
+        bottom = t + (by - vy + bh) * k                 # низ рисунка
+        top2 = 2 * bottom - (t + h) + 6                 # зеркальная копия под ним (отступ 6)
+        refl = (f'<div class="a" style="left:0;top:{bottom + 6:.2f}px;width:256px;height:{512 - bottom - 6:.2f}px;'
+                f'overflow:hidden;-webkit-mask-image:linear-gradient(180deg,rgba(0,0,0,0.26) 0px,rgba(0,0,0,0) 64px);'
+                f'mask-image:linear-gradient(180deg,rgba(0,0,0,0.26) 0px,rgba(0,0,0,0) 64px);">'
+                f'<img class="a" src="{uri}" style="left:{l:.2f}px;top:{top2 - bottom - 6:.2f}px;width:{w:.2f}px;'
+                f'height:{h:.2f}px;transform:scaleY(-1);"></div>')
+        return 256, 512, page(256, 512, refl + logo_layers(uri, l, t, w, h, gloss=0.22, shadow='0 2px 3px rgba(0,0,0,0.75)'))
+    if kind == 's':        # 128×64: «таблетка» 114×46 со скруглением, заливка цветом команды, крупный план
+        zx, zy, zk = spec.get('small_focus', (0.5, 0.5, 1.9))
+        vx, vy, vw, vh = spec['viewbox']
+        bx, by, bw, bh = spec['box']
+        k = 46 * zk / bh
+        w, h = vw * k, vh * k
+        l = 64 - (bx - vx + bw * zx) * k
+        t = 32 - (by - vy + bh * zy) * k
+        pill = ('left:7px;top:9px;width:114px;height:46px;border-radius:9px;overflow:hidden;'
+                f'background:linear-gradient(180deg,{c2} 0%,{c1} 100%);'
+                'box-shadow:0 0 1px 1px rgba(0,0,0,0.55);')
+        inner = (f'<img class="a" src="{uri}" style="left:{l - 7:.2f}px;top:{t - 9:.2f}px;width:{w:.2f}px;height:{h:.2f}px;">'
+                 '<div class="a" style="left:0;top:0;width:114px;height:46px;'
+                 'background:linear-gradient(180deg,rgba(255,255,255,0.30) 0%,rgba(255,255,255,0.12) 49%,'
+                 'rgba(0,0,0,0.10) 51%,rgba(0,0,0,0.28) 100%);box-shadow:inset 0 0 6px rgba(0,0,0,0.55);"></div>')
+        return 128, 64, page(128, 64, f'<div class="a" style="{pill}">{inner}</div>')
+    if kind == 'c':        # сцена 98×86: крупный план; растушёвка — маской EA (EA_MASKS) после рендера
+        l, t, w, h = _place(spec, 96, 84, 49, 43, scale_fit=spec.get('calendar_zoom', 1.45))
+        body = (f'<div class="a" style="left:0;top:0;width:98px;height:86px;overflow:hidden;">'
+                + logo_layers(uri, l, t, w, h, gloss=0.18) + '</div>')
+        return 128, 128, page(128, 128, body)
+    if kind == 'w':        # 256×256: крупный план (×1.6) с мягкими краями
+        zx, zy, zk = spec.get('wide_focus', (0.5, 0.5, 1.6))
+        vx, vy, vw, vh = spec['viewbox']
+        bx, by, bw, bh = spec['box']
+        k = 220 * zk / max(bw, bh)
+        w, h = vw * k, vh * k
+        l = 128 - (bx - vx + bw * zx) * k
+        t = 128 - (by - vy + bh * zy) * k
+        body = (f'<div class="a" style="left:0;top:0;width:256px;height:256px;overflow:hidden;">'
+                + logo_layers(uri, l, t, w, h, gloss=0.15) + '</div>')    # маска — EA_MASKS после рендера
+        return 256, 256, page(256, 256, body)
+    if kind == 'banner':   # 512×512 DXT3: логотип на прозрачном (как banner_93 у EA)
+        l, t, w, h = _place(spec, 440, 440, 256, 256)
+        return 512, 512, page(512, 512, logo_layers(uri, l, t, w, h))
+    if kind == 'spot':     # 256×256 DXT5: логотип для проекции прожекторами на лёд (как spotlight/texlib_0)
+        l, t, w, h = _place(spec, 232, 200, 128, 128)
+        return 256, 256, page(256, 256, logo_layers(uri, l, t, w, h))
+    raise ValueError(kind)
+
+
 def logo_only(spec, size, box, cx, cy, tmpdir, name):
     """Плоский логотип (без тени и блика) в квадрате size×size → RGBA."""
     l, t, w, h = _place(spec, box, box, cx, cy)
@@ -768,6 +834,77 @@ def puck_rgba(spec, tmpdir):
     return bytes(res)
 
 
+# Шайба. Верхняя грань — круг с центром (127.5, 172) (кольцо грани — радиус ~89 у НХЛ, ~115 у АХЛ),
+# нижняя грань и бока — как у шаблона.
+#  * НХЛ — шаблон puck_255_cm (EA SPORTS): надписи «National Hockey League / Official Game Puck» по кругу,
+#    в середине белый «пятак» радиуса ~36 с логотипом EA. Ставим белый круг радиуса 42 (надписи не
+#    задеваются) с серой каймой и логотип команды в нём; низ — логотип НХЛ.
+#  * АХЛ — шаблон puck_150_cm: тёмная грань (34, 38, 37) с рельефным ободком на радиусе 112–118,
+#    логотип команды прямо на грани (до радиуса ~95); низ — логотип АХЛ. Грань до радиуса 107
+#    закрашивается её цветом, логотип вписывается в радиус 94.
+PUCKS = {
+    'nhl': {'template': 'rendering/puck/puck_255_cm.rx2', 'center': (127.5, 172.0), 'r_white': 42.0,
+            'r_rim': 44.5, 'rim': (150, 154, 160), 'r_logo': 38.0},
+    'ahl': {'template': 'rendering/puck/puck_150_cm.rx2', 'center': (127.5, 172.0), 'r_clear': 107.0,
+            'face': (34, 38, 37), 'r_logo': 94.0},
+}
+
+
+def fit_logo(spec, size, r_logo, tmpdir, name):
+    """Плоский логотип в квадрате size×size с центром посередине: наибольший радиус рисунка = r_logo."""
+    c = size / 2
+    box = 2 * r_logo
+    logo = logo_only(spec, size, box, c, c, tmpdir, name)
+    r = max_radius(logo, size, size, c, c)
+    if r > 0:
+        logo = logo_only(spec, size, box * r_logo / r, c, c, tmpdir, name)
+    return logo
+
+
+def puck_rgba_league(spec, tmpdir):
+    """Шайба по spec["league"] (nhl | ahl, PUCKS): логотип по центру грани (127.5, 172), вписан по
+    наибольшему радиусу. Прежняя puck_rgba — НХЛ, центр (128, 169), рамка 70×70."""
+    style = spec.get('league', 'nhl')
+    P = PUCKS[style]
+    tpl = Rw4.load(extracted(P['template']))
+    t = tpl.textures[0]
+    w, h, base = tpl.decode(t, 0)
+    cx, cy = P['center']
+    out = bytearray(base)
+    reach = int(P.get('r_clear', P.get('r_rim', 60))) + 3
+    for y in range(int(cy) - reach, int(cy) + reach + 1):
+        for x in range(int(cx) - reach, int(cx) + reach + 1):
+            d = math.hypot(x + 0.5 - cx, y + 0.5 - cy)
+            o = (y * w + x) * 4
+            if style == 'nhl':
+                if d < P['r_white']:
+                    out[o:o + 3] = bytes((255, 255, 255))
+                elif d < P['r_rim']:
+                    out[o:o + 3] = bytes(P['rim'])
+            else:
+                rc = P['r_clear']
+                k = 1.0 if d <= rc - 1 else max(0.0, (rc + 1 - d) / 2)   # мягкий край
+                if k:
+                    for c in range(3):
+                        out[o + c] = int(P['face'][c] * k + out[o + c] * (1 - k) + 0.5)
+    logo = fit_logo(spec, 256, P['r_logo'], tmpdir, 'puck_logo.png')
+    # логотип 256×256 (центр 128, 128) → в точку (cx, cy) текстуры
+    dx, dy = int(round(cx - 128)), int(round(cy - 128))
+    lay = bytearray(w * h * 4)
+    for y in range(256):
+        ty = y + dy
+        if not 0 <= ty < h:
+            continue
+        for x in range(256):
+            tx = x + dx
+            if 0 <= tx < w:
+                lay[(ty * w + tx) * 4:(ty * w + tx) * 4 + 4] = logo[(y * 256 + x) * 4:(y * 256 + x) * 4 + 4]
+    res = bytearray(over(bytes(out), bytes(lay), w, h))
+    for i in range(3, len(res), 4):
+        res[i] = 255                                         # DXT1, непрозрачная
+    return bytes(res)
+
+
 def measure_box(svg_uri, viewbox, tmpdir):
     """Рамка рисунка в единицах viewBox: рендер в 2× и границы альфы."""
     vx, vy, vw, vh = viewbox
@@ -789,6 +926,57 @@ def measure_box(svg_uri, viewbox, tmpdir):
     return [vx + xs0 / k, vy + ys0 / k, (xs1 - xs0 + 1) / k, (ys1 - ys0 + 1) / k]
 
 
+# Размеры по замеру оригиналов EA 0…29 (непрозрачная часть, альфа > 128): t — рамка w 144…191 (медиана 171),
+# h 98…182 (150), площадь 8 493…23 997 (17 111); d — w 66…105 (87), h 50…88 (78,5), площадь 2 404…6 006 (4 267).
+# Свой логотип масштабируется к медианной площади, но не выше max_h и не шире max_w.
+SIZE_TARGET = {'t': dict(area=17111, max_w=191, max_h=170), 'd': dict(area=4267, max_w=105, max_h=86)}
+# Растушёвка c и w — альфа оригиналов EA, где логотип закрывает всю сцену (у всех одинаковая): w — круг с
+# центром (125, 128), 50 % на радиусе ~67, ноль к ~124; c — скруглённый прямоугольник 84×73 от (7, 6) с
+# мягким краем ~14 px. Маска = поточечный максимум альфы этих файлов.
+EA_MASKS = {'w': ('teamlogoswide', 'w', (2, 4, 5)), 'c': ('teamlogoscalendar', 'c', (1, 3, 11))}
+_MASK_CACHE = {}
+
+
+def ea_mask(kind, game=None):
+    if kind not in _MASK_CACHE:
+        folder, letter, nums = EA_MASKS[kind]
+        best = None
+        for n in nums:
+            lg = UiLogo.load(extracted(f'fe/ion/artassets/{folder}/{letter}{n}.big', game))
+            w, h, rgba = lg.decode()
+            a = rgba[3::4]
+            best = bytearray(a) if best is None else bytearray(max(x, y) for x, y in zip(best, a))
+        _MASK_CACHE[kind] = (w, h, bytes(best))
+    return _MASK_CACHE[kind]
+
+
+def apply_mask(rgba, w, h, mask):
+    mw, mh, m = mask
+    if (mw, mh) != (w, h):
+        raise ValueError(f'маска {mw}×{mh}, картинка {w}×{h}')
+    out = bytearray(rgba)
+    for i in range(w * h):
+        a = out[i * 4 + 3] * m[i] // 255
+        out[i * 4 + 3] = a
+        if not a:
+            out[i * 4:i * 4 + 3] = bytes(3)
+    return bytes(out)
+
+
+def alpha_stats(rgba, w, h, thr=128):
+    """Рамка (w, h) и площадь непрозрачной части (альфа > thr) — как в замерах оригиналов."""
+    xs0, ys0, xs1, ys1, area = w, h, -1, -1, 0
+    for y in range(h):
+        for x in range(w):
+            if rgba[(y * w + x) * 4 + 3] > thr:
+                area += 1
+                xs0, xs1 = min(xs0, x), max(xs1, x)
+                ys0, ys1 = min(ys0, y), max(ys1, y)
+    if xs1 < 0:
+        return 0, 0, 0
+    return xs1 - xs0 + 1, ys1 - ys0 + 1, area
+
+
 UI_SETS = {   # набор: папка, буква
     't': ('teamlogos', 't'), 's': ('teamlogossmall', 's'), 'd': ('teamlogosdynasty', 'd'),
     'c': ('teamlogoscalendar', 'c'), 'w': ('teamlogoswide', 'w'), 'r': ('teamlogosreflection', 'r'),
@@ -800,6 +988,20 @@ RX_SETS = {   # набор: путь (формат номера), шаблон �
     'puck': ('rendering/puck/puck_{}_cm.rx2', 'rendering/puck/puck_93_cm.rx2', 93, 'artid'),
     'spot': ('rendering/spotlight/texlib_{}.rx2', 'rendering/spotlight/texlib_33.rx2', 33, 'spotlight'),
 }
+# Шаблоны контейнеров по числу цифр своего номера (имя растра внутри переписывается на месте — длина
+# номера должна совпасть). 3-значных одиночных прожекторов у EA нет.
+RX_TEMPLATES = {'center': {2: 93, 3: 150}, 'banner': {2: 93, 3: 150}, 'puck': {2: 93, 3: 150}, 'spot': {2: 33}}
+
+
+def rx_template(kind, num):
+    """Шаблон контейнера для своего номера: (путь в архиве, номер шаблона) с тем же числом цифр."""
+    pattern = RX_SETS[kind][0]
+    by_digits = RX_TEMPLATES[kind]
+    digits = len(str(num))
+    if digits not in by_digits:
+        raise SystemExit(f'{kind}: нет шаблона для {digits}-значного номера {num}')
+    n = by_digits[digits]
+    return pattern.format(n), n
 
 
 def extracted(rel, game=None):
@@ -813,20 +1015,29 @@ def ui_template(kind, game=None):
     return extracted(f'fe/ion/artassets/{folder}/{letter}0.big', game)
 
 
-def build(spec_path, outdir, only=None, preview=None):
+def build(spec_path, outdir, only=None, preview=None, ea_fit=False):
     """SPEC.json: artid, svg (путь от SPEC), strip_paths (номера <path> — знак ®), colors [низ, верх
     «таблетки»], small_focus / wide_focus [доля x, доля y, увеличение], center_box (px, по умолчанию 640),
-    calendar_zoom (по умолчанию 1.45), spotlight (номер прожектора; нет — набор spot пропускается).
-    Рамка рисунка (box) считается сама, если её нет."""
+    calendar_zoom (по умолчанию 1.45), spotlight (номер прожектора; нет — набор spot пропускается),
+    league: nhl | ahl (наборы по умолчанию: у АХЛ без r и spot; шаблон шайбы — при ea_fit).
+    Рамка рисунка (box) считается сама, если её нет.
+    ea_fit=True — размеры t/d/r по замерам EA (SIZE_TARGET), растушёвка c/w — маской EA (EA_MASKS), шайба —
+    puck_rgba_league (центр грани, лига); по умолчанию — прежняя сборка (html_for, puck_rgba)."""
     spec = json.load(open(spec_path, encoding='utf-8'))
     base = os.path.dirname(os.path.abspath(spec_path))
     svg = svg_text(os.path.join(base, spec['svg']), tuple(spec.get('strip_paths', ())))
     spec['viewbox'] = _svg_viewbox(svg)
     uri = spec['_uri'] = data_uri(svg)
     artid = int(spec['artid'])
-    kinds = only or ['t', 's', 'd', 'c', 'w', 'r', 'center', 'puck', 'banner', 'spot']
+    if only:
+        kinds = only
+    elif spec.get('league', 'nhl') == 'ahl':          # у клубов АХЛ нет r-набора, прожектор и туннель общие (34)
+        kinds = ['t', 's', 'd', 'c', 'w', 'center', 'puck', 'banner']
+    else:
+        kinds = ['t', 's', 'd', 'c', 'w', 'r', 'center', 'puck', 'banner', 'spot']
     tmp = tempfile.mkdtemp(prefix='teamart_b_')
     made = []
+    scales = {}
     try:
         if 'box' not in spec:
             spec['box'] = measure_box(uri, spec['viewbox'], tmp)
@@ -835,31 +1046,53 @@ def build(spec_path, outdir, only=None, preview=None):
             if kind in UI_SETS:
                 folder, letter = UI_SETS[kind]
                 tpl = UiLogo.load(ui_template(kind))
-                W, H, html = html_for(kind, spec, uri)
+                base = 't' if kind == 'r' else kind
+                scale = 1.0
+                if ea_fit and base in SIZE_TARGET:
+                    if base not in scales:
+                        tg = SIZE_TARGET[base]
+                        for _ in range(4):              # рендер → замер → поправка (тень добавляет пару px)
+                            W, H, html = html_for_ea(base, spec, uri, scale)
+                            png = os.path.join(tmp, f'{base}_fit.png')
+                            render_html(html, png, W, H)
+                            bw, bh, area = alpha_stats(ph.png_read(png)[2], W, H)
+                            f = min(math.sqrt(tg['area'] / area), tg['max_h'] / bh, tg['max_w'] / bw)
+                            if 0.998 <= f <= 1.01:          # не крупнее целей, мельче — не больше чем на 1 %
+                                break
+                            scale *= f
+                        scales[base] = scale
+                        print(f'{base}: масштаб {scale:.3f} (рамка {bw}×{bh}, площадь {area})')
+                    scale = scales[base]
+                W, H, html = html_for_ea(kind, spec, uri, scale) if ea_fit else html_for(kind, spec, uri)
                 png = os.path.join(tmp, f'{kind}.png')
                 render_html(html, png, W, H)
                 _, _, rgba = ph.png_read(png)
                 tw, th = tpl.fetch.width, tpl.fetch.height
+                if ea_fit and kind in EA_MASKS:
+                    if (W, H) != (tw, th):
+                        rgba, W, H = ph.place(rgba, W, H, tw, th), tw, th
+                    rgba = apply_mask(rgba, W, H, ea_mask(kind))
                 if (W, H) != (tw, th):
                     rgba = ph.place(rgba, W, H, tw, th)
                 data = tpl.build(rgba, 'md5')
                 rel = f'fe/ion/artassets/{folder}/{letter}{artid}.big'
             else:
-                pattern, tpl_rel, tpl_num, key = RX_SETS[kind]
+                pattern, _, _, key = RX_SETS[kind]
                 if key not in spec:
                     print(f'{kind}: в SPEC нет «{key}» — пропуск')
                     continue
                 num = int(spec[key])
+                tpl_rel, tpl_num = rx_template(kind, num)
                 tpl = Rw4.load(extracted(tpl_rel))
                 t = tpl.textures[0]
                 if kind == 'puck':
-                    rgba = puck_rgba(spec, tmp)
+                    rgba = puck_rgba_league(spec, tmp) if ea_fit else puck_rgba(spec, tmp)
                     W, H = t.fetch.width, t.fetch.height
                 elif kind == 'center':
                     rgba = center_rgba(spec, tmp)
                     W, H = t.fetch.width, t.fetch.height
                 else:
-                    W, H, html = html_for(kind, spec, uri)
+                    W, H, html = html_for_ea(kind, spec, uri) if ea_fit else html_for(kind, spec, uri)
                     png = os.path.join(tmp, f'{kind}.png')
                     render_html(html, png, W, H)
                     _, _, rgba = ph.png_read(png)
@@ -1030,7 +1263,7 @@ def main():
     elif cmd == 'build':
         only = args[args.index('--only') + 1].split(',') if '--only' in args else None
         preview = args[args.index('--preview') + 1] if '--preview' in args else None
-        build(args[0], args[1], only, preview)
+        build(args[0], args[1], only, preview, ea_fit='--legacy' not in args)
     elif cmd == 'alias':
         alias_uniforms(int(args[0]), int(args[1]), args[2])
     else:
