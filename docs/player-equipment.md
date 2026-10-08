@@ -121,8 +121,7 @@ CRC сходятся; изменились только записанные п�
 
 ## В игре: только через сохранённый состав
 
-Проверено 08.10.2026: база с экипировкой (`nhlng-equip.db`) стояла в `cache:\db
-hlng.db`, игра
+Проверено 08.10.2026: база с экипировкой (`nhlng-equip.db`) стояла в `cache:\db\nhlng.db`, игра
 запущена после установки, а в составе, который пользователь сохранил в той же сессии, экипировка у
 всех 4875 полевых — как в базе EA 2012 года (обмотка Овечкина белая, свитер заправлен). Всё
 остальное из нашей базы игра взяла: имена, составы, рейтинги, тон кожи, команды, календари. Откуда
@@ -161,7 +160,8 @@ python -m roster.equipment sheet --visor-rule --jersey-rule   # лист про�
 python -m roster.equipment apply ../game/work/roster-expanded-ahl32/nhlng-photos.db \
        ../game/work/roster-expanded-ahl32/nhlng-equip.db --visor-rule --jersey-rule \
        --report ../game/work/roster-expanded-ahl32/equipment-apply.json
-python -m roster.equipment roster "../game/userdata/B13EBABEBABEBABE/4541099B/00000001/ROSTER …/ROSTER …" \n       --report ../game/work/roster-expanded-ahl32/equipment-apply.json [--write]   # → сохранённый состав
+python -m roster.equipment roster "../game/userdata/B13EBABEBABEBABE/4541099B/00000001/ROSTER …/ROSTER …" \
+       --report ../game/work/roster-expanded-ahl32/equipment-apply.json [--write]   # → сохранённый состав
 ```
 
 Общие опции — до команды: `--work` (папка конвейера с `write.json`, по умолчанию
