@@ -13,6 +13,7 @@
 #   vk-fbo-gamma8 то же, что vk-fbo, + gamma_render_target_as_unorm16=false — проверка табло
 #   d3d12-rov     D3D12, EDRAM через ROV (прежний основной вариант)
 #   d3d12-rtv     D3D12, хостовые render target'ы (как Xenia Canary по умолчанию на NVIDIA)
+#   d3d12-rtv-2x  то же в 1440p (resolution_scale = 2)
 # Хостовым RT нужен execute_unclipped_draw_vs_on_cpu=true (умолчание Xenia; в SDK — false):
 # иначе экранные квады считаются «на весь EDRAM» и порождают лишние копии между RT.
 #
@@ -25,7 +26,7 @@
 
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet("vk-fsi", "vk-fsi-noocc", "vk-fsi-quick", "vk-fbo", "vk-fbo-noest", "vk-fbo-gamma8", "d3d12-rov", "d3d12-rtv")]
+    [ValidateSet("vk-fsi", "vk-fsi-noocc", "vk-fsi-quick", "vk-fbo", "vk-fbo-noest", "vk-fbo-gamma8", "d3d12-rov", "d3d12-rtv", "d3d12-rtv-2x")]
     [string]$Variant,
     [string]$Exe = "S:\Claude\megarohas_nhl13\port-ffx\out\build\win-amd64-release\nhl13.exe",
     [string[]]$Extra = @()
@@ -48,6 +49,7 @@ switch ($Variant) {
     "vk-fbo-gamma8" { $gameArgs += @("--render_target_path_vulkan=fbo", "--execute_unclipped_draw_vs_on_cpu=true", "--gamma_render_target_as_unorm16=false") }
     "d3d12-rov" { $gameArgs += @("--gpu_backend=d3d12", "--render_target_path_d3d12=rov") }
     "d3d12-rtv" { $gameArgs += @("--gpu_backend=d3d12", "--render_target_path_d3d12=rtv", "--execute_unclipped_draw_vs_on_cpu=true") }
+    "d3d12-rtv-2x" { $gameArgs += @("--gpu_backend=d3d12", "--render_target_path_d3d12=rtv", "--execute_unclipped_draw_vs_on_cpu=true", "--resolution_scale=2") }
 }
 $gameArgs += $Extra
 
