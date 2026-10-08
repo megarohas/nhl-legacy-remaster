@@ -32,6 +32,7 @@
 //    снаружи), фарм-клубы 220/221 → 62/63 — подмены и врезки ниже (Ahl…, AhlThirtyTwo()).
 
 #include <algorithm>
+#include <atomic>
 #include <array>
 #include <cstdint>
 #include <cstdio>
@@ -54,6 +55,11 @@
 REXCVAR_DEFINE_INT32(nhl_teams, 30, "NHL13",
                      "NHL teams in franchise: 30 = original, 32 = teams 30/31 of the DB are NHL clubs")
     .range(30, 32)
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
+
+REXCVAR_DEFINE_BOOL(nhl_guest_print_log, false, "NHL13",
+                    "Log what the game passes to its empty stub 832055C8 (first 200 texts): slow, the stub "
+                    "is called from ~3400 places every frame - only for crash hunts")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
 REXCVAR_DEFINE_INT32(nhl_ahl_teams, 30, "NHL13",
@@ -1340,6 +1346,14 @@ bool Nhl13DraftLottery(PPCRegister& r1, PPCRegister& r27, PPCRegister& r29) {
 // только «trap hit (type 22)». Строка (r3) и адрес вызова — в лог; каждая строка один раз,
 // не больше 200 разных (аудит 07.10.2026).
 extern "C" void sub_832055C8(PPCContext& ctx, uint8_t* base) {
+  // В игре это пустая функция (blr), её зовут из ~3400 мест — в том числе каждый кадр и не со
+  // строкой (в r3 — что угодно). Разбор на каждый вызов (VirtualQuery, сборка строки, мьютекс)
+  // ронял игру до ~10 кадров (08.10.2026): по умолчанию — снова пустая.
+  static const bool enabled = REXCVAR_GET(nhl_guest_print_log);
+  static std::atomic<bool> full{false};
+  if (!enabled || full.load(std::memory_order_relaxed)) {
+    return;
+  }
   static std::mutex mutex;
   static std::unordered_map<std::string, int> seen;
   const uint32_t str = ctx.r3.u32;
@@ -1378,7 +1392,11 @@ extern "C" void sub_832055C8(PPCContext& ctx, uint8_t* base) {
     return;
   }
   std::lock_guard<std::mutex> lock(mutex);
-  if (seen.size() >= 200 || seen.count(text)) {
+  if (seen.size() >= 200) {
+    full.store(true, std::memory_order_relaxed);
+    return;
+  }
+  if (seen.count(text)) {
     return;
   }
   seen[text] = 1;
