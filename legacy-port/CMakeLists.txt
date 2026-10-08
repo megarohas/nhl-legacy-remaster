@@ -24,6 +24,7 @@ set(NHLLEGACY_SOURCES
     src/nhllegacy_year.cpp
     src/nhllegacy_teams.cpp
     src/nhllegacy_team_sites.cpp
+    src/nhllegacy_salary.cpp
 )
 
 if(WIN32)
