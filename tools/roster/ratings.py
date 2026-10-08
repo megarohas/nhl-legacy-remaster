@@ -127,6 +127,31 @@ class Model:
         self.offset = {c: _median(diffs[c], 0.0) for c in 'CWDG'}
         # перцентили OVR НХЛ 2026/27 по амплуа — для тех, у кого рейтинга нет совсем
         self.depth = depth_of(players)
+        # клубы АХЛ конвейера (--ahl32: CV/HSK, составы из Wikipedia). OVR у них — оценка по статистике или по
+        # уровню АХЛ, атрибуты из него — с поправкой игроков NHL 27. У клубов АХЛ базы шкала своя: в NHL 13 медиана
+        # OVR АХЛ 76,5, а у оценок CV/HSK — 74; в Legacy сохранённый OVR АХЛ на ~9 ниже среднего атрибута (67,8 против
+        # 76,7). Новые клубы выходили слабее соседей на 3 (NHL 13) и 12 (Legacy) пунктов атрибутов. Поэтому медиана OVR
+        # по амплуа равняется на игроков АХЛ базы (ahl_shift), а атрибуты строятся с их поправкой «OVR − среднее
+        # атрибутов» (ahl_offset). Без клубов АХЛ конвейера ничего не меняется.
+        self.ahl_shift, self.ahl_offset = {}, {}
+        ahl_new = defaultdict(list)
+        for p in players:
+            if p.get('ahl') and p['rating']['source'] not in ('ea', 'nhlratings'):
+                ahl_new[cls(p['pos'])].append(p['rating']['ovr'] or default_ovr(p, self.depth))
+        if ahl_new:
+            base_ovr, base_off = defaultdict(list), defaultdict(list)
+            for r in range(v.nbio):
+                if 33 <= v.g('team', r) <= 62 and v.ai(r) and not v.created_slot(r):    # клубы АХЛ 32–61 (номер + 1)
+                    t, row = v.ai(r)
+                    fs = GK if t == G else SK
+                    c = cls({0: 'C', 1: 'L', 2: 'R', 3: 'D', 4: 'G'}[v.g('position', r)])
+                    o = v.overall(r)
+                    base_ovr[c].append(o)
+                    base_off[c].append(o - sum(db.get(t, fld(f), row) + BASE for f in fs) / len(fs))
+            for c in 'CWDG':
+                if ahl_new[c] and base_ovr[c]:
+                    self.ahl_shift[c] = _median(base_ovr[c]) - _median(ahl_new[c])
+                    self.ahl_offset[c] = _median(base_off[c])
         # стили исходной базы: «центроид» формы атрибутов и медианы тенденций ИИ
         cent, bias = defaultdict(lambda: defaultdict(list)), defaultdict(lambda: defaultdict(list))
         for r in range(db.by_name[S]['rows']):
@@ -149,9 +174,12 @@ class Model:
 
     def target_ovr(self, p):
         rt = p['rating']
+        shift = self.ahl_shift.get(cls(p['pos'])) if p.get('ahl') and rt['source'] not in ('ea', 'nhlratings') else None
         if rt['ovr']:
-            return rt['ovr']
+            return rt['ovr'] if shift is None else round(rt['ovr'] + shift, 1)
         ovr = default_ovr(p, self.depth)
+        if shift is not None:
+            ovr = round(ovr + shift, 1)
         self.estimated[p['nhl_id']] = ovr
         return ovr
 
@@ -177,8 +205,9 @@ class Model:
         # форма, сдвинутая так, чтобы среднее всех плюс поправка амплуа дало OVR
         unknown = [f for f in fs if f not in known]
         out = {f: known.get(f, shape[f]) for f in fs}
+        offset = self.ahl_offset.get(c, self.offset[c]) if p.get('ahl') else self.offset[c]   # клубы АХЛ — как у АХЛ базы
         for _ in range(10):   # упирающиеся в 36/99 значения съедают часть сдвига
-            level = sum(clamp_rating(out[f]) for f in fs) / len(fs) + self.offset[c]
+            level = sum(clamp_rating(out[f]) for f in fs) / len(fs) + offset
             delta = (ovr - level) * len(fs) / max(1, len(unknown))
             if abs(ovr - level) < 0.3 or not unknown:
                 break
