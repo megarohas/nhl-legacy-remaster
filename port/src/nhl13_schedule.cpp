@@ -47,9 +47,16 @@ REXCVAR_DEFINE_BOOL(nhl_schedule32, false, "NHL13",
                     "breaks with 32 teams)")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
+REXCVAR_DEFINE_BOOL(nhl_preseason_september, false, "NHL13",
+                    "Franchise preseason only in September: the game counts preseason games played in October "
+                    "as regular-season games (standings GP/points, player stats); with 32 teams SEA/VGK have no "
+                    "preseason, so the others got 2-3 extra games. true = drop October preseason games")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
+
 bool Nhl13ThirtyTwo();  // src/nhl13_teams.cpp
 
 extern "C" void __imp__sub_8286AD88(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__sub_828DB828(PPCContext& ctx, uint8_t* base);
 extern "C" void sub_828D3C78(PPCContext& ctx, uint8_t* base);  // GetLeague: +12 — год сезона
 extern "C" void sub_827DFE00(PPCContext& ctx, uint8_t* base);  // номер сборной (0/1), −16 — нет
 #endif
@@ -497,6 +504,45 @@ extern "C" void sub_8286AD88(PPCContext& ctx, uint8_t* base) {
               year, plan.size(), kGames, kHome, kNumDays, seed, tries, three,
               allstar ? std::to_string(allstar_a) + "/" + std::to_string(allstar_b) + " on 27.01" : std::string("no"));
   ctx.r3.u64 = n;
+}
+
+// Предсезонка франшизы: 828DB828(лига, *дата начала, буфер, вместимость, сколько уже) пишет 10 игровых дней
+// по одной игре на дивизион (6 × 10 = 60 игр, раунд 6, команды — по модулю 5 в дивизионах дерева на 30) с
+// даты «первая игра − 14» — у сезона 2026/27 это 27.09…06.10. Игра засчитывает в таблицу и статистику
+// игроков игры, сыгранные с 1 октября, даже предсезонные (сверено по сейву: у всех 32 клубов лишние игры в
+// таблице = их предсезонные игры в октябре; GP 86–87 вместо 84), а у SEA/VGK предсезонки нет совсем — у них
+// 84, у остальных 86–87 (очки и P% неравны). При nhl_preseason_september = true октябрьские предсезонные
+// игры не создаются: остаются игры 27–30 сентября (у клуба 0–2), в зачёт идёт ровно регулярка.
+extern "C" void sub_828DB828(PPCContext& ctx, uint8_t* base) {
+  static const bool on = REXCVAR_GET(nhl_preseason_september);
+  const uint32_t buf = ctx.r5.u32;
+  const uint32_t start = ctx.r7.u32;
+  __imp__sub_828DB828(ctx, base);
+  if (!on || !buf) {
+    return;  // без буфера игра пишет предсезонку прямо в базу (828D82C8) — не трогаем
+  }
+  const uint32_t n = ctx.r3.u32;
+  if (n > 200) {
+    return;
+  }
+  uint32_t kept = 0;
+  for (uint32_t i = 0; i < n; ++i) {
+    const uint32_t src = buf + (start + i) * kEntryBytes;
+    if (Load32(base, src) >= 9) {  // месяц с 0: 9 — октябрь
+      continue;
+    }
+    if (kept != i) {
+      std::memmove(base + buf + (start + kept) * kEntryBytes + (buf >= 0xE0000000u ? 0x1000u : 0u),
+                   base + src + (src >= 0xE0000000u ? 0x1000u : 0u), kEntryBytes);
+    }
+    ++kept;
+  }
+  static int logged = 0;
+  if (logged++ < 4) {
+    REXLOG_INFO("[nhl13] preseason: {} games, kept {} in September (October ones would count as regular season)",
+                n, kept);
+  }
+  ctx.r3.u64 = kept;
 }
 #endif  // !NHL13_SCHEDULE_SELFTEST
 
