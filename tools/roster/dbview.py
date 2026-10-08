@@ -14,6 +14,7 @@
 """
 from collections import defaultdict
 
+from . import common
 from .common import AHL_CLUBS
 
 B, S, G = 'exhibitionplayerbiotable', 'exhibitionskaterai', 'exhibitiongoalieai'
@@ -25,6 +26,29 @@ NATIONAL = range(128, 149)
 SPECIAL = set(NATIONAL) | set(ALLSTAR) | set(range(209, 218))   # сборные, проспекты, легенды, Зимняя классика
 CLUBS = (set(range(32, 128)) | set(range(149, 209)) | set(AHL_CLUBS)) - set(ALLSTAR)
 LINK_LIMIT = 16000                 # с 16000 — связи создаваемых игроков
+GENERIC_HEAD = 10000               # headid с 10000 — типовые головы (не сканы EA)
+LEGACY = common.GAME.name == 'legacy'
+if LEGACY:
+    # NHL Legacy (база tools/nhl32.py --game legacy): сборные Матча звёзд — 222/223, сборные стран 133–153,
+    # проспекты 214/215, Зимняя классика 216–219, команды EASHL 220/221; клубы — АХЛ…Норвегия 32–132 и
+    # юниоры CHL 154–213 (--ahl32 у Legacy нет); типовые головы — 60000+ (60000–60210)
+    ALLSTAR = (222, 223)
+    NATIONAL = range(133, 154)
+    SPECIAL = set(NATIONAL) | set(ALLSTAR) | set(range(214, 222))
+    CLUBS = (set(range(32, 133)) | set(range(154, 214))) - set(ALLSTAR)
+    GENERIC_HEAD = common.GAME.generic_heads[0]
+
+
+def fld(name):
+    """Поле атрибутов в базе по имени NHL 13 (p_*, g_*, p_style, g_style): у Legacy — c_* и playerstyle
+    (шкалы те же: значение − 36 в 6 битах; стили 1–10 полевых и 0–2 вратарей сверены по игрокам)."""
+    if not LEGACY:
+        return name
+    if name in ('p_style', 'g_style'):
+        return 'playerstyle'
+    if name[:2] in ('p_', 'g_'):
+        return 'c_' + name[2:]
+    return name
 FLAGS = ([f'l{n}{p}' for n in (1, 2, 3) for p in ('lw', 'c', 'rw', 'ld', 'rd')] + ['l4lw', 'l4c', 'l4rw']
          + [f'pp{n}{p}' for n in (1, 2) for p in ('lw', 'c', 'rw', 'ld', 'rd')]
          + [f'pp4_{n}{p}' for n in (1, 2) for p in ('lw', 'c', 'ld', 'rd')]
@@ -88,7 +112,7 @@ class View:
 
     def overall(self, r):
         t, row = self.ai(r)
-        return self.db.get(t, 'p_overall' if t == S else 'g_overall', row) + 36
+        return self.db.get(t, fld('p_overall' if t == S else 'g_overall'), row) + 36
 
     def team_name(self, t):
         return self.db.get_string(T, 'fullname', t)

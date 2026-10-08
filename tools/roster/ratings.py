@@ -20,7 +20,7 @@ import zlib
 from collections import defaultdict
 
 from .common import SEASON_YEAR
-from .dbview import B, G, S
+from .dbview import B, G, S, fld
 
 SK = ['p_deking', 'p_handeye', 'p_passing', 'p_puckcontrol', 'p_slapaccuracy', 'p_slapshotpower', 'p_wristaccuracy',
       'p_wristshotpower', 'p_acceleration', 'p_agility', 'p_balance', 'p_endurance', 'p_speed', 'p_discipline',
@@ -98,7 +98,7 @@ class Model:
                 t, row = v.ai(r)
                 fs = GK if t == G else SK
                 base[cls({0: 'C', 1: 'L', 2: 'R', 3: 'D', 4: 'G'}[v.g('position', r)])].append(
-                    {f: db.get(t, f, row) + BASE for f in fs})
+                    {f: db.get(t, fld(f), row) + BASE for f in fs})
         self.shape = {}
         for c in 'CWDG':
             fs = GK if c == 'G' else SK
@@ -130,13 +130,13 @@ class Model:
         # стили исходной базы: «центроид» формы атрибутов и медианы тенденций ИИ
         cent, bias = defaultdict(lambda: defaultdict(list)), defaultdict(lambda: defaultdict(list))
         for r in range(db.by_name[S]['rows']):
-            st = db.get(S, 'p_style', r)
-            vals = {f: db.get(S, f, r) for f in SK}
+            st = db.get(S, fld('p_style'), r)
+            vals = {f: db.get(S, fld(f), r) for f in SK}
             mean = sum(vals.values()) / len(vals)
             for f in SK:
                 cent[st][f].append(vals[f] - mean)
             for f in SK_BIAS:
-                bias[st][f].append(db.get(S, f, r))
+                bias[st][f].append(db.get(S, fld(f), r))
         self.centroid = {st: {f: statistics.mean(x) for f, x in d.items()} for st, d in cent.items()
                          if st in D_STYLES + F_STYLES and len(d['p_speed']) >= 3}
         self.bias = {st: {f: int(statistics.median(x)) for f, x in d.items()} for st, d in bias.items()}
@@ -145,7 +145,7 @@ class Model:
     # --- атрибуты ------------------------------------------------------------------------------
     def db_attrs(self, r):
         t, row = self.v.ai(r)
-        return {f: self.v.db.get(t, f, row) + BASE for f in (GK if t == G else SK)}
+        return {f: self.v.db.get(t, fld(f), row) + BASE for f in (GK if t == G else SK)}
 
     def target_ovr(self, p):
         rt = p['rating']
@@ -197,13 +197,13 @@ class Model:
             if rt.get('style') in (0, 1, 2):
                 return rt['style']
             if not new and self.v.ai(row)[0] == G:
-                return self.v.db.get(G, 'g_style', self.v.ai(row)[1])
+                return self.v.db.get(G, fld('g_style'), self.v.ai(row)[1])
             return 1                                          # butterfly — самый частый
         allowed = D_STYLES if p['pos'] == 'D' else F_STYLES
         if rt.get('style') in allowed:
             return rt['style']
         if not new and self.v.ai(row)[0] == S:
-            old = self.v.db.get(S, 'p_style', self.v.ai(row)[1])
+            old = self.v.db.get(S, fld('p_style'), self.v.ai(row)[1])
             if old in allowed:
                 return old
         by_stats = self.style_from_scoring(p)

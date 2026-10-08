@@ -25,6 +25,7 @@ import os
 import shutil
 import urllib.parse
 
+from . import common
 from .common import SEASON, SEASON_YEAR, norm, read_json, write_json
 
 API = 'https://liiga.fi/api/v2'
@@ -43,6 +44,15 @@ LEVEL = {'F': 72, 'D': 72, 'G': 73}             # медиана OVR клубо�
 GOALIE_AVG = 0.913                              # средний % отражённых Liiga (как в statsrating.GOALIE)
 RESEARCH = ('research', 'liiga.fi')
 CLUB_MAX = 33                                   # как у самого большого клуба исходной базы (HPK 2012)
+if common.GAME.name == 'legacy':
+    # NHL Legacy: Liiga 2015/16 — строки 76–90 (15 клубов, есть KooKoo и Sport; Jokerit тогда был в КХЛ —
+    # места нет, как и у Jukurit); уровень OVR клубов Liiga в базе Legacy ниже: медианы 65/65/64
+    LIIGA_CLUBS = {
+        76: ('Ässät', 'ASS'), 77: ('K-Espoo', 'KES'), 78: ('HPK', 'HPK'), 79: ('HIFK', 'HIFK'), 80: ('Ilves', 'ILV'),
+        81: ('JYP', 'JYP'), 82: ('KalPa', 'KAL'), 83: ('Kärpät', 'KAR'), 84: ('KooKoo', 'KOO'), 85: ('Lukko', 'LUK'),
+        86: ('Pelicans', 'PEL'), 87: ('SaiPa', 'SAI'), 88: ('Tappara', 'TAP'), 89: ('TPS', 'TPS'), 90: ('Sport', 'SPO'),
+    }
+    LEVEL = {'F': 65, 'D': 65, 'G': 64}
 
 
 def _rel_info():
@@ -186,5 +196,5 @@ def club_names():
     return {slot: (abbr, f'{name} (Liiga)') for slot, (name, abbr) in LIIGA_CLUBS.items()}
 
 
-assert all(74 <= s <= 87 for s in LIIGA_CLUBS)
+assert all(common.GAME.leagues['liiga'][1] <= s <= common.GAME.leagues['liiga'][2] for s in LIIGA_CLUBS)
 assert urllib.parse

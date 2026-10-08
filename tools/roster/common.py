@@ -11,6 +11,10 @@ REPO = os.path.dirname(TOOLS)
 if TOOLS not in sys.path:
     sys.path.insert(0, TOOLS)          # tdb.py, tdb_read.py
 
+import gameprofile                     # noqa: E402  (tools/gameprofile.py: nhl13 или legacy)
+
+GAME = gameprofile.get()               # профиль игры (NHL_GAME или nhl13); cli: --game legacy → set_game
+
 SEASON = 20262027                      # сезон составов
 SEASON_YEAR = 2026                     # «сейчас» игры (season_year порта)
 UA = 'Mozilla/5.0 (megarohas_nhl13 roster pipeline; personal, non-commercial)'
@@ -40,8 +44,17 @@ def game_dir():
     return os.path.join(REPO, 'game')
 
 
+def set_game(name):
+    """Игра конвейера (до импорта этапов: dbview и др. берут номера строк и поля при импорте)."""
+    global GAME
+    GAME = gameprofile.get(name)
+    return GAME
+
+
 def ref_meta():
-    """Схема nhlng-meta.xml из анкеров nhl-modding-studio (ref/ — не в git)."""
+    """Схема nhlng-meta.xml из анкеров nhl-modding-studio (ref/ — не в git); у Legacy — схема игры."""
+    if GAME.name != 'nhl13':
+        return GAME.meta
     for root in (REPO, main_repo()):
         p = os.path.join(root, 'ref', 'nhl-modding-studio', 'anchors', 'xbox360', 'nhl13', 'databases',
                          'nhlng-meta.xml')
@@ -56,15 +69,21 @@ class Paths:
         имя внутри game/work/ («roster-lines», можно и «game/work/roster-lines»); по умолчанию
         game/work/roster."""
         self.game = game or game_dir()
+        # Legacy: всё своё — в game/work/legacy-data/ (кэш сети roster-cache — общий: данные не зависят от игры)
+        legacy = GAME.name == 'legacy'
+        base = os.path.join(self.game, 'work', 'legacy-data') if legacy else os.path.join(self.game, 'work')
         self.cache = os.path.join(self.game, 'work', 'roster-cache')
         if work and not os.path.isabs(work):
             parts = [x for x in os.path.normpath(work).split(os.sep) if x not in ('', '.')]
             if [x.lower() for x in parts[:2]] == ['game', 'work']:
                 parts = parts[2:]
-            work = os.path.join(self.game, 'work', *parts) if parts else None
-        self.work = work or os.path.join(self.game, 'work', 'roster')
-        self.db_in = os.path.join(self.game, 'work', 'nhl32', 'nhlng.db')
-        self.db_orig = os.path.join(self.game, 'extracted', 'big', 'cache', 'db', 'nhlng.db')
+            if legacy and [x.lower() for x in parts[:1]] == ['legacy-data']:
+                parts = parts[1:]
+            work = os.path.join(base, *parts) if parts else None
+        self.work = work or os.path.join(base, 'roster')
+        self.db_in = os.path.join(base, 'nhl32', 'nhlng.db')
+        self.db_orig = (GAME.db if legacy else
+                        os.path.join(self.game, 'extracted', 'big', 'cache', 'db', 'nhlng.db'))
         self.db_out = os.path.join(self.work, 'nhlng.db')
         self.players = os.path.join(self.work, 'players.json')
         self.lines = os.path.join(self.work, 'lines.json')
@@ -74,7 +93,7 @@ class Paths:
         self.report_lines = os.path.join(self.work, 'report-lines.md')
         self.registry = os.path.join(self.work, 'artid-registry.json')
         # artid новых игроков общие для всех папок: в новой папке таблица берётся из основной
-        self.registry_main = os.path.join(self.game, 'work', 'roster', 'artid-registry.json')
+        self.registry_main = os.path.join(base, 'roster', 'artid-registry.json')
         self.ahl = False                # --ahl32: ещё и клубы АХЛ из AHL_CLUBS (составы из Wikipedia)
         self.stats_ratings = False      # --stats-ratings: OVR по статистике (statsrating.py)
         self.fa = False                 # --fa: свободные агенты (fa.py)

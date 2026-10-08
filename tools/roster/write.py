@@ -37,11 +37,16 @@ from tdb import Tdb
 from . import lines as lines_mod
 from .codes import NONE, country_code, state_code
 from .common import SEASON, SEASON_YEAR, SLOT_TEAM, club_abbr, fit_utf8, norm, read_json, team_slot, write_json
-from .dbview import (B, CLUBS, F, FLAGS, G, LINK_LIMIT, NHL, P, POS_CODE, POS_NAME, R, S, SPECIAL, View)
+from .dbview import (B, CLUBS, F, FLAGS, G, GENERIC_HEAD, LEGACY, LINK_LIMIT, NATIONAL, NHL, P, POS_CODE, POS_NAME, R,
+                     S, SPECIAL, View, fld)
 from .match import load_db
 from .ratings import BASE, SK_BIAS, TRAITS, Model, age, clamp_rating
 
 ART_MIN, ART_MAX = 9803, 16383          # свободные artid: портреты на диске — до p9802, поле — 14 бит
+if LEGACY:
+    # Legacy: artid 16 бит, у игроков базы — до 12814 (портреты до p12401); портреты ≤ 60000 игра ищет в
+    # p8001_12000/ (generalhelpers.big: «push 60000» вместо 12000 у NHL 13), 60000+ — силуэты
+    ART_MIN, ART_MAX = 12815, 49999
 # «условия» места в клубе: переходят к тому, кто занимает место ушедшего в НХЛ (юниору — без
 # контракта, игроку АХЛ — двусторонний контракт с правами клуба НХЛ и т. п.)
 SLOT_TERMS = ['proteam', 'contractstatus', 'contractdollars', 'contractlength', 'contractis2way',
@@ -189,7 +194,7 @@ class Writer:
         v = self.v
         heads = Counter()
         for r in range(v.nbio):
-            if not v.created_slot(r) and v.g('headid', r) >= 10000:      # 10000+ — типовые головы
+            if not v.created_slot(r) and v.g('headid', r) >= GENERIC_HEAD:      # 10000+ (Legacy 60000+) — типовые
                 heads[(v.g('headid', r), v.g('skincolor', r))] += 1
         skin = Counter()
         for (h, c), n in heads.items():
@@ -208,7 +213,7 @@ class Writer:
         from . import skin
         v = self.v
         matched_heads = {p['nhl_id']: v.g('headid', self.row_of[p['nhl_id']]) for p in self.players
-                         if p['nhl_id'] not in self.new and v.g('headid', self.row_of[p['nhl_id']]) >= 10000}
+                         if p['nhl_id'] not in self.new and v.g('headid', self.row_of[p['nhl_id']]) >= GENERIC_HEAD}
         self.skin_model = m = skin.SkinModel(self.paths.game, self.head_skin, self.players, matched_heads, self.log)
         over = skin.load_overrides(self.paths.game)
         self.skin_pick = {}
@@ -245,7 +250,7 @@ class Writer:
                     kind = 'replaced'
                     counts['в базе: голова заменена'] += 1
                 else:
-                    counts['в базе: своя голова' if cur < 10000 else 'в базе: голова оставлена'] += 1
+                    counts['в базе: своя голова' if cur < GENERIC_HEAD else 'в базе: голова оставлена'] += 1
             elif head is None:
                 counts['новый: нет фото — по умолчанию' if new else 'в базе: нет фото'] += 1
             if head is not None:
@@ -253,7 +258,7 @@ class Writer:
             final = head if head is not None else (None if new else cur)
             self.skin_rows.append({'nhl_id': pid, 'name': f"{p['first']} {p['last']}", 'team': p['team'], 'new': new,
                                    'choice': ch, 'final_head': final, 'final_skin': None, 'note': note, 'kind': kind,
-                                   'scan': not new and cur < 10000 and head is None})
+                                   'scan': not new and cur < GENERIC_HEAD and head is None})
         self.skin_info = dict(m.summary(), counts=dict(counts))
 
     def assign_artids(self):
@@ -300,7 +305,8 @@ class Writer:
 
     def write_bio(self, p, r, new, ovr):
         db, v, notes = self.db, self.v, self.notes[p['nhl_id']]
-        put = lambda f, x: db.set(B, f, r, x)
+        bio = db.by_name[B]['fields']       # у Legacy нет junioryearlost и waiversneedreentry — пропускаются
+        put = lambda f, x: db.set(B, f, r, x) if f in bio else None
         self.set_name(r, p, new)
         y, m, d = p['birth']
         put('year', y - 1900)
@@ -369,6 +375,10 @@ class Writer:
             put(f, x)
         for f, x in self.contract(p, ovr, r).items():
             put(f, x)
+        if LEGACY:
+            # новые поля Legacy: новичок АХЛ/CHL, сделки с удержанием зарплаты — у игроков НХЛ базы 0
+            for f in ('rookieahl', 'rookiechl', 'retainedsalarytrades'):
+                put(f, 0)
         if p.get('fa'):
             # как у 183 свободных агентов исходной базы: контракта нет, yearufa — нынешний год
             for f in CONTRACT + ['contractneedsentrylevel', 'contractismultiyear']:
@@ -404,21 +414,21 @@ class Writer:
         style = m.style(p, r, new)
         attrs, ovr = m.attributes(p, r, new, style)
         for f, x in attrs.items():
-            db.set(t, f, row, x - BASE)
+            db.set(t, fld(f), row, x - BASE)
         pot = m.potential(p)
         if t == S:
-            old_style = db.get(S, 'p_style', row)
-            db.set(S, 'p_overall', row, clamp_rating(ovr) - BASE)
-            db.set(S, 'p_style', row, style)
+            old_style = db.get(S, fld('p_style'), row)
+            db.set(S, fld('p_overall'), row, clamp_rating(ovr) - BASE)
+            db.set(S, fld('p_style'), row, style)
             if new or style != old_style:
                 for f in SK_BIAS:
                     if f in m.bias.get(style, {}):
-                        db.set(S, f, row, m.bias[style][f])
-            db.set(S, 'p_potential', row, pot)
+                        db.set(S, fld(f), row, m.bias[style][f])
+            db.set(S, fld('p_potential'), row, pot)
         else:
-            db.set(G, 'g_overall', row, clamp_rating(ovr) - BASE)
-            db.set(G, 'g_style', row, style)
-            db.set(G, 'g_potential', row, pot)
+            db.set(G, fld('g_overall'), row, clamp_rating(ovr) - BASE)
+            db.set(G, fld('g_style'), row, style)
+            db.set(G, fld('g_potential'), row, pot)
             # g_consistency не трогаем: в базе это не рейтинг, а 0–2 (у 383 из 537 вратарей — 1)
         if pot == 30:
             db.set(t, 'growthtier', row, 0)
@@ -569,11 +579,11 @@ class Writer:
             ne = dict(e)
             ne['playerindex'] = pick_link(r, e['team'])
             t_ai, row_ai = v.ai(r)
-            ne['playerstyle'] = db.get(t_ai, 'p_style' if t_ai == S else 'g_style', row_ai)
+            ne['playerstyle'] = db.get(t_ai, fld('p_style' if t_ai == S else 'g_style'), row_ai)
             refill.append(ne)
             db.set(B, 'team', r, e['team'] + 1)
             db.set(B, 'jersey', r, e['jersey'])
-            for f in SLOT_TERMS:            # условия места — как у ушедшего (по исходной базе)
+            for f in (f for f in SLOT_TERMS if f in db.by_name[B]['fields']):   # условия места — как у ушедшего
                 db.set(B, f, r, self.orig.get(B, f, r_old))
             self.events.append({'team': e['team'], 'what': 'место ушедшего в НХЛ', 'player': v.name(r),
                                 'instead': orig_name(r_old)})
@@ -581,7 +591,7 @@ class Writer:
         # но в сборной (легендах и т. п.), `team` = эта команда + 1, у совсем без команды — 0
         for r in displaced:
             special = sorted(t for t in v.teams_of[r] if t in SPECIAL)
-            nat = [t for t in special if t in range(128, 149)]
+            nat = [t for t in special if t in NATIONAL]
             db.set(B, 'team', r, (nat or special)[0] + 1 if special else 0)
             for f in CONTRACT:
                 db.set(B, f, r, 0)

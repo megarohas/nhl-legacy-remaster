@@ -45,6 +45,7 @@ import statistics
 import zlib
 from collections import defaultdict
 
+from . import common
 from .common import SEASON, read_json, write_json
 
 SKIN_CLASSES = (1, 2, 3, 4, 6, 9, 10)          # тоны типовых голов в базе
@@ -52,6 +53,8 @@ SKIN_CLASSES = (1, 2, 3, 4, 6, 9, 10)          # тоны типовых гол�
 STEPS = [(42.0, (1,)), (30.0, (2,)), (21.0, (3, 4)), (-10.0, (6,)), (-20.0, (9,)), (-999.0, (10,))]
 PINK_HUE, PINK_ITA = 45.0, 26.0                # розоватый тон при тёмном замере — не коричневый
 ICON_DIR = ('extracted', 'big', 'cache', 'fe', 'ion', 'artassets', 'createplayer', 'head')
+if common.GAME.name == 'legacy':           # у Legacy свои типовые головы 60000–60210 и свои иконки (140×108)
+    ICON_DIR = ('other', 'legacy', 'big', 'cache', 'fe', 'ion', 'artassets', 'createplayer', 'head')
 ICON_BOX = (42, 36, 98, 82)                    # лицо на иконке 140×108 (анфас по центру)
 SESSION_MIN = 8                                # фото в съёмке, чтобы взять её эталон
 NEAREST = 5
@@ -189,11 +192,12 @@ def _cache_dir(game):
 
 def icon_tones(game, heads):
     """{headid: тон иконки} для типовых голов; кэш — roster-cache/skin/heads.json, PNG иконок — skin/icons/."""
-    cache = os.path.join(_cache_dir(game), 'heads.json')
+    sub = _cache_dir(game) if common.GAME.name == 'nhl13' else os.path.join(_cache_dir(game), common.GAME.name)
+    cache = os.path.join(sub, 'heads.json')         # иконки голов — свои у каждой игры, замеры фото — общие
     got = {int(k): v for k, v in (read_json(cache, {}) or {}).items()}
     changed = False
     for hid in heads:
-        png = os.path.join(_cache_dir(game), 'icons', f'head{hid}.png')
+        png = os.path.join(sub, 'icons', f'head{hid}.png')
         if hid in got and (got[hid] is None or os.path.exists(png)):
             continue
         path = os.path.join(game, *ICON_DIR, f'head{hid}.big')

@@ -15,12 +15,17 @@
 Вход по умолчанию — game/work/nhl32/nhlng.db (НХЛ на 32 команды, tools/nhl32.py), выход —
 game/work/roster/nhlng.db (или --work/nhlng.db); в game/userdata/ ничего не пишется.
 Подробно — docs/roster-pipeline.md.
+
+NHL Legacy: --game legacy (или NHL_GAME=legacy) — база tools/nhl32.py --game legacy
+(game/work/legacy-data/nhl32/nhlng.db), папки — в game/work/legacy-data/ (roster, своя таблица artid);
+кэш сети — общий. --ahl32 для Legacy нет. Подробно — docs/legacy-data.md.
 """
 import argparse
 import os
 import sys
 
-from .common import Paths
+from .common import Paths, set_game
+import gameprofile  # noqa: E402  (tools/ в sys.path — common.py)
 
 STAGES = ['fetch', 'build', 'lines', 'match', 'write', 'report']
 
@@ -30,7 +35,8 @@ def main():
     ap = argparse.ArgumentParser(prog='python tools/roster', description=__doc__.splitlines()[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter, epilog='\n'.join(__doc__.splitlines()[2:]))
     ap.add_argument('stage', choices=STAGES + ['all', 'photos'])
-    ap.add_argument('--game', help='каталог game/ (по умолчанию — основной копии репозитория)')
+    ap.add_argument('--game', help='каталог game/ (по умолчанию — основной копии репозитория) или игра: nhl13, '
+                                   'legacy (NHL Legacy, tools/gameprofile.py; иначе NHL_GAME, по умолчанию nhl13)')
     ap.add_argument('--work', help='папка players.json, lines.json, match.json, write.json, отчётов и выходной базы: '
                                    'имя в game/work/ (roster-lines или game/work/roster-lines) или абсолютный путь '
                                    '(по умолчанию game/work/roster)')
@@ -53,6 +59,12 @@ def main():
     ap.add_argument('--league', choices=['liiga'],
                     help='и клубы лиги нынешними составами с сайта лиги (league.py; проба — финская Liiga, строки 74–87)')
     a = ap.parse_args()
+    profile = None
+    if a.game and a.game.lower() in gameprofile.GAMES:      # --game legacy — игра, а не каталог
+        profile, a.game = a.game.lower(), None
+    game = set_game(profile or gameprofile.default_name())
+    if game.name == 'legacy' and a.ahl32:
+        ap.error('--ahl32 для NHL Legacy не сделан (docs/legacy-data.md)')
     paths = Paths(a.game, a.work)
     paths.ahl = a.ahl32
     paths.stats_ratings = a.stats_ratings
