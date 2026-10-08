@@ -17,15 +17,22 @@ nhlbluebackground.big: подложка mcColor) + его арт и анимац
                        [--also "подпись=DIR;…"] [--times 0,2.5,…] [--width 640] [--name compare] [--no-frames]
         # OUTDIR/<name>.png — сетка кадров (строки — оригинал и варианты, столбцы — секунды анимации),
         # frames/<name>/*.png — те же кадры по отдельности, <name>.html — живая анимация всех вариантов
+        # В --src/--also элемент «@игра» (@nhl13, @legacy) — оригиналы другой игры вместо своих:
+        # --also "NHL 13=@nhl13;NHL 13 серый=@nhl13,game/work/fe-bg/out"
+    … --game nhl13|legacy (или NHL_GAME) — чьи оригиналы: у NHL Legacy фон — свой (тёмная арена, cacheboot.big),
+        см. docs/fe-background.md, «NHL Legacy»
 
 Подробности — docs/fe-background.md. Только стандартная библиотека (+ Chrome или Edge для preview).
 Каталог игры — переменная NHL13_GAME или game/ рядом с tools/.
 """
-import base64, colorsys, json, os, struct, sys
+import argparse, base64, colorsys, json, os, struct, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import playerhead as ph  # noqa: E402  (BIGF, XPR2, RefPack, PNG)
 import teamart as ta     # noqa: E402  (константа выборки, раскладка, DXT1/3/5 и 8888)
+import gameprofile       # noqa: E402  (--game: NHL 13 / NHL Legacy)
+
+GAME = gameprofile.get('nhl13')          # игра (--game / NHL_GAME) — задаётся в main()
 
 # ---------------------------------------------------------------- Apt (Flash EA), вариант «Apt Data:1:7:4»
 
@@ -958,18 +965,26 @@ SETS = {
 }
 
 
-def source_path(rel, archive, game=None):
-    return os.path.join(game or ph.game_dir(), 'extracted', 'big', archive, *rel.split('/'))
+def source_path(rel, archive, game=None, profile=None):
+    """Оригинал файла: NHL 13 — game/extracted/big/<архив>/…; другая игра (профиль) — её распакованные архивы,
+    первый, где файл есть (у Legacy фон NHLBlueBackgroundComponents — в cacheboot.big, а не в cache.big)."""
+    P = profile or GAME
+    if P.name == 'nhl13':
+        return os.path.join(game or ph.game_dir(), 'extracted', 'big', archive, *rel.split('/'))
+    return P.extracted(rel) or P.archive_path(archive, rel)
 
 
 def load_set(name, src=None, game=None):
     """{путь → FeMovie}: файлы из src (папка или папки через запятую в раскладке cache:, по порядку),
-    чего там нет — оригиналы из game/extracted/big."""
+    чего там нет — оригиналы из game/extracted/big (у --game legacy — из архивов Legacy); элемент «@игра»
+    в src — оригиналы этой игры (@nhl13, @legacy)."""
     dirs = [d for d in (src or '').split(',') if d]
+    base = next((gameprofile.get(d[1:]) for d in dirs if d.startswith('@')), None)
+    dirs = [d for d in dirs if not d.startswith('@')]
     files = {}
     for rel, archive in SETS[name]['files']:
         p = next((q for q in (os.path.join(d, *rel.split('/')) for d in dirs) if os.path.exists(q)), None)
-        files[rel] = FeMovie.load(p or source_path(rel, archive, game))
+        files[rel] = FeMovie.load(p or source_path(rel, archive, game, base))
     return files
 
 
@@ -1158,7 +1173,7 @@ def cmd_preview(args):
     name = opt(args, '--name', 'compare')
     times = [float(x) for x in opt(args, '--times', '0,2.5,5,7.5').split(',')]
     cw = int(opt(args, '--width', '640'))
-    variants = [('оригинал', load_set(sets))]
+    variants = [('оригинал' if GAME.name == 'nhl13' else f'оригинал ({GAME.title})', load_set(sets))]
     if '--src' in args:
         variants.append((opt(args, '--label', 'перекраска'), load_set(sets, opt(args, '--src'))))
     for extra in (opt(args, '--also', '') or '').split(';'):
@@ -1203,9 +1218,16 @@ def cmd_preview(args):
 
 
 def main():
+    global GAME
     if len(sys.argv) < 3:
         sys.exit(__doc__)
-    cmd, args = sys.argv[1], sys.argv[2:]
+    ap = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+    gameprofile.add_argument(ap)                          # --game nhl13|legacy (или NHL_GAME) — где угодно в строке
+    g, rest = ap.parse_known_args(sys.argv[1:])
+    GAME = gameprofile.get(g.game)
+    if len(rest) < 2:
+        sys.exit(__doc__)
+    cmd, args = rest[0], rest[1:]
     if cmd == 'info':
         cmd_info(args)
     elif cmd == 'dump':
