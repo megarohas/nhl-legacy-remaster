@@ -33,3 +33,5 @@ __pycache__/
 
 # Экспериментальная копия порта под свою сборку SDK (Vulkan + FSR/CAS), docs/sdk-build.md
 /port-ffx/
+# свой саундтрек пользователя (tools/music.py) — не в git
+best_of_nhl/
