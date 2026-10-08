@@ -8,8 +8,11 @@
         [--stadium 601,602]    # 3D-модель арены (exhibitionarena.arenaartid) вместо 255 «EA SPORTS Arena»
         [--centerline N,M]     # рисунок красной линии (ice_cline_N), сейчас 0 — сплошная
         [--in-place]           # разрешить OUT = DB (иначе отказ)
+        [--game legacy]        # NHL Legacy (tools/gameprofile.py): SEA/VGK — арт 100/101, прожекторы 46/47, арены 187/188
 
-DB по умолчанию — game/userdata/cache/guest/db/nhlng.db (рядом nhlng-meta.xml). Файлы арта под эти номера
+DB по умолчанию — game/userdata/cache/guest/db/nhlng.db (рядом nhlng-meta.xml); для Legacy — db/nhlng.db в cache:
+порта Legacy (gameprofile: строка «CACHE:» статуса legacy-port или NHL_LEGACY_CACHE), лучше указать явно — например
+базу nhl32 legacy-data (game/work/legacy-data/nhl32/nhlng.db). База другой игры, чем --game, — отказ (check_db). Файлы арта под эти номера
 собирает tools/teamart.py (game/work/logos/out → game/userdata/cache/guest). Почему именно эти поля —
 docs/logos-arenas.md:
   * exhibitionteams.artid — номер всех логотипов интерфейса (t/s/d/c/w/r<artid>.big), центра льда хозяина
@@ -25,21 +28,31 @@ import argparse, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tdb import SaveFile                      # noqa: E402
 from tdb_read import load_meta                # noqa: E402
+import gameprofile                            # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_DB = os.path.join(HERE, '..', 'game', 'userdata', 'cache', 'guest', 'db', 'nhlng.db')
 
 # строка exhibitionteams: аббревиатура (для проверки), artid, spotlight, арена (строка exhibitionarena)
-TEAMS = {
-    30: dict(abbr='SEA', artid=98, spotlight=45, arena=174, arena_name='Climate Pledge Arena'),
-    31: dict(abbr='VGK', artid=99, spotlight=46, arena=175, arena_name='T-Mobile Arena'),
+TEAMS_BY_GAME = {
+    'nhl13': {
+        30: dict(abbr='SEA', artid=98, spotlight=45, arena=174, arena_name='Climate Pledge Arena'),
+        31: dict(abbr='VGK', artid=99, spotlight=46, arena=175, arena_name='T-Mobile Arena'),
+    },
+    # NHL Legacy (база — tools/nhl32.py у legacy-data): арт 98/99 заняты (Vaasan Sport, KooKoo) → 100/101; файлы
+    # прожекторов у Legacy texlib_0…45 → 46/47; арены — копии «EA SPORTS Arena» (181) в конце таблицы
+    'legacy': {
+        30: dict(abbr='SEA', artid=100, spotlight=46, arena=187, arena_name='Climate Pledge Arena'),
+        31: dict(abbr='VGK', artid=101, spotlight=47, arena=188, arena_name='T-Mobile Arena'),
+    },
 }
-OLD_ART = {93, 94}                            # Tappara, TPS — их арт не трогаем
+TEAMS = TEAMS_BY_GAME['nhl13']
+OLD_ART = {93, 94}                            # Tappara, TPS — их арт не трогаем (у Legacy те же номера)
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument('db', nargs='?', default=DEFAULT_DB)
+    ap.add_argument('db', nargs='?')
     ap.add_argument('--meta')
     ap.add_argument('--out')
     ap.add_argument('--in-place', action='store_true')
@@ -47,9 +60,21 @@ def main():
     ap.add_argument('--jerseys', action='store_true')
     ap.add_argument('--stadium')
     ap.add_argument('--centerline')
+    gameprofile.add_argument(ap)
     a = ap.parse_args()
+    P = gameprofile.get(a.game)
+    TEAMS = TEAMS_BY_GAME[P.name]
+    if a.db is None:
+        if P.name == 'nhl13':
+            a.db = DEFAULT_DB
+        elif P.install:
+            a.db = os.path.join(P.install, 'db', 'nhlng.db')
+        else:
+            sys.exit(f'{P.title}: папка cache: порта не известна — укажите DB')
     meta_path = a.meta or os.path.join(os.path.dirname(os.path.abspath(a.db)), 'nhlng-meta.xml')
-    s = SaveFile(open(a.db, 'rb').read(), load_meta(meta_path))
+    raw = open(a.db, 'rb').read()
+    gameprofile.check_db(P, raw)
+    s = SaveFile(raw, load_meta(meta_path))
     db = s.db
     T, A, J = 'exhibitionteams', 'exhibitionarena', 'stockteamjerseys'
     stadiums = [int(x) for x in a.stadium.split(',')] if a.stadium else None
