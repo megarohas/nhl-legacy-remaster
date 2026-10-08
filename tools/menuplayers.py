@@ -711,6 +711,28 @@ def visible_mask(anim, times=(0.0, 0.5, 1.0)):
     return vis
 
 
+# видимая ширина кадра (px кадра) в худший момент проезда: тип 0 — в конце (x 804), тип 1 — в начале
+# (x 784), тип 2 — в конце (x 724)
+VIS_END = {0: 476, 1: 496, 2: 556}
+VISIBLE_ROWS = 604                         # ниже этой строки кадра — полосы внизу экрана (при любом проезде)
+
+
+def core_box(alpha):
+    """«Ядро» силуэта — туловище и ноги без вытянутых рук и клюшки: столбцы, где силуэт выше 30 % своей
+    высоты."""
+    import numpy as np
+    m = alpha > 128
+    ys, xs = np.nonzero(m)
+    if not len(xs):
+        return 0, 0, alpha.shape[1], alpha.shape[0]
+    h = ys.max() - ys.min() + 1
+    cols = np.nonzero(m.sum(0) > 0.30 * h)[0]
+    if not len(cols):
+        return body_box(alpha)
+    rows = np.nonzero(m[:, cols.min():cols.max() + 1].any(1))[0]
+    return int(cols.min()), int(rows.min()), int(cols.max()) + 1, int(rows.max()) + 1
+
+
 def compose(cut, e, anim=2):
     """Вырезка → кадр 600×760 и маска «плохих» обрезов (видимых на экране).
 
@@ -730,21 +752,41 @@ def compose(cut, e, anim=2):
     SW, SH = cut.size
     fit = e.get('fit') or 'auto'
     M = 10                                                     # поле у видимых краёв кадра
+    c0, _, c1, _ = core_box(alpha)
+    cw, ccx = c1 - c0, (c0 + c1) / 2
+    # голова: середина верхних 10 % силуэта (у наклонившегося игрока — сбоку от «ядра»)
+    m128 = alpha > 128
+    ys_, xs_ = np.nonzero(m128)
+    top = ys_.min()
+    sel = ys_ < top + 0.10 * (ys_.max() - top + 1)
+    hx = float(xs_[sel].mean()) if sel.any() else ccx
+    vis = VIS_END.get(anim, 556)
+    rows_any = alpha > 40
+
+    def left_visible(s, oy):
+        """Левый край силуэта среди строк, видимых на экране (ниже y ≈ 600 кадра — полосы помощи и
+        бегущей строки): клюшка или перчатка внизу может уходить за левый край кадра незаметно."""
+        cutoff = int(max(0, min(SH, (VISIBLE_ROWS - oy) / s)))
+        if cutoff <= 0:
+            return SW
+        cols = np.nonzero(rows_any[:cutoff].any(0))[0]
+        return int(cols.min()) if len(cols) else SW
+
     if fit == 'auto':
-        # по высоте тела (~724 px; по пояс — 700), но не шире ~520 px: к концу проезда на экране видна
-        # левая часть кадра шириной ~520–560 px
-        s = min((700 if sides['bottom'] else 724) / bh, 520 / bw)
-        for _ in range(40):
-            # по горизонтали: тело — к x ≈ 290; левый край силуэта (с клюшкой) не левее поля
-            ox = BODY_CX - (x0 + bw / 2) * s
-            ox = max(ox, M - fx0 * s)
+        # по высоте тела (~724 px; по пояс — 700); «ядро» (туловище и ноги, без рук и клюшки) — не шире
+        # видимой в худший момент проезда части кадра и с центром на 42 % её ширины; за край экрана может
+        # уходить до 35 % ядра (обрез краем экрана допустим), голова — видна с запасом
+        s = min((700 if sides['bottom'] else 724) / bh, 0.95 * vis / max(1, cw))
+        for _ in range(60):
+            oy = (FRAME_H - SH * s) if sides['bottom'] else (748 - y1 * s)
+            ox = 0.42 * vis - ccx * s
+            ox = max(ox, M - left_visible(s, oy) * s)
             if sides['right']:                                 # срез справа — уводим за правый край кадра
                 ox = max(ox, FRAME_W - SW * s)
-            # по вертикали: срез снизу — на нижний край кадра, иначе коньки у 748
-            oy = (FRAME_H - SH * s) if sides['bottom'] else (748 - y1 * s)
             top_ok = fy0 * s + oy >= M
-            right_body = (x1 * s + ox) - FRAME_W                # сколько тела ушло за правый край
-            if top_ok and right_body <= 0.18 * bw * s:
+            core_right = c1 * s + ox                           # правый край ядра — в видимой части
+            head_ok = hx * s + ox <= vis - 80                  # голова — в видимой части с запасом
+            if top_ok and head_ok and core_right <= vis + 0.35 * cw * s:
                 break
             s *= 0.97
     else:
