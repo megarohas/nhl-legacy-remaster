@@ -14,6 +14,8 @@
                                                                   # лист проверки equipment/sheet.html
     python -m roster.equipment apply   DB_IN DB_OUT [--min-conf high|med] [--fields tape,socks,jersey,visor]
                                        [--visor-rule] [--jersey-rule] [--dry-run] [--report JSON]
+    python -m roster.equipment roster  SAVE --report JSON [--meta XML] [--write]
+                                                                  # отчёт apply → сохранённый состав игры (ROSTER)
 
 Общие опции (до команды): --work ПАПКА — папка конвейера с write.json (по умолчанию roster-expanded-ahl32;
 roster-expanded, roster-custom…), --game — каталог game/.
@@ -1372,6 +1374,60 @@ def coverage(paths, st, teams=None):
     return by_team
 
 
+def cmd_roster(paths, a):
+    """Отчёт apply → сохранённый состав игры (сейв ROSTER …): экипировку игра берёт только оттуда.
+
+    Из cache:/db/nhlng.db экипировку игроков игра не подхватывает (08.10.2026: после установки базы
+    с экипировкой у всех полевых в памяти значения EA 2012 года), а сохранённый состав загружает
+    целиком. Новое значение ставится, только если в составе сейчас старое из отчёта: ручные правки
+    пользователя в игре (там уже другое) не трогаются. Без --write — только подсчёт.
+    """
+    from tdb import SaveFile
+    from tdb_read import load_meta
+    from .common import ref_meta
+    meta_path = a.meta or os.path.join(paths.game, 'userdata', 'cache', 'guest', 'db', 'nhlng-meta.xml')
+    if not os.path.exists(meta_path):
+        meta_path = ref_meta()
+    raw = open(a.save, 'rb').read()
+    sf = SaveFile(raw, load_meta(meta_path))
+    db = sf.db
+    changes = json.load(open(a.report, encoding='utf-8'))['changes']
+    index = {}
+    done = same = kept = missing = 0
+    for c in changes:
+        t, f, gid = c['table'], c['field'], c['game_id']
+        if t not in index:
+            index[t] = {db.get(t, 'game_id', r): r for r in range(db.by_name[t]['rows'])}
+        r = index[t].get(gid)
+        if r is None:
+            missing += 1
+            continue
+        cur = db.get(t, f, r)
+        if cur == c['new']:
+            same += 1
+        elif cur == c['old']:
+            db.set(t, f, r, c['new'])
+            done += 1
+        else:
+            kept += 1
+            print(f'  оставлено (ручная правка): {c["name"]} {f}: в составе {cur}, у нас {c["new"]}')
+    print(f'{"записано" if a.write else "будет записано"} {done}, уже было {same}, '
+          f'ручные правки оставлены {kept}, нет в составе {missing}')
+    if not a.write:
+        return
+    out = sf.bytes(fix=True)
+    assert len(out) == len(raw), 'размер сейва изменился'
+    bak = a.save + '.bak'
+    if not os.path.exists(bak):
+        open(bak, 'wb').write(raw)
+    open(a.save, 'wb').write(out)
+    bad = SaveFile(open(a.save, 'rb').read(), load_meta(meta_path)).verify()
+    if bad:
+        open(a.save, 'wb').write(raw)
+        raise SystemExit(f'проверка не прошла, сейв возвращён: {bad}')
+    print(f'сейв записан, проверка CRC/обёртки — OK; копия до правки — {bak}')
+
+
 def cmd_status(paths, a):
     st = load_store(paths)
     cov = coverage(paths, st)
@@ -1608,6 +1664,11 @@ def main(argv=None):
     s.add_argument('--by', default='claude')
     s = sub.add_parser('status')
     s.add_argument('--values', action='store_true', help='и распределение уверенных значений')
+    s = sub.add_parser('roster')
+    s.add_argument('save', help='файл сейва ROSTER … (userdata/<профиль>/4541099B/00000001/ROSTER …/ROSTER …)')
+    s.add_argument('--report', required=True, help='отчёт apply (equipment-apply.json)')
+    s.add_argument('--meta', help='nhlng-meta.xml (по умолчанию из cache: игры)')
+    s.add_argument('--write', action='store_true', help='записать (без него — только подсчёт)')
     for name in ('sheet', 'apply'):
         s = sub.add_parser(name)
         if name == 'apply':
@@ -1629,7 +1690,8 @@ def main(argv=None):
     a = ap.parse_args(argv)
     paths = Paths(a.game, a.work)
     {'fetch': cmd_fetch, 'todo': cmd_todo, 'zoom': cmd_zoom, 'commons': cmd_commons, 'csheet': cmd_csheet,
-     'meta': cmd_meta, 'record': cmd_record, 'status': cmd_status, 'sheet': cmd_sheet, 'apply': cmd_apply}[a.cmd](paths, a)
+     'meta': cmd_meta, 'record': cmd_record, 'status': cmd_status, 'sheet': cmd_sheet, 'apply': cmd_apply,
+     'roster': cmd_roster}[a.cmd](paths, a)
 
 
 if __name__ == '__main__':
