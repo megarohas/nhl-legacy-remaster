@@ -766,6 +766,13 @@ def main():
         if loc.put(key, text) is None:
             added += 1
     print(f'строки: {len(strings)} ключей, из них новых {added}')
+    fixed = set()  # описание GM Connected: «your own 30-team NHL» — команд теперь 32
+    for r, sid, off in loc.rows():
+        t = loc.text(off)
+        if off not in fixed and '30-team NHL' in t:
+            loc.set_text(off, t.replace('30-team NHL', '32-team NHL'))
+            fixed.add(off)
+            print(f'строка {sid}: 30-team NHL -> 32-team NHL')
     bad = loc.check()  # две записи с одним hashid — игра видит первую (docs/modding.md)
     if bad:
         sys.exit('локализация с ошибками (locdb.py check):\n' + '\n'.join(bad))
