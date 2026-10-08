@@ -228,13 +228,12 @@ def cmd_save():
     sf = SaveFile(raw, meta)
     db = sf.db
     t = 'leagueplayerbiotable'
-    b = db.by_name[t]['block']
-    n = int.from_bytes(db.d[b + 0x16:b + 0x18], 'big')
     # Ключ — artid и game_id игрока (write.json): франшиза сама выдаёт сгенерированным
     # игрокам (призывники, свободные агенты) номера фото из того же диапазона, что и новые
-    # игроки конвейера, — им чужое лицо не ставим.
+    # игроки конвейера, — им чужое лицо не ставим. Строки — только живые записи сейва
+    # (tdb.Tdb.live_rows: [0, current) без удалённых; у удалённой прежние artid и game_id остаются).
     rows = {}
-    for r in range(n):
+    for r in db.live_rows(t):
         rows.setdefault((db.get(t, 'artid', r), db.get(t, 'game_id', r)), []).append(r)
     # game_id в сейве — со сдвигом +1 (кодировка ссылок франшизы), в базе — как есть
     game_ids = {p['nhl_id']: p['game_id'] + 1 for p in load('write.json')['players'] if p.get('game_id') is not None}
