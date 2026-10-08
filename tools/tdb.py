@@ -1,4 +1,4 @@
-"""База EA TDB v6 и сейв RosterFile (NHL 12/13): чтение, запись полей, пересчёт CRC.
+"""База EA TDB v6 и сейв RosterFile (NHL 12/13, NHL Legacy — ZlibV4): чтение, запись полей, пересчёт CRC.
 
     python tdb.py verify  FILE                          # все CRC базы и обёртки сейва
     python tdb.py states  FILE                          # leaguestates: type/key -> value
@@ -17,6 +17,8 @@ FILE — `.db` или внутренний файл сейва (`RosterFile`, `D
 - обёртка сейва — checksum_b (CRC-32/BZIP2 по базе [0x2C..0x2C+размер]) → 0x28, затем
   checksum_a (CRC-32/IEEE по [0x1C..конец файла], с хвостом) → 0x10, оба big-endian.
   Для `Dynasty` NHL 13 проверено на своих сейвах; у `RosterFile` хвоста нет.
+- сейв NHL Legacy (ZlibV4: база сжата zlib с 0x30) — класс ZlibV4 ниже; читается и пишется так же,
+  схема — `--meta` с nhlng-meta.xml Legacy (tools/gameprofile.py).
 """
 import argparse, os, struct, sys, zlib
 from tdb_read import load_meta
@@ -228,13 +230,26 @@ class Tdb:
             self.put32(o, c)
         self.put32(0x14, crc32_mpeg2(self.d[0:0x14]))
 
+def is_zlibv4(data):
+    """Обёртка ZlibV4 (NHL 14/15/Legacy): база не с 0x2C, а с 0x30 — поток zlib (78 xx)."""
+    return len(data) > 0x32 and data[:2] != b'DB' and data[0x2C:0x2E] != b'DB' and data[0x30] == 0x78 \
+        and (data[0x30] * 256 + data[0x31]) % 31 == 0
+
+
 class SaveFile:
-    """Внутренний файл сейва: заголовок 0x2C байт + база + хвост (у франшизы)."""
+    """Внутренний файл сейва: заголовок 0x2C байт + база + хвост (у франшизы) — NHL 12/13;
+    у NHL Legacy (ZlibV4) база сжата, устройство — в ZlibV4 ниже."""
     def __init__(self, data, meta):
         data = bytearray(data)
+        self.zlib = None
         if data[:2] == b'DB':
             self.header, self.tail = None, b''
             self.db = Tdb(data, meta)
+            return
+        if is_zlibv4(data):
+            self.zlib = ZlibV4(data)
+            self.header, self.tail = self.zlib.header, self.zlib.tail
+            self.db = Tdb(self.zlib.inflated[:self.zlib.db_size], meta)
             return
         size = struct.unpack('>I', data[0x24:0x28])[0]
         self.header = data[:CONTAINER_HEADER]
@@ -248,6 +263,8 @@ class SaveFile:
     def bytes(self, fix=True):
         if fix:
             self.db.fix()
+        if self.zlib is not None:
+            return self.zlib.pack(bytes(self.db.d))
         if self.header is None:
             return bytes(self.db.d)
         out = bytearray(self.header) + self.db.d + self.tail
@@ -257,13 +274,82 @@ class SaveFile:
 
     def verify(self):
         bad = [f'база @0x{o:X}: записано {a:08X}, должно {b:08X}' for o, a, b in self.db.verify()]
-        if self.header is not None:
+        if self.zlib is not None:
+            bad += self.zlib.verify()
+        elif self.header is not None:
             full = bytes(self.header) + bytes(self.db.d) + self.tail
             b_sum, a_sum = self._sums(full)
             if struct.unpack('>I', full[0x28:0x2C])[0] != b_sum:
                 bad.append('обёртка: checksum_b не сходится')
             if struct.unpack('>I', full[0x10:0x14])[0] != a_sum:
                 bad.append('обёртка: checksum_a не сходится')
+        return bad
+
+
+class ZlibV4:
+    """Сейв NHL Legacy (и NHL 14/15): заголовок 0x2C байт как у NHL 13, дальше сжатая область.
+
+    Сверено на анкерах nhl-modding-studio (ROSTER, DYNASTY, SEASON, BEAPRO Legacy для Xbox 360):
+    - 0x10 checksum_a — CRC-32/IEEE по [0x1C..конец файла] (с хвостом), big-endian;
+    - 0x14 версия: 4 — составы, 5 — франшиза, сезон, «Стань профи»;
+    - 0x24 размер области (BE): область [0x2C, 0x2C + размер) — длина потока (u32 **LE**), с 0x30
+      поток zlib, дальше нули; у составов размер = длине разжатого, у франшизы — ровно половине;
+    - 0x28 checksum_b — CRC-32/BZIP2 по области [0x2C, 0x2C + размер), big-endian;
+    - разжатое — база TDB (длина — db_size @0x08 базы) + 4 байта 0xDBDBDBDB;
+    - после области — хвост своих данных (у франшизы 160–1300 КБ, у составов его нет).
+    Запись: если база не изменилась — прежний поток байт в байт; иначе zlib уровня 6 (поток zlib-ng
+    Python другой длины, чем у EA, игра разжимает любой), размер области — с тем же отношением к
+    длине разжатого, что был (проверено в игре — docs/legacy-data.md)."""
+
+    def __init__(self, data):
+        data = bytes(data)
+        self.header = bytearray(data[:CONTAINER_HEADER])
+        self.region = struct.unpack('>I', data[0x24:0x28])[0]
+        self.csize = struct.unpack('<I', data[0x2C:0x30])[0]
+        if not 4 < self.csize <= self.region - 4 or CONTAINER_HEADER + self.region > len(data):
+            raise ValueError(f'ZlibV4: длина потока {self.csize} или области {self.region} не сходится')
+        self.stream = data[0x30:0x30 + self.csize]
+        self.inflated = zlib.decompress(self.stream)
+        if self.inflated[:2] != b'DB':
+            raise ValueError('ZlibV4: внутри не база TDB')
+        E = '>' if self.inflated[4] == 1 else '<'
+        self.db_size = struct.unpack(E + 'I', self.inflated[8:12])[0]
+        self.trailer = self.inflated[self.db_size:]
+        self.pad = data[0x30 + self.csize:CONTAINER_HEADER + self.region]
+        self.tail = data[CONTAINER_HEADER + self.region:]
+        self.original = data
+        self.ratio = (len(self.inflated), self.region)
+
+    @property
+    def version(self):
+        return struct.unpack('>I', self.header[0x14:0x18])[0]
+
+    def pack(self, db, level=6):
+        inflated = bytes(db) + self.trailer
+        if inflated == self.inflated:
+            stream, region = self.stream, self.region
+        else:
+            stream = zlib.compress(inflated, level)
+            n, r = self.ratio
+            region = (len(inflated) * r + n - 1) // n
+            region = max(region, 4 + len(stream))
+        body = struct.pack('<I', len(stream)) + stream
+        out = bytearray(self.header) + body + bytes(region - len(body)) + self.tail
+        out[0x24:0x28] = struct.pack('>I', region)
+        out[0x28:0x2C] = struct.pack('>I', crc32_bzip2(out[CONTAINER_HEADER:CONTAINER_HEADER + region]))
+        out[0x10:0x14] = struct.pack('>I', crc32_ieee(out[0x1C:]))
+        return bytes(out)
+
+    def verify(self):
+        d, bad = self.original, []
+        if struct.unpack('>I', d[0x28:0x2C])[0] != crc32_bzip2(d[CONTAINER_HEADER:CONTAINER_HEADER + self.region]):
+            bad.append('обёртка ZlibV4: checksum_b не сходится')
+        if struct.unpack('>I', d[0x10:0x14])[0] != crc32_ieee(d[0x1C:]):
+            bad.append('обёртка ZlibV4: checksum_a не сходится')
+        if any(self.pad):
+            bad.append('обёртка ZlibV4: после потока zlib в области не нули')
+        if self.trailer != b'\xDB' * 4:
+            bad.append(f'обёртка ZlibV4: после базы {self.trailer[:8].hex()} вместо DBDBDBDB')
         return bad
 
 def states(db):
@@ -282,8 +368,9 @@ def main():
     if a.cmd == 'verify':
         bad = s.verify()
         kind = bytes(s.header[:16]).rstrip(b'\0').decode('latin1') if s.header is not None else ''
+        z = f' ZlibV4 v{s.zlib.version}, поток {s.zlib.csize} байт' if s.zlib is not None else ''
         print('\n'.join(bad) if bad else f'OK: все CRC сходятся ({len(s.db.tables)} таблиц'
-              + (f', обёртка {kind}, хвост {len(s.tail)} байт)' if kind else ')'))
+              + (f', обёртка {kind}{z}, хвост {len(s.tail)} байт)' if kind else ')'))
         sys.exit(1 if bad else 0)
     if a.cmd == 'states':
         for i, ty, k, v, tier in states(s.db):
