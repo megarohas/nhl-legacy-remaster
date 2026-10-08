@@ -114,7 +114,21 @@ python tools/nhl32.py $L/db/nhlng.db $W/nhlng.db $L/fe/loc/nhl_eng_us.db $W/nhl_
   таблицы, плюс строка Матча звёзд 32/33 в тот же день, что у EA (31.01 и 25.01), home/away — 6 бит;
 - схема: вместимость франшизы на 32 (`leaguegmdata`/`leaguestaffdata` 32, `leaguedraftpick` 1344,
   `leaguetempscheduletable` 3200), поля «команда НХЛ» −1…30 → 6 бит (у Legacy без
-  `leagueretirementtable` — там уже 8 бит, плюс новое `leagueplayerbiotable.tradeblockteam`);
+  `leagueretirementtable` — там уже 8 бит, плюс новое `leagueplayerbiotable.tradeblockteam` и
+  `exhibitiondraftpick.owner/origteamid`);
+- **те же поля — и в заголовках таблиц базы** (`DB_WIDEN` → `widen_headers`, с 08.10.2026 22:48). В отличие
+  от NHL 13, Legacy строит таблицы франшизы по заголовкам заготовок `league*` в самой базе (из схемы берёт
+  только вместимость `maxinsert`). Пока там было 5 бит, в сейве франшизы у игроков Вегаса стоял
+  `proteam` = 32 → 0. В итоге состав VGK оказывался пустым (21 игрок уезжал в ARZ: у неё 45 записей), а пики драфта
+  VGK — без владельца, и симуляция висла на первой игре VGK: 9→10 октября, `rand() % 0`. Расширяются
+  `leagueplayerbiotable` proteam/draftteam/tradeblockteam, `leaguedraftpick` owner/origteamid,
+  `leaguefreeagentdata` originalteamid/signedteamid, `leaguerookiedata.draftteam`,
+  `leaguecontractoffers.teamnotification`, `leaguegamemodesvars.team`, `leaguescoutvisits.team`,
+  `exhibitiondraftpick` owner/origteamid. При `--ahl32` FA/gamemodesvars/scoutvisits получают 7 бит, `leagueteams.ahlaffiliate` — 8. Значения не
+  меняются, у NHL 13 вывод прежний. Поля 0…31 без «+ 1» не трогаются, как в NHL 13: teamid штаба,
+  сделок, предложений, RFA и выкупов — 31 туда помещается. Сейвы франшизы, созданные на старой базе,
+  хранят свою 5-битную раскладку, их нужно создавать заново. Проверка — заголовок против схемы по всем
+  полям: расходятся только home/away календарей (в базе 6 бит, в схеме 5, как в NHL 13);
 - **`--ahl32`** (по просьбе legacy-port): Coachella Valley и Henderson — на Custom 02/03 = 224/225, арт
   102/103 (формы — копии Springfield/Providence у помощника art, [uniforms.md](uniforms.md) §12), арена —
   копия Cedar Park Center; АХЛ Legacy 2015/16 (30 клубов, 8/7/8/7) → 8/8/8/8: Texas — в Central, Lake Erie
