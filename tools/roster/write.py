@@ -51,8 +51,12 @@ CONTRACT = ['proteam', 'contractlength', 'contractdollars', 'contractstatus', 'c
             'contractneedsentrylevel', 'extensionlength', 'extensiondollars', 'extensionis2way']
 STATS = ['stockcareerseasonplayerstats', 'stockcareerplayoffplayerstats', 'stockcareerseasongoaliestats',
          'stockcareerplayoffgoaliestats']
-TIER = {0: 'ушедший из НХЛ', 1: 'свободный агент 2012', 2: 'без команды', 3: 'клуб (АХЛ/Европа/юниоры)'}
+TIER = {0: 'ушедший из НХЛ', 1: 'свободный агент 2012', 2: 'без команды', 3: 'клуб (АХЛ/Европа/юниоры)',
+        4: 'клуб, пересобранный конвейером (--league)'}
 MAX_PER_TEAM = 40
+# --fa: строки для свободных агентов берутся и у клубов АХЛ/Европы/юниоров 2012 года — только неодетые
+# (rosterstatus 0, ни одного места в звеньях) и только сверх CLUB_MIN игроков в клубе, старшие первыми
+CLUB_MIN = 22
 
 
 class Writer:
@@ -81,11 +85,38 @@ class Writer:
         self.events = []                      # строки отчёта о составах
         self.out = {}                         # nhl_id -> итог по игроку
         self.new_links = []                   # (index, game_id)
+        # --fa: свободные агенты (team 'FA', slot None) — связь в exhibitionfreeagents, в составах их нет
+        self.fa_players = [p for p in self.players if p.get('fa')]
+        self.spare = bool(self.fa_players)    # доноры из клубов — только неодетые сверх CLUB_MIN
+        self.skin_on = getattr(paths, 'skin', False)   # --skin: голова под тон кожи на фото (skin.py)
+        self.skin_rows, self.skin_info = [], None
 
     # --- 1. строки игроков -----------------------------------------------------------------
+    def spare_rows(self):
+        """Строки игроков клубов АХЛ/Европы/юниоров, которых можно отдать: игрок только в этом клубе, не
+        одет и без мест в звеньях, в клубе больше CLUB_MIN игроков; у клуба — старшие первыми."""
+        v = self.v
+        per = defaultdict(list)
+        for e in v.entries:
+            per[e['team']].append(e)
+        out = set()
+        for t, es in per.items():
+            if t not in CLUBS or t in self.own_clubs:
+                continue
+            free = []
+            for e in es:
+                r = v.row_of_gid.get(v.link_gid.get(e['playerindex']))
+                if r is None or v.teams_of[r] != [t] or e['rosterstatus'] or any(e[f] for f in FLAGS):
+                    continue
+                free.append((v.birth(r), r))
+            free.sort()
+            out.update(r for _, r in free[:max(0, len(es) - CLUB_MIN)])
+        return out
+
     def donor_candidates(self, taken):
         v = self.v
         out = {'G': [], 'S': []}
+        spare = self.spare_rows() if self.spare else None
         for r in range(v.nbio):
             if r in taken or v.created_slot(r) or not v.ai(r):
                 continue
@@ -98,15 +129,20 @@ class Writer:
                 tier = 1
             elif not teams:
                 tier = 2
+            elif all(t in self.own_clubs for t in teams):
+                tier = 4                              # его клуб конвейер пересобирает (--league) — место освобождается
             else:
                 tier = 3
-            out['G' if v.is_goalie(r) else 'S'].append((tier >= 3, v.birth(r)[0], tier, r))
+                if spare is not None and r not in spare:
+                    continue
+            out['G' if v.is_goalie(r) else 'S'].append((tier == 3, v.birth(r)[0], tier, r))
         for k in out:
             out[k].sort()
         return out
 
     def plan(self):
         v = self.v
+        self.own_clubs = {p['slot'] for p in self.players if p['slot'] is not None and p['slot'] not in NHL}
         self.row_of, self.new, self.no_room = {}, set(), []
         for p in self.players:
             m = self.mt.get(str(p['nhl_id']))
@@ -116,7 +152,7 @@ class Writer:
         self.donor_info = {}
         for kind in ('G', 'S'):
             need = [p for p in self.players if p['nhl_id'] not in self.row_of and (p['pos'] == 'G') == (kind == 'G')]
-            need.sort(key=lambda p: (p['slot'], p['nhl_id']))
+            need.sort(key=lambda p: (999 if p['slot'] is None else p['slot'], p['nhl_id']))
             pool = cands[kind]
             for p in need:
                 if not pool:
@@ -160,6 +196,65 @@ class Writer:
             skin[c] += n
         usual = skin.most_common(1)[0][0]
         self.heads = sorted(k for k in heads if k[1] == usual)
+        self.head_skin = {h: c for h, c in heads}
+
+    # --- тон кожи (--skin) -------------------------------------------------------------------
+    MISMATCH_STEPS = 2       # у сопоставленного с типовой головой — замена, если ступень тона по фото дальше
+
+    def prepare_skin(self):
+        """Выбор типовой головы по фото: новым — всегда (есть фото), сопоставленным с типовой головой — при
+        грубом расхождении (ступень тона по фото дальше MISMATCH_STEPS от головы EA, замер уверенный),
+        сканам EA (headid < 10000) — никогда."""
+        from . import skin
+        v = self.v
+        matched_heads = {p['nhl_id']: v.g('headid', self.row_of[p['nhl_id']]) for p in self.players
+                         if p['nhl_id'] not in self.new and v.g('headid', self.row_of[p['nhl_id']]) >= 10000}
+        self.skin_model = m = skin.SkinModel(self.paths.game, self.head_skin, self.players, matched_heads, self.log)
+        over = skin.load_overrides(self.paths.game)
+        self.skin_pick = {}
+        counts = Counter()
+        for p in self.players:
+            pid = p['nhl_id']
+            r = self.row_of[pid]
+            new = pid in self.new
+            ch = m.choose(p)
+            cur = v.g('headid', r)
+            head, note, kind = None, None, None
+            o = over.get(str(pid))
+            if o:
+                if o.get('head') in self.head_skin:
+                    head = o['head']
+                elif o.get('skin') in set(self.head_skin.values()):
+                    pool = sorted(h for h, c in self.head_skin.items() if c == o['skin'] and h in m.icon and m.icon[h])
+                    if ch:
+                        pool.sort(key=lambda h: (abs(m.icon[h]['ita'] - ch['target']), h))
+                        pool = pool[:5]
+                    head = pool[zlib.crc32(f"{p['first']} {p['last']}".encode()) % len(pool)] if pool else None
+                if head:
+                    note = f"поправка: {o.get('note') or o}"
+                    kind = 'override'
+                    counts['ручная поправка'] += 1
+            if head is None and ch:
+                if new:
+                    head = ch['head']
+                    counts['новый: по фото' + (' (проверить)' if ch['unsure'] else '')] += 1
+                elif (cur in self.head_skin and not ch['unsure']
+                      and abs(m.step_of_class(self.head_skin[cur]) - ch['step']) > self.MISMATCH_STEPS):
+                    head = ch['head']
+                    note = f"в базе голова {cur} (тон {self.head_skin[cur]}), по фото тон {ch['skin']} — заменена"
+                    kind = 'replaced'
+                    counts['в базе: голова заменена'] += 1
+                else:
+                    counts['в базе: своя голова' if cur < 10000 else 'в базе: голова оставлена'] += 1
+            elif head is None:
+                counts['новый: нет фото — по умолчанию' if new else 'в базе: нет фото'] += 1
+            if head is not None:
+                self.skin_pick[pid] = head
+            final = head if head is not None else (None if new else cur)
+            self.skin_rows.append({'nhl_id': pid, 'name': f"{p['first']} {p['last']}", 'team': p['team'], 'new': new,
+                                   'choice': ch, 'final_head': final, 'final_skin': None, 'note': note, 'kind': kind,
+                                   'scan': not new and cur < 10000 and head is None})
+        self.skin_info = dict(m.summary(), counts=dict(counts))
 
     def assign_artids(self):
         v = self.v
@@ -232,8 +327,10 @@ class Writer:
         else:
             notes.append('нет хвата')
         put('position', POS_CODE[p['pos']])
-        put('team', p['slot'] + 1)
-        if p.get('ahl'):
+        put('team', 0 if p.get('fa') else p['slot'] + 1)
+        if p.get('fa') or p.get('league'):
+            put('proteam', 0)                # свободный агент / клуб лиги: прав клуба НХЛ нет
+        elif p.get('ahl'):
             # клуб АХЛ: права — у клуба-хозяина, если контракт с ним (иначе контракт с клубом АХЛ — 0)
             put('proteam', team_slot(p['ahl']['parent']) + 1 if p['ahl']['nhl_contract'] else 0)
         elif p['slot'] + 1 < 1 << db.by_name[B]['fields']['proteam'][1]:
@@ -272,6 +369,16 @@ class Writer:
             put(f, x)
         for f, x in self.contract(p, ovr, r).items():
             put(f, x)
+        if p.get('fa'):
+            # как у 183 свободных агентов исходной базы: контракта нет, yearufa — нынешний год
+            for f in CONTRACT + ['contractneedsentrylevel', 'contractismultiyear']:
+                put(f, 0)
+            put('yearufa', SEASON_YEAR - 1900)
+            put('jersey', min(127, p.get('num') or 0))
+        elif p.get('league'):
+            # клуб европейской лиги: как у игроков Европы исходной базы — контракта НХЛ нет
+            for f in CONTRACT + ['contractneedsentrylevel', 'contractismultiyear']:
+                put(f, 0)
         if not p['landing']:
             notes.append('нет карточки landing: драфт и игры по сезонам не заполнены')
         if p.get('omitted'):
@@ -281,8 +388,14 @@ class Writer:
             put('audioid', 0)
             put('hasportrait', 0)
             head, skin = self.heads[zlib.crc32(f"{p['first']} {p['last']}".encode()) % len(self.heads)]
+            if self.skin_on and p['nhl_id'] in self.skin_pick:      # --skin: голова под тон кожи на фото
+                head = self.skin_pick[p['nhl_id']]
+                skin = self.head_skin[head]
             put('headid', head)
             put('skincolor', skin)
+        elif self.skin_on and p['nhl_id'] in self.skin_pick:          # сопоставленный: грубое расхождение тона
+            put('headid', self.skin_pick[p['nhl_id']])
+            put('skincolor', self.head_skin[self.skin_pick[p['nhl_id']]])
 
     # --- 3. рейтинги -----------------------------------------------------------------------
     def write_ratings(self, p, r, new):
@@ -316,10 +429,16 @@ class Writer:
             for f in TRAITS:
                 if f in db.by_name[t]['fields']:
                     db.set(t, f, row, 0)
-        if p['rating']['source'] == 'none':
+        src = p['rating']['source']
+        if src == 'none':
             self.notes[p['nhl_id']].append(f'рейтинга нет — оценка OVR {ovr}')
-        elif p['rating']['source'] in ('nhlratings-ovr', 'ea-ovr'):
+        elif src in ('nhlratings-ovr', 'ea-ovr'):
             self.notes[p['nhl_id']].append('атрибуты достроены из OVR')
+        elif src == 'stats':             # --stats-ratings
+            self.notes[p['nhl_id']].append(f"OVR по статистике — {ovr} (прежняя оценка {p['rating_before']['ovr']})")
+        elif src.endswith('+stats'):
+            self.notes[p['nhl_id']].append(f"OVR NHL 27 смешан со статистикой — {p['rating_before']['ovr']} → {ovr}; "
+                                           'атрибуты достроены из OVR')
         return attrs, ovr, style
 
     # --- 4. составы ------------------------------------------------------------------------
@@ -396,7 +515,7 @@ class Writer:
         kept, vacancies = [], []
         for e in v.entries:
             t, r = e['team'], row_of_link(e['playerindex'])
-            if t in NHL:
+            if t in NHL or t in self.own_clubs:       # составы НХЛ и клубов конвейера — заново ниже
                 continue
             if r in new_rows:
                 if t in SPECIAL and r not in donors:
@@ -428,7 +547,7 @@ class Writer:
         displaced = []
         for e in v.entries:
             r = row_of_link(e['playerindex'])
-            if e['team'] in NHL and r not in new_rows and r not in displaced:
+            if (e['team'] in NHL or e['team'] in self.own_clubs) and r not in new_rows and r not in displaced:
                 displaced.append(r)
         self.displaced = list(displaced)
         # места ушедших в НХЛ из клубов АХЛ/Европы/юниоров — ушедшим из НХЛ того же амплуа
@@ -471,7 +590,8 @@ class Writer:
         nhl_entries = []
         by_team = defaultdict(list)
         for p in self.players:
-            by_team[p['slot']].append(p)
+            if p['slot'] is not None:
+                by_team[p['slot']].append(p)
         self.lines_of, self.lines_info = {}, {}
         for team in sorted(by_team):
             tp = by_team[team]
@@ -496,6 +616,14 @@ class Writer:
                 o.update({'jersey': nums[p['nhl_id']], 'dressed': int(p['nhl_id'] in dressed),
                           'letter': {1: 'C', 2: 'A'}.get(letters.get(p['nhl_id'], 0)),
                           'slots': sorted(holder[p['nhl_id']])})
+        # свободные агенты (--fa): своя связь — в exhibitionfreeagents
+        self.fa_links = {}
+        for p in self.fa_players:
+            r = self.row_of[p['nhl_id']]
+            self.fa_links[p['nhl_id']] = pick_link(r, None)
+            self.out[p['nhl_id']].update({'jersey': v.g('jersey', r), 'dressed': 0, 'letter': None, 'slots': [],
+                                          'fa_link': self.fa_links[p['nhl_id']]})
+        fa_keep = sorted(fa_keep + list(self.fa_links.values()))
         entries = kept + refill + nhl_entries
         per_team = defaultdict(list)
         for e in entries:
@@ -586,7 +714,7 @@ class Writer:
             if team and r not in club_of and team - 1 not in v2.teams_of[r]:
                 bad.append(f"{v2.name(r)}: team {team} — команды нет среди его записей")
         # клубы НХЛ и заполненные конвейером клубы АХЛ (--ahl32): 71 место, 20 одетых, буквы, номера
-        own = list(NHL) + sorted({p['slot'] for p in self.players if p.get('ahl')})
+        own = list(NHL) + sorted(self.own_clubs)
         for team in own:
             te = [e for e in es if e['team'] == team]
             for f in FLAGS:
@@ -613,7 +741,16 @@ class Writer:
                 bad.append(f'команда {team}: буквы {dict(caps)}')
             nums = Counter(e['jersey'] for e in te)
             bad += [f'команда {team}: номер {n} у двоих' for n, c in nums.items() if c > 1]
-        want = {self.row_of[p['nhl_id']]: p['slot'] for p in self.players}
+        fa_set = set(v2.fa)
+        for p in self.fa_players:
+            r = self.row_of[p['nhl_id']]
+            if club_of.get(r):
+                bad.append(f'свободный агент {v2.name(r)} в составе {club_of[r]}')
+            if self.fa_links.get(p['nhl_id']) not in fa_set:
+                bad.append(f'свободного агента {v2.name(r)} нет в exhibitionfreeagents')
+            if v2.g('team', r) != 0 or v2.g('contractstatus', r) != 0:
+                bad.append(f"свободный агент {v2.name(r)}: team {v2.g('team', r)}, contractstatus {v2.g('contractstatus', r)}")
+        want = {self.row_of[p['nhl_id']]: p['slot'] for p in self.players if p['slot'] is not None}
         for r, team in want.items():
             if club_of.get(r) != [team]:
                 bad.append(f'{v2.name(r)}: в составах {club_of.get(r)}, нужен {team}')
@@ -628,6 +765,8 @@ class Writer:
         v, db = self.v, self.db
         self.plan()
         self.generic_heads()
+        if self.skin_on:
+            self.prepare_skin()
         self.assign_artids()
         for p in self.players:
             r = self.row_of[p['nhl_id']]
@@ -642,6 +781,10 @@ class Writer:
                 'db_name': m.get('db_name'), 'donor': self.donor_info.get(p['nhl_id']),
                 'artid': db.get(B, 'artid', r), 'ovr': ovr, 'rating_source': p['rating']['source'],
                 'style': style, 'notes': self.notes[p['nhl_id']]}
+        if self.skin_on:
+            for row in self.skin_rows:
+                r = self.row_of[row['nhl_id']]
+                row['final_head'], row['final_skin'] = v.g('headid', r), v.g('skincolor', r)
         self.rebuild_entries()
         self.write_table_rows(R, self.entries)
         self.write_table_rows(F, [{'playerindex': l} for l in self.fa_keep])
@@ -676,6 +819,16 @@ def run(paths, log=print, real_lines=True):
                  'links': w.db.by_name[P]['rows']},
         'model': {'offset': w.model.offset, 'depth': w.model.depth},
     }
+    if w.skin_on:
+        from . import skin
+        summary['skin'] = w.skin_info
+        summary['skin_players'] = [{k: r[k] for k in ('nhl_id', 'name', 'team', 'new', 'final_head', 'final_skin', 'note', 'kind')}
+                                   | {'unsure': bool((r['choice'] or {}).get('unsure')),
+                                      'photo_ita': (r['choice'] or {}).get('photo_ita'),
+                                      'norm': (r['choice'] or {}).get('norm')} for r in w.skin_rows]
+        sheet_path = os.path.join(paths.work, 'skin-sheet.html')
+        skin.sheet(sheet_path, paths.game, [r for r in w.skin_rows if not r['scan']], w.skin_info)
+        log(f"  тон кожи: {w.skin_info['counts']} -> {sheet_path}")
     write_json(paths.written, summary)
     n_new = len(w.new)
     log(f'write: {len(w.out)} игроков ({len(w.out) - n_new} сопоставлено, {n_new} в строках доноров, '

@@ -6,6 +6,7 @@
     python tools/roster match                       # players.json + база → match.json
     python tools/roster write  [--db-in DB] [--db-out DB] [--rating-lines]   # → game/work/roster/nhlng.db
     python tools/roster report                      # → game/work/roster/report.md, report-lines.md
+    python tools/roster photos                      # фото не из НХЛ → кадр НХЛ (photos_other.py), лист photos-sheet.html
     python tools/roster all    [--offline]          # всё подряд
     python tools/roster all --offline --work roster-lines   # всё в другую папку: game/work/roster-lines/
     python tools/roster all --ahl32 --db-in game/work/nhl32-ahl32/nhlng.db --work roster-ahl32
@@ -16,6 +17,7 @@ game/work/roster/nhlng.db (или --work/nhlng.db); в game/userdata/ ничег
 Подробно — docs/roster-pipeline.md.
 """
 import argparse
+import os
 import sys
 
 from .common import Paths
@@ -27,23 +29,36 @@ def main():
     sys.stdout.reconfigure(encoding='utf-8')
     ap = argparse.ArgumentParser(prog='python tools/roster', description=__doc__.splitlines()[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter, epilog='\n'.join(__doc__.splitlines()[2:]))
-    ap.add_argument('stage', choices=STAGES + ['all'])
+    ap.add_argument('stage', choices=STAGES + ['all', 'photos'])
     ap.add_argument('--game', help='каталог game/ (по умолчанию — основной копии репозитория)')
     ap.add_argument('--work', help='папка players.json, lines.json, match.json, write.json, отчётов и выходной базы: '
                                    'имя в game/work/ (roster-lines или game/work/roster-lines) или абсолютный путь '
                                    '(по умолчанию game/work/roster)')
     ap.add_argument('--db-in', help='входная база (по умолчанию game/work/nhl32/nhlng.db)')
     ap.add_argument('--db-out', help='выходная база (по умолчанию <work>/nhlng.db)')
-    ap.add_argument('--only', help='fetch: части через запятую (nhl, ea, nhlratings, wiki, dfo, ahl)')
+    ap.add_argument('--only', help='fetch: части через запятую (nhl, ea, nhlratings, wiki, dfo, ahl, fa, liiga)')
     ap.add_argument('--ahl32', action='store_true',
                     help='и клубы АХЛ из common.AHL_CLUBS (фарм-клубы Сиэтла и Вегаса; база tools/nhl32.py --ahl32)')
     ap.add_argument('--refresh', action='store_true', help='fetch: скачать заново, не глядя в кэш')
     ap.add_argument('--offline', action='store_true', help='только кэш; нет файла — ошибка')
     ap.add_argument('--pause', type=float, default=1.0, help='пауза между запросами к хосту, с (не меньше 1)')
     ap.add_argument('--rating-lines', action='store_true', help='write: звенья всех клубов по рейтингу, без lines.json')
+    ap.add_argument('--stats-ratings', action='store_true',
+                    help='build: OVR по статистике трёх сезонов с NHL-эквивалентами лиг (statsrating.py) у игроков '
+                         'без рейтинга и смесь с «только OVR» у малоопытных; отчёт report-ratings.md')
+    ap.add_argument('--fa', action='store_true',
+                    help='и свободные агенты: игроки НХЛ 2024/25–2025/26 без клуба (fa.py) → exhibitionfreeagents')
+    ap.add_argument('--skin', action='store_true',
+                    help='write: типовая голова под тон кожи на официальном фото (skin.py), лист проверки skin-sheet.html')
+    ap.add_argument('--league', choices=['liiga'],
+                    help='и клубы лиги нынешними составами с сайта лиги (league.py; проба — финская Liiga, строки 74–87)')
     a = ap.parse_args()
     paths = Paths(a.game, a.work)
     paths.ahl = a.ahl32
+    paths.stats_ratings = a.stats_ratings
+    paths.fa = a.fa
+    paths.skin = a.skin
+    paths.league = a.league
     if a.db_in:
         paths.db_in = a.db_in
     if a.db_out:
@@ -71,3 +86,9 @@ def main():
         elif stage == 'report':
             from . import report
             report.run(paths)
+        elif stage == 'photos':
+            # фото не из НХЛ: NHL latest и портреты лиг → кадр НХЛ (photos_other.py); в «all» не входит
+            from . import photos_other
+            photos_other.run(paths, offline=a.offline)
+            if os.path.exists(paths.written):
+                photos_other.build(paths)               # → game/work/photos-other/ (не photos-all)

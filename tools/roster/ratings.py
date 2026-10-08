@@ -57,6 +57,29 @@ def _median(xs, default=None):
     return statistics.median(xs) if xs else default
 
 
+def depth_of(players):
+    """25-й перцентиль OVR NHL 27 по амплуа среди игроков с рейтингом (оценка «нет рейтинга»)."""
+    ovrs = defaultdict(list)
+    for p in players:
+        if p['rating']['ovr']:
+            ovrs[cls(p['pos'])].append(p['rating']['ovr'])
+    return {c: (sorted(x)[len(x) // 4] if x else 75) for c, x in ovrs.items()}
+
+
+def default_ovr(p, depth):
+    """OVR игрока без рейтинга: 25-й перцентиль амплуа ± молодость ± 1 (постоянный по имени); у
+    клуба АХЛ — уровень АХЛ (ahl.target_ovr)."""
+    a = age(p['birth'])
+    adj = -2 if a <= 21 else -1 if a <= 23 else 0
+    spread = zlib.crc32(f"{p['first']} {p['last']}".encode()) % 3 - 1          # −1…+1, постоянный для игрока
+    if p.get('ahl'):
+        from .ahl import target_ovr
+        return target_ovr(p, spread)                 # клуб АХЛ: уровень АХЛ, не НХЛ
+    if p.get('league'):                              # клуб европейской лиги (--league): уровень лиги в базе
+        return p['league']['level'] + (-1 if a <= 20 else 0) + spread
+    return depth.get(cls(p['pos']), 75) + adj + spread
+
+
 class Model:
     def __init__(self, v, players):
         self.v = v
@@ -103,11 +126,7 @@ class Model:
                     diffs[cls(p['pos'])].append(rt['ovr'] - sum(vals) / len(vals))
         self.offset = {c: _median(diffs[c], 0.0) for c in 'CWDG'}
         # перцентили OVR НХЛ 2026/27 по амплуа — для тех, у кого рейтинга нет совсем
-        ovrs = defaultdict(list)
-        for p in players:
-            if p['rating']['ovr']:
-                ovrs[cls(p['pos'])].append(p['rating']['ovr'])
-        self.depth = {c: (sorted(x)[len(x) // 4] if x else 75) for c, x in ovrs.items()}
+        self.depth = depth_of(players)
         # стили исходной базы: «центроид» формы атрибутов и медианы тенденций ИИ
         cent, bias = defaultdict(lambda: defaultdict(list)), defaultdict(lambda: defaultdict(list))
         for r in range(db.by_name[S]['rows']):
@@ -132,17 +151,7 @@ class Model:
         rt = p['rating']
         if rt['ovr']:
             return rt['ovr']
-        c = cls(p['pos'])
-        a = age(p['birth'])
-        adj = -2 if a <= 21 else -1 if a <= 23 else 0
-        name = f"{p['first']} {p['last']}"
-        spread = zlib.crc32(name.encode()) % 3 - 1          # −1…+1, постоянный для игрока
-        if p.get('ahl'):
-            from .ahl import target_ovr
-            ovr = target_ovr(p, spread)                   # клуб АХЛ: уровень АХЛ, не НХЛ
-            self.estimated[p['nhl_id']] = ovr
-            return ovr
-        ovr = self.depth.get(c, 75) + adj + spread
+        ovr = default_ovr(p, self.depth)
         self.estimated[p['nhl_id']] = ovr
         return ovr
 

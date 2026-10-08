@@ -31,6 +31,12 @@ python tools/roster all --offline --work roster-lines      # → game/work/roste
 # и фарм-клубы Сиэтла и Вегаса (база tools/nhl32.py --ahl32, составы из Wikipedia):
 python tools/roster fetch --only ahl --work roster-ahl32
 python tools/roster all --offline --ahl32 --db-in game/work/nhl32-ahl32/nhlng.db --work roster-ahl32
+
+# расширения (docs/roster-expansion.md); без флагов база — прежняя байт в байт:
+python tools/roster fetch --only fa,liiga                 # свободные агенты и Liiga — в кэш
+python tools/roster all --offline --stats-ratings --fa --skin --league liiga --work roster-custom \
+       --db-in game/work/nhl32-custom/nhlng.db
+python tools/roster photos --work roster-custom           # фото не из НХЛ → кадр НХЛ, затем tools/photos.py build
 ```
 
 Интерпретатор — Python 3.14, только стандартная библиотека. Каталог `game/` (не в git)
@@ -40,9 +46,17 @@ python tools/roster all --offline --ahl32 --db-in game/work/nhl32-ahl32/nhlng.db
 [tools/nhl32.py](../tools/nhl32.py)), `--work` (папка `players.json`, `lines.json`,
 `match.json`, `write.json`, отчётов и выходной базы: имя внутри `game/work/` или абсолютный
 путь; в новой папке `artid-registry.json` берётся из `game/work/roster/` — artid новых те же),
-`fetch --only nhl,ea,nhlratings,wiki,dfo,ahl`, `--refresh` (скачать заново), `--pause` (не меньше
-1 с), `write --rating-lines` (звенья всех клубов по рейтингу, как до этапа lines), `--ahl32`
+`fetch --only nhl,ea,nhlratings,wiki,dfo,ahl,fa,liiga`, `--refresh` (скачать заново), `--pause` (не
+меньше 1 с), `write --rating-lines` (звенья всех клубов по рейтингу, как до этапа lines), `--ahl32`
 (ещё и клубы АХЛ из `common.AHL_CLUBS` — ниже).
+
+Расширения — [roster-expansion.md](roster-expansion.md): `--stats-ratings` (OVR по статистике трёх
+сезонов с NHL-эквивалентами лиг, `statsrating.py`, отчёт `report-ratings.md` «было → стало»),
+`--fa` (реальные свободные агенты 2026/27 → `exhibitionfreeagents`, `fa.py`), `--skin` (типовая
+голова под тон кожи на официальном фото, `skin.py`, лист проверки `skin-sheet.html`, поправки
+`game/work/roster/skin-overrides.json`), `--league liiga` (клубы SM-liiga 74–87 — нынешними составами
+liiga.fi, `league.py`), этап `photos` (портреты лиг и NHL latest → кадр портретов НХЛ,
+`photos_other.py`, лист `photos-sheet.html`).
 
 ### Клубы АХЛ (--ahl32)
 
@@ -75,7 +89,8 @@ nhlratings.net у игроков АХЛ нет: OVR — уровень АХЛ и
 | lines | `lines_real.py`, `sources.dfo_lines` | кэш DailyFaceoff + `players.json` → `lines.json` |
 | match | `match.py`, `dbview.py` | `players.json` + входная база → `match.json` |
 | write | `write.py`, `ratings.py`, `lines.py`, `codes.py` | всё выше → `nhlng.db`, `write.json`, `artid-registry.json` |
-| report | `report.py` | json выше и выходная база → `report.md`, `report-lines.md` |
+| report | `report.py` | json выше и выходная база → `report.md`, `report-lines.md` (и `report-ratings.md` при `--stats-ratings`) |
+| photos | `photos_other.py` | портреты не из НХЛ → `roster-cache/photos/20262027/` (кадр НХЛ), `photos-sheet.html` |
 
 ### fetch: источники
 
@@ -91,7 +106,7 @@ nhlratings.net у игроков АХЛ нет: OVR — уровень АХЛ и
 | `search.d3.nhle.com/api/v1/search/player?q=*&active=true` | 1 | игроки, которых состав не показывает (ниже) |
 | `ea.com/games/nhl/ratings?page=1…6` | 6 | топ-300 NHL 27: ID EA, OVR, 40 атрибутов (`__NEXT_DATA__`) |
 | `nhlratings.net` | ~1100 | страницы 32 клубов, игроков с них (OVR, атрибуты у части, стиль) и 13 списков топ-100 вратарских атрибутов; сборщик — по образцу `tools/providers/ea_ratings.py` puckpeak (MIT) |
-| `en.wikipedia.org` (`action=raw`) | 1 | «List of current NHL captains and alternate captains» |
+| `en.wikipedia.org` (`/wiki/<статья>?action=raw`) | 1 | «List of current NHL captains and alternate captains» (robots.txt закрывает `/w/`, поэтому не `index.php`) |
 | `www.dailyfaceoff.com/teams/{slug}/line-combinations` | 32 + robots.txt | реальные звенья: 4 тройки, 3 пары, вратари, PP1/PP2, PK1/PK2, травмированные (`__NEXT_DATA__`, ниже — раздел lines) |
 
 **Игроки вне `/roster/current`.** Состав API не показывает травмированных (Джарвис, Барзал,

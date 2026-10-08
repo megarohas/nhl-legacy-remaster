@@ -76,6 +76,11 @@ class Paths:
         # artid новых игроков общие для всех папок: в новой папке таблица берётся из основной
         self.registry_main = os.path.join(self.game, 'work', 'roster', 'artid-registry.json')
         self.ahl = False                # --ahl32: ещё и клубы АХЛ из AHL_CLUBS (составы из Wikipedia)
+        self.stats_ratings = False      # --stats-ratings: OVR по статистике (statsrating.py)
+        self.fa = False                 # --fa: свободные агенты (fa.py)
+        self.skin = False               # --skin: голова под тон кожи на фото (skin.py)
+        self.league = None              # --league liiga: клубы европейской лиги нынешними составами (league.py)
+        self.report_ratings = os.path.join(self.work, 'report-ratings.md')
 
     def meta_for(self, db_path):
         """Схема рядом с базой (nhl32 кладёт свою, с вместимостью франшизы), иначе анкер."""
@@ -243,10 +248,20 @@ def team_slot(abbr):
     return TEAM_SLOT.get(TEAM_ALIAS.get(abbr, abbr))
 
 
+def _league_clubs():
+    from .league import club_names           # клубы европейских лиг (--league), позднее подключение
+    return club_names()
+
+
 def club_abbr(slot):
-    """Аббревиатура клуба по строке: НХЛ или клуб АХЛ из AHL_CLUBS."""
-    return SLOT_TEAM.get(slot) or AHL_CLUBS[slot]['abbr']
+    """Аббревиатура клуба по строке: НХЛ, клуб АХЛ из AHL_CLUBS или клуб лиги (--league)."""
+    if slot in SLOT_TEAM:
+        return SLOT_TEAM[slot]
+    if slot in AHL_CLUBS:
+        return AHL_CLUBS[slot]['abbr']
+    return _league_clubs()[slot][0]
 
 
 def club_name(abbr):
-    return TEAM_NAMES.get(abbr) or next(c['name'] for c in AHL_CLUBS.values() if c['abbr'] == abbr)
+    return (TEAM_NAMES.get(abbr) or next((c['name'] for c in AHL_CLUBS.values() if c['abbr'] == abbr), None)
+            or next(n for a, n in _league_clubs().values() if a == abbr))

@@ -15,6 +15,8 @@
   JSON `__NEXT_DATA__` страницы); перед ними — robots.txt (там `Disallow: /api/`, `/cms/`).
 - ahl (--ahl32 или --only ahl): составы клубов АХЛ из Wikipedia, их ID НХЛ (search.d3 по имени) и
   карточки landing — ahl.py.
+- fa (--fa или --only fa): свободные агенты — stats REST bios за 2024/25 и карточки landing игроков без
+  клуба — fa.py.
 """
 import re
 import time
@@ -29,8 +31,8 @@ SEARCH_ALL = 'https://search.d3.nhle.com/api/v1/search/player?culture=en-us&limi
 EXTRA_GP = 40
 EA = 'https://www.ea.com/games/nhl/ratings'
 NR = 'https://www.nhlratings.net/'
-WIKI_CAPTAINS = ('https://en.wikipedia.org/w/index.php?title=List_of_current_NHL_captains_and_alternate_captains'
-                 '&action=raw')
+# /wiki/<статья>?action=raw: robots.txt Wikipedia закрывает /w/ (index.php), а /wiki/ — открыт
+WIKI_CAPTAINS = 'https://en.wikipedia.org/wiki/List_of_current_NHL_captains_and_alternate_captains?action=raw'
 NR_TEAMS = TEAM_URL_SLUG              # anaheim-ducks … winnipeg-jets
 NR_GOALIE_LISTS = ['angles', 'breakaway', 'five-hole', 'glove-side-high', 'glove-side-low', 'stick-side-high',
                    'stick-side-low', 'poke-check', 'rebound-control', 'shot-recover', 'vision',
@@ -160,7 +162,8 @@ PARTS = ['nhl', 'ea', 'nhlratings', 'wiki', 'dfo']
 
 
 def run(paths, parts=None, pause=1.0, refresh=False, log=print):
-    parts = parts or (PARTS + ['ahl'] if paths.ahl else PARTS)
+    parts = parts or (PARTS + (['ahl'] if paths.ahl else []) + (['fa'] if getattr(paths, 'fa', False) else [])
+                      + ([paths.league] if getattr(paths, 'league', None) else []))
     h = Http(paths.cache, pause=pause, refresh=refresh, log=log)
     if 'nhl' in parts:
         rosters = nhl_rosters(h, log)
@@ -179,6 +182,14 @@ def run(paths, parts=None, pause=1.0, refresh=False, log=print):
     if 'ahl' in parts:
         from . import ahl
         ahl.fetch(h, log)
+    if 'liiga' in parts:
+        from . import league
+        league.fetch(h, log)
+    if 'fa' in parts:
+        from . import fa
+        from .common import read_json
+        ids = set(roster_ids(nhl_rosters(h, log))) | set(read_json(h.path('nhl/extras.json'), []) or [])
+        fa.fetch(h, ids, log)
     write_json(h.path(f'_fetched-{"-".join(parts)}.json'),
                {'date': time.strftime('%Y-%m-%d %H:%M:%S'), 'parts': parts, 'requests': h.requests})
     log(f'fetch: готово, запросов в сеть {h.requests}')

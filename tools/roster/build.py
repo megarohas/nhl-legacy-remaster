@@ -264,6 +264,41 @@ def run(paths, log=print):
             p['rating'] = choose_rating(p)
             ahl_added.append(p)
         players += ahl_added
+    league_added, league_skipped = [], {}
+    if getattr(paths, 'league', None):
+        # клубы лиги нынешними составами с сайта лиги (league.py); кто уже в НХЛ/АХЛ — там и остаётся
+        from . import league
+        league_added, league_skipped = league.players(cache, players, log)
+        for p in league_added:
+            p['rating'] = choose_rating(p)
+        players += league_added
+    fa_added, fa_dropped = [], []
+    if getattr(paths, 'fa', False):
+        # свободные агенты: играли в НХЛ в 2024/25–2025/26, клуба нет (fa.py)
+        from . import fa
+        on_all = {p['nhl_id'] for p in players}
+        over_fn = os.path.join(paths.game, 'work', 'roster', 'fa-overrides.json')
+        if not os.path.exists(over_fn):
+            write_json(over_fn, {'_': 'Ручные поправки свободных агентов (--fa): exclude — не брать, include — взять кандидата, '
+                                      'даже если проверка его отсеяла (список отсеянных с причинами — report.md).',
+                                 'exclude': {}, 'include': {}})
+        fa_over = read_json(over_fn, {}) or {}
+        fa_added, fa_dropped = fa.players(cache, bios, base_record, entry_from_landing, sources.nhl_landing, on_all, log,
+                                          overrides=fa_over)
+        for p in fa_added:
+            p['rating'] = choose_rating(p)
+        players += fa_added
+    stats_summary = None
+    if getattr(paths, 'stats_ratings', False):
+        # OVR по статистике трёх сезонов (NHLe) — у кого рейтинга нет и смесь у малоопытных «только OVR»
+        from . import statsrating
+        stats_summary = statsrating.apply(players, lambda pid: sources.nhl_landing(cache, pid), log)
+    elif fa_added or league_added:
+        # свободных агентов и игроков лиг EA и nhlratings.net не знают: OVR по статистике (без --stats-ratings —
+        # только у них)
+        from . import statsrating
+        stats_summary = statsrating.apply(players, lambda pid: sources.nhl_landing(cache, pid), log,
+                                          only=lambda p: bool(p.get('fa') or p.get('league')))
     by_src = defaultdict(int)
     for p in players:
         by_src[p['rating']['source']] += 1
@@ -271,6 +306,7 @@ def run(paths, log=print):
         'season': SEASON, 'generated': time.strftime('%Y-%m-%d %H:%M:%S'),
         'counts': {'players': len(players), 'omitted_added': len(extras), 'no_landing': len(no_landing),
                    'ahl': len(ahl_added), 'ahl_wiki_only': sum(1 for p in ahl_added if p.get('wiki_only')),
+                   'free_agents': len(fa_added), 'league': len(league_added),
                    'ea_top300': len(ea),
                    'ea_matched': len(ea) - len(ea_unmatched), 'nhlratings_pages': len(nr),
                    'nhlratings_matched': nr_used, 'captains_teams': len(caps), 'letters_found': cap_found,
@@ -279,11 +315,20 @@ def run(paths, log=print):
         'omitted_added': extras,
         'ea_unmatched': ea_unmatched, 'letters_unmatched': cap_miss, 'no_landing': no_landing,
     }
-    players.sort(key=lambda p: (p['slot'], {'C': 0, 'L': 1, 'R': 2, 'D': 3, 'G': 4}[p['pos']], p['last'], p['first']))
+    if stats_summary:
+        meta['stats_ratings'] = stats_summary
+    if getattr(paths, 'fa', False):
+        meta['fa_dropped'] = fa_dropped
+    if league_added or league_skipped:
+        meta['league_skipped'] = league_skipped
+    players.sort(key=lambda p: (999 if p['slot'] is None else p['slot'], {'C': 0, 'L': 1, 'R': 2, 'D': 3, 'G': 4}[p['pos']],
+                                p['last'], p['first']))
     write_json(paths.players, {'meta': meta, 'players': players})
     c = meta['counts']
     if ahl_added:
         log(f"build: клубы АХЛ — {c['ahl']} игроков (без ID НХЛ {c['ahl_wiki_only']})")
+    if fa_added:
+        log(f"build: свободные агенты — {len(fa_added)} (отсеяно кандидатов {len(fa_dropped)})")
     log(f"build: {c['players']} игроков 32 клубов (из них вне /roster/current {c['omitted_added']}); "
         f"EA {c['ea_matched']}/{c['ea_top300']}, nhlratings.net "
         f"{c['nhlratings_matched']}; рейтинги {dict(by_src)}; буквы {cap_found} ({len(caps)} клубов) -> {paths.players}")

@@ -18,7 +18,10 @@ HOW = {'artid': 'artid = ID EA', 'birth': 'фамилия + дата рожде�
        'birth+similar': 'дата рождения + похожая фамилия'}
 SRC = {'ea': 'EA NHL 27 (все атрибуты)', 'nhlratings': 'nhlratings.net (атрибуты)',
        'nhlratings-ovr': 'nhlratings.net (только OVR, атрибуты достроены)', 'ea-ovr': 'EA (только OVR)',
-       'none': 'нет — оценка по амплуа и возрасту'}
+       'none': 'нет — оценка по амплуа и возрасту',
+       'stats': 'нет — оценка по статистике трёх сезонов (--stats-ratings)',
+       'nhlratings-ovr+stats': 'nhlratings.net (только OVR), смешан с оценкой по статистике',
+       'ea-ovr+stats': 'EA (только OVR), смешан с оценкой по статистике'}
 STYLE = {1: 'оборонец', 2: 'атакующий защитник', 3: 'силовой защитник', 4: 'универсал', 5: 'работяга',
          6: 'плеймейкер', 7: 'снайпер', 8: 'силовой нападающий', 9: 'двусторонний', 10: 'тафгай'}
 
@@ -101,7 +104,8 @@ def run(paths, log=print):
     add('|---|---|---|---|---|---|---|---|')
     by_team = defaultdict(list)
     for o in out.values():
-        by_team[o['slot']].append(o)
+        if o['slot'] is not None:            # свободные агенты (--fa) — отдельный раздел ниже
+            by_team[o['slot']].append(o)
     for slot in sorted(by_team):
         os_ = by_team[slot]
         pos = Counter('G' if o['pos'] == 'G' else 'D' if o['pos'] == 'D' else 'F' for o in os_)
@@ -126,7 +130,8 @@ def run(paths, log=print):
                 n = 'номера из API нет или он занят в клубе — выдан прежний или свободный'
             elif n.startswith('страна рождения'):
                 n = 'страна рождения без кода в базе (127)'
-            notes[n.split(' — ')[0] if n.startswith(('рейтинга нет', 'буква A')) else n] += 1
+            notes[n.split(' — ')[0] if n.startswith(('рейтинга нет', 'буква A', 'OVR по статистике', 'OVR NHL 27'))
+                  else n] += 1
     add('- Контракты у всех игроков НХЛ — **заглушка** по OVR и возрасту (сумма 0,9–10 млн $, срок 1–4 года, '
         'yearufa, yearfirstsigned, yearwaivereligible — по сроку и драфту); настоящие — этап контрактов.')
     add('- Портреты, логотипы, формы — следующий этап: у новых игроков `hasportrait` = 0 (силуэт), типовая голова, '
@@ -157,6 +162,37 @@ def run(paths, log=print):
         '(211–213), Зимняя классика (214–217) — составы 2012 года; сопоставленные игроки в них обновлены вместе с '
         'основной записью (например, Кросби в сборной Канады). Обновление этих составов — следующие этапы.')
     add('')
+    fa_out = [o for o in out.values() if o['slot'] is None]
+    if fa_out or meta.get('fa_dropped') is not None:
+        add(f'## Свободные агенты (--fa): {len(fa_out)}')
+        add('')
+        add('Играли в НХЛ в 2024/25–2025/26, клуба сейчас нет (stats REST bios + карточка landing: активен, нет клуба '
+            'и строк сезона 2026/27 в другой лиге, не старше 40 лет, 10+ игр в НХЛ за два сезона). В базе — как свободные '
+            'агенты исходной: `team` 0, без контракта, связь в `exhibitionfreeagents` (записей там: '
+            f"{wr['rows']['free_agents']}).")
+        add('')
+        add('Ручные поправки — `game/work/roster/fa-overrides.json`: `{"exclude": {"<NHL ID>": "причина"}, '
+            '"include": {"<NHL ID>": "причина"}}` (include — взять кандидата из списка отсеянных).')
+        add('')
+        add('| Игрок | Поз. | Род. | Последний клуб НХЛ | Игр НХЛ за 2 сезона | OVR | Рейтинг | Wikipedia | Строка базы |')
+        add('|---|---|---|---|---|---|---|---|---|')
+        for o in sorted(fa_out, key=lambda o: -o['ovr']):
+            p = players[o['nhl_id']]
+            if o['new']:
+                d = o['donor']
+                where = f"новый, artid {o['artid']}; строка {o['row']} ({d['name']}, {d['birth'][0]}, {d['tier']})"
+            else:
+                where = f"{HOW.get(o['how'], o['how'])}; строка {o['row']}"
+            add(f"| {o['name']} | {o['pos']} | {_fmt_birth(p['birth'])} | {p['fa'].get('last_team') or '—'} | "
+                f"{p['fa']['nhl_gp_2y']} | {o['ovr']} | {o['rating_source']} | "
+                f"{(p['fa'].get('wiki') or '—').replace('Wikipedia: ', '')} | {where} |")
+        add('')
+        if meta.get('fa_dropped'):
+            add('Отсеяны кандидаты (клуба в bios нет, но):')
+            add('')
+            for q in sorted(meta['fa_dropped'], key=lambda q: -q['gp']):
+                add(f"- {q['name']} ({q['gp']} игр НХЛ за 2 сезона) — {q['why']}")
+            add('')
     if wr['no_room']:
         add('## Без места')
         add('')
@@ -215,8 +251,68 @@ def run(paths, log=print):
     with open(paths.report, 'w', encoding='utf-8', newline='\n') as f:
         f.write('\n'.join(L) + '\n')
     log(f'report: {len(L)} строк -> {paths.report}')
-    assert all(s in NHL or s in AHL_CLUBS for s in by_team)
+    if meta.get('league_skipped'):
+        L2 = ['', '## Клубы лиги (--league): кто не взят', '']
+        for why, names in meta['league_skipped'].items():
+            L2.append(f"- {why}: {len(names)}" + (f" — {', '.join(names[:60])}{' …' if len(names) > 60 else ''}" if names else ''))
+        with open(paths.report, 'a', encoding='utf-8', newline='\n') as f:
+            f.write('\n'.join(L2) + '\n')
     run_lines(paths, log)
+    if meta.get('stats_ratings'):
+        run_ratings(paths, data, wr, log)
+
+
+# --- рейтинги по статистике -------------------------------------------------------------------
+def run_ratings(paths, data, wr, log=print):
+    """report-ratings.md: «было → стало» у игроков, чей OVR изменён --stats-ratings, и модель."""
+    from .ratings import age
+    from .statsrating import NHLE, SEASON_W
+    meta = data['meta']['stats_ratings']
+    out = {o['nhl_id']: o for o in wr['players']}
+    L = []
+    add = L.append
+    add('# Рейтинги по статистике (--stats-ratings): было → стало')
+    add('')
+    add(f"Собрано {time.strftime('%d.%m.%Y %H:%M')}. Модель — `tools/roster/statsrating.py`, обоснование — "
+        '`docs/roster-expansion.md`. Статистика — регулярный чемпионат трёх сезонов из карточек landing НХЛ, '
+        'очки переведены в НХЛ коэффициентами лиг (NHLe), веса сезонов '
+        + ', '.join(f"{str(k)[:4]}/{str(k)[6:]}: {v}" for k, v in sorted(meta['season_weights'].items(), reverse=True))
+        + '.')
+    add('')
+    add('## Модель')
+    add('')
+    add('| Амплуа | Игроков в калибровке | Средняя ошибка, OVR | Из них малоопытных (< 40 игр НХЛ) | Ошибка у них | Коэффициенты |')
+    add('|---|---|---|---|---|---|')
+    names = {'F': 'нападающие: a, b·P, c·P², d·E, e·E·P', 'D': 'защитники: a, b·P, c·P², d·E, e·E·P',
+             'G': 'вратари: a, b·E, c·sv, d·E·sv'}
+    for g, i in meta['fit'].items():
+        add(f"| {g} | {i['n']} | {i['mae']} | {i['n_rookies']} | {i['mae_rookies']} | {names[g]} = "
+            f"{', '.join(str(c) for c in i['coef'])} |")
+    add('')
+    add('NHLe (очки в НХЛ на очко в лиге): ' + ', '.join(f'{k} {v}' for k, v in NHLE.items() if v >= 0.2) + '.')
+    add('')
+    add('Что сделано: ' + '; '.join(f'{k} — {n}' for k, n in sorted(meta['counts'].items())) + '.')
+    add('')
+    rows = [p for p in data['players'] if p.get('rating_before')]
+    rows.sort(key=lambda p: (-abs(p['rating']['ovr'] - p['rating_before']['ovr']), p['team'], p['last']))
+    add(f'## Изменённые игроки ({len(rows)})')
+    add('')
+    add('P — очки за игру в пересчёте на НХЛ (со сжатием к запасному), sv — % отражённых выше среднего по лиге '
+        '(пункты), уверенность — по числу игр. «Было» у игроков без рейтинга — прежняя оценка по амплуа и возрасту.')
+    add('')
+    add('| Игрок | Клуб | Поз. | Возр. | Было | Оценка | Уверенность | Стало | В базе | Сезоны (лига, сезон, И-Г-П) |')
+    add('|---|---|---|---|---|---|---|---|---|---|')
+    for p in rows:
+        b, st = p['rating_before'], p['stats']
+        o = out.get(p['nhl_id']) or {}
+        x = f"P {st['P']}" if 'P' in st else f"sv {st['sv']:+}"
+        add(f"| {p['first']} {p['last']} | {p['team']} | {p['pos']} | {age(p['birth'])} | {b['ovr']} ({b['source']}) | "
+            f"{st['ovr']} ({x}) | {st['conf']} | **{p['rating']['ovr']}** | {o.get('ovr', '—')} | "
+            f"{'; '.join(st['lines'][-6:]) or '—'} |")
+    add('')
+    with open(paths.report_ratings, 'w', encoding='utf-8', newline='\n') as f:
+        f.write('\n'.join(L) + '\n')
+    log(f'report: рейтинги по статистике — {len(rows)} изменено -> {paths.report_ratings}')
 
 
 # --- звенья ------------------------------------------------------------------------------------

@@ -17,7 +17,7 @@ import zlib
 from .codes import PROVINCE_NAMES, PROVINCES, STATE_NAMES, STATES
 from .common import AHL_CLUBS, SEASON_YEAR, TEAM_NAMES, norm, read_json, write_json
 
-WIKI_RAW = 'https://en.wikipedia.org/w/index.php?title={}&action=raw'
+WIKI_RAW = 'https://en.wikipedia.org/wiki/{}?action=raw'      # robots.txt закрывает /w/, /wiki/ — открыт
 SEARCH = 'https://search.d3.nhle.com/api/v1/search/player?culture=en-us&limit=20&q={}'
 NHL = 'https://api-web.nhle.com/v1'
 POS = {'C': 'C', 'LW': 'L', 'RW': 'R', 'W': 'L', 'F': 'C', 'D': 'D', 'G': 'G', 'L': 'L', 'R': 'R'}
