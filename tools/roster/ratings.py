@@ -20,7 +20,7 @@ import zlib
 from collections import defaultdict
 
 from .common import SEASON_YEAR
-from .dbview import B, G, S, fld
+from .dbview import B, G, LEGACY, S, fld
 
 SK = ['p_deking', 'p_handeye', 'p_passing', 'p_puckcontrol', 'p_slapaccuracy', 'p_slapshotpower', 'p_wristaccuracy',
       'p_wristshotpower', 'p_acceleration', 'p_agility', 'p_balance', 'p_endurance', 'p_speed', 'p_discipline',
@@ -133,25 +133,14 @@ class Model:
         # 76,7). Новые клубы выходили слабее соседей на 3 (NHL 13) и 12 (Legacy) пунктов атрибутов. Поэтому медиана OVR
         # по амплуа равняется на игроков АХЛ базы (ahl_shift), а атрибуты строятся с их поправкой «OVR − среднее
         # атрибутов» (ahl_offset). Без клубов АХЛ конвейера ничего не меняется.
-        self.ahl_shift, self.ahl_offset = {}, {}
-        ahl_new = defaultdict(list)
-        for p in players:
-            if p.get('ahl') and p['rating']['source'] not in ('ea', 'nhlratings'):
-                ahl_new[cls(p['pos'])].append(p['rating']['ovr'] or default_ovr(p, self.depth))
-        if ahl_new:
-            base_ovr, base_off = defaultdict(list), defaultdict(list)
-            for r in range(v.nbio):
-                if 33 <= v.g('team', r) <= 62 and v.ai(r) and not v.created_slot(r):    # клубы АХЛ 32–61 (номер + 1)
-                    t, row = v.ai(r)
-                    fs = GK if t == G else SK
-                    c = cls({0: 'C', 1: 'L', 2: 'R', 3: 'D', 4: 'G'}[v.g('position', r)])
-                    o = v.overall(r)
-                    base_ovr[c].append(o)
-                    base_off[c].append(o - sum(db.get(t, fld(f), row) + BASE for f in fs) / len(fs))
-            for c in 'CWDG':
-                if ahl_new[c] and base_ovr[c]:
-                    self.ahl_shift[c] = _median(base_ovr[c]) - _median(ahl_new[c])
-                    self.ahl_offset[c] = _median(base_off[c])
+        self.ahl_shift, self.ahl_offset = self.calibrate(v, players, lambda p: p.get('ahl'), range(32, 62))
+        # клубы европейской лиги конвейера (--league liiga) — то же у NHL Legacy: её сохранённый OVR вне НХЛ ниже
+        # атрибутов (у Liiga базы на 9,3), и новые клубы Liiga выходили на 10,5 пункта атрибутов слабее исходных и
+        # соседних лиг. Связь — по игрокам этих же клубов в базе. У NHL 13 OVR ≈ атрибуты во всех лигах — не трогаем.
+        self.league_shift, self.league_offset = {}, {}
+        if LEGACY:
+            rows = {p['slot'] for p in players if p.get('league')}
+            self.league_shift, self.league_offset = self.calibrate(v, players, lambda p: p.get('league'), rows)
         # стили исходной базы: «центроид» формы атрибутов и медианы тенденций ИИ
         cent, bias = defaultdict(lambda: defaultdict(list)), defaultdict(lambda: defaultdict(list))
         for r in range(db.by_name[S]['rows']):
@@ -172,9 +161,44 @@ class Model:
         t, row = self.v.ai(r)
         return {f: self.v.db.get(t, fld(f), row) + BASE for f in (GK if t == G else SK)}
 
+    def calibrate(self, v, players, member, rows):
+        """({амплуа: сдвиг OVR}, {амплуа: OVR − среднее атрибутов}) для новых игроков группы member: медиана их
+        OVR по амплуа равняется медиане игроков клубов rows исходной базы, связь OVR с атрибутами — их же.
+        Игроки с полным набором атрибутов (ea, nhlratings) не считаются и не сдвигаются."""
+        new = defaultdict(list)
+        for p in players:
+            if member(p) and p['rating']['source'] not in ('ea', 'nhlratings'):
+                new[cls(p['pos'])].append(p['rating']['ovr'] or default_ovr(p, self.depth))
+        shift, offset = {}, {}
+        if not new:
+            return shift, offset
+        db, teams = v.db, {r + 1 for r in rows}                 # в био команда — номер + 1
+        base_ovr, base_off = defaultdict(list), defaultdict(list)
+        for r in range(v.nbio):
+            if v.g('team', r) in teams and v.ai(r) and not v.created_slot(r):
+                t, row = v.ai(r)
+                fs = GK if t == G else SK
+                c = cls({0: 'C', 1: 'L', 2: 'R', 3: 'D', 4: 'G'}[v.g('position', r)])
+                o = v.overall(r)
+                base_ovr[c].append(o)
+                base_off[c].append(o - sum(db.get(t, fld(f), row) + BASE for f in fs) / len(fs))
+        for c in 'CWDG':
+            if new[c] and base_ovr[c]:
+                shift[c] = _median(base_ovr[c]) - _median(new[c])
+                offset[c] = _median(base_off[c])
+        return shift, offset
+
+    def group(self, p):
+        """(сдвиг, поправка) группы игрока: клуб АХЛ конвейера, клуб лиги конвейера (Legacy) или ничего."""
+        if p.get('ahl'):
+            return self.ahl_shift, self.ahl_offset
+        if p.get('league'):
+            return self.league_shift, self.league_offset
+        return {}, {}
+
     def target_ovr(self, p):
         rt = p['rating']
-        shift = self.ahl_shift.get(cls(p['pos'])) if p.get('ahl') and rt['source'] not in ('ea', 'nhlratings') else None
+        shift = self.group(p)[0].get(cls(p['pos'])) if rt['source'] not in ('ea', 'nhlratings') else None
         if rt['ovr']:
             return rt['ovr'] if shift is None else round(rt['ovr'] + shift, 1)
         ovr = default_ovr(p, self.depth)
@@ -205,7 +229,7 @@ class Model:
         # форма, сдвинутая так, чтобы среднее всех плюс поправка амплуа дало OVR
         unknown = [f for f in fs if f not in known]
         out = {f: known.get(f, shape[f]) for f in fs}
-        offset = self.ahl_offset.get(c, self.offset[c]) if p.get('ahl') else self.offset[c]   # клубы АХЛ — как у АХЛ базы
+        offset = self.group(p)[1].get(c, self.offset[c])      # клубы АХЛ / лиги конвейера — как у их клубов в базе
         for _ in range(10):   # упирающиеся в 36/99 значения съедают часть сдвига
             level = sum(clamp_rating(out[f]) for f in fs) / len(fs) + offset
             delta = (ovr - level) * len(fs) / max(1, len(unknown))
