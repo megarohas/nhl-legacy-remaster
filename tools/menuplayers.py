@@ -495,6 +495,22 @@ def cmd_scout(args):
         print(f"место {e['slot']:2d} {e['name']:24s} кандидатов {len(rows):3d} → {os.path.relpath(out, GAME)}", flush=True)
 
 
+_NUMS = None
+
+
+def number_label(nhl_id):
+    """«№30 G» — номер и амплуа из players.json конвейера (для сверки: на фото из статей NHL.com бывает
+    другой игрок той же команды)."""
+    global _NUMS
+    if _NUMS is None:
+        try:
+            _NUMS = {i: (p.get('num'), p.get('pos')) for i, p in load_players().items()}
+        except Exception:                                           # noqa: BLE001
+            _NUMS = {}
+    num, pos = _NUMS.get(int(nhl_id), (None, None))
+    return f'№{num} {pos}' if num is not None else ''
+
+
 def fetch_original(c, nhl_id):
     """Оригинал кандидата scout в players/src/<id>/ (кэш): NHL.com — t_q-best, Commons — url."""
     import hashlib
@@ -619,7 +635,7 @@ def cmd_try(args):
         both.paste(scr0, (0, 0))
         both.paste(scr, (0, 750))
         d = ImageDraw.Draw(both)
-        d.text((8, 723), f"#{i} {os.path.basename(src)}  {Image.open(src).size}  масштаб ×{sc:.2f}  "
+        d.text((8, 723), f"#{i} [{e['name']} {number_label(e['nhl_id'])}] {os.path.basename(src)}  {Image.open(src).size}  масштаб ×{sc:.2f}  "
                          f"обрезы на экране: {int(bad.sum())} px  ({c.get('date', '')} {c.get('title', '')[:70]})",
                 fill=(255, 220, 120) if not bad.any() else (255, 120, 255), font=font)
         tiles.append(both.resize((640, 375)))
@@ -878,7 +894,7 @@ def surname(e):
     return last.upper()
 
 
-def render_name(text, max_w=380, max_cap=84, shear=0.21):
+def render_name(text, max_w=360, max_cap=84, shear=0.21):
     """Фамилия «металлом», как mainMenuPlayerNames (остатки NHL 11 в архивах NHL 12): шрифт пунктов меню
     NHL 12 («EA HelveticaNeue Hv» из её cache.big — DIN), наклон, градиент, царапины, отражение. → RGBA."""
     import numpy as np
@@ -932,7 +948,12 @@ def render_name(text, max_w=380, max_cap=84, shear=0.21):
     return img.filter(ImageFilter.SMOOTH_MORE) if False else img
 
 
-def best_name_pos(fig_alpha, name_alpha, xs=(14, 44, 74), ys=range(36, 268, 8), origin=(0, 0)):
+# фамилия — правее панели «NHL 13 Features» (она вверху слева, до x ≈ 742 экрана; кадр — с 684)
+NAME_X_MIN = 74
+
+
+def best_name_pos(fig_alpha, name_alpha, xs=(NAME_X_MIN, NAME_X_MIN + 30, NAME_X_MIN + 60), ys=range(36, 268, 8),
+                  origin=(0, 0)):
     """Где фамилия меньше всего закрыта силуэтом: перебор положений (x, y) в координатах кадра/сцены;
     fig_alpha — альфа силуэта (H×W, 0…1) с началом в origin. Предпочтение — выше и левее."""
     import numpy as np
@@ -1109,7 +1130,7 @@ def legend_name_pos(src, label):
     img = Image.frombytes('RGBA', (t.fetch.width, t.fetch.height), t.decode())
     a = np.asarray(render_name(label))[..., 3].astype(np.float32) / 255
     fig = np.asarray(img)[..., 3].astype(np.float32) / 255
-    lo = max(int(FRAME_POS[0]) - 120, round(tx) + 4)                       # имя — внутри картинки легенды
+    lo = max(int(FRAME_POS[0]) + NAME_X_MIN, round(tx) + 4)                # правее панели Features, в картинке
     hi = min(int(FRAME_POS[0]) + 90, round(tx) + int(shape.bounds[2]) - a.shape[1] - 4)
     xs = tuple(range(lo, max(lo, hi) + 1, 30))
     ys = range(max(40, round(ty) + 4), 268, 8)
@@ -1257,7 +1278,9 @@ def cmd_screens(args):
         im = Image.open(f).resize((TW, TH), Image.LANCZOS)
         x, y = (k % cols) * TW, (k // cols) * (TH + 24)
         sheet.paste(im, (x, y))
-        d.text((x + 6, y + TH + 2), os.path.basename(f)[:-11], fill=(220, 220, 220), font=font)
+        tag = os.path.basename(f)[:-11]
+        nid = tag.split('_')[1] if '_' in tag else ''
+        d.text((x + 6, y + TH + 2), f"{tag}  {number_label(nid) if nid.isdigit() else ''}", fill=(220, 220, 220), font=font)
     sheet.save(out, quality=88)
     print(out)
 
