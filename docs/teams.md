@@ -31,12 +31,13 @@
 и командам (Кросби — «Питтсбург», 23):
 
 - **с нуля** (номер строки): `exhibitionrostertable.team`, `stockteamjerseys.teamid`,
-  `stockteamequipmenttable.team` (255 — общий), `stockretirednumbertable.team`,
-  `stockawardstable.team`, `stockplayoffteamstats.team`, `stockseasonteamstats.team`,
-  `stockteamcolorstable.team`;
+  `stockretirednumbertable.team`, `stockawardstable.team`, `stockplayoffteamstats.team`,
+  `stockseasonteamstats.team`, `stockteamcolorstable.team`;
 - **номер + 1** (0 — нет команды): `exhibitionplayerbiotable.team/proteam/draftteam/
   juniorteam`, `exhibitionteams.rivalteam/rivalteam2/ahlaffiliate`,
-  `stockgoalieequipment.team`, `customteamequipmenttable.team`,
+  `stockteamequipmenttable.team` (255 — общие строки; до 08.10.2026 здесь ошибочно стояло
+  «с нуля», из-за чего у «Вашингтона» и SaiPa перепутались цвета экипировки —
+  `docs/uniforms.md` §7), `stockgoalieequipment.team`, `customteamequipmenttable.team`,
   `exhibitiondraftpick.origteamid/owner`.
 
 Многие поля «команда НХЛ» — 5 бит: `proteam`, `draftteam`, пики драфта и почти все

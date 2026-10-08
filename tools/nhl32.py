@@ -30,10 +30,11 @@ SWAP = {30: 86, 31: 87}            # новая команда НХЛ ← стр
 LIIGA_REL = {86 - 74, 87 - 74}     # их номера внутри финской лиги (строки 74–87)
 
 # Поля-ссылки на команду: (таблица, поле, кодировка). 'zero' — номер строки,
-# 'plus1' — номер + 1 (0 = нет команды). Проверено по известным игрокам и командам.
+# 'plus1' — номер + 1 (0 = нет команды). Проверено по известным игрокам и командам
+# (stockteamequipmenttable до 08.10.2026 ошибочно считалась 'zero' — docs/uniforms.md §7).
 TEAM_FIELDS = [
     ('stockteamjerseys', 'teamid', 'zero'),
-    ('stockteamequipmenttable', 'team', 'zero'),
+    ('stockteamequipmenttable', 'team', 'plus1'),     # 255 (−1) — общие строки
     ('stockretirednumbertable', 'team', 'zero'),
     ('stockawardstable', 'team', 'zero'),
     ('stockplayoffteamstats', 'team', 'zero'),
