@@ -112,7 +112,11 @@ python tools/nhl32.py $L/db/nhlng.db $W/nhlng.db $L/fe/loc/nhl_eng_us.db $W/nhl_
 - фарм-клубы — общие с соседом, как в NHL 13: Stockton Heat (бывший Abbotsford Heat) и Texas Stars;
 - календари: `nhlschedule`, `favoriteteamschedule` и `nhlfutureschedule` (у Legacy — календарь
   следующих сезонов франшизы) — 32 × 84 игры по 42 дома, по нынешним дивизионам, на игровые дни своей
-  таблицы, плюс строка Матча звёзд 32/33 в тот же день, что у EA (31.01 и 25.01), home/away — 6 бит;
+  таблицы, плюс строка Матча звёзд 32/33 в тот же день, что у EA (31.01 и 25.01), home/away — 6 бит.
+  Игровые дни — только существующие в сезоне 2026/27 (с 09.10.2026). В исходном календаре Legacy
+  2015/16 есть 29.02.2016, в 2027 году такого дня нет: 7 игр этого дня игра не играла, у 14 клубов
+  было 83 игры (нашёл legacy-port). Теперь игры этого дня расходятся по остальным дням, 2 игры WHL того
+  же дня переехали на 28.02;
 - схема: вместимость франшизы на 32 (`leaguegmdata`/`leaguestaffdata` 32, `leaguedraftpick` 1344,
   `leaguetempscheduletable` 3200), поля «команда НХЛ» −1…30 → 6 бит (у Legacy без
   `leagueretirementtable` — там уже 8 бит, плюс новое `leagueplayerbiotable.tradeblockteam` и
@@ -140,7 +144,7 @@ python tools/nhl32.py $L/db/nhlng.db $W/nhlng.db $L/fe/loc/nhl_eng_us.db $W/nhl_
 ## Составы 2026/27 (`tools/roster --game legacy`)
 
 ```bash
-python tools/roster all --offline --game legacy --stats-ratings --fa --skin --league liiga --payroll-max 100
+python tools/roster all --offline --game legacy --stats-ratings --fa --fa-only --skin --league liiga --payroll-max 100
 #   → game/work/legacy-data/roster/nhlng.db (+ nhlng-meta.xml, отчёты); вход — база nhl32 выше
 #   (--ahl32 --db-in game/work/legacy-data/nhl32-ahl32/nhlng.db --work roster-ahl32 — с CV/HSK)
 python tools/roster photos --game legacy             # фото не из НХЛ (Liiga…) → кадр НХЛ (сеть — только недостающие)
@@ -153,6 +157,11 @@ cd tools && python -m roster.equipment --game legacy apply ../game/work/legacy-d
 ```
 
 `--payroll-max 100`: контракты конвейера — заглушка по OVR, и ведомости клубов выходили 94–135 млн. Потолок 2026/27 — 104 млн, его ставит врезка legacy-port. Игра считает ведомость по составу НХЛ (`exhibitionrostertable`), это legacy-port сверил на экране Be a GM: у ANA «Cap Value $99.050M» — ровно сумма по 26 строкам состава. Со 2-го сезона игра поднимает потолок до самой дорогой ведомости, а клуб пользователя сверх потолка дальше не пускает. Поэтому у клубов дороже 100 млн контракты (по `proteam`) выше минималки 850 тыс. ужимаются одним коэффициентом до 100 млн: так получилось у 28 клубов, у ANA/VAN/CGY/SEA ведомость 94–99 млн. Настоящие кэп-хиты — CapWages: платный API или разбор страниц, решение за пользователем ([research-data-sources.md](research-data-sources.md) §2).
+
+`--fa-only` (с 09.10.2026): в пуле свободных агентов (`exhibitionfreeagents`) остаются только 39 настоящих
+(`--fa`). Раньше там оставались ещё 35 свободных агентов Legacy 2015 года (Ehrhoff, Zidlicky, Visnovsky…),
+и к июню 2027 они были в топе хаба свободных агентов франшизы (нашёл legacy-port). Строки этих игроков
+остаются в базе, как у игроков без клуба.
 
 Кэш сети (`game/work/roster-cache/`) — общий с NHL 13: данные не зависят от игры. Своё у Legacy: папка
 `game/work/legacy-data/roster/`, таблица artid новых (`artid-registry.json` там же; у `--work` другой
