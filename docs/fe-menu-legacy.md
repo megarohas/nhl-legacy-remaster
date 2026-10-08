@@ -166,7 +166,7 @@ bash game/work/legacy-data/install-legacy-data.sh @game/work/legacy-data/menu/fi
 bash game/work/legacy-data/uninstall-legacy-data.sh @game/work/legacy-data/menu/files.txt   # откат
 ```
 
-- **Состав.** 75 файлов, около 12 МБ:
+- **Состав.** 75 файлов, 13 082 472 байт:
   - `fe/ion/game/background/nhlmainmenubackground.big` (557 536 байт);
   - `fe/ion/game/components/menu.big` (123 868, у оригинала 113 884);
   - `fe/ion/main.big` (99 380);
