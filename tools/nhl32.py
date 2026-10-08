@@ -621,6 +621,9 @@ def main():
         if loc.put(key, text) is None:
             added += 1
     print(f'строки: {len(strings)} ключей, из них новых {added}')
+    bad = loc.check()  # две записи с одним hashid — игра видит первую (docs/modding.md)
+    if bad:
+        sys.exit('локализация с ошибками (locdb.py check):\n' + '\n'.join(bad))
     loc.db.fix()
     assert not loc.db.verify()
     open(a.loc_out, 'wb').write(loc.db.d)
