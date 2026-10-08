@@ -15,7 +15,7 @@
 |---|---|
 | [docs/briefing.md](docs/briefing.md) | Вводная: цель, что известно о базе, план |
 | [docs/xbox-transfer.md](docs/xbox-transfer.md) | Как достать файлы с приставки |
-| [docs/game-files.md](docs/game-files.md) | Что внутри игры, где база, как распаковать |
+| [docs/game-files.md](docs/game-files.md) | Что внутри игры, где база, как распаковать; NHL 12, NHL 10 и NHL Legacy с той же приставки |
 | [docs/year-and-date.md](docs/year-and-date.md) | Где живут текущий год и даты: сейвы, календари, код |
 | [docs/save-editing.md](docs/save-editing.md) | Устройство сейва франшизы и как его править |
 | [docs/port.md](docs/port.md) | Тулчейн порта, генерация кода ReXGlue, что дальше |
@@ -36,6 +36,7 @@
 | [tools/xex.py](tools/xex.py) | Расшифровка и разжатие `default.xex` в образ памяти |
 | [tools/lzx.py](tools/lzx.py), [tools/aes.py](tools/aes.py) | LZX (порт lzxd) и AES-128 на чистом Python |
 | [tools/unchunk.py](tools/unchunk.py) | Разжатие EA `chunklzx` / `chunkzip` внутри `.big` |
+| [tools/big.py](tools/big.py) | Архивы EA `.big`: BigEB v3 и BIG4 (NHL 10), RefPack и chunk-сжатие, весь диск по папкам пулом процессов |
 | [tools/ppcdis.py](tools/ppcdis.py) | Мини-дизассемблер PowerPC для разведки по образу |
 | [tools/tdb_read.py](tools/tdb_read.py) | Читалка баз EA TDB v6 (только чтение) |
 | [tools/tdb.py](tools/tdb.py) | Запись полей TDB, пересчёт CRC базы и обёртки сейва |
