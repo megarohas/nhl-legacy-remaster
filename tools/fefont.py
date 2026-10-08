@@ -1,5 +1,9 @@
 """Шрифты интерфейса NHL 13 (Xbox 360): где лежат, разбор, замена своим шрифтом TTF/OTF.
 
+    python fefont.py КОМАНДА … [--game nhl13|legacy]   # игра (tools/gameprofile.py, или NHL_GAME); по умолчанию NHL 13.
+        # --game legacy — NHL Legacy: шрифты игры из cacheboot.big (game/other/legacy/big), сборка кладёт файлы
+        # строчными именами, как в архиве (OUTDIR/fe/ion/fonts/eahelveticaneue…-mod.ttf), coverage — строки и база
+        # Legacy (что стоит в cache: порта Legacy или лежит в game/work/legacy-data/out, иначе с диска)
     python fefont.py info [FONT…]                      # имена, метрики, набор символов, кернинг;
                                                        # без аргументов — шрифты игры
     python fefont.py styles FONT                       # оси и именованные стили вариативного шрифта
@@ -8,7 +12,7 @@
     python fefont.py build OUTDIR --face KEY=SRC[#N][@СТИЛЬ] [--face …] [--fit cap|x|em] [--scale K]
                            [--width 1|auto|K] [--track N] [--no-kern] [--keep-marks] [--caps] [--no-squeeze]
                            [--vmetrics game|source] [--preview DIR]
-    python fefont.py build OUTDIR --keep --face KEY=SRC [--face …]    # шрифт как есть (см. ниже)
+    python fefont.py build OUTDIR --keep --face KEY=SRC [--face …] [--add СИМВОЛЫ]   # шрифт как есть (см. ниже)
         # KEY — conbold, med, hv (интерфейс) или indicator (подписи игроков на льду);
         # SRC — TTF/OTF/TTC (#N — номер шрифта в TTC), @СТИЛЬ — именованный стиль вариативного шрифта
         # («SemiBold», «Bold Condensed») или оси («wght=600,wdth=80»).
@@ -22,7 +26,8 @@
         # --keep — шрифт SRC как есть (TrueType того же unitsPerEm, например шрифт меню NHL 12): его глифы,
         # ширины и хинтинг байт в байт, меняются только имена/классы (как у шрифта игры) и вертикальные метрики;
         # недостающие символы дописываются (похожий символ, ℠ из S и M, иначе глиф игры), крупный ® — уменьшенной
-        # копией. --fit/--scale/--width/--track с --keep не сочетаются.
+        # копией. --fit/--scale/--width/--track с --keep не сочетаются. --add СИМВОЛЫ (или U+2120,…) — дописать
+        # и символы, которых нет в шрифте игры (℠ в «Hv» Legacy).
         # Результат — дерево как в cache: OUTDIR/fe/ion/fonts/EAHelveticaNeue…-Mod.ttf
         # (+ OUTDIR/fe/ion/fonts/font_extents.txt при --vmetrics source), отчёт — OUTDIR/fefont-build.json.
     python fefont.py preview OUTDIR PREVIEW_DIR [--shot PNG|WEBP] [--nhl12 JPG]
@@ -31,11 +36,15 @@
         # с теми же пунктами шрифтом «Hv» до и после)
     python fefont.py compare OUTDIR PNG [--label ИМЯ]   # три колонки: шрифты NHL 13 как были | исходные файлы
                                                        # сборки как есть (ИМЯ, например «NHL 12») | сборка
-    python fefont.py coverage [OUTDIR|FONT…] [--all-loc]
+    python fefont.py compare OUTDIR PNG --col ПОДПИСЬ=ПАПКА [--col …]
+        # свои колонки вместо трёх: ПАПКА — сборка (дерево cache:), распакованный архив или папка с файлами шрифтов;
+        # game — шрифты игры (--game)
+    python fefont.py coverage [OUTDIR|FONT…] [--all-loc] [--db NHLNG.DB …]
         # все ли символы строк интерфейса (fe/loc/NHL_ENG_US.db, --all-loc — все языки) и строк базы
         # (db/nhlng.db: имена игроков, команды, арены) — из cache: порта, иначе с диска — есть в шрифтах сборки;
         # какие из них нарисованы глифом оригинала (другой рисунок); без аргументов — шрифты игры. Код выхода 1,
-        # если символа не хватает
+        # если символа не хватает. --db — ещё базы (например, составы 2026/27 из NHL 13 для Legacy): строки
+        # всех таблиц; схема — nhlng-meta.xml рядом с базой, иначе той игры, чья это база
 
 Как устроено (подробности — docs/fe-fonts.md):
   * Интерфейс (Apt/ION) рисует текст шрифтами TrueType на лету (растеризатор Bitstream FontFusion
@@ -60,12 +69,18 @@
     оригинала; чего нет в исходном шрифте — заменяется похожим (пробел, дефис, Ё → Ë, ﬁ → f+i)
     или берётся глиф оригинала (список — в отчёте). Кернинг (GPOS/kern) — в таблицу kern.
 
+  * NHL Legacy (--game legacy): те же три имени и fonts.txt, файлы — в cacheboot.big; рисунок свой (квадратный
+    гротеск, прописные 700), набор символов NHL 13 + Ę ę; font_extents.txt посчитан по самим файлам (у «Con Bold»
+    952/221, а не по 77 Bold Condensed, как в NHL 13). Загрузчик (Legacy 828251C0, NHL 13 82F604E0) берёт буфер
+    «Font File Buffer» ровно по размеру файла — жёсткого предела размера в коде нет (docs/fe-fonts.md, «NHL Legacy»).
+
 Только стандартная библиотека (+ Chrome или Edge для preview). Каталог игры — NHL13_GAME или game/.
 """
-import json, math, os, re, shutil, struct, subprocess, sys, tempfile, time
+import argparse, json, math, os, re, shutil, struct, subprocess, sys, tempfile, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import playerhead as ph  # noqa: E402  (game_dir, RefPack)
+import gameprofile  # noqa: E402  (--game: NHL 13 / NHL Legacy)
 
 # ---------------------------------------------------------------- шрифты игры
 
@@ -90,6 +105,46 @@ FONTS_LIST = 'fe/ion/fonts/fonts.txt'
 EXTENTS_ORDER = ('conbold', 'hv', 'med')          # порядок блоков в font_extents.txt игры
 EXTENTS_SIZES = range(10, 251)
 EXTENTS_MAX_PX = 127                              # выше — те же значения (кэш глифов до 127 px)
+
+GAME = gameprofile.get('nhl13')                   # игра (--game / NHL_GAME) — задаётся в main()
+LOWER_NAMES = ('legacy',)                         # игры, чьи шрифты в cache: — строчными именами, как в архиве
+ROLES = {'legacy': {   # что внутри шрифтов меню у других игр (у NHL 13 — в FACES)
+    'conbold': 'интерфейс: большинство надписей (квадратный гротеск Legacy, прописные 700)',
+    'med': 'интерфейс: тот же рисунок под вторым именем',
+    'hv': 'интерфейс: цифры, пункты меню, заголовки таблиц (жирный квадратный гротеск)'}}
+
+
+def src_of(key):
+    """(архив, путь в архиве) шрифта KEY у текущей игры: шрифты из cache.big NHL 13 у Legacy лежат в cacheboot.big."""
+    rel, (arch, member), _, _ = {**FACES, **EXTRA}[key]
+    return (GAME.fonts_archive if arch == 'cache' else arch), member
+
+
+def out_rel(key):
+    """Путь шрифта KEY в cache: (и в OUTDIR сборки): у NHL 13 — как в fonts.txt, у Legacy — строчными, как в архиве."""
+    rel, (arch, member), _, _ = {**FACES, **EXTRA}[key]
+    return member if GAME.name in LOWER_NAMES else rel
+
+
+def built_face(outdir, key):
+    """Файл шрифта KEY в OUTDIR сборки (дерево cache:, имя любым регистром) или None."""
+    for rel in dict.fromkeys((out_rel(key), FACES[key][0], FACES[key][1][1])):
+        p = os.path.join(outdir, *rel.split('/'))
+        if os.path.exists(p):
+            return p
+    return None
+
+
+def face_in(src, key):
+    """Шрифт KEY в папке SRC: сборка (дерево cache:), распакованный архив или папка с самими файлами шрифтов."""
+    p = built_face(src, key)
+    if p:
+        return p
+    for name in (os.path.basename(FACES[key][1][1]), os.path.basename(FACES[key][0])):
+        p = os.path.join(src, name)
+        if os.path.exists(p):
+            return p
+    raise SystemExit(f'{src}: нет шрифта {key} ({os.path.basename(FACES[key][0])})')
 
 
 def u16(b, o): return struct.unpack_from('>H', b, o)[0]
@@ -140,13 +195,19 @@ def unwrap(blob):
 
 
 def game_file(archive, member, game=None):
-    """Файл игры: распакованный (game/extracted/big/<архив>/…, game/work/fe-font/src/<архив>/…) или из .big."""
+    """Файл игры: распакованный (game/extracted/big/<архив>/…, game/work/fe-font/src/<архив>/…) или из .big;
+    у NHL Legacy — game/other/legacy/big/<архив>/… или game/other/legacy/disc/<архив>.big (профиль игры)."""
     g = game or ph.game_dir()
-    for root in (os.path.join(g, 'extracted', 'big', archive), os.path.join(g, 'work', 'fe-font', 'src', archive)):
+    if GAME.name == 'nhl13':
+        roots = (os.path.join(g, 'extracted', 'big', archive), os.path.join(g, 'work', 'fe-font', 'src', archive))
+        big = os.path.join(g, 'extracted', 'disc', archive + '.big')
+    else:
+        roots = (os.path.join(GAME.big, archive),)
+        big = os.path.join(GAME.disc, archive + '.big')
+    for root in roots:
         p = os.path.join(root, *member.split('/'))
         if os.path.exists(p):
             return unwrap(open(p, 'rb').read())
-    big = os.path.join(g, 'extracted', 'disc', archive + '.big')
     if os.path.exists(big):
         blob = bigeb_member(big, member)
         if blob is not None:
@@ -155,7 +216,7 @@ def game_file(archive, member, game=None):
 
 
 def game_font(key, game=None):
-    rel, (arch, member), _, _ = {**FACES, **EXTRA}[key]
+    arch, member = src_of(key)
     return Font(game_file(arch, member, game), path=f'{arch}.big:{member}')
 
 
@@ -1802,13 +1863,14 @@ def _glyph_box(data):
     return struct.unpack_from('>4h', data, 2)
 
 
-def keep_build(target, source, marks=True, vmetrics='game', max_size=None, log=print):
+def keep_build(target, source, marks=True, vmetrics='game', max_size=None, log=print, extra=()):
     """Шрифт source как есть — свои контуры, ширины и хинтинг (fpgm/prep/cvt, инструкции глифов, hdmx, LTSH,
     VDMX, gasp) — с «лицом» target: таблица name, классы веса/ширины и fsSelection (OS/2), macStyle, вертикальные
     метрики (vmetrics='game' — hhea, typo, win target'а, font_extents.txt остаётся верным). Глифы source не
     меняются байт в байт; символы target, которых нет в source, дописываются в конец глифами без инструкций:
     похожий символ (ALIAS — тот же глиф), лигатуры fi/fl из букв, ℠ из S и M в рамке ™, иначе глиф target.
-    marks — ®, ™, ℠ заметно крупнее маленьких надстрочных знаков target вписываются в их рамку (новым глифом)."""
+    marks — ®, ™, ℠ заметно крупнее маленьких надстрочных знаков target вписываются в их рамку (новым глифом).
+    extra — символы сверх набора target (например, ℠ для «Hv» Legacy, где его нет): из source или собранные."""
     if 'glyf' not in source.t or source.cff:
         raise SystemExit(f'{source.path}: --keep только для TrueType (glyf)')
     if source.axes:
@@ -1859,7 +1921,7 @@ def keep_build(target, source, marks=True, vmetrics='game', max_size=None, log=p
                 cmap[c] = add(cs, aw, tname(c) + '.ea')
                 final[c] = (cs, aw)
                 notes.append(f'U+{c:04X} {chr(c)} — уменьшен до размера оригинала (×{kk:.2f}), новым глифом')
-    for c in sorted(target.cmap):
+    for c in sorted(set(target.cmap) | set(extra)):
         if c in cmap:
             continue
         alt = next((a for a in ALIAS.get(c, []) if a in source.cmap), None)
@@ -1884,6 +1946,9 @@ def keep_build(target, source, marks=True, vmetrics='game', max_size=None, log=p
                 composed.append(c)
                 notes.append('U+2120 ℠ ← S и M исходного шрифта в рамке ™')
                 continue
+        if c not in target.cmap:                          # сверх набора игры: взять неоткуда
+            notes.append(f'U+{c:04X} {chr(c)} — нет ни в источнике, ни в шрифте игры: не добавлен')
+            continue
         cs, aw = target.outline(target.cmap[c])
         cmap[c] = add(cs, aw, tname(c))
         fallback.append(c)
@@ -2055,7 +2120,7 @@ PREVIEW_LINES = [
 def preview(outdir, prevdir, shot=None, game=None, nhl12=None):
     rep_path = os.path.join(outdir, 'fefont-build.json')
     report = json.load(open(rep_path, encoding='utf-8')) if os.path.exists(rep_path) else {}
-    faces = [k for k in FACES if os.path.exists(os.path.join(outdir, *FACES[k][0].split('/')))]
+    faces = [k for k in FACES if built_face(outdir, k)]
     if not faces:
         raise SystemExit(f'{outdir}: нет собранных шрифтов')
     os.makedirs(prevdir, exist_ok=True)
@@ -2066,8 +2131,8 @@ def preview(outdir, prevdir, shot=None, game=None, nhl12=None):
             if k == 'indicator' and k not in faces:
                 continue
             orig = os.path.join(tmp, f'orig_{k}.ttf')
-            open(orig, 'wb').write(game_file(*FACES[k][1], game))
-            new = os.path.join(outdir, *FACES[k][0].split('/')) if k in faces else orig
+            open(orig, 'wb').write(game_file(*src_of(k), game))
+            new = built_face(outdir, k) if k in faces else orig
             css += (f"@font-face{{font-family:'o_{k}';src:url('{file_url(orig)}')}}"
                     f"@font-face{{font-family:'n_{k}';src:url('{file_url(new)}')}}\n")
         base_css = ('body{margin:0;background:#0b1626;color:#e8edf3;font-family:sans-serif}'
@@ -2078,7 +2143,7 @@ def preview(outdir, prevdir, shot=None, game=None, nhl12=None):
         for k in faces:
             info = report.get(k, {})
             src = info.get('source', '?')
-            body = (f'<div class="pair"><div class="col"><div class="h">ДО — {FACES[k][2]} (оригинал NHL 13)</div>'
+            body = (f'<div class="pair"><div class="col"><div class="h">ДО — {FACES[k][2]} (оригинал {GAME.title})</div>'
                     f'</div><div class="col"><div class="h">ПОСЛЕ — {os.path.basename(src)} {info.get("style") or ""}'
                     f' → «{FACES[k][2]}»</div></div></div>')
             for text, px in PREVIEW_LINES:
@@ -2086,7 +2151,7 @@ def preview(outdir, prevdir, shot=None, game=None, nhl12=None):
                          f'{text}</div></div><div class="col"><div class="ln" style="font-family:n_{k};font-size:{px}px">'
                          f'{text}</div></div></div>')
             fb = set(x.split()[0] for x in info.get('from_original', []))
-            chars = sorted(Font(game_file(*FACES[k][1], game)).cmap)
+            chars = sorted(Font(game_file(*src_of(k), game)).cmap)
             grid = ''.join(f'<span class="{"fb" if f"U+{c:04X}" in fb else ""}">{chr(c) if c > 0x20 and c != 0x7F else "·"}'
                            f'</span>' for c in chars)
             body += (f'<div class="pair"><div class="col"><div class="lab">все символы оригинала</div><div style="font-family:o_{k};'
@@ -2141,9 +2206,9 @@ def _preview_nhl12(shot, outdir, css, prevdir, game=None):
     """Меню NHL 12 (кусок снимка) рядом с теми же пунктами шрифтом пунктов меню NHL 13 («Hv»): до и после."""
     K = 3
     img = file_url(shot)
-    orig = Font(game_file(*FACES['hv'][1], game))
-    newp = os.path.join(outdir, *FACES['hv'][0].split('/'))
-    new = Font(open(newp, 'rb').read()) if os.path.exists(newp) else orig
+    orig = Font(game_file(*src_of('hv'), game))
+    newp = built_face(outdir, 'hv')
+    new = Font(open(newp, 'rb').read()) if newp else orig
     x0, y0, w, h = 140, 230, 390, 220
 
     def panel(fam, font):
@@ -2191,8 +2256,16 @@ COMPARE_ROWS = [   # ключ шрифта, кегль, текст ('|' — пе
 ]
 
 
-def compare(outdir, out_png, game=None, ref_label='источник'):
-    """Три колонки: шрифты NHL 13 как были | исходные файлы сборки (как есть, например NHL 12) | сборка."""
+COMPARE_MENU = {   # пункты главного меню своей игры (первая строка сравнения)
+    'legacy': ('hv', 26, '*PLAY NOW|LIVE THE LIFE|BE A GM|SEASON MODE|HOCKEY ULTIMATE TEAM|GAME MODES|ONLINE'
+                         '|WINTER CLASSIC', 'пункты главного меню — «Hv» (строки локализации Legacy)'),
+}
+
+
+def compare(outdir, out_png, game=None, ref_label='источник', cols=None):
+    """Три колонки: шрифты игры как были | исходные файлы сборки (как есть, например NHL 12) | сборка.
+    cols — свои колонки [(подпись, папка), …]: сборка (дерево cache:), распакованный архив или папка с файлами
+    шрифтов; 'game' — шрифты игры."""
     rep_path = os.path.join(outdir, 'fefont-build.json')
     report = json.load(open(rep_path, encoding='utf-8')) if os.path.exists(rep_path) else {}
     tmp = tempfile.mkdtemp(prefix='fefont_cmp_')
@@ -2200,15 +2273,26 @@ def compare(outdir, out_png, game=None, ref_label='источник'):
         css = ''
         for k in ('conbold', 'med', 'hv'):
             orig = os.path.join(tmp, f'orig_{k}.ttf')
-            open(orig, 'wb').write(game_file(*FACES[k][1], game))
-            new = os.path.join(outdir, *FACES[k][0].split('/'))
-            new = new if os.path.exists(new) else orig
+            open(orig, 'wb').write(game_file(*src_of(k), game))
+            if cols:
+                for i, (_, src) in enumerate(cols):
+                    path = orig if src == 'game' else face_in(src, k)
+                    css += f"@font-face{{font-family:'c{i}_{k}';src:url('{file_url(path)}')}}\n"
+                continue
+            new = built_face(outdir, k) or orig
             ref = report.get(k, {}).get('source') or orig
             for fam, path in (('o', orig), ('r', ref), ('n', new)):
                 css += f"@font-face{{font-family:'{fam}_{k}';src:url('{file_url(path)}')}}\n"
-        cols = [('o', 'NHL 13 — как было'), ('r', ref_label + ' — оригинал'), ('n', 'NHL 13 — новый шрифт')]
+        if cols:
+            cols = [(f'c{i}', label) for i, (label, _) in enumerate(cols)]
+        else:
+            cols = [('o', f'{GAME.title} — как было'), ('r', ref_label + ' — оригинал'),
+                    ('n', f'{GAME.title} — новый шрифт')]
+        rows = COMPARE_ROWS
+        if GAME.name in COMPARE_MENU:
+            rows = [COMPARE_MENU[GAME.name]] + COMPARE_ROWS[1:]
         body = '<div class="row hdr">' + ''.join(f'<div class="col h">{t}</div>' for _, t in cols) + '</div>'
-        for k, px, text, label in COMPARE_ROWS:
+        for k, px, text, label in rows:
             body += f'<div class="lab">{label}</div><div class="row">'
             for fam, _ in cols:
                 lines = ''
@@ -2226,7 +2310,7 @@ def compare(outdir, out_png, game=None, ref_label='источник'):
                 '.lab{font:13px Segoe UI,sans-serif;color:#8fa3bd;padding:6px 30px 0}'
                 '.ln{white-space:nowrap;line-height:1.3}.sel{background:linear-gradient(#e9ecef,#aab0b7);color:#1b1d20;'
                 'padding:0 8px;margin:0 -8px;border-radius:3px}</style></head><body>' + body + '</body></html>')
-        render_page(html, out_png, 1800, 1200)
+        render_page(html, out_png, max(1800, 560 * len(cols)), 1200)
         print(f'  {out_png}')
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -2257,6 +2341,7 @@ def cmd_info(paths):
         role = ''
         if key in FACES or key in EXTRA:
             rel, (arch, member), apt, role = {**FACES, **EXTRA}[key]
+            rel, arch, role = out_rel(key), src_of(key)[0], ROLES.get(GAME.name, {}).get(key, role)
             print(f'== {key}: cache:\\{rel.replace("/", chr(92))}  ({arch}.big)  — {role}')
         else:
             print(f'== {key}')
@@ -2300,7 +2385,7 @@ def cmd_extents(args):
         open(out, 'wb').write(text.encode('ascii'))
         print(f'записано {out}')
     if check or not out:
-        game = parse_extents(game_file('cache', EXTENTS_FILE).decode('latin1'))
+        game = parse_extents(game_file(GAME.fonts_archive, EXTENTS_FILE).decode('latin1'))
         ind = extents_rows(game_font('indicator'))
         for name, rows in blocks:
             g = game.get(name, [])
@@ -2314,15 +2399,28 @@ def cmd_extents(args):
 USER_CACHE = ('userdata', 'cache', 'guest')         # cache: порта (свободные файлы поверх архивов)
 
 
-def used_chars(game=None, all_loc=False):
+def _rel(p, root):
+    try:
+        return os.path.relpath(p, root)
+    except ValueError:                                     # другой диск
+        return os.path.abspath(p)
+
+
+def used_chars(game=None, all_loc=False, extra_db=()):
     """Символы, которые игра выводит этими шрифтами: строки интерфейса (fe/loc/NHL_ENG_US.db, с all_loc —
     все языки диска) и строковые поля базы (имена игроков, команд, арен — db/nhlng.db). Берётся то, что
-    стоит в cache: порта (game/userdata/cache/guest), иначе — с диска. → {символ: [сколько, пример, источник]}."""
+    стоит в cache: порта (game/userdata/cache/guest), иначе — с диска; у NHL Legacy — cache: порта Legacy (если
+    есть), затем game/work/legacy-data/out, иначе с диска. extra_db — ещё базы (любой игры): строки всех таблиц.
+    → {символ: [сколько, пример, источник]}."""
     from locdb import LocDb
     from tdb_read import load_meta, read_db
     g = game or ph.game_dir()
-    cache = os.path.join(g, *USER_CACHE)
-    locdir = os.path.join(g, 'extracted', 'big', 'cache', 'fe', 'loc')
+    if GAME.name == 'nhl13':
+        caches = [os.path.join(g, *USER_CACHE)]
+        locdir = os.path.join(g, 'extracted', 'big', 'cache', 'fe', 'loc')
+    else:
+        caches = [c for c in (GAME.install, GAME.out) if c]
+        locdir = os.path.dirname(GAME.loc)
     out = {}
 
     def note(text, where, src):
@@ -2336,20 +2434,40 @@ def used_chars(game=None, all_loc=False):
     langs = sorted(f[:-3] for f in os.listdir(locdir) if f.endswith('.db')) if os.path.isdir(locdir) else []
     for lang in langs if all_loc else [x for x in langs if x == 'nhl_eng_us']:
         meta = os.path.join(locdir, lang + '-meta.xml')
-        path = next((p for p in (os.path.join(cache, 'fe', 'loc', lang.upper() + '.db'),
-                                 os.path.join(cache, 'fe', 'loc', lang + '.db'), os.path.join(locdir, lang + '.db'))
-                     if os.path.exists(p)), None)
+        path = next((p for p in [x for c in caches for x in (os.path.join(c, 'fe', 'loc', lang.upper() + '.db'),
+                                                              os.path.join(c, 'fe', 'loc', lang + '.db'))]
+                     + [os.path.join(locdir, lang + '.db')] if os.path.exists(p)), None)
         if not path or not os.path.exists(meta):
             continue
         ld = LocDb(open(path, 'rb').read(), load_meta(meta))
         for _, sid, off in ld.rows():
-            note(ld.text(off), sid, os.path.relpath(path, g))
-    dbp = os.path.join(cache, 'db', 'nhlng.db')
-    metap = os.path.join(cache, 'db', 'nhlng-meta.xml')
-    if not os.path.exists(metap):
-        metap = os.path.join(os.path.dirname(__file__), '..', 'ref', 'nhl-modding-studio', 'anchors', 'xbox360', 'nhl13',
-                             'databases', 'nhlng-meta.xml')
-    if os.path.exists(dbp) and os.path.exists(metap):
+            note(ld.text(off), sid, _rel(path, g))
+    if GAME.name == 'nhl13':
+        dbp = os.path.join(caches[0], 'db', 'nhlng.db')
+        metap = os.path.join(caches[0], 'db', 'nhlng-meta.xml')
+        if not os.path.exists(metap):
+            metap = os.path.join(os.path.dirname(__file__), '..', 'ref', 'nhl-modding-studio', 'anchors', 'xbox360',
+                                 'nhl13', 'databases', 'nhlng-meta.xml')
+    else:
+        dbp = next((p for p in [os.path.join(c, 'db', 'nhlng.db') for c in caches] if os.path.exists(p)), GAME.db)
+        metap = os.path.join(os.path.dirname(dbp), 'nhlng-meta.xml')
+        if not os.path.exists(metap):
+            metap = GAME.meta
+    dbs = [(dbp, metap, True)]
+    for p in extra_db:                                     # --db: базы любой игры, схема — рядом или той игры
+        if not os.path.exists(p):
+            raise SystemExit(f'нет базы {p}')
+        mp = os.path.join(os.path.dirname(p), 'nhlng-meta.xml')
+        if not os.path.exists(mp):
+            with open(p, 'rb') as fh:
+                mp = gameprofile.get(gameprofile.detect(fh.read(0x400000)) or GAME.name).meta
+        dbs.append((p, mp, False))
+    for dbp, metap, own in dbs:
+        if not (os.path.exists(dbp) and os.path.exists(metap)):
+            continue
+        if own:                                            # база своей игры: чужая (не та игра) — стоп
+            with open(dbp, 'rb') as fh:
+                gameprofile.check_db(GAME, fh.read(0x400000), _rel(dbp, g))
         d, tables = read_db(dbp, load_meta(metap))
         for tname, (rows, reclen, rb, fds, fmeta) in tables.items():
             for kind, bitoff, fid, w in fds:
@@ -2360,7 +2478,7 @@ def used_chars(game=None, all_loc=False):
                     st = rb + r * reclen + bitoff // 8
                     s = bytes(d[st:st + w // 8]).split(b'\0', 1)[0].decode('utf-8', errors='replace')
                     if s:
-                        note(s, f'{tname}.{fname}[{r}]', os.path.relpath(dbp, g))
+                        note(s, f'{tname}.{fname}[{r}]', _rel(dbp, g))
     return out
 
 
@@ -2370,10 +2488,18 @@ def _fmt_chars(cs):
 
 def cmd_coverage(args):
     """Покрытие символов: все ли символы строк интерфейса и базы есть в шрифтах (сборке OUTDIR или файлах) и
-    какие из них в сборке нарисованы глифами оригинала NHL 13 (другой стиль)."""
+    какие из них в сборке нарисованы глифами оригинала игры (другой стиль)."""
     all_loc = '--all-loc' in args
-    paths = [a for a in args if not a.startswith('--')]
-    used = used_chars(all_loc=all_loc)
+    paths, dbs, i = [], [], 0
+    while i < len(args):
+        if args[i] == '--db':
+            dbs.append(args[i + 1])
+            i += 2
+            continue
+        if not args[i].startswith('--'):
+            paths.append(args[i])
+        i += 1
+    used = used_chars(all_loc=all_loc, extra_db=dbs)
     want = {ord(c) for c in used if ord(c) >= 0x20}
     upper = {ord(c.upper()) for c in used if len(c.upper()) == 1 and ord(c) >= 0x20} - want   # пункты меню — toUpperCase()
     orig_have = set(game_font('conbold').cmap)
@@ -2382,7 +2508,7 @@ def cmd_coverage(args):
           f'источники: {", ".join(sorted({v[2] for v in used.values()}))}')
     print('   не ASCII: ' + _fmt_chars(c for c in want if c > 0x7E))
     if never:
-        print(f'   нет и в шрифтах NHL 13 ({len(never)}, игра их и так не рисует): ' + _fmt_chars(never))
+        print(f'   нет и в шрифтах {GAME.title} ({len(never)}, игра их и так не рисует): ' + _fmt_chars(never))
         for c in never[:3]:
             print(f'      U+{c:04X} — {used[chr(c)][1]}')
     targets = []
@@ -2393,8 +2519,8 @@ def cmd_coverage(args):
             rp = os.path.join(p, 'fefont-build.json')
             rep = json.load(open(rp, encoding='utf-8')) if os.path.exists(rp) else {}
             for k in FACES:
-                fp = os.path.join(p, *FACES[k][0].split('/'))
-                if os.path.exists(fp):
+                fp = built_face(p, k)
+                if fp:
                     targets.append((f'{p}: {k}', Font(open(fp, 'rb').read(), path=fp), rep.get(k)))
         else:
             targets.append((p, load_source(p)[0], None))
@@ -2411,14 +2537,14 @@ def cmd_coverage(args):
                 n, ex, src = used[chr(c)]
                 print(f'      U+{c:04X} ×{n} — {ex}')
         else:
-            print('   все символы строк, что есть в шрифтах NHL 13, есть')
+            print(f'   все символы строк, что есть в шрифтах {GAME.title}, есть')
         if miss_up:
             print(f'   нет прописных к строчным из строк ({len(miss_up)}): ' + _fmt_chars(miss_up))
         if rep:
             orig = {int(x.split()[0][2:], 16) for x in rep.get('from_original', [])}
             comp = {int(x.split()[0][2:], 16) for x in rep.get('composed', [])}
             hit = sorted(c for c in orig if c in want)
-            print(f'   глифом оригинала NHL 13 (другой рисунок) — из строк: {_fmt_chars(hit) if hit else "ни одного"}'
+            print(f'   глифом оригинала {GAME.title} (другой рисунок) — из строк: {_fmt_chars(hit) if hit else "ни одного"}'
                   + (f'; всего в шрифте {len(orig)}' if orig else ''))
             if comp:
                 print(f'   собраны из буквы и знака: {_fmt_chars(sorted(comp))}')
@@ -2430,13 +2556,17 @@ def cmd_build(args):
         raise SystemExit('нужен OUTDIR')
     outdir, args = args[0], args[1:]
     opts = {'fit': 'cap', 'scale': '1', 'width': '1', 'track': '0', 'vmetrics': 'game', 'preview': None}
-    faces, kern, marks, caps, keep, squeeze = [], True, True, False, False, True
+    faces, kern, marks, caps, keep, squeeze, extra = [], True, True, False, False, True, []
     i = 0
     while i < len(args):
         a = args[i]
         if a == '--keep':
             keep = True
             i += 1
+        elif a == '--add':                                # символы сверх набора шрифта игры (только с --keep)
+            for tok in args[i + 1].split(','):
+                extra += [int(tok[2:], 16)] if re.fullmatch(r'U\+[0-9A-Fa-f]{4,6}', tok) else [ord(ch) for ch in tok]
+            i += 2
         elif a == '--face':
             key, spec = args[i + 1].split('=', 1)
             if key not in FACES:
@@ -2466,34 +2596,37 @@ def cmd_build(args):
     new_win = {}
     for key, spec in faces:
         src, path, style = load_source(spec)
-        orig = game_file(*FACES[key][1])
-        target = Font(orig, path=f'{FACES[key][1][0]}.big:{FACES[key][1][1]}')
+        orig = game_file(*src_of(key))
+        target = Font(orig, path='%s.big:%s' % src_of(key))
         print(f'{key} ← {path}' + (f' @{style}' if style else '') + f'  ({FACES[key][2]})')
         if keep:
             if (opts['fit'], opts['scale'], opts['width'], opts['track']) != ('cap', '1', '1', '0') or caps:
                 raise SystemExit('--keep — шрифт как есть: без --fit/--scale/--width/--track/--caps')
-            font, rep = keep_build(target, src, marks=marks, vmetrics=opts['vmetrics'], max_size=len(orig))
+            font, rep = keep_build(target, src, marks=marks, vmetrics=opts['vmetrics'], max_size=len(orig),
+                                   extra=extra)
         else:
+            if extra:
+                raise SystemExit('--add — только со сборкой как есть (--keep)')
             font, rep = transplant(target, src, fit=opts['fit'], scale=float(opts['scale']), width=opts['width'],
                                    track=float(opts['track']), kern=kern, vmetrics=opts['vmetrics'], marks=marks,
                                    caps=caps, max_size=len(orig), squeeze=squeeze)
         check = Font(font, path='сборка')                # самопроверка: файл читается, набор символов тот же
         assert set(target.cmap) <= set(check.cmap) and (keep or set(check.cmap) == set(target.cmap)),             'набор символов не совпал'
-        dst = os.path.join(outdir, *FACES[key][0].split('/'))
+        dst = os.path.join(outdir, *out_rel(key).split('/'))
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         open(dst, 'wb').write(font)
-        rep.update({'source': os.path.abspath(path), 'style': style, 'file': FACES[key][0], 'apt_name': FACES[key][2]})
+        rep.update({'source': os.path.abspath(path), 'style': style, 'file': out_rel(key), 'apt_name': FACES[key][2]})
         report[key] = rep
         new_win[key] = check
         print(f'  → {dst} ({len(font)} байт)')
     if opts['vmetrics'] == 'source':
         blocks = []
-        game_rows = parse_extents(game_file('cache', EXTENTS_FILE).decode('latin1'))
+        game_rows = parse_extents(game_file(GAME.fonts_archive, EXTENTS_FILE).decode('latin1'))
         for k in EXTENTS_ORDER:
             blocks.append((FACES[k][2], extents_rows(new_win[k]) if k in new_win else game_rows[FACES[k][2]]))
         dst = os.path.join(outdir, *EXTENTS_FILE.split('/'))
         text = format_extents(blocks).encode('ascii')
-        if text == game_file('cache', EXTENTS_FILE):
+        if text == game_file(GAME.fonts_archive, EXTENTS_FILE):
             print('  font_extents.txt совпадает с игровым — не нужен')
             if os.path.exists(dst):
                 os.remove(dst)
@@ -2510,10 +2643,17 @@ def cmd_build(args):
 
 
 def main():
+    global GAME
     a = sys.argv[1:]
     if not a or a[0] in ('-h', '--help'):
         print(__doc__)
         return
+    ap = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+    gameprofile.add_argument(ap)                          # --game nhl13|legacy (или NHL_GAME) — где угодно в строке
+    g, a = ap.parse_known_args(a)
+    GAME = gameprofile.get(g.game)
+    if not a:
+        raise SystemExit(__doc__)
     cmd, rest = a[0], a[1:]
     if cmd == 'info':
         cmd_info(rest)
@@ -2527,7 +2667,10 @@ def main():
         sys.exit(1 if cmd_coverage(rest) else 0)
     elif cmd == 'compare':
         label = rest[rest.index('--label') + 1] if '--label' in rest else 'источник'
-        compare(rest[0], rest[1], ref_label=label)
+        cols = [tuple(rest[i + 1].split('=', 1)) for i, x in enumerate(rest) if x == '--col']
+        if any(len(c) != 2 for c in cols):
+            raise SystemExit('--col ПОДПИСЬ=ПАПКА')
+        compare(rest[0], rest[1], ref_label=label, cols=cols or None)
     elif cmd == 'preview':
         shot = rest[rest.index('--shot') + 1] if '--shot' in rest else None
         nhl12 = rest[rest.index('--nhl12') + 1] if '--nhl12' in rest else None
