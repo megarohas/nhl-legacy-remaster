@@ -33,6 +33,9 @@ rexglue_setup_target(nhllegacy GPU_PLUGINS xenos)
 
 if(WIN32)
     target_link_libraries(nhllegacy PRIVATE dbghelp)  # стек в отчёте о падении
+    # PDB и в Release: код игры и так собирается с -gline-tables-only (generated/rexglue.cmake), clang++ -g
+    # при линковке даёт /debug — в nhllegacy_crash.txt видны имена функций игры (sub_XXXXXXXX).
+    target_link_options(nhllegacy PRIVATE -g)
     # nhllegacy_snap.exe — слепок памяти игры снаружи (src/nhllegacy_snap.cpp), рядом с nhllegacy.exe
     add_executable(nhllegacy_snap src/nhllegacy_snap.cpp)
     target_link_libraries(nhllegacy_snap PRIVATE dbghelp)
