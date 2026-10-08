@@ -3,6 +3,8 @@
     python team_hooks.py SITES.json [SITES2.json ...]            # port/nhl13_team_sites.toml + port/src/nhl13_team_sites.cpp
     python team_hooks.py SITES.json [SITES2.json ...] --report   # только список: что будет сделано и что отброшено
     python team_hooks.py ... --out-dir DIR                       # записать оба файла в DIR (для сверки, port/ не трогается)
+    python team_hooks.py --game legacy SITES.json ...            # порт NHL Legacy: legacy-port/nhllegacy_team_sites.toml
+                                                                 # + legacy-port/src/nhllegacy_team_sites.cpp (имена NhlLegacy…)
 
 SITES.json — список {"addr", "old", "new", "class", "func", "what"[, "when"]}: одна инструкция, у которой
 меняется только непосредственное значение (cmpwi/cmplwi, li/addi, mulli). Старое слово сверяется с образом
@@ -28,8 +30,24 @@ HOOKS = os.path.join(ROOT, 'port', 'nhl13_team_hooks.toml')
 OUT_TOML = os.path.join(ROOT, 'port', 'nhl13_team_sites.toml')
 OUT_CPP = os.path.join(ROOT, 'port', 'src', 'nhl13_team_sites.cpp')
 
+# Игра: образ, свои ручные врезки (места с ними пропускаются), куда писать и префикс имён в C++.
+PROFILES = {
+    'nhl13': dict(image=IMAGE, hooks=HOOKS, out_toml=OUT_TOML, out_cpp=OUT_CPP, prefix='Nhl13',
+                  docs='docs/teams.md', toml_rel='port/nhl13_team_sites.toml'),
+    'legacy': dict(image=os.path.join(ROOT, 'game', 'other', 'legacy', 'xex', 'default.bin'),
+                   hooks=os.path.join(ROOT, 'legacy-port', 'nhllegacy_team_hooks.toml'),
+                   out_toml=os.path.join(ROOT, 'legacy-port', 'nhllegacy_team_sites.toml'),
+                   out_cpp=os.path.join(ROOT, 'legacy-port', 'src', 'nhllegacy_team_sites.cpp'),
+                   prefix='NhlLegacy', docs='docs/legacy-port.md',
+                   toml_rel='legacy-port/nhllegacy_team_sites.toml'),
+}
+P = PROFILES['nhl13']
+
 WHENS = ('team32', 'ahl32')  # порядок проверки в C++ — обратный: сначала ahl32 (он строже)
-GATE = {'team32': 'Nhl13ThirtyTwo()', 'ahl32': 'Nhl13Ahl32()'}
+
+
+def gate_call(when):
+    return {'team32': f"{P['prefix']}ThirtyTwo()", 'ahl32': f"{P['prefix']}Ahl32()"}[when]
 
 
 def s16(v):
@@ -100,9 +118,9 @@ def plan(variants, gate=None):
         if when in variants:
             tag = value_tag(kind, f, variants[when][2])
             tags.append(tag if when == 'team32' else 'a' + tag)
-    name = f"Nhl13{base}_{'_'.join(tags)}"
+    name = f"{P['prefix']}{base}_{'_'.join(tags)}"
     if gate:
-        name += '_' + (gate[0][5:] if gate[0].startswith('Nhl13') else gate[0])
+        name += '_' + (gate[0][len(P['prefix']):] if gate[0].startswith(P['prefix']) else gate[0])
     if kind in ('cmps', 'cmpu'):
         regs = [f"r{f['ra']}", f"cr{f['cr']}"]
         head = f"{kind} r{f['ra']}, {f['imm']}"
@@ -125,9 +143,9 @@ def plan(variants, gate=None):
 
 
 def existing_hooks():
-    if not os.path.exists(HOOKS):
+    if not os.path.exists(P['hooks']):
         return set()
-    return {int(m, 16) for m in re.findall(r'address\s*=\s*0x([0-9A-Fa-f]+)', open(HOOKS, encoding='utf-8').read())}
+    return {int(m, 16) for m in re.findall(r'address\s*=\s*0x([0-9A-Fa-f]+)', open(P['hooks'], encoding='utf-8').read())}
 
 
 def cpp_gated(name, variants, gate):
@@ -164,20 +182,20 @@ def cpp_function(name, regs, variants, gate=None):
             t = 'int32_t' if kind == 'cmps' else 'uint32_t'
             field = 's32' if kind == 'cmps' else 'u32'
             return (f'void {name}(PPCRegister& a, PPCCRRegister& cr) {{\n'
-                    f'  if (Nhl13ThirtyTwo()) {{\n'
+                    f'  if ({gate_call('team32')}) {{\n'
                     f'    const {t} v = a.{field}, n = {n};\n'
                     f'    cr.lt = v < n;\n    cr.gt = v > n;\n    cr.eq = v == n;\n  }}\n}}\n')
         if kind == 'li':
-            return f'void {name}(PPCRegister& d) {{\n  if (Nhl13ThirtyTwo()) {{\n    d.s64 = {n};\n  }}\n}}\n'
+            return f'void {name}(PPCRegister& d) {{\n  if ({gate_call('team32')}) {{\n    d.s64 = {n};\n  }}\n}}\n'
         if kind == 'addi':
-            return f'void {name}(PPCRegister& d) {{\n  if (Nhl13ThirtyTwo()) {{\n    d.s64 += {n - f["imm"]};\n  }}\n}}\n'
+            return f'void {name}(PPCRegister& d) {{\n  if ({gate_call('team32')}) {{\n    d.s64 += {n - f["imm"]};\n  }}\n}}\n'
         if f['rd'] != f['ra']:
             return (f'void {name}(PPCRegister& d, PPCRegister& a) {{\n'
-                    f'  if (Nhl13ThirtyTwo()) {{\n    d.s64 = static_cast<int64_t>(a.s32) * {n};\n  }}\n}}\n')
+                    f'  if ({gate_call('team32')}) {{\n    d.s64 = static_cast<int64_t>(a.s32) * {n};\n  }}\n}}\n')
         return (f'void {name}(PPCRegister& d) {{\n'
-                f'  if (Nhl13ThirtyTwo()) {{\n    d.s64 = static_cast<int64_t>(d.s32 / {f["imm"]}) * {n};\n  }}\n}}\n')
+                f'  if ({gate_call('team32')}) {{\n    d.s64 = static_cast<int64_t>(d.s32 / {f["imm"]}) * {n};\n  }}\n}}\n')
     # несколько условий: число выбирается по самому строгому включённому
-    pick = ''.join(f"  {'if' if i == 0 else '} else if'} ({GATE[w]}) {{\n    n = {variants[w][2]};\n"
+    pick = ''.join(f"  {'if' if i == 0 else '} else if'} ({gate_call(w)}) {{\n    n = {variants[w][2]};\n"
                    for i, w in enumerate(whens)) + '  } else {\n    return;\n  }\n'
     if kind in ('cmps', 'cmpu'):
         t = 'int32_t' if kind == 'cmps' else 'uint32_t'
@@ -216,9 +234,13 @@ def main():
     ap.add_argument('sites', nargs='+')
     ap.add_argument('--report', action='store_true')
     ap.add_argument('--out-dir', help='куда записать .toml и .cpp вместо port/ (для сверки)')
+    ap.add_argument('--game', choices=sorted(PROFILES), default='nhl13',
+                    help='игра: nhl13 (port/) или legacy (legacy-port/)')
     a = ap.parse_args()
+    global P
+    P = PROFILES[a.game]
     sys.stdout.reconfigure(encoding='utf-8', newline='\n')
-    img = open(IMAGE, 'rb').read()
+    img = open(P['image'], 'rb').read()
     have = existing_hooks()
     by_addr = {}
     for s in load_sites(a.sites):
@@ -259,15 +281,15 @@ def main():
     print(f'врезок: {len(done)}, пропущено: {len(skipped)}', file=sys.stderr)
     if a.report:
         return
-    out_toml, out_cpp = OUT_TOML, OUT_CPP
+    out_toml, out_cpp = P['out_toml'], P['out_cpp']
     if a.out_dir:
         os.makedirs(a.out_dir, exist_ok=True)
-        out_toml = os.path.join(a.out_dir, os.path.basename(OUT_TOML))
-        out_cpp = os.path.join(a.out_dir, os.path.basename(OUT_CPP))
+        out_toml = os.path.join(a.out_dir, os.path.basename(P['out_toml']))
+        out_cpp = os.path.join(a.out_dir, os.path.basename(P['out_cpp']))
     ahl = any('ahl32' in v for _, v, _, _ in done)
     with open(out_toml, 'w', encoding='utf-8', newline='\n') as f:
-        f.write('# Сгенерировано tools/team_hooks.py — не править руками. Разбор — docs/teams.md.\n'
-                '# «30 команд НХЛ → 32»: границы, константы, смещения АХЛ (src/nhl13_team_sites.cpp).\n')
+        f.write(f"# Сгенерировано tools/team_hooks.py — не править руками. Разбор — {P['docs']}.\n"
+                f"# «30 команд НХЛ → 32»: границы, константы, смещения АХЛ (src/{os.path.basename(P['out_cpp'])}).\n")
         if ahl:
             f.write('# Места ahl32 (docs/ahl32.md): «30 клубов АХЛ → 32», профи-команды 64 — при nhl_ahl_teams = 32.\n')
         for sites, variants, gate, (name, regs, text) in done:
@@ -284,12 +306,12 @@ def main():
     gates = sorted({gate[0] for _, _, gate, _ in done if gate})
     with open(out_cpp, 'w', encoding='utf-8', newline='\n') as f:
         f.write('// Сгенерировано tools/team_hooks.py — не править руками.\n'
-                '// Врезки «30 команд НХЛ → 32» (port/nhl13_team_sites.toml); действуют при nhl_teams = 32.\n')
+                f"// Врезки «30 команд НХЛ → 32» ({P['toml_rel']}); действуют при nhl_teams = 32.\n")
         if ahl:
             f.write('// Варианты ahl32 (nhl_ahl_teams = 32, только вместе с nhl_teams = 32) — docs/ahl32.md.\n')
-        f.write('\n#include <cstdint>\n\n#include <rex/ppc.h>\n\nbool Nhl13ThirtyTwo();\n')
+        f.write(f"\n#include <cstdint>\n\n#include <rex/ppc.h>\n\nbool {P['prefix']}ThirtyTwo();\n")
         if ahl:
-            f.write('bool Nhl13Ahl32();\n')
+            f.write(f"bool {P['prefix']}Ahl32();\n")
         for g in gates:
             f.write(f'bool {g}(PPCRegister& r);\n')
         f.write('\n')
