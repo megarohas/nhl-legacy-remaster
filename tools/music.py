@@ -1,11 +1,11 @@
-"""Музыка NHL 13: банк audio/music (EA SBR + SBS, кодек EALayer3) и названия песен EA Trax.
+"""Музыка NHL 13 и NHL Legacy: банк audio/music (EA SBR + SBS, кодек EALayer3) и названия песен EA Trax.
 
     python music.py unpack                       # банк с диска → game/work/music/orig
     python music.py list    [--all]              # песни EA Trax (trax0…trax15) и все звуки банка
     python music.py export  WHAT… OUT_DIR [--wav]  # звук → .mp3 (без потерь) или .wav
     python music.py init    TRACKS_DIR           # tracks.txt по файлам папки (теги — ffprobe)
     python music.py build   TRACKS_DIR [OUT]     # песни + tracks.txt → OUT/audio/music/* (cache:)
-    python music.py check   [DIR] [--deep] [--decode WHAT…]  # проверка собранного банка
+    python music.py check   [DIR] [--deep] [--decode WHAT…] [--compare WHAT=ФАЙЛ…]  # проверка банка
 
 WHAT — слот EA Trax `trax0`…`trax15`, id звука (`105`, `id105`) или категория (`HomeGoal`).
 Исходный банк — game/work/music/orig (`--orig`), вывод — game/work/music/out в раскладке
@@ -14,6 +14,13 @@ cache: (`audio/music/` — три файла банка, `fe/ion/artassets/eatra
 альбом | обложка». build: `--no-alt` (не трогать вторые версии песен), `--copy` (MP3 44,1 кГц
 стерео без перекодирования), `--quality N` (LAME -V, по умолчанию 2), `--bitrate K` (CBR),
 `--volume дБ`, `--no-covers`.
+
+NHL Legacy — `--game legacy` (или NHL_GAME=legacy; профиль tools/gameprofile.py): банк того же
+устройства и кодека, распакованный — game/other/legacy/big, исходный — game/work/legacy-data/music/orig,
+вывод — game/work/legacy-data/out. Своё у Legacy: EA Trax — 10 песен (trax0…trax9), вторые версии —
+копии тех же 10 (меню обучения и титры); слоты trax10…trax21 build добавляет сам — новый id в
+`.sbr`, запись в `.bin`, id в список MenuTunes дерева выбора `music_graffitidata.bin` (его build
+тогда тоже пишет); обложки e10…e21 в игре есть (остались от NHL 15).
 
 Устройство (docs/music.md):
 - `music_samples.sbr` — оглавление «SBKR»: 195 звуков, у каждого одно поле SNS1 — смещение
@@ -28,19 +35,29 @@ cache: (`audio/music/` — три файла банка, `fe/ion/artassets/eatra
   47 сэмплов PCM s16be — сначала левый канал, потом правый. Декодер выдаёт эти 47 сэмплов,
   отбрасывает первые 1152 сэмпла MP3 (задержка кодера LAME 576 + декодера 529 = 1105 = 1152 − 47)
   и дальше идёт по MP3. Значит, MP3 от LAME переупаковывается в EALayer3 без потерь.
-- `music_musicboxdata.bin` — «MBX0»: по записи на звук (id, тип, теги «ключ=значение»):
-  VolumeType (категория), у песен EA Trax ещё Index, Artist, Album, Title, AssetID, FirstBoot,
-  loc_* (ключей eatrax13_* в nhl_eng_us.db нет — меню берёт простые строки).
+- `music_musicboxdata.bin` — «MBX0»: по записи на звук (id, тип = номер пула повторов, теги
+  «ключ=значение»): VolumeType (категория), у песен EA Trax ещё Index, Artist, Album, Title,
+  AssetID, FirstBoot, loc_* (ключей eatrax13_*/eatrax16_* в nhl_eng_us.db нет — меню берёт
+  простые строки). Число песен EA Trax игра берёт из данных — сколько записей с тегом Index.
+- `music_graffitidata.bin` — «GRF0X360»: выбор звука — хеш-таблица записей (параметр события,
+  значение, вид, список id); вид 1 — список категории (`music_context`), вид 2 — уточнения
+  (страна, команда, режим матча), из них берётся пересечение.
 
 MP3/FLAC/WAV читаются и MP3 кодируется через ffmpeg (есть в PATH: winget Gyan.FFmpeg).
 """
-import argparse, os, re, shutil, struct, subprocess, sys
+import argparse, bisect, os, re, shutil, struct, subprocess, sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import gameprofile
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 ORIG = os.path.join(ROOT, 'game', 'work', 'music', 'orig')
 OUT = os.path.join(ROOT, 'game', 'work', 'music', 'out')
 BANK = ('audio', 'music')
 SBR, SBS, MBX = 'music_samples.sbr', 'music_samples.sbs', 'music_musicboxdata.bin'
+GRF = 'music_graffitidata.bin'
+SMALL = ('music_eventdef.csi', SBR, 'music_moduledef.xml', 'music_eventsubscr.bin', GRF, MBX,
+         'music_repetitionpools.bin')
 
 SAMPLE_RATES = (44100, 48000, 32000)
 BITRATES = (0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320)
@@ -424,10 +441,11 @@ def pcm_head(grans):
     return b''.join(struct.pack('>%dh' % DELAY_PCM, *vals[c::nch]) for c in range(nch))
 
 
-def encode_track(path, quality=2, bitrate=None, copy=False, volume=None):
+def encode_track(path, quality=2, bitrate=None, copy=False, volume=None, max_block=9600):
     """Файл пользователя → (поток SPS EALayer3, как кодировали).
 
-    copy — MP3 (MPEG-1, 44,1 кГц, стерео) переупаковать без перекодирования."""
+    copy — MP3 (MPEG-1, 44,1 кГц, стерео) переупаковать без перекодирования; max_block — предел
+    блока D в байтах (sps_build)."""
     if copy and path.lower().endswith('.mp3') and not volume:
         data = open(path, 'rb').read()
         try:
@@ -438,14 +456,14 @@ def encode_track(path, quality=2, bitrate=None, copy=False, volume=None):
         if ok:
             ns = len(grans) * GRANULE - (DISCARD - DELAY_PCM)
             ns -= min(max(0, lame_padding(data) - 529), ns // 2)   # добивка LAME включает 529 декодера
-            return sps_build(grans, pcm_head(grans), ns, 2, 44100), 'MP3 без перекодирования'
+            return sps_build(grans, pcm_head(grans), ns, 2, 44100, max_block), 'MP3 без перекодирования'
     pcm = decode_pcm(path, volume)
     ns = len(pcm) // 4
     if ns < 44100:
         raise ValueError('звук короче секунды')
     grans = mp3_granules(encode_mp3(pcm, quality, bitrate))
     how = f'LAME {bitrate} кбит/с' if bitrate else f'LAME -V{quality}'
-    return sps_build(grans, pcm_head(grans), ns, 2, 44100), how
+    return sps_build(grans, pcm_head(grans), ns, 2, 44100, max_block), how
 
 
 def stream_to_pcm(raw):
@@ -531,11 +549,17 @@ def big_extract(archive, wanted, outdir):
 # ---------------------------------------------------------------- music_musicboxdata.bin
 
 class MusicBox:
-    """MBX0: шапка (событие trigger_MusicEvent) + по записи на звук с тегами «ключ=значение»."""
+    """MBX0: шапка (событие trigger_MusicEvent) + по записи на звук с тегами «ключ=значение».
+
+    В 0x10 — адрес пары «число записей, адрес таблицы» (у NHL 13 — 0x8C, у Legacy шапка длиннее —
+    0xA4: у события четыре параметра, а не три). Записи идут по возрастанию id."""
     def __init__(self, data):
         if data[:4] != b'MBX0':
             raise ValueError('не MBX0')
-        n, tab = u32(data, 0x8C), u32(data, 0x90)
+        self.head = u32(data, 0x10)
+        n, tab = u32(data, self.head), u32(data, self.head + 4)
+        if tab != self.head + 8:
+            raise ValueError(f'MBX0: таблица на 0x{tab:x}, а не сразу за числом записей')
         self.prefix = data[:tab]
         self.records = []
         for i in range(n):
@@ -557,9 +581,20 @@ class MusicBox:
                 return
         tags.append([key, value])
 
+    def add(self, sid, misc, typ, tags):
+        """Новая запись (id по возрастанию, как у EA)."""
+        if sid in self.by_id:
+            raise ValueError(f'MBX0: запись {sid} уже есть')
+        rec = [sid, list(misc), typ, [list(kv) for kv in tags]]
+        self.records.insert(bisect.bisect([r[0] for r in self.records], sid), rec)
+        self.by_id[sid] = rec
+        return rec
+
     def bytes(self):
         tab = len(self.prefix)
         pos = tab + 36 * len(self.records)
+        prefix = bytearray(self.prefix)
+        struct.pack_into('>I', prefix, self.head, len(self.records))
         table, body = bytearray(), bytearray()
         for sid, misc, typ, tags in self.records:
             off = pos + len(body)
@@ -572,7 +607,7 @@ class MusicBox:
                     strs += bytes(-len(strs) % 4)
             body += struct.pack('>%dI' % len(ptrs), *ptrs) + strs
             table += struct.pack('>9I', sid, *misc, typ, len(tags), off)
-        return bytes(self.prefix) + bytes(table) + bytes(body)
+        return bytes(prefix) + bytes(table) + bytes(body)
 
     def trax(self):
         """Песни EA Trax: {номер слота (Index): id звука}."""
@@ -583,16 +618,89 @@ class MusicBox:
                 out[int(t['Index'])] = sid
         return dict(sorted(out.items()))
 
+# ---------------------------------------------------------------- music_graffitidata.bin
+
+class Graffiti:
+    """GRF0X360 — выбор звука по параметрам события trigger_MusicEvent.
+
+    Шапка 0x1C байт (в 0x14 — число корзин, оно же число записей), корзины хеш-таблицы по 8 байт
+    (число записей, смещение первой или FFFFFFFF), записи по 16 байт (параметр, значение, вид,
+    смещение списка), списки (число, id по возрастанию); смещения — от 0x1C, всё подряд. Параметры
+    и значения — из music_eventsubscr.bin (1 — music_context: 5 = MenuTunes; 6 — страна хозяев;
+    9 — режим матча…). Вид 1 — список категории, вид 2 — уточнение: берётся пересечение списков."""
+    def __init__(self, data):
+        if data[:8] != b'GRF0X360':
+            raise ValueError('не GRF0X360')
+        self.head = bytes(data[:0x1C])
+        nb = u32(data, 0x14)
+        self.counts = [u32(data, 0x1C + 8 * i) for i in range(nb)]
+        self.entries = []
+        for i, cnt in enumerate(self.counts):
+            off = u32(data, 0x1C + 8 * i + 4)
+            for j in range(cnt):
+                p, v, k, lo = struct.unpack_from('>4I', data, 0x1C + off + 16 * j)
+                c = u32(data, 0x1C + lo)
+                self.entries.append([p, v, k, list(struct.unpack_from('>%dI' % c, data, 0x1C + lo + 4))])
+        self.changed = False
+
+    def ids(self):
+        return {sid for e in self.entries for sid in e[3]}
+
+    def main_list(self, ids):
+        """Запись вида 1, в списке которой все эти id (у песен EA Trax — music_context=MenuTunes)."""
+        found = [e for e in self.entries if e[2] == 1 and set(ids) <= set(e[3])]
+        if len(found) != 1:
+            raise ValueError(f'{GRF}: списков вида 1 со всеми песнями EA Trax — {len(found)}, ожидался один')
+        return found[0]
+
+    def add(self, entry, sid):
+        if sid not in entry[3]:
+            bisect.insort(entry[3], sid)
+            self.changed = True
+
+    def bytes(self):
+        nb = len(self.counts)
+        rel = 8 * nb
+        buckets, k = bytearray(), 0
+        for cnt in self.counts:
+            buckets += struct.pack('>II', cnt, rel + 16 * k if cnt else 0xFFFFFFFF)
+            k += cnt
+        lists_at = rel + 16 * len(self.entries)
+        ents, lists = bytearray(), bytearray()
+        for p, v, kind, lst in self.entries:
+            ents += struct.pack('>4I', p, v, kind, lists_at + len(lists))
+            lists += struct.pack('>%dI' % (len(lst) + 1), len(lst), *lst)
+        return self.head + bytes(buckets) + bytes(ents) + bytes(lists)
+
 # ---------------------------------------------------------------- банк
 
 # вторые версии песен EA Trax (тег MenuTunes без названия): сверено по огибающей громкости
 # (корреляция 0,85–0,97 против < 0,65 у ближайшей чужой песни) и по длительности
 ALTERNATES = {104: 77, 113: 78, 114: 79, 116: 80, 117: 82, 212: 83, 105: 208, 112: 209,
               211: 217, 111: 218, 110: 219, 109: 220, 106: 221, 107: 222}
+# NHL Legacy: вторые версии 10 песен EA Trax — байт-в-байт копии (огибающая 1,00, та же длина);
+# играют в меню обучения (8) и титров (718, 722) — списки music_match_type=Tutorial/Credits
+ALTERNATES_LEGACY = {694: 711, 700: 716, 701: 717, 702: 718, 703: 719, 706: 721, 708: 722,
+                     726: 989, 728: 990, 729: 991}
+
+# что у игр разное (профиль — tools/gameprofile.py; перенести туда: music_alternates и др.)
+#   alternates — пары «песня EA Trax → вторая версия»;
+#   max_trax   — до скольких слотов EA Trax build может дополнить банк (0 — не дополнять);
+#                у Legacy обложек e0…e21 — 22 (от NHL 15), флагов «вкл» в настройках — 25 байт;
+#   max_block  — предел блока D: у EA в NHL 13 самый большой 9671, в Legacy — 8455 байт.
+MUSIC = {
+    'nhl13': dict(alternates=ALTERNATES, max_trax=0, max_block=9600),
+    'legacy': dict(alternates=ALTERNATES_LEGACY, max_trax=22, max_block=8455),
+}
+P = gameprofile.get('nhl13')            # игра; ставит main() по --game
+
+
+def music_of(name=None):
+    return MUSIC[name or P.name]
 
 
 class Bank:
-    """Банк в папке DIR/audio/music: оглавление .sbr, потоки .sbs, теги .bin."""
+    """Банк в папке DIR/audio/music: оглавление .sbr, потоки .sbs, теги .bin (и дерево выбора .bin)."""
     def __init__(self, root):
         self.root = root
         d = os.path.join(root, *BANK)
@@ -602,6 +710,9 @@ class Bank:
         self.sbs_path = os.path.join(d, SBS)
         self.sbr = bytearray(unchunked(open(os.path.join(d, SBR), 'rb').read()))
         self.mbx = MusicBox(unchunked(open(os.path.join(d, MBX), 'rb').read()))
+        grf = os.path.join(d, GRF)
+        self.grf = Graffiti(unchunked(open(grf, 'rb').read())) if os.path.exists(grf) else None
+        self.added = []            # новые id (новые слоты EA Trax)
         s = self.sbr
         if s[:4] != b'SBKR' or s[u32(s, 0x28):u32(s, 0x28) + 4] != b'SNS1':
             raise ValueError('music_samples.sbr: не SBKR/SNS1')
@@ -616,6 +727,57 @@ class Bank:
         with open(self.sbs_path, 'rb') as f:
             if f.read(4) != b'SBKS':
                 raise ValueError('music_samples.sbs: не SBKS')
+
+    def free_id(self):
+        """Свободный id для нового звука: первый пропуск после первой песни EA Trax (у Legacy —
+        695, 696…: id песен NHL 15, которых в банке нет), не занятый ни в .sbr, ни в .bin, ни в
+        дереве выбора — внутри прежнего диапазона id."""
+        used = set(self.slots) | set(self.mbx.by_id) | set(self.added) | (self.grf.ids() if self.grf else set())
+        sid = min(self.mbx.trax().values()) + 1
+        while sid in used:
+            sid += 1
+        return sid
+
+    def add_trax(self, k):
+        """Новый слот EA Trax k: новый id звука (поток — из build), запись в .bin по образцу trax0
+        (тип = пул повторов MenuMusicPool, теги VolumeType/Index/AssetID = k), id — в список
+        MenuTunes дерева выбора. Слоты должны идти подряд (игра ищет песни по Index 0…N−1)."""
+        if self.grf is None:
+            raise SystemExit(f'нет {GRF} рядом с банком — сначала: python music.py unpack')
+        trax = self.mbx.trax()
+        entry = self.grf.main_list(trax.values())
+        sid = self.free_id()
+        tmpl = self.mbx.by_id[trax[0]]
+        self.mbx.add(sid, tmpl[1], tmpl[2], [['VolumeType', 'MenuTunes'], ['Index', str(k)],
+                                             ['Artist', ''], ['Title', ''], ['AssetID', str(k)]])
+        self.grf.add(entry, sid)
+        self.added.append(sid)
+        return sid
+
+    def sbr_with_added(self):
+        """Оглавление с новыми id → (байты, {id: место смещения потока}). Раскладка как у EA:
+        таблица по возрастанию id с 0xB6, сразу за ней поля SNS1 (по одному на звук, в порядке
+        таблицы), за ними значения — в прежнем порядке, новые в конце."""
+        s = self.sbr
+        n, tab = u32(s, 0x1C), u32(s, 0x24)
+        fields0 = tab + 10 * n
+        if min(self.slots.values()) != fields0 + 6 * n or len(s) != fields0 + 10 * n:
+            raise ValueError('music_samples.sbr: раскладка не та, что у EA, — новые id не добавить')
+        ids = sorted(list(self.slots) + self.added)
+        total = len(ids)
+        fields = tab + 10 * total
+        vals = fields + 6 * total
+        vorder = sorted(self.slots, key=self.slots.get) + self.added
+        where = {sid: vals + 4 * i for i, sid in enumerate(vorder)}
+        out = bytearray(s[:tab])
+        struct.pack_into('>I', out, 0x1C, total)
+        for i, sid in enumerate(ids):
+            out += struct.pack('>IHI', sid, 1, fields + 6 * i)
+        for sid in ids:
+            out += struct.pack('>HI', 0, where[sid])
+        for sid in vorder:
+            out += s[self.slots[sid]:self.slots[sid] + 4] if sid in self.slots else bytes(4)
+        return out, where
 
     def offset(self, sid):
         return u32(self.sbr, self.slots[sid])
@@ -634,14 +796,23 @@ class Bank:
         return dict(codec=codec, ch=ch, rate=rate, samples=ns, sec=ns / rate)
 
     def save(self, out_root, streams):
-        """Записать банк в out_root/audio/music: потоки streams {id: байты} вместо исходных."""
+        """Записать банк в out_root/audio/music: потоки streams {id: байты} вместо исходных.
+
+        Новые id (add_trax) — потоки в конце .sbs, оглавление пересобрано; дерево выбора пишется,
+        только если менялось (иначе в cache: остаётся архивное)."""
         d = os.path.join(out_root, *BANK)
         os.makedirs(d, exist_ok=True)
         sbs_out = os.path.join(d, SBS)
         if os.path.abspath(sbs_out) == os.path.abspath(self.sbs_path):
             raise SystemExit('папка вывода совпадает с исходной')
+        missing = [sid for sid in self.added if sid not in streams]
+        if missing:
+            raise SystemExit(f'у новых id {missing} нет звука (новому слоту нужен файл)')
         order = sorted(self.slots, key=self.offset)        # порядок потоков как у EA
-        sbr = bytearray(self.sbr)
+        sbr, where = bytearray(self.sbr), self.slots
+        if self.added:
+            sbr, where = self.sbr_with_added()
+            order += self.added
         tmp = sbs_out + '.tmp'
         with open(self.sbs_path, 'rb') as src, open(tmp, 'wb') as o:
             o.write(b'SBKS' + bytes(12))
@@ -651,12 +822,14 @@ class Bank:
                 pad = -pos % 16
                 o.write(bytes(pad))
                 pos += pad
-                struct.pack_into('>I', sbr, self.slots[sid], pos)
+                struct.pack_into('>I', sbr, where[sid], pos)
                 o.write(raw)
                 pos += len(raw)
         os.replace(tmp, sbs_out)
         open(os.path.join(d, SBR), 'wb').write(sbr)
         open(os.path.join(d, MBX), 'wb').write(self.mbx.bytes())
+        if self.grf is not None and self.grf.changed:
+            open(os.path.join(d, GRF), 'wb').write(self.grf.bytes())
         return d
 
 # ---------------------------------------------------------------- обложки EA Trax
@@ -697,6 +870,11 @@ def cover_rgba(src, w, h):
 
 def cover_template(sub, name):
     rel = ('fe', 'ion', 'artassets', sub, name)
+    if P.name != 'nhl13':                        # Legacy: из распакованных архивов (cache)
+        p = P.extracted('/'.join(rel))
+        if not p:
+            raise SystemExit(f'нет обложки-шаблона {"/".join(rel)} в {P.big}')
+        return p
     p = os.path.join(ROOT, 'game', 'extracted', 'big', 'cache', *rel)
     if os.path.exists(p):
         return p
@@ -744,15 +922,32 @@ TRACKS_HEAD = """\
 """
 
 
-def resolve(bank, target):
-    """trax3 / id105 / 105 / HomeGoal → (список id, слот EA Trax или None)."""
+def tracks_head(bank):
+    if P.name == 'nhl13':
+        return TRACKS_HEAD
+    n, top = len(bank.mbx.trax()), music_of()['max_trax']
+    lines = TRACKS_HEAD.splitlines(True)
+    lines[0] = f'# {P.title} — свой саундтрек (python tools/music.py --game {P.name} build ПАПКА).\n'
+    lines[2] = (f'#   trax0 … trax{n - 1} — песни EA Trax (меню; список: python tools/music.py --game {P.name} list),\n'
+                f'#   trax{n} … trax{top - 1} — новые слоты (подряд, без пропусков);\n')
+    return ''.join(lines)
+
+
+def resolve(bank, target, create=False):
+    """trax3 / id105 / 105 / HomeGoal → (список id, слот EA Trax или None).
+
+    create — слота EA Trax нет, но игра позволяет (max_trax): добавить (Bank.add_trax)."""
     t = target.strip()
     m = re.fullmatch(r'(?i)trax(\d+)', t)
     if m:
         trax = bank.mbx.trax()
         k = int(m.group(1))
         if k not in trax:
-            raise SystemExit(f'{t}: слота нет, есть trax0…trax{max(trax)}')
+            top = music_of()['max_trax']
+            if create and k < top:
+                return [bank.add_trax(k)], k
+            more = f' (новые — до trax{top - 1})' if top else ''
+            raise SystemExit(f'{t}: слота нет, есть trax0…trax{max(trax)}{more}')
         return [trax[k]], k
     m = re.fullmatch(r'(?i)(?:id)?(\d+)', t)
     if m:
@@ -785,7 +980,31 @@ def describe(bank, sid):
     return t.get('VolumeType', '?'), t
 
 
+def unpack_extracted(a):
+    """Не NHL 13: файлы банка — из распакованных архивов игры (tools/big.py → P.big), иначе с диска."""
+    dst_dir = os.path.join(a.orig, *BANK)
+    os.makedirs(dst_dir, exist_ok=True)
+    for name in SMALL + (SBS,):
+        rel = 'audio/music/' + name
+        src = None if a.disc else P.extracted(rel)
+        dst = os.path.join(dst_dir, name)
+        if src:
+            if name == SBS:
+                shutil.copyfile(src, dst)
+            else:
+                open(dst, 'wb').write(unchunked(open(src, 'rb').read()))
+            print(f'{P.archive_of(rel)}: {name} ({os.path.getsize(dst):,} байт)')
+            continue
+        disc = a.disc or P.disc
+        arc = 'nocache.big' if name == SBS else 'audioboot.big'
+        got = big_extract(os.path.join(disc, arc), {rel}, a.orig)
+        print(f'{arc}: {name} ({os.path.getsize(got[0]):,} байт)' if got else f'{arc}: {name} — нет!')
+    print('→', dst_dir)
+
+
 def cmd_unpack(a):
+    if P.name != 'nhl13':
+        return unpack_extracted(a)
     disc = a.disc or os.path.join(ROOT, 'game', 'extracted', 'disc')
     names = ['music_eventdef.csi', SBR, 'music_moduledef.xml', 'music_eventsubscr.bin',
              'music_graffitidata.bin', MBX, 'music_repetitionpools.bin']
@@ -799,14 +1018,16 @@ def cmd_unpack(a):
 def cmd_list(a):
     bank = Bank(a.orig)
     trax = bank.mbx.trax()
-    alt_of = {v: k for k, v in ALTERNATES.items()}
+    alts = music_of()['alternates']
+    alt_of = {v: k for k, v in alts.items()}
     print('EA Trax — песни меню (слот = Index; FirstBoot — по названию, песни первого запуска):')
     for k, sid in trax.items():
         t = bank.mbx.tags(sid)
-        alt = f'  вторая версия: {ALTERNATES[sid]}' if sid in ALTERNATES else ''
+        alt = f'  вторая версия: {alts[sid]}' if sid in alts else ''
         first = '  FirstBoot' if t.get('FirstBoot') == 'Yes' else ''
+        album = f' ({t["Album"]})' if 'Album' in t else ''         # у Legacy тега Album нет
         print(f'  trax{k:<3} id {sid:<4} {bank.info(sid)["sec"]:6.1f} с  {t.get("Artist")} — '
-              f'{t.get("Title")} ({t.get("Album")}){first}{alt}')
+              f'{t.get("Title")}{album}{first}{alt}')
     if not a.all:
         print('Все звуки банка: list --all')
         return
@@ -869,18 +1090,19 @@ def names_from_file(path):
 def make_tracks(folder, bank):
     files = scan_audio(folder)
     trax = bank.mbx.trax()
-    lines = [TRACKS_HEAD]
-    if len(files) > len(trax):
-        lines.append(f'# файлов {len(files)}, слотов {len(trax)}: лишние ниже закомментированы\n')
+    slots = max(len(trax), music_of()['max_trax'])      # Legacy: и новые слоты
+    lines = [tracks_head(bank)]
+    if len(files) > slots:
+        lines.append(f'# файлов {len(files)}, слотов {slots}: лишние ниже закомментированы\n')
     for i, fn in enumerate(files):
         artist, title, album = names_from_file(os.path.join(folder, fn))
         row = f'trax{i} = {fn} | {artist} | {title} | {album}'
-        lines.append(row if i < len(trax) else '# ' + row)
+        lines.append(row if i < slots else '# ' + row)
     lines.append('')
     for k, sid in trax.items():
         if k >= len(files):
             t = bank.mbx.tags(sid)
-            lines.append(f'# trax{k} = | {t.get("Artist")} | {t.get("Title")} | {t.get("Album")}   (оригинал)')
+            lines.append(f'# trax{k} = | {t.get("Artist")} | {t.get("Title")} | {t.get("Album", "")}   (оригинал)')
     return '\n'.join(lines) + '\n', len(files)
 
 
@@ -909,21 +1131,25 @@ def cmd_build(a):
             for name in os.listdir(d):
                 if re.fullmatch(pattern.format(r'\d+').replace('.', r'\.'), name):
                     os.remove(os.path.join(d, name))
+    game = music_of()
+    alts = game['alternates']
     streams, cache, report, covers = {}, {}, [], 0
     for n, target, fn, artist, title, album, cover in read_tracks(tracks):
-        ids, slot = resolve(bank, target)
+        ids, slot = resolve(bank, target, create=True)
+        if ids[0] in bank.added and not fn:
+            raise SystemExit(f'{tracks}:{n}: {target} — нового слота в банке нет, нужен файл песни')
         if fn:
             src = os.path.join(a.tracks_dir, fn)
             if not os.path.exists(src):
                 raise SystemExit(f'{tracks}:{n}: нет файла {src}')
             if src not in cache:
-                raw, how = encode_track(src, a.quality, a.bitrate, a.copy, a.volume)
+                raw, how = encode_track(src, a.quality, a.bitrate, a.copy, a.volume, game['max_block'])
                 sec = sps_header(raw)[3] / 44100
                 cache[src] = raw
                 print(f'  {fn}: {sec:.1f} с, {len(raw) / 1048576:.1f} МБ ({how})')
             targets = list(ids)
-            if slot is not None and not a.no_alt and ids[0] in ALTERNATES:
-                targets.append(ALTERNATES[ids[0]])
+            if slot is not None and not a.no_alt and ids[0] in alts:
+                targets.append(alts[ids[0]])
             for sid in targets:
                 streams[sid] = cache[src]
         if slot is not None:
@@ -941,6 +1167,8 @@ def cmd_build(a):
             if t.get('Title') in ('Grace', 'Turn Your Back'):
                 print(f'  внимание: у названия «{t["Title"]}» игра подменяет исполнителя (зашито в код)')
             line = f'trax{slot} (id {sid}): {t.get("Artist")} — {t.get("Title")}' + ('' if fn else ' [звук прежний]')
+            if sid in bank.added:
+                line += ' [новый слот]'
             if not a.no_covers and (fn or cover):
                 src_img = cover_source(a.tracks_dir, fn, cover)
                 if src_img and build_cover(t.get('AssetID', str(slot)), src_img, a.out):
@@ -953,9 +1181,22 @@ def cmd_build(a):
             print(f'  {tracks}:{n}: у {target} названий и обложек нет — поля пропущены')
         if slot is None and fn:
             report.append(f'{target}: id {", ".join(map(str, ids))}')
+    trax = bank.mbx.trax()
+    if sorted(trax) != list(range(len(trax))):         # игра ищет песни по Index 0…N−1
+        raise SystemExit(f'слоты EA Trax с пропуском: {sorted(trax)} — новые слоты нужны подряд')
+    grf_out = os.path.join(a.out, *BANK, GRF)
+    if game['max_trax'] and not bank.added and os.path.exists(grf_out):
+        os.remove(grf_out)                           # от прошлой сборки с новыми слотами
     d = bank.save(a.out, streams)
     print('\n'.join(report))
     print(f'заменено потоков: {len(streams)}, обложек: {covers}; банк → {d}')
+    if bank.added:
+        print(f'новые слоты: {len(bank.added)} (id {", ".join(map(str, bank.added))}); EA Trax всего {len(trax)}; '
+              f'дерево выбора → {GRF}')
+    if P.name != 'nhl13':
+        print(f'поставить (игра закрыта): содержимое {a.out} (audio\\music, fe\\ion\\artassets\\eatrax*) '
+              f'→ cache: порта {P.title}' + (f' ({P.install})' if P.install else ''))
+        return
     print(f'поставить (игра закрыта): содержимое {a.out} (audio\\music, fe\\ion\\artassets\\eatrax*) '
           '→ game\\userdata\\cache\\guest; убрать — удалить эти файлы оттуда')
 
@@ -991,6 +1232,8 @@ def cmd_check(a):
     overlap = sum(1 for (a0, a1), (b0, b1) in zip(ends, ends[1:]) if b0 < a1)
     print(f'звуков {total}, битых {bad}, пересечений {overlap}, .sbs {size:,} байт'
           + (' (кадры EALayer3 разобраны)' if a.deep else ''))
+    if P.name != 'nhl13' or os.path.exists(os.path.join(d, GRF)):
+        bad += check_links(bank, a)
     for what in a.decode or []:
         for sid in resolve(bank, what)[0]:
             pcm, ch, rate = stream_to_pcm(bank.read(sid))
@@ -998,48 +1241,172 @@ def cmd_check(a):
             vals = struct.unpack('<%dh' % (len(pcm) // 2), pcm)
             rms = (sum(v * v for v in vals[::97]) / max(1, len(vals[::97]))) ** 0.5
             print(f'  {sid}: ffmpeg декодировал {n} сэмплов ({n / rate:.1f} с), RMS {rms:.0f}')
+    for spec in a.compare or []:
+        what, _, path = spec.partition('=')
+        if not path or not os.path.exists(path):
+            raise SystemExit(f'--compare {spec}: нужно СЛОТ=ФАЙЛ (файл — исходник песни)')
+        for sid in resolve(bank, what)[0]:
+            print(compare_stream(bank.read(sid), path, f'{what} (id {sid})'))
     sys.exit(1 if bad or overlap else 0)
 
 
+def check_links(bank, a):
+    """Связи банка: id в .sbr и .bin одни и те же, EA Trax — Index подряд и в списке MenuTunes дерева
+    выбора, все id дерева есть в банке; крупнейший блок D против предела игры. → число ошибок."""
+    errs = []
+    sbr_ids, mbx_ids = set(bank.slots), set(bank.mbx.by_id)
+    if sbr_ids != mbx_ids:
+        errs.append(f'id только в .sbr: {sorted(sbr_ids - mbx_ids)}, только в .bin: {sorted(mbx_ids - sbr_ids)}')
+    trax = bank.mbx.trax()
+    if sorted(trax) != list(range(len(trax))):
+        errs.append(f'Index песен EA Trax не подряд: {sorted(trax)}')
+    grf, where = bank.grf, 'рядом с банком'
+    if grf is None:                              # дерево не менялось — в игре архивное (как в orig)
+        p = os.path.join(a.orig, *BANK, GRF)
+        grf, where = (Graffiti(unchunked(open(p, 'rb').read())), 'из orig') if os.path.exists(p) else (None, '')
+    if grf is not None:
+        lost = sorted(grf.ids() - sbr_ids)
+        if lost:
+            errs.append(f'в дереве выбора id, которых нет в банке: {lost}')
+        try:
+            menu = grf.main_list(trax.values())
+            print(f'дерево выбора ({where}): MenuTunes — {len(menu[3])} id, все {len(trax)} песен EA Trax в нём')
+        except ValueError as e:
+            errs.append(str(e))
+    alts = music_of()['alternates']
+    print(f'EA Trax: {len(trax)} песен (Index 0…{len(trax) - 1}), вторых версий в банке: '
+          f'{sum(1 for sid in trax.values() if alts.get(sid) in bank.slots)}')
+    if a.deep:
+        top, at = 0, None
+        with open(bank.sbs_path, 'rb') as f:
+            for sid in bank.ids():
+                for k, (_, payload) in enumerate(sps_blocks(sps_read(f, bank.offset(sid)))):
+                    if len(payload) + 8 > top:
+                        top, at = len(payload) + 8, (sid, k)
+        lim = music_of()['max_block']
+        print(f'крупнейший блок D: {top} байт (id {at[0]}, блок {at[1]}); предел сборки {lim}'
+              + ('' if top <= lim else ' — БОЛЬШЕ предела'))
+    for e in errs:
+        print('  ОШИБКА:', e)
+    if not errs:
+        print('связи .sbr / .bin / дерево выбора: в порядке')
+    return len(errs)
+
+
+def compare_stream(raw, path, label):
+    """Поток банка против исходника: длина, уровень, сдвиг, отношение сигнал/шум (целиком и худший
+    10-секундный кусок) и стыки блоков D (шум разницы на ±32 сэмпла у стыка против соседних
+    ±544) — щелчок или потерянная гранула дали бы скачок."""
+    import array, math
+    dec, ch, rate = stream_to_pcm(raw)
+    x, y = array.array('h', dec), array.array('h', decode_pcm(path))
+    if sys.byteorder != 'little':
+        x.byteswap()
+        y.byteswap()
+    n = min(len(x), len(y)) // ch * ch
+
+    def db(v):
+        return 10 * math.log10(v) if v > 0 else float('-inf')
+
+    def energy(sig, lo, hi, step=1):
+        s = sig[lo:hi:step]
+        return sum(v * v for v in s) / max(1, len(s))
+
+    def resid(lo, hi, step=1):
+        r = range(lo, hi, step)
+        return sum((x[i] - y[i]) ** 2 for i in r) / max(1, len(r))
+
+    # сдвиг: 2000 точек левого канала с 10-й секунды, лаг ±1152 сэмпла
+    lag = 0
+    start = min(10 * rate, max(0, n // ch - 3 * rate)) * ch
+    pts = range(start, min(n, start + 2000 * 11 * ch), 11 * ch)
+    if n > 4 * rate * ch:
+        lag = min(range(-1152, 1153), key=lambda L: sum(
+            abs(x[i] - y[i + L * ch]) for i in pts if 0 <= i + L * ch < len(y)))
+    sig, err = energy(y, 0, n, 7), resid(0, n, 7)
+    seg = 10 * rate * ch
+    worst = min(((db(energy(y, lo, min(n, lo + seg), 5) / max(1e-9, resid(lo, min(n, lo + seg), 5))), lo)
+                 for lo in range(0, n, seg) if energy(y, lo, min(n, lo + seg), 50) > 1e4), default=(float('nan'), 0))
+    joints, pos = [DELAY_PCM], 0                     # стык «47 сэмплов PCM → MP3» и начала блоков D
+    for k, (samples, _) in enumerate(sps_blocks(raw)):
+        if k:
+            joints.append(pos)
+        pos += samples
+    ratios = []
+    for b in joints:
+        i = b * ch
+        near = []
+        if i - 64 * ch > 0:
+            near.append(resid(max(0, i - 544 * ch), i - 32 * ch))
+        if i + 64 * ch < n:
+            near.append(resid(i + 32 * ch, min(n, i + 544 * ch)))
+        if near:
+            ratios.append(resid(max(0, i - 32 * ch), min(n, i + 32 * ch)) / max(sum(near) / len(near), 1.0))
+    ratios.sort()
+    return (f'  {label} против {os.path.basename(path)}: длина {len(x) // ch} / {len(y) // ch} сэмплов '
+            f'({(len(x) - len(y)) // ch:+d}), сдвиг {lag:+d}; уровень {db(energy(x, 0, n, 7)):.1f} / {db(sig):.1f} дБ; '
+            f'сигнал/шум {db(sig / max(err, 1e-9)):.1f} дБ, худшие 10 с — {worst[0]:.1f} дБ '
+            f'(с {worst[1] // ch / rate:.0f} с); стыков {len(ratios)}: шум разницы у стыка / рядом — медиана '
+            f'{ratios[len(ratios) // 2]:.2f}, макс {ratios[-1]:.2f}')
+
+
 def main():
-    p = argparse.ArgumentParser(description='Музыка NHL 13: банк audio/music и песни EA Trax')
+    global P
+    p = argparse.ArgumentParser(description='Музыка NHL 13 и NHL Legacy: банк audio/music и песни EA Trax')
+    gameprofile.add_argument(p)
     sub = p.add_subparsers(dest='cmd', required=True)
-    s = sub.add_parser('unpack', help='достать банк из архивов диска')
-    s.add_argument('--disc', help='папка с audioboot.big и nocache.big (game/extracted/disc)')
-    s.add_argument('--orig', default=ORIG)
-    s.set_defaults(fn=cmd_unpack)
-    s = sub.add_parser('list', help='песни EA Trax и звуки банка')
-    s.add_argument('--orig', default=ORIG)
+
+    def add(name, fn, **kw):
+        s = sub.add_parser(name, **kw)
+        s.add_argument('--game', choices=gameprofile.GAMES, default=argparse.SUPPRESS,
+                       help='игра (можно и до команды): nhl13 или legacy')
+        s.set_defaults(fn=fn)
+        return s
+
+    s = add('unpack', cmd_unpack, help='достать банк из архивов диска')
+    s.add_argument('--disc', help='папка с audioboot.big и nocache.big (game/extracted/disc; у Legacy '
+                                  '— только если не брать распакованное из game/other/legacy/big)')
+    s.add_argument('--orig')
+    s = add('list', cmd_list, help='песни EA Trax и звуки банка')
+    s.add_argument('--orig')
     s.add_argument('--all', action='store_true')
-    s.set_defaults(fn=cmd_list)
-    s = sub.add_parser('export', help='звук → .mp3 (без потерь) или .wav')
+    s = add('export', cmd_export, help='звук → .mp3 (без потерь) или .wav')
     s.add_argument('what', nargs='+')
     s.add_argument('out_dir')
-    s.add_argument('--orig', default=ORIG)
+    s.add_argument('--orig')
     s.add_argument('--wav', action='store_true')
-    s.set_defaults(fn=cmd_export)
-    s = sub.add_parser('init', help='tracks.txt для папки с песнями')
+    s = add('init', cmd_init, help='tracks.txt для папки с песнями')
     s.add_argument('tracks_dir')
-    s.add_argument('--orig', default=ORIG)
+    s.add_argument('--orig')
     s.add_argument('--force', action='store_true')
-    s.set_defaults(fn=cmd_init)
-    s = sub.add_parser('build', help='собрать банк со своими песнями')
+    s = add('build', cmd_build, help='собрать банк со своими песнями')
     s.add_argument('tracks_dir')
-    s.add_argument('out', nargs='?', default=OUT)
-    s.add_argument('--orig', default=ORIG)
+    s.add_argument('out', nargs='?')
+    s.add_argument('--orig')
     s.add_argument('--no-alt', action='store_true', help='не трогать вторые версии песен EA Trax')
     s.add_argument('--copy', action='store_true', help='MP3 44,1 кГц стерео — без перекодирования')
     s.add_argument('--quality', type=int, default=2, help='LAME VBR -V (0 лучше … 9), по умолчанию 2')
     s.add_argument('--bitrate', type=int, help='LAME CBR, кбит/с (вместо VBR)')
     s.add_argument('--volume', type=float, help='усиление, дБ (например -3)')
     s.add_argument('--no-covers', action='store_true', help='не делать обложки EA Trax')
-    s.set_defaults(fn=cmd_build)
-    s = sub.add_parser('check', help='проверить банк в папке (раскладка cache:)')
-    s.add_argument('dir', nargs='?', default=OUT)
+    s = add('check', cmd_check, help='проверить банк в папке (раскладка cache:)')
+    s.add_argument('dir', nargs='?')
+    s.add_argument('--orig', help='исходный банк (дерево выбора, если рядом с проверяемым его нет)')
     s.add_argument('--deep', action='store_true', help='разобрать все кадры EALayer3')
     s.add_argument('--decode', nargs='*', help='декодировать звуки через ffmpeg')
-    s.set_defaults(fn=cmd_check)
+    s.add_argument('--compare', nargs='*', metavar='WHAT=ФАЙЛ',
+                   help='сравнить звук банка с исходником: длина, уровень, сигнал/шум, стыки блоков')
     a = p.parse_args()
+    P = gameprofile.get(a.game)
+    if P.name == 'nhl13':                        # как до профиля: game/work/music/{orig,out}
+        orig, out = ORIG, OUT
+    else:                                        # game/work/legacy-data/music/orig, game/work/legacy-data/out
+        orig, out = P.work_dir('music', 'orig'), P.out
+    if getattr(a, 'orig', None) is None and 'orig' in a:
+        a.orig = orig
+    for key in ('out', 'dir'):
+        if key in a and getattr(a, key) is None:
+            setattr(a, key, out)
     a.fn(a)
 
 
