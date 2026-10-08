@@ -1,0 +1,539 @@
+# Ручные врезки «НХЛ на 32 команды» для NHL Legacy (src/nhllegacy_teams.cpp; по образцу
+# port/nhl13_team_hooks.toml; разбор мест — legacy-port/analysis/team32/hooks_map.md (локально) и
+# docs/legacy-port.md). Места «30 → 32» одной инструкцией — nhllegacy_team_sites.toml (генератор
+# tools/team_hooks.py --game legacy по nhllegacy_team32_sites.json / nhllegacy_ahl32_sites.json).
+#
+# Константы Legacy (в отличие от NHL 13): кэш сводок команд — записи 332 байта, флаги +9960, счётчик
+# +9992, размер 9996 (глобал 0x83BDC414); настройки лиги «есть сборные» +604; состояния лиги: Матч звёзд
+# 54, сборные 55/56; сборные при 32 — teamid 222/223; ahl32 — фарм-клубы SEA/VGK teamid 224/225 (номера
+# 62/63); драфт — две таблицы порядка 0x83A15178 и 0x83A151F0; лотерея — r1+384; таблица статистики —
+# записи +36, число +48, список узла — число +88.
+
+# ---------------------------------------------------------------------------------------------------------
+# Вместимость календаря лиги: 1350 игр → 1600 (запись 28 байт, буфер 37 800 — как в NHL 13).
+# Уверенность: высокая (82A0DB08 = 827B2300 по структуре 1:1; 82B3B028 = 828DE2C8, предел тот же).
+# В Legacy со второго сезона вместо генератора 8286AD88 — 82B218E0 (шаблон из базы, сдвиг дат), предсезонка —
+# 82B1E988 (до 4 дивизионов × 28 игр). 32 × 84 / 2 + 112 = 1456 < 1600. kScheduleCapacity не менять.
+
+# 82A0DB08 (загрузчик календаря, = 827B2300): три буфера
+[[midasm_hook]]
+address = 0x82A0DB6C   # ori r3, r3, 0x93A8  (было 827B2360)
+name = "NhlLegacyScheduleBytes"
+registers = ["r3"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A0DB80   # li r10, 1350  (827B2374)
+name = "NhlLegacyScheduleCapacity"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A0DFC8   # ori r3, r3, 0x93A8  (827B27C0)
+name = "NhlLegacyScheduleBytes"
+registers = ["r3"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A0DFD8   # li r10, 1350  (827B27D0)
+name = "NhlLegacyScheduleCapacity"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A0E160   # ori r3, r3, 0x93A8  (827B2958)
+name = "NhlLegacyScheduleBytes"
+registers = ["r3"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A0E170   # li r10, 1350  (827B2968)
+name = "NhlLegacyScheduleCapacity"
+registers = ["r10"]
+after_instruction = true
+
+# 82B3B028 (= 828DE2C8): календарь лиги при создании франшизы и новом сезоне
+[[midasm_hook]]
+address = 0x82B3B234   # ori r3, r3, 0x93A8  (828DE510)
+name = "NhlLegacyScheduleBytes"
+registers = ["r3"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3B244   # li r10, 1350  (828DE520)
+name = "NhlLegacyScheduleCapacity"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3B2D0   # li r10, 1350 → 82A0E460 (первый сезон из базы; 828DE5A8)
+name = "NhlLegacyScheduleCapacity"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3B304   # li r9, 1350 → 82B218E0 (вместо генератора 8286AD88; 828DE5D8)
+name = "NhlLegacyScheduleCapacity"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3B378   # li r6, 1350 → 82B1E988 (предсезонка; 828DE648)
+name = "NhlLegacyScheduleCapacity"
+registers = ["r6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3B3D0   # li r10, 1350  (828DE6A8)
+name = "NhlLegacyScheduleCapacity"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3B404   # li r9, 1350  (828DE6D4)
+name = "NhlLegacyScheduleCapacity"
+registers = ["r9"]
+after_instruction = true
+
+# ---------------------------------------------------------------------------------------------------------
+# Фарм-клубы 30/31: массив league+520 (индекс +130 слов) и флаг +640 — те же, LeagueExtra как есть.
+# Уверенность: высокая.
+# 82B28FB0 (= 828C0250)
+[[midasm_hook]]
+address = 0x82B291A0   # lwzx r11, r11, r30  (828C0434; регистры те же)
+name = "NhlLegacyAffiliateAt"
+registers = ["r11", "r29", "r30"]
+after_instruction = true
+
+# 82B3DFC8 (= 828CD4E8): индекс команды НХЛ — r14 (было r15), лига — r23 (было r29)
+[[midasm_hook]]
+address = 0x82B3E2E8   # lwzx r11, r11, r23  (828CD7B8)
+name = "NhlLegacyAffiliateAt"
+registers = ["r11", "r14", "r23"]
+after_instruction = true
+
+# лишние игроки (> 23) — в фарм-клуб: номер команды — r15 (было r16), результат — r24 (было r23)
+[[midasm_hook]]
+address = 0x82B3E480   # addi r24, r11, -30  (828CD928)
+name = "NhlLegacyAffiliateAhl"
+registers = ["r24", "r11", "r15", "r23"]
+after_instruction = true
+
+# НОВЫЕ (нет в NHL 13; нашёл сосед, overrides_map.md §2.1; место проверено): компилятор Legacy встроил
+# подменяемые в NHL 13 8289AF40 и 8289B040 — чтение +520[idx] надо ловить врезкой. Уверенность: высокая.
+# 82B0A250 (= 828D4BF8, 5 вызовов из создания составов): lbz 640 → addi r10,r27,130 → lwzx
+[[midasm_hook]]
+address = 0x82B0A2B0   # lwzx r10, r10, r11 — фарм-клуб команды r27 лиги r11
+name = "NhlLegacyAffiliateAt"
+registers = ["r10", "r27", "r11"]
+after_instruction = true
+
+# 82B0B798 (= 828DB260): «общий ли фарм-клуб» — +520[r29] перед bl 82AFC310
+[[midasm_hook]]
+address = 0x82B0B80C   # lwzx r4, r10, r11
+name = "NhlLegacyAffiliateAt"
+registers = ["r4", "r29", "r11"]
+after_instruction = true
+
+# ---------------------------------------------------------------------------------------------------------
+# Кэш сводок команд НХЛ. Уверенность: высокая по местам, средняя по реализации (проверить создание франшизы).
+# TODO(Legacy): kTeamCacheRecord = 332, kTeamCacheExtra = 9996, kTeamCacheFlags = 9960 (счётчик +9992),
+#   размер = 9996 + 2·332 = 10 660; смещение записи i ≥ 30 = 9996 + (i − 30)·332. Подмены: конструктор 82B63708
+#   (30 записей через 82B5F320 = обнуление 332 б) — обнулить 30/31 и флаги +9990/+9991; сброс флагов 82B57FC8.
+#   Врезка Nhl13TeamCacheWords (82917D44) НЕ НУЖНА: 82B5F378 пишет запись от r31 (memcpy 300 б в +32), без
+#   счёта в словах.
+[[midasm_hook]]
+address = 0x82B637A0   # li r3, 9996  (82920058; было 4116)
+name = "NhlLegacyTeamCacheBytes"
+registers = ["r3"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B5F3B4   # mulli r11, r30, 332  (82917D2C; индекс r30, было r29)
+name = "NhlLegacyTeamCacheOffset"
+registers = ["r11", "r30"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B5F4A8   # mulli r11, r30, 332  (82917E40)
+name = "NhlLegacyTeamCacheOffset"
+registers = ["r11", "r30"]
+after_instruction = true
+
+# ---------------------------------------------------------------------------------------------------------
+# 82B3DFC8 (= 828CD4E8): «АХЛ с 30» и «номер АХЛ = teamid − 2». Уверенность: высокая.
+[[midasm_hook]]
+address = 0x82B3E7E0   # addi r3, r11, -2  (828CDC30; номер текущей команды — r15, было r16)
+name = "NhlLegacyAhlOwnTeam"
+registers = ["r3", "r15"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3EA30   # addi r11, r3, -30  (828CDE04)
+name = "NhlLegacyAhlShift"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3EA78   # addi r9, r15, -30  (828CDE4C)
+name = "NhlLegacyAhlShift"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3EC08   # li r11, 30  (828CDF80)
+name = "NhlLegacyAhlBase"
+registers = ["r11"]
+after_instruction = true
+
+# НОВАЯ (нет в NHL 13): новая ветка 82B3DFC8 — молодой игрок с правами клуба НХЛ (возраст 2015 − год ≤ 20)
+# в его фарм-клуб: 82B0A250 (= 828D4BF8) → номер клуба АХЛ, «− 30» → порядковый → 82B3BBE8 (= 828CE810).
+# Уверенность: высокая (та же арифметика, что 828CDE04).
+[[midasm_hook]]
+address = 0x82B3E940   # addi r4, r3, -30
+name = "NhlLegacyAhlShift"
+registers = ["r4"]
+after_instruction = true
+
+# ---------------------------------------------------------------------------------------------------------
+# АХЛ на 32: объекты клубов АХЛ league+772[30] (смещения +764/+772/+892/+896/+900 те же).
+# Уверенность: высокая. TODO(Legacy): подмена 8289B0E8 → 82AFC418 (у соседа); имя «0x82057214» → 0x82080298.
+[[midasm_hook]]
+address = 0x82B3EA3C   # lwzx r3, r11, r23  (828CDE10; лига r23, было r29)
+name = "NhlLegacyAhlTeamObject"
+registers = ["r3", "r11", "r23"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3BCBC   # lwzx r3, r11, r31  (828CE8F4; 82B3BBE8 = 828CE810)
+name = "NhlLegacyAhlTeamObject"
+registers = ["r3", "r11", "r31"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3EF50   # lwzx r6, r11, r31  (828CED80; результат в r6, было r5)
+name = "NhlLegacyAhlTeamObject"
+registers = ["r6", "r11", "r31"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3F360   # lwzx r3, r11, r31  (828CF190)
+name = "NhlLegacyAhlTeamObject"
+registers = ["r3", "r11", "r31"]
+after_instruction = true
+
+# 82B3EDC0 (= 828CEBF0), цикл по клубам АХЛ (граница 82B3F598 — место в legacy_ahl32_sites.json)
+[[midasm_hook]]
+address = 0x82B3F580   # lwz r3, 4(r29)  (828CF3AC)
+name = "NhlLegacyAhlTeamObjectAt"
+registers = ["r3", "r30", "r31"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3F588   # stwu r27, 4(r29)  (828CF3B4: было stwu r20)
+name = "NhlLegacyAhlTeamObjectFreed"
+registers = ["r30", "r31"]
+jump_address_on_true = 0x82B3F58C   # addi r3, r1, 160 (следующая; было 828CF3B8)
+
+# ---------------------------------------------------------------------------------------------------------
+# 82B0BEC8 (= 828A8060): состояние лиги 54 ← настройки лиги +604 (2 — есть сборные). При ahl32 → 0.
+# Уверенность: высокая. TODO(Legacy): в логе/комментариях Nhl13AllStarGame — состояние 54 (было 52), поле +604.
+[[midasm_hook]]
+address = 0x82B0BF10   # lwz r5, 604(r29)  (828A80A8; было +600)
+name = "NhlLegacyAllStarGame"
+registers = ["r5"]
+after_instruction = true
+
+# ---------------------------------------------------------------------------------------------------------
+# Вне франшизы (exhibitionteams) при ahl32. 829CA650 совпала с 827C0D00 целиком.
+# Уверенность: высокая по местам. TODO(Legacy): kAhlNewTeams = {224, 225} (в Legacy 220/221 — EASHL); байт +190
+#   у 224/225 → −32/−31, UnsignedTeamByte как есть.
+[[midasm_hook]]
+address = 0x829CA754   # cmpwi cr6, r26, 61  (827C0E04)
+name = "NhlLegacyAhlTeamidRange"
+registers = ["r26", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829CA780   # extsb r11, r11  (827C0E30)
+name = "NhlLegacyAffiliateByte"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A24A64   # extsb r24, r11  (8280F02C)
+name = "NhlLegacyAffiliateByte"
+registers = ["r24"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B8CA90   # extsb r11, r11  (8283DEAC)
+name = "NhlLegacyAffiliateByte"
+registers = ["r11"]
+after_instruction = true
+
+# 829CA650: команды НХЛ с данным фарм-клубом (по базе): 0…29 → 0…31. Уверенность: высокая.
+[[midasm_hook]]
+address = 0x829CA79C   # cmpwi cr6, r30, 30  (827C0E4C)
+name = "NhlLegacyNhlBound"
+registers = ["r30", "cr6"]
+after_instruction = true
+
+# StatsCache (829886B0 = 827F24A8, блоки 864 б, записи 28 б — как в NHL 13): пока предел 30.
+# Уверенность: высокая.
+[[midasm_hook]]
+address = 0x82988718   # mr. r29, r3  (827F2508)
+name = "NhlLegacyStatsCacheCount"
+registers = ["r29"]
+after_instruction = true
+
+# ---------------------------------------------------------------------------------------------------------
+# 82B3EDC0 (= 828CEBF0): раздача свободных агентов по составам. Уверенность: высокая.
+# В Legacy у функции два новых аргумента (r4 — массив «удержания зарплаты» по 300 б на команду, r5 — их число;
+# см. раздел 3.2 hooks_map.md) — на врезки не влияет.
+[[midasm_hook]]
+address = 0x82B3F37C   # cmpwi cr6, r29, 30  (828CF1AC)
+name = "NhlLegacyNhlBound"
+registers = ["r29", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3EF34   # addi r11, r3, -30  (828CED70; источник r3 вместо r4)
+name = "NhlLegacyAhlShift"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3F3F8   # addi r4, r30, 30  (828CF224)
+name = "NhlLegacyAhlUnshift"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3F760   # cmpwi cr6, r24, 30  (828CF570; счётчик r24, было r25)
+name = "NhlLegacyNhlBound"
+registers = ["r24", "cr6"]
+after_instruction = true
+
+# 82B3BBE8 (= 828CE810): номер команды из порядкового АХЛ (+ 30). Уверенность: высокая.
+[[midasm_hook]]
+address = 0x82B3BC8C   # addi r11, r29, 30  (828CE8C4)
+name = "NhlLegacyAhlUnshift"
+registers = ["r11"]
+after_instruction = true
+
+# ---------------------------------------------------------------------------------------------------------
+# 82B4A540 (= 828F8808), конец создания: число команд НХЛ из меню — 124(r1) → r21 (было 100(r1) → r22).
+# Уверенность: высокая.
+[[midasm_hook]]
+address = 0x82B4AECC   # lwz r21, 124(r1)  (828F8FD8)
+name = "NhlLegacyNhlCount"
+registers = ["r21"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B4AEDC   # lwz r21, 124(r1)  (828F8FE8)
+name = "NhlLegacyNhlCount"
+registers = ["r21"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B4B704   # cmpwi cr6, r21, 60  (828F9754)
+name = "NhlLegacyProBound"
+registers = ["r21", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B4B7D8   # cmpwi cr6, r30, 60  (828F9824; счётчик r30, было r29)
+name = "NhlLegacyProBound"
+registers = ["r30", "cr6"]
+after_instruction = true
+
+# ---------------------------------------------------------------------------------------------------------
+# 82BED038 (= 828D32E8, совпала целиком; запись GM 104 б): зажим номера до 29. Уверенность: высокая.
+[[midasm_hook]]
+address = 0x82BED06C   # cmpwi cr6, r31, 30  (828D331C)
+name = "NhlLegacyNhlBound"
+registers = ["r31", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82BED074   # li r31, 29  (828D3324)
+name = "NhlLegacyNhlLast"
+registers = ["r31"]
+after_instruction = true
+
+# 82B2D740 (= 828EF198, места прошлого сезона): кадр 1120 → 1136; только вместе с 15 местами PLAYOFF_RUN
+# из legacy_team32_sites.json (эпилог 82B2DCC8 там же). Уверенность: высокая.
+[[midasm_hook]]
+address = 0x82B2D748   # stwu r1, -1120(r1)  (828EF1A0)
+name = "NhlLegacyStackGrow16"
+registers = ["r1"]
+after_instruction = true
+
+# ---------------------------------------------------------------------------------------------------------
+# 82B741E8 (= 82931B70, переписана) — порядок драфта первого сезона: в Legacy ДВЕ статические таблицы по 30:
+# A 0x83A15178 (2015 после лотереи) → [this+316], B 0x83A151F0 (2015 до лотереи) → [this+320]; за B — пол и
+# потолок зарплат. Число команд — this+336 (82B74248 li r11,30 — место в legacy_team32_sites.json): включать
+# только вместе с обеими врезками, иначе в порядок попадут дубли и числа зарплат.
+# Уверенность: высокая по местам, средняя по содержанию таблицы B для 30/31 (в конце, как в NHL 13).
+# TODO(Legacy): Nhl13DraftOrderTable копирует 30 слов с 0x83A15178 (было 0x83835200) + 30, 31.
+[[midasm_hook]]
+address = 0x82B743A8   # addi r9, r9, 20856  (lis r9,-31839; 82931D68)
+name = "NhlLegacyDraftOrderTable"
+registers = ["r9"]
+after_instruction = true
+
+# НОВАЯ: вторая таблица. Реализация — как Nhl13DraftOrderTable, источник 0x83A151F0 + 30, 31 в конце.
+[[midasm_hook]]
+address = 0x82B743E4   # addi r9, r9, 20976
+name = "NhlLegacyDraftOrderTableB"
+registers = ["r9"]
+after_instruction = true
+
+# 82AFBC80 (= 8289A868) — сборные Матча звёзд: teamid 30/31 (RED/BLU в базе Legacy) → свои строки.
+# Номера франшизы сборных — состояния 55/56 (было 53/54). Уверенность: высокая по местам.
+# TODO(Legacy): kAllStarTeamA/B = 222/223 (заготовки Custom Legacy; уточнить по профилю nhl32.py для Legacy).
+[[midasm_hook]]
+address = 0x82AFBCC0   # li r11, 30  (8289A89C)
+name = "NhlLegacyAllStarTeamA"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82AFBCC4   # li r10, 31  (8289A8A0)
+name = "NhlLegacyAllStarTeamB"
+registers = ["r10"]
+after_instruction = true
+
+# 82B741E8 — лотерея драфта (82B7456C…82B74684): 14 команд вне плей-офф в r1+384 (от худшей), один розыгрыш,
+# победитель сразу на 1-е место (stw r9,384(r1) @82B74684). При 32 командах вне плей-офф 16 (места
+# 82B744E8/82B74534/82B74548 — в списке), они помещаются ровно до r1+448.
+# Врезка: своя лотерея по r1+384 (16 записей), затем r9 = номер команды с нового 1-го места и переход на
+# 82B74680 (там addi r11,r1,368 / stw r9,384(r1) / сбор 4 победителей дивизионов).
+# Уверенность: средняя (проверить драфт в игре).
+# TODO(Legacy): в Nhl13DraftLottery — r1 + 384 вместо r1 + 608; вместо r27 = 0, r29 = 1 — r9 = order[0].
+[[midasm_hook]]
+address = 0x82B7456C   # bl 0x83077F80 (rand) — начало розыгрыша  (82931EF8)
+name = "NhlLegacyDraftLottery"
+registers = ["r1", "r9"]
+jump_address_on_true = 0x82B74680
+
+# ---------------------------------------------------------------------------------------------------------
+# Дерево НХЛ (82A1E910 = 82809330, переписано под 4 дивизиона): перед каждым вызовом 82AEBEF0 (= 828FE278:
+# узел r3, число r4, массив команд r1+80 на 8 номеров) — подстановка дивизиона по id узла.
+# id Legacy: 3 Pacific (7), 4 Central (7), 5 Atlantic (8), 6 Metropolitan (8); конференции 1 Запад, 2 Восток.
+# Вместо 6 врезок NHL 13 — 4. Уверенность: высокая по местам.
+# TODO(Legacy): таблица kDivisions на 8/8/8/8 — у соседа (overrides_map.md); узлы 5/6 менять не нужно, но если
+#   оставить врезки, внести их в таблицу (иначе предупреждение «division unknown»).
+[[midasm_hook]]
+address = 0x82A1E9D4   # bl 0x82AEBEF0 — узел 3 Pacific, li r4,7  (было 828093EC)
+name = "NhlLegacyNhlDivision"
+registers = ["r3", "r4", "r5"]
+
+[[midasm_hook]]
+address = 0x82A1EA1C   # узел 4 Central, li r4,7  (82809424)
+name = "NhlLegacyNhlDivision"
+registers = ["r3", "r4", "r5"]
+
+[[midasm_hook]]
+address = 0x82A1EA8C   # узел 5 Atlantic, li r4,8 (вместо 82809464/828094B4/828094F8)
+name = "NhlLegacyNhlDivision"
+registers = ["r3", "r4", "r5"]
+
+[[midasm_hook]]
+address = 0x82A1EAE4   # узел 6 Metropolitan, li r4,8  (вместо 82809534)
+name = "NhlLegacyNhlDivision"
+registers = ["r3", "r4", "r5"]
+
+# Дерево АХЛ (82A1EE18 = 82809848, только ahl32): корень 7, конференции 8 (Запад: 12, 13) и 9 (Восток: 10, 11).
+# На стеке 8 мест на дивизион — АХЛ на 32 только 8/8/8/8. Уверенность: высокая по местам.
+# TODO(Legacy): kAhlDivisions с id 12/13/10/11 и teamid 2015/16 + 224/225 — у соседа.
+[[midasm_hook]]
+address = 0x82A1EEEC   # bl 0x82AEBEF0 — узел 12 Central, li r4,8  (вместо 82809904…)
+name = "NhlLegacyAhlDivision"
+registers = ["r3", "r4", "r5"]
+
+[[midasm_hook]]
+address = 0x82A1EF44   # узел 13 Pacific, li r4,7
+name = "NhlLegacyAhlDivision"
+registers = ["r3", "r4", "r5"]
+
+[[midasm_hook]]
+address = 0x82A1EFBC   # узел 10 Atlantic, li r4,8
+name = "NhlLegacyAhlDivision"
+registers = ["r3", "r4", "r5"]
+
+[[midasm_hook]]
+address = 0x82A1F014   # узел 11 North, li r4,7
+name = "NhlLegacyAhlDivision"
+registers = ["r3", "r4", "r5"]
+
+# ---------------------------------------------------------------------------------------------------------
+# 82B6BA58 (= 82925900) — сортировка таблицы статистики: буфер записей при тройной ничьей r1+384, временный
+# объект с r1+1024 портит записи с 27-й (ошибка игры та же) → свой буфер. Уверенность: высокая.
+[[midasm_hook]]
+address = 0x82B6BC04   # addi r11, r1, 384 — копия всех записей  (82925A2C; было 400)
+name = "NhlLegacyTieBuffer"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B6BE04   # addi r10, r1, 384 — три записи обратно  (82925C2C)
+name = "NhlLegacyTieBuffer"
+registers = ["r10"]
+after_instruction = true
+
+# 829264B0 (Nhl13DivisionStart) — НЕ НУЖНА: Legacy считает начало дивизиона суммой размеров
+# (82B6CF38 add r7,r24,r31; 82B6CF80 add r24,r3,r24).
+
+# 82B5C2F0 (= 829212E8): список номеров записей узла — не писать больше выделенного (r26).
+# Уверенность: высокая. TODO(Legacy): в Nhl13TeamListFull число — Load32(r31 + 88) (было +84).
+[[midasm_hook]]
+address = 0x82B5C420   # lwz r11, 88(r31) — перед list[count] = k  (82921410)
+name = "NhlLegacyTeamListFull"
+registers = ["r31", "r26"]
+jump_address_on_true = 0x82B5C43C   # addi r30, r30, 1 (было 8292142C)
+
+# 82B6BA58: команды дерева нет среди записей (r9 = r15 = −1) — не копировать из-за края буфера.
+# Уверенность: высокая.
+[[midasm_hook]]
+address = 0x82B6C040   # lwz r11, 36(r18) — перед memcpy(запись, буфер + r9·24)  (82925E7C)
+name = "NhlLegacyTreeTeamMissing"
+registers = ["r9"]
+jump_address_on_true = 0x82B6C05C   # addi r31, r31, 1 (было 82925E98)
+
+# ---------------------------------------------------------------------------------------------------------
+# НОВЫЕ: флаги «пересобрать сводку состава» объекта 0x83BD8330 (82A56298) — бывшее место 82947424 NHL 13.
+# Флаги +15817[30], сразу за ними (+15848) подобъект (82A57358, u32 в +0): 32 флага НЕ помещаются, а
+# [obj+4] = число команд (82A6F8B0) = 32 — сеттер для команды 31 испортил бы подобъект. CTR (82A59090,
+# 82A5E9BC) не трогать; флаги 30/31 — снаружи (по адресу объекта), как LeagueExtra.
+# Уверенность: средняя (поведение пересборки 82956D18 проверить в игре).
+#   void Nhl13RosterFlagGet(PPCRegister& r3, PPCRegister& r4, PPCRegister& r11):
+#       i = r4; obj = r11 − r4; если i ∈ {30, 31}: r3 = extra[obj][i − 30]
+#   bool Nhl13RosterFlagSet(PPCRegister& r4, PPCRegister& r11):
+#       i ∈ {30, 31} → extra[r11 − r4][i − 30] = 1; return true (пропустить stb → blr)
+#   void Nhl13RosterFlagClear(PPCRegister& obj): extra[obj] = {0, 0}
+[[midasm_hook]]
+address = 0x82A5905C   # lbz r3, 15817(r11)  (82A59058: get, add r11,r4,r3)
+name = "NhlLegacyRosterFlagGet"
+registers = ["r3", "r4", "r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A59084   # stb r10, 15817(r11)  (82A59068: set, после проверки 0 ≤ i < [obj+4])
+name = "NhlLegacyRosterFlagSet"
+registers = ["r4", "r11"]
+jump_address_on_true = 0x82A59088   # blr
+
+[[midasm_hook]]
+address = 0x82A59090   # li r10, 30 — clear (r3 = объект); CTR оставить 30
+name = "NhlLegacyRosterFlagClear"
+registers = ["r3"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A5E9BC   # li r10, 30 — обнуление в конструкторе 82A5E938 (r31 = объект); CTR оставить 30
+name = "NhlLegacyRosterFlagClear"
+registers = ["r31"]
+after_instruction = true

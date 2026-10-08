@@ -22,6 +22,8 @@ set(NHLLEGACY_SOURCES
     src/nhllegacy_composite.cpp
     src/nhllegacy_dbtrace.cpp
     src/nhllegacy_year.cpp
+    src/nhllegacy_teams.cpp
+    src/nhllegacy_team_sites.cpp
 )
 
 if(WIN32)

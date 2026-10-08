@@ -24,6 +24,10 @@ if [ "${1:-}" = "--mods" ]; then
   (cd "$P/userdata/cache/guest" && find . -type f \
       ! -name '*.ver' ! -path './admanager_cache_images*' ! -name 'highlights.sav' -print0 |
       xargs -0 -r cp --parents -t "$D/userdata/cache/guest")
+  # база на 32 команды в модах → франшиза на 32 по умолчанию
+  if [ -f "$D/userdata/cache/guest/db/nhlng.db" ]; then
+    sed -i 's/^nhl_teams = 30$/nhl_teams = 32/' "$D/nhllegacy.toml"
+  fi
 fi
 du -sh "$D"
 ls "$D"
