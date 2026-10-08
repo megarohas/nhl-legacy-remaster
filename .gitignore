@@ -35,3 +35,5 @@ __pycache__/
 /port-ffx/
 # свой саундтрек пользователя (tools/music.py) — не в git
 best_of_nhl/
+# Прототип порта NHL Legacy (docs/legacy-port-feasibility.md): код игры и чужой код — только локально
+/legacy-port/
