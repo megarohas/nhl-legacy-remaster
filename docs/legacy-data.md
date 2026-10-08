@@ -122,10 +122,13 @@ python tools/nhl32.py $L/db/nhlng.db $W/nhlng.db $L/fe/loc/nhl_eng_us.db $W/nhl_
   `leagueretirementtable` — там уже 8 бит, плюс новое `leagueplayerbiotable.tradeblockteam` и
   `exhibitiondraftpick.owner/origteamid`);
 - **те же поля — и в заголовках таблиц базы** (`DB_WIDEN` → `widen_headers`, с 08.10.2026 22:48). В отличие
-  от NHL 13, Legacy строит таблицы франшизы по заголовкам заготовок `league*` в самой базе (из схемы берёт
-  только вместимость `maxinsert`). Пока там было 5 бит, в сейве франшизы у игроков Вегаса стоял
-  `proteam` = 32 → 0. В итоге состав VGK оказывался пустым (21 игрок уезжал в ARZ: у неё 45 записей), а пики драфта
-  VGK — без владельца, и симуляция висла на первой игре VGK: 9→10 октября, `rand() % 0`. Расширяются
+  от того, что считалось для NHL 13 (агент франшизы NHL 13 09.10 нашёл, что и у NHL 13 так же), Legacy строит
+  таблицы франшизы по заголовкам заготовок `league*` в самой базе (из схемы берёт только вместимость
+  `maxinsert`). Пока там было 5 бит, в сейве франшизы у игроков Вегаса стоял `proteam` = 32 → 0. Игра
+  удаляла все записи состава VGK, и состав оставался пустым. Пики драфта VGK были без владельца, и симуляция
+  висла на первой игре VGK: 9→10 октября, `rand() % 0`. Сначала казалось, что 21 игрок VGK «уехал в ARZ»: у
+  неё было 45 записей. Но это удалённые записи: `tools/tdb.py` читает и их, а номер следующей свободной записи
+  в первых 16 битах перекрывает `team` (`Tdb.deleted`, ниже). Живых записей у ARZ было 23, у VGK — 0. Расширяются
   `leagueplayerbiotable` proteam/draftteam/tradeblockteam, `leaguedraftpick` owner/origteamid,
   `leaguefreeagentdata` originalteamid/signedteamid, `leaguerookiedata.draftteam`,
   `leaguecontractoffers.teamnotification`, `leaguegamemodesvars.team`, `leaguescoutvisits.team`,
@@ -162,6 +165,13 @@ cd tools && python -m roster.equipment --game legacy apply ../game/work/legacy-d
 (`--fa`). Раньше там оставались ещё 35 свободных агентов Legacy 2015 года (Ehrhoff, Zidlicky, Visnovsky…),
 и к июню 2027 они были в топе хаба свободных агентов франшизы (нашёл legacy-port). Строки этих игроков
 остаются в базе, как у игроков без клуба.
+
+**Сейвы франшизы читать без удалённых записей.** В базах игр (исходные NHL 13 и Legacy, наша) удалённых
+записей нет, а в сейвах франшизы есть. Например, во 2-м сезоне `leaguerostertable` — 167 удалённых,
+`leaguerookiedata` — 1008. Заголовок таблицы: +0x18 (u16) — число удалённых, +0x1A — голова списка
+свободных. У удалённой записи первые 16 бит — номер следующей (0xFFFF — конец). `Tdb.deleted(таблица)`
+отдаёт их номера, и в подсчётах по сейву эти строки надо пропускать. Без этого получались «DAL 38 в составе НХЛ»
+и «SPR 52 в АХЛ», а живых во 2-м сезоне в НХЛ 21–24, в АХЛ 22–36 (поправка legacy-port, 01:15).
 
 Кэш сети (`game/work/roster-cache/`) — общий с NHL 13: данные не зависят от игры. Своё у Legacy: папка
 `game/work/legacy-data/roster/`, таблица artid новых (`artid-registry.json` там же; у `--work` другой
