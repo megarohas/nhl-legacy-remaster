@@ -634,17 +634,18 @@ extern "C" void sub_8292F258(PPCContext& ctx, uint8_t* base) {
   if (!recs || n > 64) {
     return;
   }
-  uint64_t seen = 0;
+  // номера франшизы до 125 (при АХЛ на 32 юниоры CHL — 66…125): метки на 128
+  uint64_t seen[2] = {};
   std::string teams;
   bool bad = false;
   for (uint32_t k = 0; k < n; ++k) {
     const uint32_t obj = Load32(base, recs + 24 * k + 16);
     const uint32_t t = obj ? Load8(base, obj + 8) : 255;
     teams += std::to_string(t) + " ";
-    if (t >= 64 || (seen >> t & 1)) {
+    if (t >= 128 || (seen[t >> 6] >> (t & 63) & 1)) {
       bad = true;
     } else {
-      seen |= 1ull << t;
+      seen[t >> 6] |= 1ull << (t & 63);
     }
   }
   static int logged = 0;
@@ -860,6 +861,19 @@ extern "C" void sub_8289AAA0(PPCContext& ctx, uint8_t* base) {
   int32_t aff[kExtra];
   for (int k = 0; k < kExtra; ++k) {
     aff[k] = GuestTeamInfoByte(ctx, base, true, 30 + k, 190);
+    // АХЛ на 32: фарм-клубы Сиэтла и Вегаса — 62/63 (Coachella Valley, Henderson). Франшиза строит
+    // leagueteams по заголовку пустой таблицы базы, а не по схеме: в базе без широких заголовков
+    // (tools/nhl32.py до 09.10.2026) ahlaffiliate — 6 бит, у Вегаса 63 + 1 = 64 не влезает → 0 → −1,
+    // и ежедневная обработка составов (82927ED0 → 82927E40) уходила с командой −1: кэш сводок команд
+    // [−1] (порча кучи), окно «EA server…» и выход из франшизы на первом игровом дне VGK.
+    if (AhlThirtyTwo() && aff[k] < 0) {
+      static int logged = 0;
+      if (logged++ < 2) {
+        REXLOG_WARN("[nhl13] team {}: AHL affiliate missing in the franchise (narrow leagueteams.ahlaffiliate) "
+                    "-> {}", 30 + k, 62 + k);
+      }
+      aff[k] = 62 + k;
+    }
   }
   EditExtra(league, [&](LeagueExtra& e) {
     for (int k = 0; k < kExtra; ++k) {
@@ -1035,6 +1049,54 @@ extern "C" void sub_82917CB0(PPCContext& ctx, uint8_t* base) {
   if (ThirtyTwo()) {
     ClearExtraCacheFlags(base, cache);
   }
+}
+
+// Запись кэша по номеру вне НХЛ (−1 и ≥ 32). Проверок у игры нет: 82917E10 (запись команды idx)
+// смотрит флаг +4080[idx] и зовёт 82917CD8, а та пишет 25 слов записи по +136·idx + 36… — при idx = −1
+// это 100 байт ПЕРЕД блоком кэша: затирается заголовок блока кучи (head = 0x20 в слепке 08.10.2026,
+// 23:46 — падение dlmalloc при выходе из франшизы, 829230B0 → free) и флаг «посчитано» [−1] — последний
+// байт записи 29. Такой вызов был: 82927ED0 (ежедневная обработка состава) → 82927E40(лига, фарм-клуб) с
+// фарм-клубом Вегаса −1 (узкий leagueteams.ahlaffiliate, см. sub_8289AAA0). Вместо записи — пустая
+// (нулевая) запись снаружи, вызывающий получает нули; первые вызовы — в лог со стеком.
+namespace {
+uint32_t DummyTeamCacheRecord() {
+  static const uint32_t rec = rex::Runtime::instance()->memory()->SystemHeapAlloc(kTeamCacheRecord);
+  return rec;
+}
+
+bool BadTeamCacheIndex(PPCContext& ctx, uint8_t* base, int32_t idx, const char* what) {
+  if (!ThirtyTwo() || (idx >= 0 && idx < NhlTeams())) {
+    return false;
+  }
+  static std::atomic<int> logged{0};
+  const int n = logged.fetch_add(1);
+  if (n < 12) {
+    REXLOG_WARN("[nhl13] team cache {}: team index {} (lr {:08X}) — empty record instead", what, idx,
+                static_cast<uint32_t>(ctx.lr));
+    if (n < 3) {
+      LogStackOnce("82917E10/82917CD8: кэш сводок команд, номер вне НХЛ");
+    }
+  }
+  std::memset(Host(base, DummyTeamCacheRecord()), 0, kTeamCacheRecord);
+  return true;
+}
+}  // namespace
+
+extern "C" void __imp__sub_82917E10(PPCContext& ctx, uint8_t* base);
+extern "C" void sub_82917E10(PPCContext& ctx, uint8_t* base) {
+  if (BadTeamCacheIndex(ctx, base, ctx.r4.s32, "get")) {
+    ctx.r3.u64 = DummyTeamCacheRecord();
+    return;
+  }
+  __imp__sub_82917E10(ctx, base);
+}
+
+extern "C" void __imp__sub_82917CD8(PPCContext& ctx, uint8_t* base);
+extern "C" void sub_82917CD8(PPCContext& ctx, uint8_t* base) {
+  if (BadTeamCacheIndex(ctx, base, ctx.r4.s32, "fill")) {
+    return;
+  }
+  __imp__sub_82917CD8(ctx, base);
 }
 
 // Врезки «АХЛ с 30» (nhl13_team_hooks.toml): при 32 командах АХЛ начинается с 32.
