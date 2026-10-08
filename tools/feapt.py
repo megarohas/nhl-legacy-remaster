@@ -59,7 +59,7 @@ OPS1 = {
     0xA7: ('SetStringMember', True, 'str'), 0xAE: ('PushValueOfVar', False, 'u8'), 0xAF: ('GetNamedMember', False, 'u8'),
     0xB0: ('CallNamedFuncPop', False, 'u8'), 0xB1: ('CallNamedFunc', False, 'u8'),
     0xB2: ('CallNamedMethodPop', False, 'u8'), 0xB3: ('CallNamedMethod', False, 'u8'),
-    0xB4: ('PushFloat', False, 'f32'), 0xB5: ('PushByte', False, 'u8'), 0xB6: ('PushShort', False, 'u16'),
+    0xB4: ('PushFloat', False, 'f32'), 0xB5: ('PushByte', False, 'u8'), 0xB6: ('PushShort', False, 'u16'),  # со знаком
     0xB7: ('PushLong', False, 'u32'), 0xB8: ('BranchIfFalse', True, 's32'), 0xB9: ('PushRegister', False, 'u8'),
 }
 BRANCHES = ('BranchAlways', 'BranchIfTrue', 'BranchIfFalse')
@@ -381,6 +381,8 @@ class Decompiler:
                 st.extend(lit_str(x) for x in a)
             elif n in ('PushByte', 'PushShort', 'PushLong'):
                 v = a[0]
+                if n == 'PushByte' and v >= 0x80:                # байт со знаком: 255 = −1 (проверено в игре)
+                    v -= 0x100
                 if n == 'PushShort' and v >= 0x8000:
                     v -= 0x10000
                 if n == 'PushLong' and v >= 0x80000000:
