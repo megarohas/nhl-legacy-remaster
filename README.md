@@ -23,7 +23,7 @@
 | [docs/modding.md](docs/modding.md) | Моды базы через cache: — игроки (nhlng.db) и названия (локализация) |
 | [docs/music.md](docs/music.md) | Музыка: банк audio/music (EALayer3), EA Trax, как игра выбирает трек, замена саундтрека |
 | [docs/team-editor.md](docs/team-editor.md) | Встроенный редактор команд: кто отсекает обычные команды, что ломает сохранение, вариант «форма-донор» |
-| [docs/fe-fonts.md](docs/fe-fonts.md) | Шрифты интерфейса (TrueType в fe/ion/fonts): какой для чего, замена своим, шрифт меню NHL 12 |
+| [docs/fe-fonts.md](docs/fe-fonts.md) | Шрифты интерфейса (TrueType в fe/ion/fonts): какой для чего, замена своим; шрифт меню NHL 12 — стоит в игре, установка и откат |
 | [docs/fe-background.md](docs/fe-background.md) | Фон меню (анимация Apt): синий → любой цвет, tools/febg.py |
 | [docs/player-models.md](docs/player-models.md) | 3D-модели игроков: из чего собран игрок, детализации, формат сетки RW4, гетры (skatesocktuck) и правка голени, клюшка и обмотка до носка |
 | [docs/player-equipment.md](docs/player-equipment.md) | Экипировка игроков по фото (НХЛ + Wikimedia Commons): обмотка клюшки, гетры, свитер, визор — поля базы и охват |
@@ -43,11 +43,12 @@
 | [tools/year_hooks.py](tools/year_hooks.py) | Поиск годов-констант в коде и врезки сдвига года для порта |
 | [tools/nhl32.py](tools/nhl32.py) | НХЛ на 32 команды: перенос двух команд, дивизионы, календарь на 84 игры |
 | [tools/febg.py](tools/febg.py) | Фон меню: разбор анимации интерфейса, перекраска, превью |
-| [tools/fefont.py](tools/fefont.py) | Замена шрифтов интерфейса: свой TTF/OTF в «скелет» шрифта игры с теми же именами и метриками |
+| [tools/fefont.py](tools/fefont.py) | Замена шрифтов интерфейса: свой TTF/OTF в «скелет» шрифта игры с теми же именами и метриками или шрифт как есть (`--keep`, так поставлен шрифт NHL 12); проверка символов строк и имён, превью |
 | [tools/music.py](tools/music.py) | Свой саундтрек: MP3/FLAC/WAV → банк музыки игры, названия и обложки EA Trax (через ffmpeg) |
 | [tools/rw4mesh.py](tools/rw4mesh.py) | Сетки игроков RW4 ⇄ OBJ для Blender, правка голени гетр, проверка зазоров, превью |
 | [tools/sticktape.py](tools/sticktape.py) | Обмотка клюшки до самого носка крюка и скругление носка: полевые и вратарские, обе руки, `_2`/`_4`, проверки, лист превью |
 | [tools/perfwatch.ps1](tools/perfwatch.ps1), [tools/perf_ab.ps1](tools/perf_ab.ps1) | Пассивный замер GPU/CPU по потокам во время игры; запуск A/B-вариантов рендера аргументами |
+| [tools/gameshot.ps1](tools/gameshot.ps1) | Проверка в игре без геймпада: запуск сборки, снимок окна (PrintWindow), нажатия клавиатурой через `--mnk_mode` |
 | [tools/stackpeek.py](tools/stackpeek.py) | Чем занят поток игры: стек через ReadProcessMemory без остановки, адреса → функции гостя |
 | `game/` | Локальные файлы игры, не в git |
 | `ref/` | Клоны репозиториев puckhead73 для справки, не в git |
