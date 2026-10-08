@@ -1,6 +1,6 @@
 """НХЛ на 32 команды: Seattle Kraken и Vegas Golden Knights — новые клубы на пустых слотах.
 
-    python nhl32.py DB_IN DB_OUT LOC_IN LOC_OUT [--seed N] [--meta META_IN META_OUT]
+    python nhl32.py DB_IN DB_OUT LOC_IN LOC_OUT [--seed N] [--meta META_IN META_OUT] [--ahl32]
 
 Почему так (разбор — docs/teams.md):
 - Календарь НХЛ (nhlschedule) хранит номер команды в лиге 5 битами (0–31), а команды
@@ -31,6 +31,12 @@
   218/219 ключей нет, а BLU — это Espoo Blues).
 - Поля «команда НХЛ» в exhibitionplayerbiotable (proteam, draftteam: номер + 1, 5 бит)
   расширяются до 6 бит — иначе у Вегаса (31 + 1 = 32) они не влезают.
+- --ahl32: АХЛ на 32 — свои фарм-клубы Сиэтла и Вегаса (Coachella Valley Firebirds, Henderson
+  Silver Knights) на заготовках Custom Team 02/03 (строки 220/221; у каждой лиги свой
+  конструктор дерева с зашитыми строками, поэтому шведская лига 62–73 не двигается), Charlotte
+  переезжает на Восток (16 + 16, 6 + 5 + 5 — как у НХЛ), календарь АХЛ — 32 × 76 игр,
+  exhibitionteams.ahlaffiliate расширяется до 8 бит (номер 220 + 1 в 6 бит не влезает). Во
+  франшизе нужен порт с nhl_ahl_teams = 32 (docs/ahl32.md) — без него такую базу не ставить.
 """
 import argparse, random, re, struct, sys
 from collections import Counter, defaultdict
@@ -62,6 +68,37 @@ NEW_TEAMS = {
 }
 # Сборные: имена — по ключам их аббревиатуры (своих ключей по номеру у строк 218/219 нет).
 ALLSTAR_NAMES = {218: ('EAS', 'Eastern', 'Eastern All-Stars'), 219: ('WES', 'Western', 'Western All-Stars')}
+
+# --ahl32: фарм-клубы Сиэтла и Вегаса. parent — клуб НХЛ, kit/strategy — чьи комплекты формы,
+# цвета экипировки и тактика (Springfield, Providence; Houston, Texas), art 100/101 — свободны.
+AHL_NEW = {
+    220: dict(short='Coachella Valley', full='Coachella Valley Firebirds', abbr='CV', nick='Firebirds',
+              parent=30, rival=221, strategy=43, kit=56, art=100, spotlight=34, tunnel=34, audio=55,
+              primary=(233, 7, 43), secondary=(0, 22, 40), equip={},
+              arena=dict(name='Acrisure Arena', city='Thousand Palms, CA', capacity=11000)),
+    221: dict(short='Henderson', full='Henderson Silver Knights', abbr='HSK', nick='Silver Knights',
+              parent=31, rival=220, strategy=58, kit=51, art=101, spotlight=34, tunnel=34, audio=56,
+              primary=(19, 19, 19), secondary=(162, 170, 173), equip={},
+              arena=dict(name="Lee's Family Forum", city='Henderson, NV', capacity=6000)),
+}
+# Арена клуба АХЛ: копия Cedar Park Center (модель арены АХЛ 145, красная линия «шашками»), звук
+# арены и города — общий (255), без кричалок.
+AHL_TEMPLATE_ARENA = 56
+AHL_ARENA_FIELDS = {'arenaaudioid': 255, 'cityaudioid': 255, 'chantaudioid': 0, 'avgattendance': 80}
+# Дерево АХЛ — как в 82809848 (конференции 10 — Запад, 11 — Восток), порт подставляет то же.
+AHL_DIVISIONS = {
+    14: [38, 40, 46, 49, 53],              # Midwest: CHW GRA MIL PEO RFD
+    15: [32, 41, 44, 52, 59],              # North: ABB HAM LEM RCH TOA
+    17: [43, 48, 55, 58, 220, 221],        # West: HOU OKC SAN TEX + CV HSK
+    12: [45, 50, 51, 54, 61],              # Atlantic: MCH POR PRO STJ WOR
+    13: [35, 37, 42, 47, 57, 60],          # East: BNG CHA HER NRF SYR WBS (Charlotte — с Запада)
+    16: [33, 34, 36, 39, 56],              # Northeast: ADK ALB BRI CT SPR
+}
+AHL_CONFERENCE = {14: 10, 15: 10, 17: 10, 12: 11, 13: 11, 16: 11}
+AHL_LEAGUE, AHL_LEAGUEGROUP = 1, 9
+# Номер команды в календаре АХЛ (5 бит) — место в списке лиги: строки 32…61, затем 220, 221.
+AHL_ORDER = list(range(32, 62)) + sorted(AHL_NEW)
+AHL_GAMES, AHL_HOME = 76, 38
 
 # Поля-ссылки на команду: (таблица, поле, кодировка). 'zero' — номер строки,
 # 'plus1' — номер + 1 (0 = нет команды). Проверено по известным игрокам и командам
@@ -193,60 +230,71 @@ def append_copies(db, table, rows, change):
         change(n + i, src)
     return list(range(n, n + len(raws)))
 
-def fill_new_teams(db):
+def fill_team(db, row, spec, league, leaguegroup, arena_template, arena_fields=None):
+    """Строка-заготовка → клуб лиги: названия, цвета, тактика, арена, комплекты формы, экипировка."""
     t = 'exhibitionteams'
-    report = {}
-    for row, spec in NEW_TEAMS.items():
-        for f, v in (('shortname', spec['short']), ('fullname', spec['full']), ('abbrname', spec['abbr']),
-                     ('artabbr', spec['abbr'])):
-            db.set_string(t, f, row, v)
-        for f, v in (('active', 1), ('table', 0), ('state', 0), ('league', 0), ('leaguegroup', 0),
-                     ('artid', spec['art']), ('spotlight', spec['spotlight']), ('audioid', spec['audio']),
-                     ('audioid2', 0), ('rivalteam', spec['rival'] + 1), ('rivalteam2', 0)):
-            db.set(t, f, row, v)
-        for prefix, rgb in (('primarycolor', spec['primary']), ('secondarycolor', spec['secondary'])):
+    for f, v in (('shortname', spec['short']), ('fullname', spec['full']), ('abbrname', spec['abbr']),
+                 ('artabbr', spec['abbr'])):
+        db.set_string(t, f, row, v)
+    for f, v in (('active', 1), ('table', 0), ('state', 0), ('league', league), ('leaguegroup', leaguegroup),
+                 ('artid', spec['art']), ('spotlight', spec['spotlight']), ('audioid', spec['audio']),
+                 ('audioid2', 0), ('rivalteam', spec['rival'] + 1), ('rivalteam2', 0)):
+        db.set(t, f, row, v)
+    if 'tunnel' in spec:
+        db.set(t, 'tunnel', row, spec['tunnel'])
+    for prefix, rgb in (('primarycolor', spec['primary']), ('secondarycolor', spec['secondary'])):
+        for c, v in zip('rgb', rgb):
+            db.set(t, f'{prefix}_{c}', row, v)
+    # тактика — как у соседа
+    db.put_record('exhibitionteamstrategies', row, db.record('exhibitionteamstrategies', spec['strategy']))
+    # арена: копия шаблона со своим названием
+    a = spec['arena']
+    def arena(new, src, a=a):
+        db.set_string('exhibitionarena', 'arenaname', new, a['name'])
+        db.set_string('exhibitionarena', 'cityname', new, a['city'])
+        db.set('exhibitionarena', 'maxattendance', new, a['capacity'])
+        for f, v in (arena_fields or {}).items():
+            db.set('exhibitionarena', f, new, v)
+    new_arena = append_copies(db, 'exhibitionarena', [arena_template], arena)[0]
+    db.set(t, 'arenaid', row, new_arena)
+    # комплекты формы — копии (у заготовки их нет) под свой номер арта
+    js = 'stockteamjerseys'
+    def kit(new, src, row=row, art=spec['art']):
+        db.set(js, 'teamid', new, row)
+        db.set(js, 'teamartid', new, art)
+    j = [r for r in range(db.by_name[js]['rows']) if db.get(js, 'teamid', r) == spec['kit']]
+    append_copies(db, js, j, kit)
+    # цвета экипировки (шлемы, перчатки…): строки kit, перекрашенные по equip; team — номер + 1
+    e = 'stockteamequipmenttable'
+    def recolor(new, src, row=row, m=spec['equip']):
+        db.set(e, 'team', new, row + 1)
+        for z in range(1, 10):
+            rgb = tuple(db.get(e, f'zone{z}_{c}', new) for c in 'rgb')
+            v = m.get(rgb[0] << 16 | rgb[1] << 8 | rgb[2])
+            if v is not None:
+                for c, x in zip('rgb', (v >> 16, v >> 8 & 0xFF, v & 0xFF)):
+                    db.set(e, f'zone{z}_{c}', new, x)
+    q = [r for r in range(db.by_name[e]['rows']) if db.get(e, 'team', r) == spec['kit'] + 1]
+    append_copies(db, e, q, recolor)
+    # цвета команды (у строк НХЛ запись осталась — 7-битное поле не переписывалось; у строк ≥ 128
+    # записей нет и быть не может, как у заготовок)
+    for r in range(db.by_name['stockteamcolorstable']['rows']):
+        if db.get('stockteamcolorstable', 'team', r) == row:
+            rgb = spec['primary'] if db.get('stockteamcolorstable', 'colorid', r) == 0 else spec['secondary']
             for c, v in zip('rgb', rgb):
-                db.set(t, f'{prefix}_{c}', row, v)
-        # тактика — как у соседа
-        db.put_record('exhibitionteamstrategies', row, db.record('exhibitionteamstrategies', spec['strategy']))
-        # арена: копия нейтральной арены НХЛ-размера со своим названием
-        a = spec['arena']
-        def arena(new, src, a=a):
-            db.set_string('exhibitionarena', 'arenaname', new, a['name'])
-            db.set_string('exhibitionarena', 'cityname', new, a['city'])
-            db.set('exhibitionarena', 'maxattendance', new, a['capacity'])
-        new_arena = append_copies(db, 'exhibitionarena', [TEMPLATE_ARENA], arena)[0]
-        db.set(t, 'arenaid', row, new_arena)
-        # комплекты формы — копии (у заготовки их нет) под свой номер арта
-        js = 'stockteamjerseys'
-        def kit(new, src, row=row, art=spec['art']):
-            db.set(js, 'teamid', new, row)
-            db.set(js, 'teamartid', new, art)
-        j = [r for r in range(db.by_name[js]['rows']) if db.get(js, 'teamid', r) == spec['kit']]
-        append_copies(db, js, j, kit)
-        # цвета экипировки (шлемы, перчатки…): строки kit, перекрашенные по equip; team — номер + 1
-        e = 'stockteamequipmenttable'
-        def recolor(new, src, row=row, m=spec['equip']):
-            db.set(e, 'team', new, row + 1)
-            for z in range(1, 10):
-                rgb = tuple(db.get(e, f'zone{z}_{c}', new) for c in 'rgb')
-                v = m.get(rgb[0] << 16 | rgb[1] << 8 | rgb[2])
-                if v is not None:
-                    for c, x in zip('rgb', (v >> 16, v >> 8 & 0xFF, v & 0xFF)):
-                        db.set(e, f'zone{z}_{c}', new, x)
-        q = [r for r in range(db.by_name[e]['rows']) if db.get(e, 'team', r) == spec['kit'] + 1]
-        append_copies(db, e, q, recolor)
-        # цвета команды (запись осталась у строки — 7-битное поле не переписывалось)
-        for r in range(db.by_name['stockteamcolorstable']['rows']):
-            if db.get('stockteamcolorstable', 'team', r) == row:
-                rgb = spec['primary'] if db.get('stockteamcolorstable', 'colorid', r) == 0 else spec['secondary']
-                for c, v in zip('rgb', rgb):
-                    db.set('stockteamcolorstable', f'color_{c}', r, v)
-        report[spec['abbr']] = dict(arena=new_arena, jerseys=len(j), equipment=len(q))
+                db.set('stockteamcolorstable', f'color_{c}', r, v)
+    return dict(arena=new_arena, jerseys=len(j), equipment=len(q))
+
+def fill_new_teams(db):
+    report = {spec['abbr']: fill_team(db, row, spec, 0, 0, TEMPLATE_ARENA) for row, spec in NEW_TEAMS.items()}
     # сборные: аббревиатура для ключей строк (EAS/WES)
     for row, (abbr, _, _) in ALLSTAR_NAMES.items():
-        db.set_string(t, 'abbrname', row, abbr)
+        db.set_string('exhibitionteams', 'abbrname', row, abbr)
     return report
+
+def fill_ahl_teams(db):
+    return {spec['abbr']: fill_team(db, row, spec, AHL_LEAGUE, AHL_LEAGUEGROUP, AHL_TEMPLATE_ARENA, AHL_ARENA_FIELDS)
+            for row, spec in AHL_NEW.items()}
 
 def realign(db):
     seen = sorted(t for teams in DIVISIONS.values() for t in teams)
@@ -259,6 +307,21 @@ def realign(db):
             db.set('exhibitionteams', 'divisiongroup', t, div)
     for t, aff in AHL_AFFILIATE.items():
         db.set('exhibitionteams', 'ahlaffiliate', t, aff)
+
+def realign_ahl(db):
+    t = 'exhibitionteams'
+    seen = sorted(x for teams in AHL_DIVISIONS.values() for x in teams)
+    assert seen == sorted(AHL_ORDER), seen
+    for div, teams in AHL_DIVISIONS.items():
+        for x in teams:
+            db.set(t, 'league', x, AHL_LEAGUE)
+            db.set(t, 'leaguegroup', x, AHL_LEAGUEGROUP)
+            db.set(t, 'conferencegroup', x, AHL_CONFERENCE[div])
+            db.set(t, 'divisiongroup', x, div)
+    # фарм-клуб — номер строки + 1: 220 + 1 в 6 бит не влезает
+    db.widen(t, ['ahlaffiliate'], 8)
+    for row, spec in AHL_NEW.items():
+        db.set(t, 'ahlaffiliate', spec['parent'], row + 1)
 
 def pair_games(rng):
     """Пары и хозяева: 4 игры в дивизионе, 3 в конференции, 2 с другой конференцией."""
@@ -279,10 +342,19 @@ def pair_games(rng):
                 games += [(x, y), (y, x)]
     # третья игра внутри конференции: ориентация по эйлерову циклу — 4 «лишних»
     # домашних из 8 у каждой команды
+    games += orient_euler(odd, rng)
+    per = Counter(t for g in games for t in g)
+    home = Counter(h for h, a in games)
+    assert all(per[t] == GAMES and home[t] == HOME for t in teams), (per, home)
+    return games
+
+def orient_euler(odd, rng):
+    """Пары с нечётным числом игр (граф чётной степени): лишняя игра — дома у того, кто ведёт по
+    эйлерову циклу, — у каждой команды поровну лишних домашних и выездных."""
     adj = {t: v[:] for t, v in odd.items()}
     for t in adj:
         rng.shuffle(adj[t])
-    used = set()
+    used, games = set(), []
     for start in sorted(adj):
         stack, path = [start], []
         while stack:
@@ -296,19 +368,47 @@ def pair_games(rng):
             else:
                 path.append(stack.pop())
         games += list(zip(path, path[1:]))
-    per = Counter(t for g in games for t in g)
-    home = Counter(h for h, a in games)
-    assert all(per[t] == GAMES and home[t] == HOME for t in teams), (per, home)
     return games
 
-def game_days(db):
+def ahl_pair_games(rng):
+    """АХЛ на 32 (номера — места в AHL_ORDER): в дивизионе из 5 — по 8 игр с соседями, в
+    дивизионе из 6 — 8 с одним (пары) и 7 с остальными, по 4 с остальными клубами
+    конференции, с другой конференцией — нет: 76 игр, 38 дома."""
+    div_of = {t: d for d, teams in AHL_DIVISIONS.items() for t in teams}
+    num = {t: i for i, t in enumerate(AHL_ORDER)}
+    eight = set()
+    for teams in AHL_DIVISIONS.values():
+        if len(teams) == 6:
+            o = teams[:]
+            rng.shuffle(o)
+            eight |= {frozenset(o[i:i + 2]) for i in range(0, 6, 2)}
+    games, odd = [], defaultdict(list)
+    for i, x in enumerate(AHL_ORDER):
+        for y in AHL_ORDER[i + 1:]:
+            a, b = num[x], num[y]
+            if div_of[x] == div_of[y]:
+                if len(AHL_DIVISIONS[div_of[x]]) == 5 or frozenset((x, y)) in eight:
+                    games += [(a, b), (b, a)] * 4
+                else:
+                    games += [(a, b), (b, a)] * 3
+                    odd[a].append(b)
+                    odd[b].append(a)
+            elif AHL_CONFERENCE[div_of[x]] == AHL_CONFERENCE[div_of[y]]:
+                games += [(a, b), (b, a)] * 2
+    games += orient_euler(odd, rng)
+    per = Counter(t for g in games for t in g)
+    home = Counter(h for h, a in games)
+    assert all(per[t] == AHL_GAMES and home[t] == AHL_HOME for t in range(len(AHL_ORDER))), (per, home)
+    return games
+
+def game_days(db, table='nhlschedule'):
     """Игровые дни регулярки 2012/13 по порядку и сколько в них было игр (без Матча звёзд)."""
     days, counts = [], Counter()
-    for r in range(db.by_name['nhlschedule']['rows']):
-        h, a = db.get('nhlschedule', 'home', r), db.get('nhlschedule', 'away', r)
+    for r in range(db.by_name[table]['rows']):
+        h, a = db.get(table, 'home', r), db.get(table, 'away', r)
         if h >= 30 or a >= 30:
             continue
-        d = (db.get('nhlschedule', 'month', r), db.get('nhlschedule', 'day', r))
+        d = (db.get(table, 'month', r), db.get(table, 'day', r))
         if d not in counts:
             days.append(d)
         counts[d] += 1
@@ -401,7 +501,14 @@ def add_allstar(db, table):
         for f, v in (('index', i), ('home', h), ('away', a), ('month', month), ('day', day), ('round', 0), ('status', 0)):
             db.set(table, f, i, v)
 
-def patch_meta(text):
+def patch_meta(text, ahl32=False):
+    if ahl32:
+        for table in ('exhibitionteams', 'leagueteams'):
+            m = re.search(r'<table name="%s".*?</table>' % table, text, re.S)
+            block, k = re.subn(r'(<field name="ahlaffiliate"[^>]*?)depth="6"([^>]*?)rangehigh="62"',
+                               lambda f: f.group(1) + 'depth="8"' + f.group(2) + 'rangehigh="254"', m.group(0))
+            assert k == 1, table
+            text = text[:m.start()] + block + text[m.end():]
     for table, n in META_MAXINSERT.items():
         pat = re.compile(r'(<table name="%s"[^>]*maxinsert=")(\d+)(")' % table)
         text, k = pat.subn(lambda m: m.group(1) + str(n) + m.group(3), text)
@@ -422,6 +529,7 @@ def main():
     ap.add_argument('--loc-meta', default=None)
     ap.add_argument('--meta', nargs=2, metavar=('META_IN', 'META_OUT'), help='схема nhlng-meta.xml: вместимость таблиц франшизы')
     ap.add_argument('--seed', type=int, default=2026)
+    ap.add_argument('--ahl32', action='store_true', help='АХЛ на 32: фарм-клубы Сиэтла и Вегаса (порт с nhl_ahl_teams = 32)')
     a = ap.parse_args()
     sys.stdout.reconfigure(encoding='utf-8')
     rng = random.Random(a.seed)
@@ -439,6 +547,13 @@ def main():
         write_schedule(db, table, plan)
         add_allstar(db, table)
     print(f'календарь НХЛ: {len(plan)} игр в {len(days)} игровых днях')
+    if a.ahl32:
+        print('АХЛ, новые клубы:', fill_ahl_teams(db))
+        realign_ahl(db)
+        days, counts = game_days(db, 'ahlschedule')
+        plan = schedule(ahl_pair_games(rng), days, counts, rng)
+        write_schedule(db, 'ahlschedule', plan)
+        print(f'календарь АХЛ: {len(plan)} игр в {len(days)} игровых днях')
     db.fix()
     assert not db.verify()
     open(a.db_out, 'wb').write(db.d)
@@ -453,6 +568,11 @@ def main():
                         f'NHLTeamName_{ab}': spec['full'], f'NHLCityName_{ab}': spec['short'],
                         f'Teamline1_{ab}': spec['short'], f'Teamline2_{ab}': spec['nick'],
                         f'NHLTeamName_ABBR3_{ab}': ab, f'X_XLA_TEAM_{ab}': ab})
+    for row, spec in (AHL_NEW.items() if a.ahl32 else ()):
+        ab = spec['abbr']
+        strings.update({f'NHLTeamName_{ab}': spec['full'], f'NHLCityName_{ab}': spec['short'],
+                        f'Teamline1_{ab}': spec['short'], f'Teamline2_{ab}': spec['nick'],
+                        f'NHLTeamName_ABBR3_{ab}': ab, f'X_XLA_TEAM_{ab}': ab})
     for row, (ab, city, full) in ALLSTAR_NAMES.items():
         strings.update({f'NHLTeamName_{ab}': full, f'NHLCityName_{ab}': city, f'Teamline1_{ab}': city,
                         f'Teamline2_{ab}': 'All-Stars', f'NHLTeamName_ABBR3_{ab}': ab, f'X_XLA_TEAM_{ab}': ab})
@@ -465,7 +585,7 @@ def main():
     assert not loc.db.verify()
     open(a.loc_out, 'wb').write(loc.db.d)
     if a.meta:
-        meta = patch_meta(open(a.meta[0], encoding='utf-8', newline='').read())
+        meta = patch_meta(open(a.meta[0], encoding='utf-8', newline='').read(), a.ahl32)
         open(a.meta[1], 'w', encoding='utf-8', newline='').write(meta)
         print(f'схема: {META_MAXINSERT}, поля 6 бит: {sum(map(len, META_WIDEN.values()))} -> {a.meta[1]}')
     print(f'записано: {a.db_out}, {a.loc_out}')
