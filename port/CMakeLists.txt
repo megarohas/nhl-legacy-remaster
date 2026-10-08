@@ -22,6 +22,7 @@ set(NHL13_SOURCES
     src/nhl13_dbtrace.cpp
     src/nhl13_team_sites.cpp
     src/nhl13_heapguard.cpp
+    src/nhl13_composite.cpp
 )
 
 if(WIN32)
