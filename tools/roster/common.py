@@ -48,9 +48,9 @@ def set_game(name):
     """Игра конвейера (до импорта этапов: dbview и др. берут номера строк и поля при импорте)."""
     global GAME, AHL_CLUBS
     GAME = gameprofile.get(name)
-    if GAME.name == 'legacy':
-        # NHL Legacy (база tools/nhl32.py --game legacy --ahl32): фарм-клубы — на Custom 02/03 = 224/225
-        AHL_CLUBS = dict(zip(GAME.custom[2:4], AHL_CLUBS.values()))
+    # у NHL Legacy (база tools/nhl32.py --game legacy --ahl32) фарм-клубы — на Custom 02/03 = 224/225
+    AHL_CLUBS = (dict(zip(GAME.custom[2:4], _AHL_CLUBS_NHL13.values())) if GAME.name == 'legacy'
+                 else dict(_AHL_CLUBS_NHL13))
     return GAME
 
 
@@ -245,6 +245,7 @@ AHL_CLUBS = {
     221: dict(abbr='HSK', name='Henderson Silver Knights', wiki='Henderson_Silver_Knights', parent='VGK',
               parent_nick='Golden Knights'),
 }
+_AHL_CLUBS_NHL13 = dict(AHL_CLUBS)
 # прежние и сменившие город клубы → нынешний слот (для команды драфта)
 TEAM_ALIAS = {'PHX': 'UTA', 'ARI': 'UTA', 'ATL': 'WPG', 'L.A': 'LAK', 'N.J': 'NJD', 'S.J': 'SJS', 'T.B': 'TBL',
               'LA': 'LAK', 'NJ': 'NJD', 'SJ': 'SJS', 'TB': 'TBL', 'MDA': 'ANA', 'HFD': 'CAR', 'QUE': 'COL',
