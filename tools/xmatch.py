@@ -3,8 +3,8 @@
 
     python xmatch.py A.bin B.bin --stats                         # сколько функций сошлось и как
     python xmatch.py A.bin B.bin --addr 82809330 828A8338        # где эти адреса A в образе B
-    python xmatch.py A.bin B.bin --port DIR [--json OUT.json] [--md OUT.md]
-                                                                 # все адреса порта NHL 13 из DIR
+    python xmatch.py A.bin B.bin --port DIR [--json OUT.json]   # все адреса порта NHL 13 из DIR
+    python xmatch.py A.bin B.bin --via V.bin --port DIR          # через промежуточный образ (NHL 14)
 
 A и B — образы памяти из tools/xex.py (база 0x82000000). Границы функций — из .pdata образа.
 
@@ -602,6 +602,8 @@ class Matcher:
         i = (a - fa) // 4
         ta, tb = A.analyze(fa), B.analyze(fb)
         how = self.how.get(fa, '')
+        if a == fa:
+            return fb, 'func', how
         if ta == tb:
             j = i
         else:
@@ -634,13 +636,66 @@ class Matcher:
                 return None, 'lost', f'функция {fa:08X}→{fb:08X} ({how}), место в изменённом куске'
         b = fb + 4 * j
         wa, wb = A.word(a), B.word(b)
-        if a == fa:
-            return b, 'func', how
         if wa == wb:
             return b, 'exact' if ta == tb else 'same', how
         if soft_token(wa) == soft_token(wb):
             return b, 'same-imm', how     # та же инструкция и то же число, другие регистры
+        if self.same_call(a, wa, b, wb):
+            return b, 'same-imm', how + '; вызов той же (сопоставленной) функции'
         return b, 'aligned-diff', f'{how}; было {wa:08X}, стало {wb:08X}'
+
+    def same_call(self, a, wa, b, wb):
+        """Оба слова — b/bl на функции, которые сопоставлены друг с другом."""
+        if wa >> 26 != 18 or wb >> 26 != 18 or (wa & 3) != (wb & 3):
+            return False
+        def target(w, at):
+            li = w & 0x03FFFFFC
+            if li & 0x02000000:
+                li -= 0x04000000
+            return (li if w & 2 else at + li) & 0xFFFFFFFF
+        ga, gb = self.A.func_at(target(wa, a)), self.B.func_at(target(wb, b))
+        return ga is not None and gb is not None and self.resolve(ga, depth=0) == gb
+
+
+RANK = ['func', 'exact', 'same', 'same-imm', 'moved', 'aligned-diff', 'moved-diff', 'lost', 'nofunc',
+        'data', 'data-?', 'data-lost', 'data-noref']
+
+
+class ChainMatcher:
+    """A → V → B: два сопоставления подряд; категория — худшая из двух (для мест —
+    сверка слова A с итоговым словом B)."""
+
+    def __init__(self, m1, m2):
+        self.hops = (m1, m2)
+
+    def map_addr(self, a):
+        m1, m2 = self.hops
+        v, c1, n1 = m1.map_addr(a)
+        if v is None:
+            return None, c1, 'шаг 1: ' + n1
+        b, c2, n2 = m2.map_addr(v)
+        if b is None:
+            return None, c2, 'шаг 2: ' + n2
+        if c1 == 'func' or c2 == 'func':
+            return b, 'func', f'{n1} / {n2}'
+        wa, wb = m1.A.word(a), m2.B.word(b)
+        if wa == wb:
+            cat = 'same' if 'exact' not in (c1, c2) or c1 != c2 else 'exact'
+        elif soft_token(wa) == soft_token(wb):
+            cat = 'same-imm'
+        else:
+            cat = max(c1, c2, key=lambda c: RANK.index(c) if c in RANK else 99)
+            if cat in ('exact', 'same', 'same-imm', 'moved'):
+                cat = 'aligned-diff'
+        return b, cat, f'через {v:08X}: {n1} / {n2}'
+
+    def map_data(self, x):
+        m1, m2 = self.hops
+        v, c1, n1 = m1.map_data(x)
+        if v is None:
+            return None, c1, n1
+        b, c2, n2 = m2.map_data(v)
+        return b, c2 if b is not None else c2, f'через {v:08X}: {n1} / {n2}'
 
 
 # ---------- адреса порта NHL 13 ----------
@@ -686,18 +741,25 @@ def main():
     ap.add_argument('--sites', nargs='*', default=[], help='списки мест (docs/team32_sites.json …)')
     ap.add_argument('--json', help='куда записать сопоставление')
     ap.add_argument('--stats', action='store_true')
+    ap.add_argument('--via', help='промежуточный образ (например, NHL 14): A → VIA → B')
     args = ap.parse_args()
     for st in (sys.stdout, sys.stderr):
         st.reconfigure(encoding='utf-8')
     log = lambda *m: print(*m, file=sys.stderr)
     A, B = Image(args.a), Image(args.b)
     log(f'A: {len(A.starts)} функций, B: {len(B.starts)}')
-    M = Matcher(A, B, log)
-    M.exact()
-    M.propagate()
-    M.by_strings()
-    M.propagate()
-    if args.stats:
+    if args.via:
+        V = Image(args.via)
+        M = ChainMatcher(Matcher(A, V, log), Matcher(V, B, log))
+        for m in M.hops:
+            m.exact(); m.propagate(); m.by_strings(); m.propagate()
+    else:
+        M = Matcher(A, B, log)
+        M.exact()
+        M.propagate()
+        M.by_strings()
+        M.propagate()
+    if args.stats and not args.via:
         c = Counter(h.split()[0] for h in M.how.values())
         log(f'пар всего: {len(M.ab)} из {len(A.starts)} ({100 * len(M.ab) / len(A.starts):.1f} %): {dict(c)}')
     items = [(int(x, 16), 'addr', 'cli') for x in args.addr]
@@ -716,7 +778,7 @@ def main():
         b, cat, note = M.map_addr(a)
         res.append(dict(a=f'{a:08X}', kind=kind, src=src, b=f'{b:08X}' if b else None, cat=cat, note=note))
     if res:
-        order = ['func', 'exact', 'same', 'same-imm', 'moved', 'aligned-diff', 'moved-diff', 'lost', 'nofunc', 'data', 'data-?', 'data-lost', 'data-noref']
+        order = RANK
         by = defaultdict(Counter)
         for r in res:
             by[(r['src'], r['kind'].split(':')[0])][r['cat']] += 1
@@ -724,8 +786,8 @@ def main():
         for (src, kind), cnt in sorted(by.items()):
             log(f'{src[:34]:34s} {kind:14s} ' + ' '.join(f'{cnt.get(c, 0):12d}' for c in order))
     if args.json:
-        json.dump(dict(a=args.a, b=args.b, pairs=len(M.ab), items=res), open(args.json, 'w', encoding='utf-8'),
-                  ensure_ascii=False, indent=1)
+        json.dump(dict(a=args.a, b=args.b, via=args.via, pairs=len(getattr(M, 'ab', {})), items=res),
+                  open(args.json, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
     elif res and not args.port and not args.sites:
         for r in res:
             print(r['a'], '→', r['b'], r['cat'], r['note'])
