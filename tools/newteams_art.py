@@ -85,8 +85,8 @@ def main():
         cur = db.get(table, field, row)
         plan.append((table, field, row, cur, value, why))
 
-    art_rows = {}
-    for r in range(db.by_name[T]['rows']):
+    art_rows = {}                             # только живые записи (tdb.Tdb.live_rows; у базы — все строки)
+    for r in db.live_rows(T):
         art_rows.setdefault(db.get(T, 'artid', r), []).append(r)
     for i, (row, t) in enumerate(TEAMS.items()):
         abbr = db.get_string(T, 'abbrname', row)
@@ -103,7 +103,7 @@ def main():
         arena = db.get(T, 'arenaid', row)
         if arena != t['arena']:
             problems.append(f'строка {row}: arenaid {arena}, ожидалась {t["arena"]}')
-        elif arena < db.by_name[A]['rows']:
+        elif db.is_live(A, arena):
             name = db.get_string(A, 'arenaname', arena)
             if name != t['arena_name']:
                 problems.append(f'арена {arena}: «{name}», ожидалась «{t["arena_name"]}»')
@@ -114,7 +114,7 @@ def main():
             if clines:
                 want(A, 'centerline', arena, clines[i], 'рисунок красной линии')
         if a.jerseys:
-            for jr in range(db.by_name[J]['rows']):
+            for jr in db.live_rows(J):
                 if db.get(J, 'teamid', jr) == row:
                     want(J, 'teamartid', jr, t['artid'], 'номер арта комплекта (UI)')
     for n in OLD_ART:
