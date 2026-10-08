@@ -96,6 +96,8 @@ class Writer:
         self.skin_on = getattr(paths, 'skin', False)   # --skin: голова под тон кожи на фото (skin.py)
         self.skin_rows, self.skin_info = [], None
         self.payroll_max = getattr(paths, 'payroll_max', None)   # --payroll-max: ведомости под потолок (cap_payroll)
+        self.fa_only = getattr(paths, 'fa_only', False) and bool(self.fa_players)   # --fa-only: пул FA — только настоящие
+        self.fa_dropped = []
         self.payroll = None
 
     # --- 1. строки игроков -----------------------------------------------------------------
@@ -540,6 +542,11 @@ class Writer:
                 kept.append(dict(e))
         fa_keep = [l for l in v.fa if row_of_link(l) not in new_rows]
         used = {e['playerindex'] for e in kept} | set(fa_keep)
+        if self.fa_only:
+            # --fa-only: свободные агенты исходной базы (у Legacy — 2015 год: Ehrhoff, Zidlicky…) из пула уходят — в
+            # пуле только настоящие (--fa); строки игроков остаются, как у игроков без клуба
+            self.fa_dropped = [v.name(row_of_link(l)) if row_of_link(l) is not None else f'связь {l}' for l in fa_keep]
+            fa_keep = []
         free_index = (i for i in range(max(i for i in v.link_gid if i < LINK_LIMIT) + 1, LINK_LIMIT)
                       if i not in v.link_gid)
 
@@ -900,6 +907,10 @@ def run(paths, log=print, real_lines=True):
         sheet_path = os.path.join(paths.work, 'skin-sheet.html')
         skin.sheet(sheet_path, paths.game, [r for r in w.skin_rows if not r['scan']], w.skin_info)
         log(f"  тон кожи: {w.skin_info['counts']} -> {sheet_path}")
+    if w.fa_only:
+        summary['fa_dropped'] = w.fa_dropped
+        log(f'  свободные агенты исходной базы убраны из пула (--fa-only): {len(w.fa_dropped)} — '
+            + ', '.join(w.fa_dropped[:8]) + (' …' if len(w.fa_dropped) > 8 else ''))
     if w.payroll is not None:
         summary['payroll'] = {'max_mln': w.payroll_max, 'clubs': w.payroll}
         log(f'  ведомости ≤ {w.payroll_max:g} млн: ужато клубов {len(w.payroll)} — '

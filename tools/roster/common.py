@@ -103,6 +103,7 @@ class Paths:
         self.skin = False               # --skin: голова под тон кожи на фото (skin.py)
         self.league = None              # --league liiga: клубы европейской лиги нынешними составами (league.py)
         self.payroll_max = None         # --payroll-max МЛН: ведомость состава клуба НХЛ не выше (write.cap_payroll)
+        self.fa_only = False            # --fa-only: в пуле свободных агентов — только настоящие (--fa)
         self.report_ratings = os.path.join(self.work, 'report-ratings.md')
 
     def meta_for(self, db_path):

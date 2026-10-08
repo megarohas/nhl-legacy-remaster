@@ -61,6 +61,9 @@ def main():
     ap.add_argument('--payroll-max', type=float, metavar='МЛН',
                     help='write: ведомость состава клуба НХЛ не больше МЛН $ — контракты-заглушки клуба выше минималки '
                          'ужимаются одним коэффициентом (write.cap_payroll; NHL Legacy: потолок 2026/27 — 104)')
+    ap.add_argument('--fa-only', action='store_true',
+                    help='write, с --fa: в пуле свободных агентов (exhibitionfreeagents) — только настоящие; свободные '
+                         'агенты исходной базы, чьи строки не ушли новым игрокам, из пула убираются (у Legacy там 2015 год)')
     a = ap.parse_args()
     profile = None
     if a.game and a.game.lower() in gameprofile.GAMES:      # --game legacy — игра, а не каталог
@@ -73,6 +76,7 @@ def main():
     paths.skin = a.skin
     paths.league = a.league
     paths.payroll_max = a.payroll_max
+    paths.fa_only = a.fa_only
     if a.db_in:
         paths.db_in = a.db_in
     if a.db_out:
