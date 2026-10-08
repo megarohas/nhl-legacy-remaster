@@ -3,15 +3,18 @@
 
     python kitpaint.py files S_A_V[_F]…                  # файлы комплекта: текстуры, форматы, мипы
     python kitpaint.py unpack S_A_V[_F] DIR               # все слои комплекта → DIR/<слой>.png + DIR/kit.json
-    python kitpaint.py pack DIR S_A_V[_F] OUTDIR [--reencode]
+    python kitpaint.py pack DIR S_A_V[_F] OUTDIR [--reencode] [--container S_A_V]
                                                           # PNG из DIR → файлы комплекта под номер S_A_V
                                                           # (раскладка cache:); слой без изменений — байты шаблона
     python kitpaint.py roundtrip S_A_V[_F]…               # шаблон → PNG → сборка: байт-в-байт и с пережатием (PSNR)
-    python kitpaint.py paint SPEC.json OUTDIR [--kits home,away] [--preview DIR] [--work DIR]
+    python kitpaint.py paint SPEC.json OUTDIR [--kits home,away] [--preview DIR] [--work DIR] [--mask-game nhl13]
                                                           # перекраска шаблонов по SPEC → готовые комплекты
-    python kitpaint.py verify OUTDIR NEW=TEMPLATE…        # собранное против шаблона (1_98_0=1_28_0 …)
+                                                          # (--mask-game — маски разметки из шаблонов другой игры)
+    python kitpaint.py verify OUTDIR NEW=TEMPLATE…        # собранное против шаблона (1_98_0=1_28_0 …; с контейнером —
+                                                          # против контейнера: 1_100_0=1_131_0)
     python kitpaint.py sheet OUTDIR "Заголовок" "подпись=S_A_V[_F]"… OUT.png
                                                           # лист превью собранных комплектов (Chrome/Edge)
+    … --game legacy                                       # у любой команды: шаблоны и контейнеры NHL Legacy (ниже)
 
 Комплект S_A_V_F: S — style, A — номер арта (у команды EA = teamartid = artid), V — variant, F — fevariant
 (по умолчанию = V). Файлы (docs/uniforms.md): rendering/jersey/texlib_S_A_V.rx2 (свитер jersey_cm DXT1,
@@ -43,13 +46,22 @@ SPEC (JSON; пример — game/work/uniforms/kitsrc/SEA.json, VGK.json):
 
 Шаблоны — из game/extracted/big/<архив>/…, иначе — из образа диска game/extracted/disc/<архив>.big (с
 кешем разжатых файлов в game/work/uniforms/templates/). Только стандартная библиотека (+ Chrome/Edge для
-SVG и листов превью, как в teamart.py). teamart.py используется как библиотека (не меняется).
+SVG и листов превью, как в teamart.py). teamart.py используется как библиотека.
+
+Другая игра: --game {nhl13,legacy} (или NHL_GAME, tools/gameprofile.py) у всех команд — шаблоны и контейнеры из
+её распакованных архивов (у NHL Legacy — game/other/legacy/big/<архив>/…); по умолчанию NHL 13, как раньше.
+Номер другой длины (Legacy: арт 100/101 вместо 98/99): имена растров на месте не переписать, поэтому файлы
+собираются в контейнере (заголовки, имена, форматы, мипы) комплекта EA той же структуры с номером нужной длины
+(CONTAINERS, «container» в SPEC или --container S_A_V), а пиксели слоёв, которые не перекрашиваются, — буферы
+шаблона как есть. SPEC может наследовать другой: {"base": "…/SEA.json", "kits": {"home": {"kit": "1_100_0"}}}
+(teamart.load_spec).
 """
 import hashlib, json, math, os, re, shutil, struct, sys, tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import playerhead as ph  # noqa: E402  (PNG, DXT5, BIGF/XPR2)
 import teamart as ta     # noqa: E402  (RW4, раскладка Xenos, DXT1/3/5, 8888, рендер SVG)
+import gameprofile       # noqa: E402  (профиль игры: NHL 13 или NHL Legacy)
 
 FMT_DXN = 0x31
 FMT_NAMES = {ta.FMT_8888: '8888', ta.FMT_DXT1: 'DXT1', ta.FMT_DXT3: 'DXT3', ta.FMT_DXT5: 'DXT5', FMT_DXN: 'DXN'}
@@ -124,8 +136,21 @@ def _unchunk(blob):
     return blob
 
 
-def source(rel):
-    """Разжатый файл игры по пути архива (rendering/…, fe/…): распакованное дерево, кеш, образ диска."""
+def profile_source(rel, prof=None):
+    """Разжатый файл другой игры (prof или teamart.set_game) из её распакованных архивов (gameprofile)."""
+    prof = prof or ta.GAME
+    p = prof.extracted(rel)
+    if not p:
+        raise SystemExit(f'{rel}: нет в распакованных архивах {prof.title} ({prof.big})')
+    return _unchunk(open(p, 'rb').read())
+
+
+def source(rel, game=None):
+    """Разжатый файл игры по пути архива (rendering/…, fe/…): распакованное дерево, кеш, образ диска. Другая игра
+    (teamart.set_game или game — имя игры) — из её распакованных архивов."""
+    g = game or ta.game_name()
+    if g != 'nhl13':
+        return profile_source(rel, gameprofile.get(g) if game else None)
     g = game_dir()
     arc = archive_of(rel)
     for p in (os.path.join(g, 'extracted', 'big', arc, *rel.split('/')),
@@ -153,6 +178,27 @@ def layer_name(raster):
     base = raster.split('.')[0]
     parts = base.split('_')
     return parts[0] + '_' + parts[-1]
+
+
+# Контейнеры под номер арта другой длины: комплект EA, у которого все 5 файлов устроены как у 1_28_0 (заголовки,
+# описания текстур, буферы, форматы и мипы; отличаются только имена растров). Ключ — число цифр номера арта.
+# NHL Legacy: 3-значные — клубы АХЛ 131…165 и CHL 360…421 (проверено перебором всех комплектов стиля 1); взят
+# 1_131_0. Для NHL 13 не нужен (98/99 — 2-значные, как шаблоны).
+CONTAINERS = {'nhl13': {}, 'legacy': {3: '1_131_0'}}
+
+
+def default_container(template, new):
+    """Контейнер для комплекта new: сам template, если номер той же длины, иначе CONTAINERS игры."""
+    if len(template.tag()) == len(new.tag()):
+        return template
+    tag = CONTAINERS.get(ta.game_name(), {}).get(len(str(new.a)))
+    if not tag:
+        raise SystemExit(f'{template} → {new}: номера разной длины, а контейнера под {len(str(new.a))}-значный номер '
+                         f'для {ta.game_name()} нет — укажите container (SPEC) или --container')
+    cont = Kit.parse(tag)
+    if len(cont.tag()) != len(new.tag()):
+        raise SystemExit(f'контейнер {cont} не той длины, что {new}')
+    return cont
 
 
 def rename_rasters(rw, old, new):
@@ -432,12 +478,12 @@ def is_normal(layer):
 
 # ---------------------------------------------------------------- разбор и сборка комплекта
 
-def kit_textures(kit):
-    """[(вид, путь, объект)] — Rw4 для .rx2, UiLogo для превью."""
+def kit_textures(kit, game=None):
+    """[(вид, путь, объект)] — Rw4 для .rx2, UiLogo для превью. game — из архивов другой игры (source)."""
     out = []
     for kind, _ in KIT_FILES:
         rel = kit.path(kind)
-        data = source(rel)
+        data = source(rel, game)
         obj = ta.UiLogo(data, rel) if kind == 'fe' else ta.Rw4(data, rel)
         out.append((kind, rel, obj))
     return out
@@ -478,16 +524,35 @@ def unpack(kit, outdir):
     return meta
 
 
-def build_kit(template, new, layers, outdir=None, reencode=False, keep=None, trailer='md5', log=print):
+def _same_texture(a, b):
+    """Те же размер буфера, раскладка и константа выборки (кроме поля базового адреса)."""
+    wa, wb = list(a.fetch.words), list(b.fetch.words)
+    wa[1] &= 0xFFF
+    wb[1] &= 0xFFF
+    return a.size == b.size and wa == wb
+
+
+def build_kit(template, new, layers, outdir=None, reencode=False, keep=None, trailer='md5', log=print, container=None):
     """Файлы комплекта new из шаблона template. layers — {слой: (w, h, rgba)} (нет слоя — пиксели шаблона);
-    keep — {слой: sha1 исходной картинки}: совпала — буфер шаблона без пережатия. → {путь: байты}."""
+    keep — {слой: sha1 исходной картинки}: совпала — буфер шаблона без пережатия. → {путь: байты}.
+    container — комплект EA, чьи файлы берутся за основу (заголовки, имена растров → new), если он не template
+    (номер другой длины, default_container): нетронутые слои — буферы шаблона как есть (структура та же)."""
     keep = keep or {}
     made = {}
-    for kind, rel, obj in kit_textures(template):
+    if container is not None and container.tag() == template.tag() and container.f == template.f:
+        container = None
+    tpl_objs = {kind: obj for kind, _, obj in kit_textures(template)} if container is not None else None
+    base = container if container is not None else template
+    for kind, rel, obj in kit_textures(base):
         out_rel = new.path(kind)
         if kind == 'fe':
             img = layers.get('fe')
-            if img is None or (not reencode and rgba_sha1(img[2]) == keep.get('fe')):
+            if container is not None and (img is None or (not reencode and rgba_sha1(img[2]) == keep.get('fe'))):
+                tf = tpl_objs['fe']                      # 8888 без сжатия: превью шаблона в контейнер без потерь
+                if tf.fetch.words != obj.fetch.words:
+                    raise SystemExit(f'{rel}: превью контейнера и шаблона устроены по-разному')
+                data = obj.build(tf.decode()[2], trailer)
+            elif img is None or (not reencode and rgba_sha1(img[2]) == keep.get('fe')):
                 big = ph.Bigf(obj.head.big.raw)
                 data = big.build(None if template.tag() == new.tag() and template.f == new.f else trailer)
             else:
@@ -499,15 +564,21 @@ def build_kit(template, new, layers, outdir=None, reencode=False, keep=None, tra
                 log(f'{out_rel}: {len(data)} байт' + (', превью шаблона' if img is None else ''))
         else:
             changed = []
+            tobj = tpl_objs[kind] if container is not None else None
             for t in obj.textures:
                 ln = layer_name(t.name)
                 img = layers.get(ln)
                 if img is None or (not reencode and rgba_sha1(img[2]) == keep.get(ln)):
+                    if tobj is not None:                 # контейнер: пиксели шаблона — его буфер как есть
+                        tt = next((x for x in tobj.textures if layer_name(x.name) == ln), None)
+                        if tt is None or not _same_texture(t, tt):
+                            raise SystemExit(f'{rel}: слой {ln} у контейнера {container} и шаблона {template} разный')
+                        obj.raw[t.data_off:t.data_off + t.size] = tobj.raw[tt.data_off:tt.data_off + tt.size]
                     continue
                 tex_replace(obj, t, img[2], img[0], img[1])
                 changed.append(ln)
-            if template.tag() != new.tag():
-                rename_rasters(obj, template, new)
+            if base.tag() != new.tag():
+                rename_rasters(obj, base, new)
             data = obj.bytes()
             if log:
                 log(f'{out_rel}: {len(data)} байт' + (f', новые слои: {", ".join(changed)}' if changed else ', пиксели шаблона'))
@@ -533,7 +604,9 @@ def read_layers(d):
 def cmd_pack(args):
     d, new, outdir = args[0], Kit.parse(args[1]), args[2]
     meta, layers, keep = read_layers(d)
-    build_kit(Kit.parse(meta['template']), new, layers, outdir, reencode='--reencode' in args, keep=keep)
+    tpl = Kit.parse(meta['template'])
+    cont = Kit.parse(args[args.index('--container') + 1]) if '--container' in args else default_container(tpl, new)
+    build_kit(tpl, new, layers, outdir, reencode='--reencode' in args, keep=keep, container=cont)
 
 
 def psnr(a, b, chans=(0, 1, 2, 3)):
@@ -1539,11 +1612,11 @@ def template_layers(kit):
 _LAYER_CACHE = {}
 
 
-def template_layer(kit, layer):
-    """Один слой шаблона (с кешем): Img."""
-    key = (str(kit), layer)
+def template_layer(kit, layer, game=None):
+    """Один слой шаблона (с кешем): Img. game — шаблон другой игры (маски разметки, MASK_GAME)."""
+    key = (str(kit), layer) if game is None else (game, str(kit), layer)
     if key not in _LAYER_CACHE:
-        for kind, rel, obj in kit_textures(kit):
+        for kind, rel, obj in kit_textures(kit, game):
             if kind == 'fe':
                 if layer == 'fe':
                     _LAYER_CACHE[key] = Img(*obj.decode())
@@ -1556,12 +1629,20 @@ def template_layer(kit, layer):
     return _LAYER_CACHE[key]
 
 
+# Игра, из шаблонов которой берутся маски разметки (template_mask), если в маске нет "game": None — та же, что у
+# шаблонов (teamart.set_game). Разметка SPEC NHL 13 рисовалась по шаблонам NHL 13; UV у Legacy те же, а шаблоны
+# перерисованы (у «Ванкувера» Legacy нет швов панелей — заливка от seed растекается по всему свитеру), поэтому для
+# SPEC NHL 13 под Legacy маски — из NHL 13 (paint --mask-game nhl13).
+MASK_GAME = None
+
+
 def template_mask(spec, w, h):
     """Маска по слою шаблона (раскладка UV у всех комплектов стиля одна): заливка от seed по пикселям, близким
     к цвету seed (thr), затем расширение dilate; ring — только кольцо (расширение минус заливка).
-    {"template": "1_28_0", "layer": "jersey_cm", "seed": [x, y], "thr": 40, "dilate": 8, "ring": false}"""
+    {"template": "1_28_0", "layer": "jersey_cm", "seed": [x, y], "thr": 40, "dilate": 8, "ring": false,
+     "game": "nhl13" (необяз.: шаблон другой игры; по умолчанию MASK_GAME)}"""
     from collections import deque
-    img = template_layer(Kit.parse(spec['template']), spec.get('layer', 'jersey_cm'))
+    img = template_layer(Kit.parse(spec['template']), spec.get('layer', 'jersey_cm'), spec.get('game') or MASK_GAME)
     if (img.w, img.h) != (w, h):
         raise SystemExit(f'маска {spec}: слой {img.w}×{img.h}, нужен {w}×{h}')
     sx, sy = spec['seed']
@@ -1766,8 +1847,9 @@ def paint_fe(img, spec, svgs, palette, log=print):
 
 def paint(spec_path, outdir, only=None, preview=None, work=None, log=print):
     """Комплекты по SPEC (формат — в начале модуля) → файлы в OUTDIR (раскладка cache:); work — PNG изменённых
-    слоёв; preview — лист превью <team>.png. → (список путей, слои)."""
-    spec = json.load(open(spec_path, encoding='utf-8'))
+    слоёв; preview — лист превью <team>.png. → (список путей, слои). У комплекта может быть "container" (S_A_V) —
+    основа файлов под номер другой длины; нет — default_container."""
+    spec = ta.load_spec(spec_path)
     base = os.path.dirname(os.path.abspath(spec_path))
     palette = spec.get('colors', {})
     svgs = {k: svg_load(v, base) for k, v in spec.get('svg', {}).items()}
@@ -1826,7 +1908,10 @@ def paint(spec_path, outdir, only=None, preview=None, work=None, log=print):
                 if keep.get(ln) != rgba_sha1(bytes(img.px)):
                     img.save(os.path.join(d, ln + '.png'))
         layers = {ln: img.tup() for ln, img in L.items()}
-        res = build_kit(tpl, new, layers, outdir, keep=keep, log=log)
+        cont = Kit.parse(ks['container']) if ks.get('container') else default_container(tpl, new)
+        if cont is not tpl:
+            log(f'  контейнер файлов: {cont}')
+        res = build_kit(tpl, new, layers, outdir, keep=keep, log=log, container=cont)
         made += list(res)
     if preview:
         kits = [(ks.get('label', name), Kit.parse(ks['kit'])) for name, ks in spec['kits'].items()
@@ -1838,7 +1923,10 @@ def paint(spec_path, outdir, only=None, preview=None, work=None, log=print):
 
 
 def cmd_paint(args):
+    global MASK_GAME
     spec, outdir = args[0], args[1]
+    if '--mask-game' in args:
+        MASK_GAME = args[args.index('--mask-game') + 1]
     only = args[args.index('--kits') + 1].split(',') if '--kits' in args else None
     work = args[args.index('--work') + 1] if '--work' in args else None
     preview = args[args.index('--preview') + 1] if '--preview' in args else None
@@ -2008,9 +2096,11 @@ def cmd_sheet(args):
 # ---------------------------------------------------------------- команды
 
 def main():
-    if len(sys.argv) < 3:
+    game, argv = ta.split_game(sys.argv[1:])
+    if len(argv) < 2:
         sys.exit(__doc__)
-    cmd, args = sys.argv[1], sys.argv[2:]
+    ta.set_game(game)
+    cmd, args = argv[0], argv[1:]
     if cmd == 'files':
         cmd_files(args)
     elif cmd == 'unpack':
