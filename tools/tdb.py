@@ -113,6 +113,20 @@ class Tdb:
         start = t['records'] + row * t['reclen'] + off // 8
         self.d[start:start + width // 8] = raw + bytes(width // 8 - len(raw))
 
+    def deleted(self, table):
+        """Номера удалённых записей таблицы (список свободных): в заголовке +0x18 (u16) — их число, +0x1A —
+        голова списка; у удалённой записи первые 16 бит — номер следующей (0xFFFF — конец), они перекрывают
+        поля из начала записи (у leaguerostertable — team). В базах игр их нет, в сейвах франшизы есть:
+        считая по таблицам сейва, эти строки надо пропускать (column и get их не отличают)."""
+        t = self.by_name[table]
+        n, r = struct.unpack(self.E + 'HH', self.d[t['block'] + 0x18:t['block'] + 0x1C])
+        out = []
+        while r != 0xFFFF and len(out) < n:
+            out.append(r)
+            s = t['records'] + r * t['reclen']
+            r = struct.unpack(self.E + 'H', self.d[s:s + 2])[0]
+        return out
+
     def column(self, table, field):
         return [self.get(table, field, r) for r in range(self.by_name[table]['rows'])]
 
