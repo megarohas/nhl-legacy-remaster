@@ -15,10 +15,12 @@
 - Заготовки заполняются как клубы НХЛ (fill_new_teams): названия, цвета, активность, лига,
   тактика (как у соседа по дивизиону), своя арена НХЛ-размера (копия нейтральной «EA SPORTS
   Arena»), комплекты формы (пока копии Tappara/TPS — своих текстур ещё нет), цвета шлемов,
-  перчаток и прочей экипировки (строки Tappara/TPS, перекрашенные в цвета клуба), арт
-  логотипов — нейтральный арт заготовок (20054) до своих логотипов. Вратарская экипировка
-  в базе — по вратарям (game_id + команда), командной нет: вратари новых клубов — со
-  стандартной.
+  перчаток и прочей экипировки (строки Tappara/TPS, перекрашенные в цвета клуба), свои
+  номера арта 98/99 (свободны везде) — у команды и у её комплектов формы, прожекторы 45/46,
+  номер звука 32/33 (свободный: 0 — это «Анахайм»). Файлы под 98/99 (логотипы, центр льда,
+  шайба, баннер, прожекторы, копии формы Tappara/TPS) — tools/teamart.py, game/work/logos/
+  (docs/logos-arenas.md). Вратарская экипировка в базе — по вратарям (game_id + команда),
+  командной нет: вратари новых клубов — со стандартной.
 - Календарь — формат НХЛ с сезона 2026/27: 84 игры (по 4 с соперниками по дивизиону,
   по 3 с остальной конференцией, по 2 с другой конференцией), 42 дома, по нынешним
   4 дивизионам; раскладывается на игровые дни календаря 2012/13. В самой игре 6
@@ -39,17 +41,20 @@ from locdb import LocDb
 SWAP = {30: 218, 31: 219}          # новый клуб НХЛ ← пустая заготовка «Custom Team 00/01»
 ALLSTAR_ROWS = (218, 219)          # сборные Матча звёзд после обмена
 TEMPLATE_ARENA = 168               # «EA SPORTS Arena»: нейтральная, площадка НХЛ (arenatype 0)
-CUSTOM_ART = 20054                 # нейтральный арт заготовок: логотипы всех наборов есть
 # Новые клубы. kit — строка, чьи комплекты формы и цвета экипировки копируются (пока своих
 # текстур нет), equip — перекраска экипировки kit (цвет → цвет), strategy — чья тактика,
-# rival — соперник (номер строки).
+# rival — соперник (номер строки). art — номер арта: логотипы, центр льда, шайба, баннер и
+# текстуры формы (рендер берёт artid команды, меню — teamartid комплекта; у EA они равны),
+# spotlight — логотип прожекторов, audio — номер звука (свободный: без записей).
 NEW_TEAMS = {
     30: dict(short='Seattle', full='Seattle Kraken', abbr='SEA', nick='Kraken', rival=28, strategy=28, kit=86,
+             art=98, spotlight=45, audio=32,
              primary=(0, 22, 40), secondary=(153, 217, 217),
              # Tappara: синий, оранжевый, чёрный шлем → глубоководный синий, ледяной голубой
              equip={0x253B73: 0x001628, 0xE35B17: 0x99D9D9, 0xDE5818: 0x99D9D9, 0x202020: 0x001628},
              arena=dict(name='Climate Pledge Arena', city='Seattle, WA', capacity=17151)),
     31: dict(short='Vegas', full='Vegas Golden Knights', abbr='VGK', nick='Golden Knights', rival=13, strategy=13, kit=87,
+             art=99, spotlight=46, audio=33,
              primary=(51, 63, 72), secondary=(185, 151, 91),
              # TPS: чёрный шлем, серый → стальной серый, золото
              equip={0x202020: 0x333F48, 0xB3B3B3: 0xB9975B},
@@ -196,8 +201,8 @@ def fill_new_teams(db):
                      ('artabbr', spec['abbr'])):
             db.set_string(t, f, row, v)
         for f, v in (('active', 1), ('table', 0), ('state', 0), ('league', 0), ('leaguegroup', 0),
-                     ('artid', CUSTOM_ART), ('audioid', 0), ('audioid2', 0), ('rivalteam', spec['rival'] + 1),
-                     ('rivalteam2', 0)):
+                     ('artid', spec['art']), ('spotlight', spec['spotlight']), ('audioid', spec['audio']),
+                     ('audioid2', 0), ('rivalteam', spec['rival'] + 1), ('rivalteam2', 0)):
             db.set(t, f, row, v)
         for prefix, rgb in (('primarycolor', spec['primary']), ('secondarycolor', spec['secondary'])):
             for c, v in zip('rgb', rgb):
@@ -212,9 +217,13 @@ def fill_new_teams(db):
             db.set('exhibitionarena', 'maxattendance', new, a['capacity'])
         new_arena = append_copies(db, 'exhibitionarena', [TEMPLATE_ARENA], arena)[0]
         db.set(t, 'arenaid', row, new_arena)
-        # комплекты формы — копии (у заготовки их нет)
-        j = [r for r in range(db.by_name['stockteamjerseys']['rows']) if db.get('stockteamjerseys', 'teamid', r) == spec['kit']]
-        append_copies(db, 'stockteamjerseys', j, lambda new, src, row=row: db.set('stockteamjerseys', 'teamid', new, row))
+        # комплекты формы — копии (у заготовки их нет) под свой номер арта
+        js = 'stockteamjerseys'
+        def kit(new, src, row=row, art=spec['art']):
+            db.set(js, 'teamid', new, row)
+            db.set(js, 'teamartid', new, art)
+        j = [r for r in range(db.by_name[js]['rows']) if db.get(js, 'teamid', r) == spec['kit']]
+        append_copies(db, js, j, kit)
         # цвета экипировки (шлемы, перчатки…): строки kit, перекрашенные по equip; team — номер + 1
         e = 'stockteamequipmenttable'
         def recolor(new, src, row=row, m=spec['equip']):
