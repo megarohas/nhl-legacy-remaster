@@ -218,3 +218,123 @@ cp -r work/fe-bg/out-mainmenu/fe userdata/cache/guest/        # по желан�
 - Логотипы команд с новой добавкой цвета на превью не видны.
 - Дрейф полос в превью приблизительный (см. §5).
 - Полупрозрачный фон в паузе матча и зона создания — по именам констант.
+
+## 10. NHL Legacy
+
+Разбор для NHL Legacy (агент legacy-data-fe, 08.10.2026). Порт Legacy —
+[legacy-port-feasibility.md](legacy-port-feasibility.md). `febg.py` берёт оригиналы Legacy с
+`--game legacy`: распакованные архивы `game/other/legacy/big`, первый архив, где файл есть.
+
+### Что у Legacy вместо синего фона
+
+| Файл в `cache:` | Архив Legacy | Что |
+|---|---|---|
+| `fe\ion\game\background\nhlbluebackground.big` | `boot.big` | **побайтно как в NHL 13**: класс `NHLBlueBackground`, подложка `mcColor` #0A09E1, импорт компонентов |
+| `fe\ion\game\background\nhlbluebackgroundcomponents.big` (358 220 байт) | `cacheboot.big` (у NHL 13 — `cache.big`, 130 116 байт) | **другой ролик** (Apt 1:7:4, 11 символов, один кадр) |
+
+Состав ролика компонентов Legacy:
+
+- `mcBlueBg` — Image 1, 2048×1024 DXT5: **тёмная фотография пустой арены** (лёд, ворота, щит
+  EA SPORTS). Средний цвет (13, 17, 23), насыщенность не выше 0,20.
+- `mcVingette` — Image 4, 512×256: чёрная виньетка.
+- `mcDimmer` — чёрный прямоугольник 66 % для `SetDim`.
+
+Полос, масок, бликов и логотипов NHL 13 нет, анимации нет — фон статичный. Методы класса те же
+по именам (`SetDim`, `SetImageAssets`, `Pause/ResumeAmbientAnimations`…), но внутри пустые.
+
+Таблица ниже — по распакованным архивам, сверка `cmp`.
+
+| Файл | Что в Legacy |
+|---|---|
+| `nhlloadingbackground`, `nhlplaynowbackground`, `nhltitlebackground` (`boot.big`) | байт в байт как в NHL 13 |
+| `nhlcreationzone`, `nhlgamemode`, `nhlshapes` (`cache.big`) | байт в байт как в NHL 13 |
+| `nhlbootflowbackground` | переехал в `cacheboot.big` |
+| главное меню (`nhlmainmenubackground.big`, `nhlbackgroundcompressedcomponents.big`, `cache.big`) | своё (ниже) |
+
+Так фон выглядит в игре: снимок legacy-data `game/work/legacy-data/ingame/t1-orig-selectteams.png`
+(за панелью — тёмная арена).
+
+### Вывод: в `out/` фон не кладётся, вариант выбирает пользователь
+
+- «Того же вида, что в NHL 13» перекраской не получить: синей анимированной заливки у Legacy нет,
+  есть тёмная фотография.
+- В NHL 13 сейчас стоит не серый #5D5D5D из §4, а **приглушённый синий #245C99**: вариант
+  `game/work/fe-bg/variants-muted/b-245C99` (`--color 245C99 --sets blue,mainmenu`). Его файлы
+  совпадают с `game/userdata/cache/guest/fe/ion/game/background/` по md5. Главное меню там с 20:22
+  заменено агентом menu12.
+- Фон Legacy и так тёмный, слегка синеватый — по духу близок к выбранному в NHL 13.
+
+Поэтому в `game/work/legacy-data/out/` ничего не положено. Варианты лежат в
+`game/work/legacy-data/fe/variants/`, у каждого оба файла фона:
+
+| Вариант | Что |
+|---|---|
+| `legacy-gray` | арена Legacy в нейтральный серый (`recolor --game legacy --gray`): средний цвет (13, 17, 23) → (18, 18, 18), подложка → #757575. По `verify` изменены только слова цвета и данные текстуры |
+| `nhl13-muted` | фон NHL 13 с полосами, как сейчас в NHL 13 (#245C99) — копия `variants-muted/b-245C99` |
+| `nhl13-gray` | фон NHL 13, серый #5D5D5D — копия `game/work/fe-bg/out` |
+
+Фон NHL 13 ляжет в Legacy без правки кода:
+
+- хозяин `nhlbluebackground.big` в обеих играх побайтно один;
+- класс компонентов у Legacy — подмножество класса NHL 13: все его методы есть у NHL 13;
+- версия Apt (1:7:4) и имя экспорта те же;
+- `cache:` перекрывает и `cacheboot.big`.
+
+Главное меню Legacy импортирует тот же `NHLBlueBackgroundComponents` — отражение под телевизором,
+как в NHL 13. Значит, вариант `nhl13-*` поменяет и его. В игре варианты не проверялись.
+
+### Превью и пересборка
+
+- `game/work/legacy-data/fe/preview/bg/compare.png` — 5 строк × 4 момента (0 / 2,5 / 5 / 7,5 с):
+  Legacy, `legacy-gray`, `nhl13-muted`, `nhl13-gray`, NHL 13 оригинал. Живая анимация —
+  `compare.html`, кадры — `frames/compare/`.
+- `ingame-nhl13-vs-legacy.png` — снимки из игр рядом: NHL 13 как сейчас (#245C99 и шрифт NHL 12),
+  Legacy оригинал, Legacy со шрифтом NHL 12.
+
+```bash
+V=game/work/legacy-data/fe/variants
+python tools/febg.py recolor --game legacy $V/legacy-gray --gray       # ~30 с (текстура 2048×1024)
+python tools/febg.py verify --game legacy $V/legacy-gray
+mkdir -p $V/nhl13-muted/fe/ion/game/background $V/nhl13-gray/fe/ion/game/background
+cp game/work/fe-bg/variants-muted/b-245C99/fe/ion/game/background/nhlblue*.big $V/nhl13-muted/fe/ion/game/background/
+cp game/work/fe-bg/out/fe/ion/game/background/*.big $V/nhl13-gray/fe/ion/game/background/
+python tools/febg.py preview --game legacy game/work/legacy-data/fe/preview/bg --width 480 \
+    --also "Legacy — серый=$V/legacy-gray;NHL 13 как сейчас=@nhl13,$V/nhl13-muted;NHL 13 серый=@nhl13,$V/nhl13-gray;NHL 13 — оригинал=@nhl13"
+```
+
+Элемент `@nhl13` в `--src`/`--also` берёт оригиналы NHL 13 вместо своих. Если вариант выбран, его
+дерево `fe` копируется в `out/`, дальше ставит legacy-data. Откат — удалить два файла из `cache:`.
+
+Что проверить в игре:
+
+- `legacy-gray` — экраны меню за панелями.
+- `nhl13-*`:
+  - анимация полос;
+  - затемнение `SetDim` на предматчевом хабе;
+  - логотипы команд на фоне (у фона Legacy их нет, фон NHL 13 покажет их через `SetImageAssets`);
+  - отражение в главном меню;
+  - переходы между экранами без падений.
+
+### Главное меню NHL 12 в Legacy — оценка (не собиралось)
+
+Агент menu12 ещё доделывает главное меню NHL 12 для NHL 13: `tools/menu12.py` и `menuplayers.py`
+на 08.10 20:45 не закоммичены, `feapt.py` — в 6a8889f. Поэтому для Legacy сделана только оценка,
+сборки нет.
+Сравнение — `feapt.py classes/dis` по роликам трёх игр, выкладки в `game/work/legacy-data/fe/menu/`.
+
+| Ролик | NHL 13 → Legacy | Что это значит |
+|---|---|---|
+| фреймворк `boot:fe/ion/external/ion_sports07/fw/commonloader.big` | та же логика загрузки фонов (`IsLoaded`, `ModeTransitionStarted`). Отличия: переходы вдвое короче (`ANIMATE_*_FRAMES` 15/7, 30/15, 10/5), метод `SkipEval`, вызов `gStateChangeComplete`, `_z = 140` | две правки байткода фона NHL 12 из `menu12.py` (`bg_edits`: слушатель `ModeTransitionStarted` и `ClearAllAnimations` в `Shutdown`) нужны и в Legacy и ложатся так же |
+| фон `cache:…/nhlmainmenubackground.big` | Legacy — тот же класс, что в NHL 13 (студия с телевизором, Apt 1:8:4), без карточек игроков; плюс `_HideComponents`/`_UpdateComponents`, экспорт `SocialNetworksInterface` | внешние методы, которые зовут меню Legacy, — те же, что у NHL 13. У фона NHL 12 их нет, вызовы пустые, как уже работает в NHL 13. Фон NHL 12 с правками menu12 подходит как есть |
+| список меню `boot:fe/ion/game/components/menu.big` | у Legacy свой, больше: 113 884 байт против 43 996, 132 символа против 99. Заголовки разделов, `GetMenuItemY(index, numVisibleHeadersBelowIndex, numVisibleRowsBelowIndex)`, картинки пунктов (`InitializeMenuImage`…), метки «New», значок непрочитанных паков, `setNewMessage(message)` с одним параметром | **файл menu12 (от NHL 13) в Legacy ставить нельзя**: код меню Legacy ждёт своих методов. Плашку NHL 12 (`selectorBG`) надо пересадить в `menu.big` Legacy (`feapt.py graft`) и заново подобрать правку невыделенных пунктов |
+| `boot:fe/ion/main.big` | та же разметка; шрифт пунктов `new TextFormat("EA HelveticaNeue Hv", 22, …)` (в NHL 13 — 24) | правку кеглей 34/25 и тени повторить на `main.big` Legacy (не копировать файл NHL 13) |
+| `mainmenuitems.big`, `menucontrol.big` | у Legacy свои (27 612 / 6 732 байт против 24 356 / 6 584) | смотреть, совпадает ли набор и порядок пунктов с тем, на что рассчитаны игроки menu12 |
+| игроки (`menuplayers.py`: картинки `mainmenuplayers…/nhl<N>.big` и цвета колец в фоне) | ресурсы фона NHL 12 — переносятся. Строки команд НХЛ 0…29 в базе Legacy в том же порядке (ANA … WSH), 30/31 — Матч звёзд, у нас под SEA/VGK (nhl32 legacy-data) | проверить, откуда фон NHL 12 берёт любимую команду в Legacy (у фона Legacy есть `_UpdateFavouriteTeamTreatment`) |
+
+Итог: правки кода игры не нужны, только данные. Нужно:
+
+1. Дождаться, когда menu12 закончит.
+2. Дать `menu12.py` опцию `--game legacy`: правки `bg_edits` — те же, а `menu.big` и `main.big`
+   брать из Legacy и править их, а не файлы NHL 13.
+3. Проверить в игре: главное меню, переходы, «Play Now» и возврат, подменю, видео на телевизоре
+   (в фоне NHL 12 его нет — вызовы пустые).
