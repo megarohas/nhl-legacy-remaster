@@ -51,17 +51,19 @@ TEMPLATE_ARENA = 168               # «EA SPORTS Arena»: нейтральная
 # текстур нет), equip — перекраска экипировки kit (цвет → цвет), strategy — чья тактика,
 # rival — соперник (номер строки). art — номер арта: логотипы, центр льда, шайба, баннер и
 # текстуры формы (рендер берёт artid команды, меню — teamartid комплекта; у EA они равны),
-# spotlight — логотип прожекторов, audio — номер звука (свободный: без записей).
+# spotlight — логотип прожекторов, audio — номер звука (свободный: без записей). primary — яркий
+# цвет-акцент (им подсвечивается логотип в меню, он же на табло), secondary — второй: у EA так же
+# (Питтсбург — золото и чёрный, Лос-Анджелес — серебро, Providence — золото и чёрный).
 NEW_TEAMS = {
     30: dict(short='Seattle', full='Seattle Kraken', abbr='SEA', nick='Kraken', rival=28, strategy=28, kit=86,
              art=98, spotlight=45, audio=32,
-             primary=(0, 22, 40), secondary=(153, 217, 217),
+             primary=(153, 217, 217), secondary=(0, 22, 40),       # ледяной голубой, глубоководный синий
              # Tappara: синий, оранжевый, чёрный шлем → глубоководный синий, ледяной голубой
              equip={0x253B73: 0x001628, 0xE35B17: 0x99D9D9, 0xDE5818: 0x99D9D9, 0x202020: 0x001628},
              arena=dict(name='Climate Pledge Arena', city='Seattle, WA', capacity=17151)),
     31: dict(short='Vegas', full='Vegas Golden Knights', abbr='VGK', nick='Golden Knights', rival=13, strategy=13, kit=87,
              art=99, spotlight=46, audio=33,
-             primary=(51, 63, 72), secondary=(185, 151, 91),
+             primary=(185, 151, 91), secondary=(51, 63, 72),        # золото Вегаса, стальной серый
              # TPS: чёрный шлем, серый → стальной серый, золото
              equip={0x202020: 0x333F48, 0xB3B3B3: 0xB9975B},
              arena=dict(name='T-Mobile Arena', city='Las Vegas, NV', capacity=17500)),
@@ -78,7 +80,7 @@ AHL_NEW = {
               arena=dict(name='Acrisure Arena', city='Thousand Palms, CA', capacity=11000)),
     221: dict(short='Henderson', full='Henderson Silver Knights', abbr='HSK', nick='Silver Knights',
               parent=31, rival=220, strategy=58, kit=51, art=101, spotlight=34, tunnel=34, audio=56,
-              primary=(19, 19, 19), secondary=(162, 170, 173), equip={},
+              primary=(162, 170, 173), secondary=(19, 19, 19), equip={},
               arena=dict(name="Lee's Family Forum", city='Henderson, NV', capacity=6000)),
 }
 # Арена клуба АХЛ: копия Cedar Park Center (модель арены АХЛ 145, красная линия «шашками»), звук
