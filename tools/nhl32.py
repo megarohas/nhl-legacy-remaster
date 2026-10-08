@@ -40,7 +40,7 @@
   франшизе нужен порт с nhl_ahl_teams = 32 (docs/ahl32.md) — без него такую базу не ставить.
 - --game legacy (tools/gameprofile.py) — то же для базы NHL Legacy 2015/16 (legacy_config ниже): сборные
   переезжают на Custom 222/223, дивизионы — нынешние 8/8/8/8 (у Legacy их уже 4), арт 100/101, ещё и
-  календарь следующих сезонов nhlfutureschedule; --ahl32 для Legacy не сделан (docs/legacy-data.md).
+  календарь следующих сезонов nhlfutureschedule; --ahl32 у Legacy — CV/HSK на 224/225, АХЛ 8/8/8/8, 72 игры.
 """
 import argparse, copy, random, re, struct, sys
 from collections import Counter, defaultdict
@@ -109,6 +109,7 @@ AHL_LEAGUE, AHL_LEAGUEGROUP = 1, 9
 # Номер команды в календаре АХЛ (5 бит) — место в списке лиги: строки 32…61, затем 220, 221.
 AHL_ORDER = list(range(32, 62)) + sorted(AHL_NEW)
 AHL_GAMES, AHL_HOME = 76, 38
+AHL_PAIRING = 'nhl13'              # nhl13 — дивизионы 5 и 6 (ahl_pair_games); div8 — 4 по 8 (Legacy)
 
 # Поля-ссылки на команду: (таблица, поле, кодировка). 'zero' — номер строки,
 # 'plus1' — номер + 1 (0 = нет команды). Проверено по известным игрокам и командам
@@ -209,6 +210,11 @@ def legacy_config():
     new[31].update(kit=P.tappara_tps[1], art=P.free_art[1], spotlight=P.new_team_spotlight[1],
                    third=(200, 16, 46))                                       # красный Вегаса
     widen = {t: list(f) for t, f in META_WIDEN.items() if t != 'leagueretirementtable'}   # у Legacy уже 8 бит
+    c2, c3 = P.custom[2:4]
+    ahl_new = {
+        c2: dict(AHL_NEW[220], parent=30, rival=c3, strategy=53, kit=55, art=P.free_art[2]),   # SD, Springfield
+        c3: dict(AHL_NEW[221], parent=31, rival=c2, strategy=58, kit=48, art=P.free_art[3]),   # Texas, Providence
+    }
     widen['leagueplayerbiotable'] = widen['leagueplayerbiotable'] + ['tradeblockteam']   # новое поле Legacy
     return dict(
         SWAP={30: P.custom[0], 31: P.custom[1]}, ALLSTAR_ROWS=P.custom[:2], TEMPLATE_ARENA=P.arena_template,
@@ -231,6 +237,22 @@ def legacy_config():
         FUTURE_SCHEDULE=('nhlfutureschedule', ((0, 24), (33, 32))),
         META_WIDEN=widen,
         AUDIOID2_NONE=P.audioid2_none,
+        # --ahl32 у Legacy: АХЛ 2015/16 — 30 клубов, конференции 8 (Запад) / 9 (Восток), дивизионы
+        # 10 Atlantic, 11 North (Восток), 12 Central, 13 Pacific (Запад), leaguegroup 7; фарм-клубы SEA/VGK —
+        # на Custom 02/03 (224/225: 220/221 — EASHL), арт 102/103 (у помощника art — копии формы
+        # Springfield/Providence, docs/uniforms.md §12), дивизионы 8/8/8/8: Texas — в Central, Lake Erie
+        # (Кливленд) — в North, как в нынешней АХЛ; календарь — 72 игры (8 с соперником по дивизиону,
+        # 2 — с другим дивизионом конференции), 36 дома
+        AHL_NEW=ahl_new, AHL_TEMPLATE_ARENA=55,             # Cedar Park Center (модель арены АХЛ 145)
+        AHL_DIVISIONS={
+            12: [36, 37, 38, 41, 44, 45, 50, 58],           # Central: CHA CHW GRA IOW MAN MIL RFD TEX
+            13: [33, 46, 52, 53, 54, 56, 224, 225],         # Pacific: BAK ONT SAN SD SJ STO + CV HSK
+            10: [35, 39, 40, 43, 47, 48, 55, 61],           # Atlantic: BRI HAR HER LVP POR PRO SPR WBS
+            11: [32, 34, 42, 49, 51, 57, 59, 60],           # North: ALB BNG LEM RCH STJ SYR TOA UTI
+        },
+        AHL_CONFERENCE={12: 8, 13: 8, 10: 9, 11: 9}, AHL_LEAGUE=1, AHL_LEAGUEGROUP=7,
+        AHL_ORDER=list(range(32, 62)) + sorted(ahl_new), AHL_GAMES=72, AHL_HOME=36, AHL_PAIRING='div8',
+        META_WIDEN_AHL32={t: f for t, f in META_WIDEN_AHL32.items() if t != 'leagueretirementtable'},
     )
 
 
@@ -489,6 +511,25 @@ def ahl_pair_games(rng):
     assert all(per[t] == AHL_GAMES and home[t] == AHL_HOME for t in range(len(AHL_ORDER))), (per, home)
     return games
 
+def ahl_pair_games_div8(rng):
+    """АХЛ на 32 в 4 дивизионах по 8 (Legacy): с соперником по дивизиону — 8 игр (4 дома), с клубом другого
+    дивизиона своей конференции — 2 (1 дома), с другой конференцией — нет: 56 + 16 = 72, дома 36."""
+    div_of = {t: d for d, teams in AHL_DIVISIONS.items() for t in teams}
+    num = {t: i for i, t in enumerate(AHL_ORDER)}
+    games = []
+    for i, x in enumerate(AHL_ORDER):
+        for y in AHL_ORDER[i + 1:]:
+            a, b = num[x], num[y]
+            if div_of[x] == div_of[y]:
+                games += [(a, b), (b, a)] * 4
+            elif AHL_CONFERENCE[div_of[x]] == AHL_CONFERENCE[div_of[y]]:
+                games += [(a, b), (b, a)]
+    rng.shuffle(games)
+    per = Counter(t for g in games for t in g)
+    home = Counter(h for h, a in games)
+    assert all(per[t] == AHL_GAMES and home[t] == AHL_HOME for t in range(len(AHL_ORDER))), (per, home)
+    return games
+
 def game_days(db, table='nhlschedule'):
     """Игровые дни регулярки 2012/13 по порядку и сколько в них было игр (без Матча звёзд)."""
     days, counts = [], Counter()
@@ -632,8 +673,6 @@ def main():
     a = ap.parse_args()
     sys.stdout.reconfigure(encoding='utf-8')
     P = gameprofile.get(a.game)
-    if P.name == 'legacy' and a.ahl32:
-        sys.exit('--ahl32 для NHL Legacy не сделан: состав АХЛ 2015/16 другой (docs/legacy-data.md)')
     configure(P.name)
     rng = random.Random(a.seed)
     data = open(a.db_in, 'rb').read()
@@ -661,13 +700,15 @@ def main():
         days, counts = game_days(db, table)
         plan = schedule(pair_games(rng), days, counts, rng)
         write_schedule(db, table, plan)
-        add_allstar(db, table, allstar)
+        if not a.ahl32:                     # при --ahl32 сборных нет — и строки Матча звёзд (как выше)
+            add_allstar(db, table, allstar)
         print(f'календарь следующих сезонов ({table}): {len(plan)} игр в {len(days)} игровых днях')
     if a.ahl32:
         print('АХЛ, новые клубы:', fill_ahl_teams(db))
         realign_ahl(db)
         days, counts = game_days(db, 'ahlschedule')
-        plan = schedule(ahl_pair_games(rng), days, counts, rng)
+        pairs = ahl_pair_games_div8(rng) if AHL_PAIRING == 'div8' else ahl_pair_games(rng)
+        plan = schedule(pairs, days, counts, rng)
         write_schedule(db, 'ahlschedule', plan)
         print(f'календарь АХЛ: {len(plan)} игр в {len(days)} игровых днях')
     db.fix()
