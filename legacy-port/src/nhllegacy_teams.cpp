@@ -22,7 +22,11 @@
 //    встроил: подмена 82B0A178 и врезки чтения +520.
 // 4. Кэш сводок команд (0x83BDC414): записи по 332 байта на 30 команд, флаги +9960, счётчик +9992,
 //    всего 9996 — записи 30/31 за ним (+9996).
-// АХЛ на 32 (nhl_ahl_teams) в Legacy пока не сделана: нужна база АХЛ на 32 (фарм-клубы 224/225).
+// 5. АХЛ на 32 (nhl_ahl_teams = 32, только вместе с nhl_teams = 32; база legacy-data --ahl32): фарм-клубы
+//    Сиэтла и Вегаса — Coachella Valley / Henderson на Custom 224/225 (220/221 — EASHL), номера франшизы 62/63,
+//    проспекты 64/65, CHL 66…125 — всего 126, сборных нет, Матч звёзд выключен. Дерево АХЛ 82A1EE18 (= 82809848):
+//    дивизионы 8/8/8/8 врезками NhlLegacyAhlDivision, подмена дописывает 224/225 и их порядковые 30/31; объекты
+//    клубов АХЛ league+772[30] (82AFC418) — 30/31 снаружи (docs/ahl32.md, docs/legacy-port.md).
 
 #include <algorithm>
 #include <array>
@@ -52,7 +56,8 @@ REXCVAR_DEFINE_INT32(nhl_teams, 30, "NHLLegacy",
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
 REXCVAR_DEFINE_INT32(nhl_ahl_teams, 30, "NHLLegacy",
-                     "AHL teams in franchise: 30 (32 is not supported in NHL Legacy yet)")
+                     "AHL teams in franchise: 30 or 32 (Coachella Valley / Henderson; only with nhl_teams = 32 "
+                     "and the --ahl32 database)")
     .range(30, 32)
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
@@ -83,6 +88,11 @@ extern "C" void __imp__sub_82B72040(PPCContext& ctx, uint8_t* base);  // зап�
 extern "C" void __imp__sub_82A58D08(PPCContext& ctx, uint8_t* base);  // средние 7 показателей
 extern "C" void __imp__sub_8271B450(PPCContext& ctx, uint8_t* base);  // ошибка кучи гостя
 extern "C" void sub_82AEB120(PPCContext& ctx, uint8_t* base);  // список команд: добавить
+extern "C" void __imp__sub_82A1EE18(PPCContext& ctx, uint8_t* base);  // дерево АХЛ
+extern "C" void __imp__sub_82AFC418(PPCContext& ctx, uint8_t* base);  // объекты клубов АХЛ league+772[30]
+extern "C" void sub_82AEBE50(PPCContext& ctx, uint8_t* base);  // дерево: teamid → порядковый
+extern "C" void sub_82E53E80(PPCContext& ctx, uint8_t* base);  // выделение памяти (размер, …)
+extern "C" void sub_829748A0(PPCContext& ctx, uint8_t* base);  // конструктор объекта клуба АХЛ (3244 б)
 extern "C" void sub_82AFC310(PPCContext& ctx, uint8_t* base);  // фарм-клуб общий у 2+ команд?
 extern "C" void sub_82AE9DD8(PPCContext& ctx, uint8_t* base);  // итератор команд: создать
 extern "C" void sub_82AE9E28(PPCContext& ctx, uint8_t* base);  // итератор команд: удалить
@@ -152,15 +162,30 @@ bool ThirtyTwo() {
   return on;
 }
 
-// АХЛ на 32 в Legacy ещё не сделана (база с фарм-клубами 224/225 и дерево АХЛ 8/8/8/8): всегда 30.
+// АХЛ на 32 — только вместе с НХЛ на 32.
 bool AhlThirtyTwo() {
   static const bool on = [] {
-    if (REXCVAR_GET(nhl_ahl_teams) == 32) {
-      REXLOG_WARN("[nhllegacy] nhl_ahl_teams = 32 is not supported in NHL Legacy yet, using 30");
+    const bool v = ThirtyTwo() && REXCVAR_GET(nhl_ahl_teams) == 32;
+    if (REXCVAR_GET(nhl_ahl_teams) == 32 && !v) {
+      REXLOG_WARN("[nhllegacy] nhl_ahl_teams = 32 needs nhl_teams = 32, using 30");
     }
-    return false;
+    REXLOG_INFO("[nhllegacy] franchise AHL teams: {}", v ? 32 : 30);
+    return v;
   }();
   return on;
+}
+
+// Новые клубы АХЛ (строки базы --ahl32): Coachella Valley, Henderson — порядковые 30/31, номера 62/63.
+constexpr uint32_t kAhlNewTeams[] = {224, 225};
+
+// Номер франшизы клуба АХЛ по teamid при ahl32: 32…61 — тот же, 224 → 62, 225 → 63; остальное как есть.
+int32_t AhlNumberOfTeamid(int32_t teamid) {
+  for (int k = 0; k < 2; ++k) {
+    if (teamid == static_cast<int32_t>(kAhlNewTeams[k])) {
+      return 62 + k;
+    }
+  }
+  return teamid;
 }
 
 int32_t NhlTeams() {
@@ -188,6 +213,16 @@ constexpr Division kDivisions[] = {
     {4, 8, {6, 7, 9, 14, 16, 24, 1, 22}},    // CHI COL DAL MIN NSH STL WPG ARI/UTA
     {5, 8, {2, 3, 10, 12, 15, 20, 26, 27}},  // BOS BUF DET FLA MTL OTT TB TOR (как в игре)
     {6, 8, {5, 8, 17, 18, 19, 21, 23, 29}},  // CAR CBJ NJ NYI NYR PHI PIT WSH (как в игре)
+};
+
+// Дивизионы АХЛ на 32 (teamid; как AHL_DIVISIONS у tools/nhl32.py --game legacy --ahl32). id узлов — как у
+// игры: 12 Central, 13 Pacific (конференция 8, Запад), 10 Atlantic, 11 North (9, Восток). Texas — в Central,
+// Lake Erie — в North, как в нынешней АХЛ.
+constexpr Division kAhlDivisions[] = {
+    {12, 8, {36, 37, 38, 41, 44, 45, 50, 58}},    // CHA CHW GRA IOW MAN MIL RFD TEX
+    {13, 8, {33, 46, 52, 53, 54, 56, 224, 225}},  // BAK ONT SAN SD SJ STO + CV HSK
+    {10, 8, {35, 39, 40, 43, 47, 48, 55, 61}},    // BRI HAR HER LVP POR PRO SPR WBS
+    {11, 8, {32, 34, 42, 49, 51, 57, 59, 60}},    // ALB BNG LEM RCH STJ SYR TOA UTI
 };
 
 // Команды 30/31 в массивах объекта лиги на 30 команд (+520 фарм-клубы, +644 teamid).
@@ -244,6 +279,19 @@ int8_t GuestTeamInfoByte(PPCContext& ctx, uint8_t* base, bool franchise, uint32_
   sub_82AE9E28(ctx, base);
   ctx.r1.u64 = saved_r1;
   return v;
+}
+
+// Список АХЛ при создании франшизы — из меню (на 30): ровно teamid 32…61 по порядку.
+bool IsMenuAhlList(uint8_t* base, uint32_t list) {
+  if (Load32(base, list) != 30) {
+    return false;
+  }
+  for (uint32_t i = 0; i < 30; ++i) {
+    if (Load32(base, list + 4 + 4 * i) != 32 + i) {
+      return false;
+    }
+  }
+  return true;
 }
 
 // Список лиги при создании франшизы — НХЛ из меню: ровно teamid 0…29 по порядку.
@@ -406,11 +454,63 @@ void NhlLegacyNhlDivision(PPCRegister& r3, PPCRegister& r4, PPCRegister& r5) {
   REXLOG_WARN("[nhllegacy] NHL division {} unknown", id);
 }
 
-// Дерево АХЛ (82A1EE18) — только для АХЛ на 32 (пока нет).
+// АХЛ на 32 — в тех же вызовах фабрики, что и НХЛ на 32 (всё, кроме меню франшизы на 30 + 30).
+bool AhlStructure() {
+  return AhlThirtyTwo() && !t_menu_structure;
+}
+
+// Дерево АХЛ 82A1EE18 (= 82809848): r4 — корень (может быть 0), r5 — список команд (может быть 0). Оригинал
+// дописывает в список teamid 32…61 и переводит их в дереве в порядковые (82AEBE50(корень, t, t − 32));
+// подмена — то же для 224/225 (→ 30/31). Дальше пересборка франшизы сдвигает порядковые на первый номер
+// лиги: 0…31 → 32…63. Дивизионы — врезки NhlLegacyAhlDivision перед четырьмя вызовами 82AEBEF0.
+extern "C" void sub_82A1EE18(PPCContext& ctx, uint8_t* base) {
+  const uint32_t root = ctx.r4.u32;
+  const uint32_t list = ctx.r5.u32;
+  __imp__sub_82A1EE18(ctx, base);
+  if (!AhlStructure()) {
+    return;
+  }
+  static int logged = 0;
+  if (logged++ < 3) {
+    REXLOG_INFO("[nhllegacy] AHL structure: 32 teams (+224/225 -> ordinals 30/31), divisions 8/8/8/8");
+  }
+  const SavedArgs args(ctx);
+  if (list) {
+    for (uint32_t team : kAhlNewTeams) {
+      ctx.r3.u64 = list;
+      ctx.r4.u64 = team;
+      sub_82AEB120(ctx, base);
+    }
+  }
+  if (root) {
+    for (uint32_t k = 0; k < 2; ++k) {
+      ctx.r3.u64 = root;
+      ctx.r4.u64 = kAhlNewTeams[k];
+      ctx.r5.u64 = 30 + k;
+      sub_82AEBE50(ctx, base);
+    }
+  }
+  args.Restore(ctx);
+}
+
+// bl 0x82AEBEF0 (узел, число, массив) в 82A1EE18: дивизион АХЛ по id узла (массив на стеке на 8 номеров).
 void NhlLegacyAhlDivision(PPCRegister& r3, PPCRegister& r4, PPCRegister& r5) {
-  (void)r3;
-  (void)r4;
-  (void)r5;
+  if (!AhlStructure()) {
+    return;
+  }
+  uint8_t* base = GuestBase();
+  const uint32_t id = Load32(base, r3.u32);
+  for (const Division& d : kAhlDivisions) {
+    if (d.id != id) {
+      continue;
+    }
+    for (uint32_t i = 0; i < d.count; ++i) {
+      Store32(base, r5.u32 + 4 * i, d.teams[i]);
+    }
+    r4.u64 = d.count;
+    return;
+  }
+  REXLOG_WARN("[nhllegacy] AHL division {} unknown", id);
 }
 
 // --- Сборные Матча звёзд ---
@@ -433,6 +533,15 @@ thread_local bool t_allstars_now = false;
 }  // namespace
 
 extern "C" void sub_82AFBC80(PPCContext& ctx, uint8_t* base) {
+  if (AhlThirtyTwo()) {
+    // АХЛ на 32: команд франшизы ровно 126 (0…125) — столько держит код (номер 126 — заглушка, массивы по
+    // номеру на 126). Сборных нет, Матч звёзд выключен (NhlLegacyAllStarGame), в базе --ahl32 его тоже нет.
+    static int logged = 0;
+    if (logged++ < 1) {
+      REXLOG_INFO("[nhllegacy] All-Star teams: not created (126 franchise teams with AHL 32)");
+    }
+    return;
+  }
   if (ThirtyTwo() && !t_allstars_now) {
     if (Load32(base, ctx.r4.u32 + 604) == 2) {  // лига, у которой есть сборные (НХЛ)
       g_allstars = {true, ctx.r3.u32, ctx.r4.u32, g_league_group_calls};
@@ -442,9 +551,16 @@ extern "C" void sub_82AFBC80(PPCContext& ctx, uint8_t* base) {
   __imp__sub_82AFBC80(ctx, base);
 }
 
-// lwz r5, 604(r29) @82B0BF10 — состояние лиги 54 («есть сборные»): только для АХЛ на 32 (пока нет).
+// lwz r5, 604(r29) @82B0BF10 — состояние лиги 54 («есть сборные», 2 у НХЛ): при ahl32 сборных нет — 0, как у
+// лиг без Матча звёзд (события выбора сборных и перерыва не ставятся).
 void NhlLegacyAllStarGame(PPCRegister& r5) {
-  (void)r5;
+  if (AhlThirtyTwo() && r5.u32 != 0) {
+    static int logged = 0;
+    if (logged++ < 1) {
+      REXLOG_INFO("[nhllegacy] All-Star game: off (league state 54: {} -> 0)", r5.u32);
+    }
+    r5.u64 = 0;
+  }
 }
 
 void NhlLegacyAllStarTeamA(PPCRegister& r) {
@@ -492,14 +608,36 @@ extern "C" void sub_82974F20(PPCContext& ctx, uint8_t* base) {
   ctx.r3.u64 = (idx >= 0 && idx < NhlTeams()) ? 1 : 0;
 }
 
-// Список команд НХЛ перед записью команд франшизы — с 30 и 31.
+// Перед записью команд лиги: в список АХЛ из меню (32…61) — 224, 225 (номера выдаются по порядку записи:
+// 224 → 62, 225 → 63).
+void AppendAhlTeams(PPCContext& ctx, uint8_t* base, uint32_t league) {
+  const uint32_t list = league + 16;
+  if (!AhlThirtyTwo() || !IsMenuAhlList(base, list)) {
+    return;
+  }
+  const SavedArgs args(ctx);
+  for (uint32_t team : kAhlNewTeams) {
+    ctx.r3.u64 = list;
+    ctx.r4.u64 = team;
+    sub_82AEB120(ctx, base);
+  }
+  args.Restore(ctx);
+  static int logged = 0;
+  if (logged++ < 4) {
+    REXLOG_INFO("[nhllegacy] league {:08X}: AHL list 30 -> {} teams (+224/225)", league, Load32(base, list));
+  }
+}
+
+// Список команд НХЛ перед записью команд франшизы — с 30 и 31 (АХЛ при ahl32 — с 224/225).
 extern "C" void sub_82B28FB0(PPCContext& ctx, uint8_t* base) {
   AppendExtraTeams(ctx, base, ctx.r3.u32);
+  AppendAhlTeams(ctx, base, ctx.r3.u32);
   __imp__sub_82B28FB0(ctx, base);
 }
 
 extern "C" void sub_82B3DFC8(PPCContext& ctx, uint8_t* base) {
   AppendExtraTeams(ctx, base, ctx.r3.u32);
+  AppendAhlTeams(ctx, base, ctx.r3.u32);
   __imp__sub_82B3DFC8(ctx, base);
 }
 
@@ -613,11 +751,18 @@ extern "C" void sub_82B0C1F0(PPCContext& ctx, uint8_t* base) {
   const uint64_t r3 = ctx.r3.u64;
   for (uint32_t i = 0; i < 30; ++i) {
     const uint32_t a = league + 520 + 4 * i;
-    Store32(base, a, static_cast<uint32_t>(static_cast<int32_t>(Load32(base, a)) + 2));
+    int32_t v = static_cast<int32_t>(Load32(base, a)) + 2;
+    if (AhlThirtyTwo()) {
+      v = AhlNumberOfTeamid(UnsignedTeamByte(v));  // 224/225 (в знаковом байте −32/−31) → 62/63
+    }
+    Store32(base, a, static_cast<uint32_t>(v));
   }
   int32_t aff[kExtra];
   for (int k = 0; k < kExtra; ++k) {
     aff[k] = UnsignedTeamByte(GuestTeamInfoByte(ctx, base, false, 30 + k, 190));
+    if (AhlThirtyTwo()) {
+      aff[k] = AhlNumberOfTeamid(aff[k]);
+    }
   }
   EditExtra(league, [&](LeagueExtra& e) {
     for (int k = 0; k < kExtra; ++k) {
@@ -661,9 +806,24 @@ extern "C" void sub_829CCA18(PPCContext& ctx, uint8_t* base) {
 extern "C" void sub_82B07C08(PPCContext& ctx, uint8_t* base) {
   const uint32_t teamid = ctx.r4.u32;
   __imp__sub_82B07C08(ctx, base);
-  if (ThirtyTwo() && ctx.r3.s32 == 60 && teamid == 61) {
-    ctx.r3.u64 = 61;
+  if (!ThirtyTwo() || ctx.r3.s32 != 60) {
+    return;
   }
+  if (!AhlThirtyTwo()) {
+    if (teamid == 61) {
+      ctx.r3.u64 = 61;
+    }
+    return;
+  }
+  // ahl32: перебор всех номеров (по сведениям франшизы, +8 — teamid), «нет» — 64 (как 60 у оригинала).
+  for (uint32_t n = 60; n < 126; ++n) {
+    const uint32_t t = static_cast<uint8_t>(GuestTeamInfoByte(ctx, base, true, n, 8));
+    if (t == (teamid & 0xFFu)) {
+      ctx.r3.u64 = n;
+      return;
+    }
+  }
+  ctx.r3.u64 = 64;
 }
 
 // Врезки чтения фарм-клуба команды НХЛ из массива +520 (82B291A0, 82B3E2E8 и встроенные 82B0A2B0,
@@ -769,32 +929,102 @@ void NhlLegacyAhlOwnTeam(PPCRegister& r3, PPCRegister& r15) {
   }
 }
 
-// Объекты клубов АХЛ league+772[30] и вне франшизы — только для АХЛ на 32 (пока нет): без изменений.
+// --- Объекты клубов АХЛ league+772[30] при ahl32 ---
+// У объекта лиги АХЛ +772 — 30 указателей на объекты клубов (3244 б; выделяет 82AFC418 при создании команд,
+// освобождает цикл по клубам АХЛ в 82B3EDC0), сразу за ними +892 — указатель пула игроков. Объекты 30/31
+// (номера 62/63) — снаружи, ключ — объект лиги АХЛ; живут только во время создания франшизы.
+namespace {
+std::mutex g_ahl_objects_mutex;
+std::unordered_map<uint32_t, std::array<uint32_t, 2>> g_ahl_objects;
+
+uint32_t AhlObject(uint32_t league, int k) {
+  std::lock_guard<std::mutex> lock(g_ahl_objects_mutex);
+  auto it = g_ahl_objects.find(league);
+  return it == g_ahl_objects.end() ? 0 : it->second[k];
+}
+}  // namespace
+
+extern "C" void sub_82AFC418(PPCContext& ctx, uint8_t* base) {
+  const uint32_t league = ctx.r3.u32;
+  __imp__sub_82AFC418(ctx, base);
+  if (!AhlThirtyTwo()) {
+    return;
+  }
+  const SavedArgs args(ctx);
+  std::array<uint32_t, 2> objs{};
+  for (int k = 0; k < 2; ++k) {
+    // как у оригинала: 82E53E80(3244, 9, «имя» 0x82080298, 0, 16, 0) и конструктор 829748A0
+    ctx.r3.u64 = 3244;
+    ctx.r4.u64 = 9;
+    ctx.r5.u64 = 0x82080298u;
+    ctx.r6.u64 = 0;
+    ctx.r7.u64 = 16;
+    ctx.r8.u64 = 0;
+    sub_82E53E80(ctx, base);
+    if (ctx.r3.u32) {
+      sub_829748A0(ctx, base);
+    }
+    objs[k] = ctx.r3.u32;
+  }
+  {
+    std::lock_guard<std::mutex> lock(g_ahl_objects_mutex);
+    g_ahl_objects[league] = objs;
+  }
+  args.Restore(ctx);
+  static int logged = 0;
+  if (logged++ < 2) {
+    REXLOG_INFO("[nhllegacy] AHL league {:08X}: team objects 30/31 outside +772: {:08X} {:08X}", league,
+                objs[0], objs[1]);
+  }
+}
+
+// lwzx rD, r11, rL — league+772[r11/4 − 193] (82B3EA3C, 82B3BCBC, 82B3EF50, 82B3F360): для 30/31 — снаружи.
 void NhlLegacyAhlTeamObject(PPCRegister& obj, PPCRegister& offset, PPCRegister& league) {
-  (void)obj;
-  (void)offset;
-  (void)league;
+  if (!AhlThirtyTwo()) {
+    return;
+  }
+  const int32_t i = static_cast<int32_t>(offset.u32 / 4) - 193;
+  if (i >= 30 && i < 32) {
+    obj.u64 = AhlObject(league.u32, i - 30);
+  }
 }
 
+// lwz r3, 4(r29) @82B3F580 в цикле освобождения (r30 = i).
 void NhlLegacyAhlTeamObjectAt(PPCRegister& obj, PPCRegister& index, PPCRegister& league) {
-  (void)obj;
-  (void)index;
-  (void)league;
+  if (AhlThirtyTwo() && index.s32 >= 30 && index.s32 < 32) {
+    obj.u64 = AhlObject(league.u32, index.s32 - 30);
+  }
 }
 
+// stwu r27, 4(r29) @82B3F588 — обнуление освобождённого: для 30/31 указатель снаружи (запись ушла бы в
+// +892/+896 — пул и буфер, нужные до конца цикла). true — пропустить запись.
 bool NhlLegacyAhlTeamObjectFreed(PPCRegister& index, PPCRegister& league) {
-  (void)index;
-  (void)league;
-  return false;
+  if (!AhlThirtyTwo() || index.s32 < 30 || index.s32 >= 32) {
+    return false;
+  }
+  std::lock_guard<std::mutex> lock(g_ahl_objects_mutex);
+  auto it = g_ahl_objects.find(league.u32);
+  if (it != g_ahl_objects.end()) {
+    it->second[index.s32 - 30] = 0;
+  }
+  return true;
 }
 
+// Вне франшизы (exhibitionteams) фарм-клуб Сиэтла/Вегаса — teamid 224/225 в знаковом байте (−32/−31):
+// extsb (829CA780, 82A24A64, 82B8CA90) → байт без знака, −1 («нет») остаётся.
 void NhlLegacyAffiliateByte(PPCRegister& r) {
-  (void)r;
+  if (AhlThirtyTwo()) {
+    r.s64 = UnsignedTeamByte(r.s32);
+  }
 }
 
+// cmpwi cr6, r26, 61 @829CA754 (вне франшизы: «клуб АХЛ» = teamid 32…61) — и 224/225.
 void NhlLegacyAhlTeamidRange(PPCRegister& r, PPCCRRegister& cr) {
-  (void)r;
-  (void)cr;
+  if (AhlThirtyTwo() && (r.u32 == kAhlNewTeams[0] || r.u32 == kAhlNewTeams[1])) {
+    cr.lt = true;
+    cr.gt = false;
+    cr.eq = false;
+  }
 }
 
 // cmpwi crN, rX, 30 по командам НХЛ → сравнение с числом команд.
