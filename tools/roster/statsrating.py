@@ -279,6 +279,9 @@ def apply(players, landing, log=print, only=None):
             # вратари лиги: модель вратарей НХЛ держится на опыте в НХЛ — здесь уровень лиги + % отражённых
             # (sv — разница с лигой × переносимость 0,5; 3 OVR на пункт переносимой разницы, не больше ±5)
             est['ovr'] = round(p['league']['level'] + max(-5.0, min(5.0, 3.0 * est.get('sv', 0.0))), 1)
+        elif p.get('league') and p['league'].get('shift'):
+            # NHL Legacy: лиги вне НХЛ в её шкале ниже, чем в NHL 13 (league.SHIFT) — оценка сдвигается
+            est['ovr'] = round(est['ovr'] + p['league']['shift'], 1)
         new = int(round(conf * est['ovr'] + (1 - conf) * before['ovr']))
         p['rating_before'] = before
         p['rating'] = dict(rt, ovr=new, source='stats')

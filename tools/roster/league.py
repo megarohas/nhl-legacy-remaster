@@ -53,6 +53,11 @@ if common.GAME.name == 'legacy':
         86: ('Pelicans', 'PEL'), 87: ('SaiPa', 'SAI'), 88: ('Tappara', 'TAP'), 89: ('TPS', 'TPS'), 90: ('Sport', 'SPO'),
     }
     LEVEL = {'F': 65, 'D': 65, 'G': 64}
+    # оценка OVR по статистике (statsrating) — в шкале NHL 13 (Liiga 2026/27 там — медиана 72, как у
+    # Liiga 2012 в базе NHL 13); у Legacy лиги вне НХЛ ниже на 7–15 (НХЛ — та же, 82): полевым — сдвиг
+    SHIFT = {'F': -7, 'D': -7}
+else:
+    SHIFT = {}
 
 
 def _rel_info():
@@ -172,6 +177,8 @@ def players(cache, existing, log=print):
             'league': {'code': 'liiga', 'id': q['id'], 'team': q.get('teamName'), 'seasons': seasons,
                        'level': LEVEL['G' if pos == 'G' else 'D' if pos == 'D' else 'F']},
         }
+        if SHIFT and pos != 'G':                # Legacy: шкала лиги ниже (statsrating.apply)
+            rec['league']['shift'] = SHIFT['D' if pos == 'D' else 'F']
         out.append(rec)
     # не больше CLUB_MAX в клубе (больше, чем у самого большого клуба исходной базы — HPK 2012, 33, — не
     # проверено в игре): лишние — без игр в трёх прошлых сезонах, потом с наименьшим числом игр, не вратари

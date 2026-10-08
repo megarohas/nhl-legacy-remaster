@@ -683,6 +683,20 @@ class Writer:
                     db.put_record(table, i, raw)
         return removed
 
+    def clear_salary_extras(self):
+        """Legacy: stockteamsalaryextras — «мёртвые» деньги (выкупы) и удержанные зарплаты клубов 2015/16
+        на 25 лет вперёд; к 2026/27 их нет, своих данных у конвейера нет — обнуляются (index остаётся)."""
+        t = 'stockteamsalaryextras'
+        if t not in self.db.by_name:
+            return 0
+        n = 0
+        for r in range(self.db.by_name[t]['rows']):
+            for f in self.db.by_name[t]['fields']:
+                if f != 'index' and self.db.get(t, f, r):
+                    self.db.set(t, f, r, 0)
+                    n += 1
+        return n
+
     # --- проверки ----------------------------------------------------------------------------
     def verify(self):
         db = self.db
@@ -800,6 +814,8 @@ class Writer:
         self.write_table_rows(F, [{'playerindex': l} for l in self.fa_keep])
         self.write_links()
         removed = self.clean_stats()
+        if LEGACY:
+            removed['stockteamsalaryextras (обнулено значений)'] = self.clear_salary_extras()
         db.fix()
         bad, crc = self.verify()
         return bad, crc, removed

@@ -55,6 +55,10 @@ PINK_HUE, PINK_ITA = 45.0, 26.0                # розоватый тон пр�
 ICON_DIR = ('extracted', 'big', 'cache', 'fe', 'ion', 'artassets', 'createplayer', 'head')
 if common.GAME.name == 'legacy':           # у Legacy свои типовые головы 60000–60210 и свои иконки (140×108)
     ICON_DIR = ('other', 'legacy', 'big', 'cache', 'fe', 'ion', 'artassets', 'createplayer', 'head')
+    # у Legacy есть и тоны 5, 7, 8 (по одной голове): по иконкам 5 (ITA −4) — между 4 и 6, 7 и 8 (−30) —
+    # между 6 и 9; ступени те же, классы 5 и 7/8 — в соседних ступенях
+    SKIN_CLASSES = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+    STEPS = [(42.0, (1,)), (30.0, (2,)), (21.0, (3, 4)), (-10.0, (5, 6)), (-20.0, (7, 8, 9)), (-999.0, (10,))]
 ICON_BOX = (42, 36, 98, 82)                    # лицо на иконке 140×108 (анфас по центру)
 SESSION_MIN = 8                                # фото в съёмке, чтобы взять её эталон
 NEAREST = 5
@@ -314,7 +318,7 @@ class SkinModel:
         """Номер ступени тона (0 — самая светлая) по ITA фото после поправки и углу цвета."""
         for k, (lo, _) in enumerate(STEPS):
             if x >= lo:
-                if STEPS[k][1] == (6,) and hue < PINK_HUE:
+                if 6 in STEPS[k][1] and hue < PINK_HUE:
                     return k - 1                         # розоватый: смуглый, не коричневый
                 return k
         return len(STEPS) - 1
