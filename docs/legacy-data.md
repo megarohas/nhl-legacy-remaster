@@ -37,7 +37,12 @@ bash game/work/legacy-data/uninstall-legacy-data.sh          # снять (чу�
 
 Вариант «АХЛ на 32» — накладка `game/work/legacy-data/out-ahl32/` (база с CV/HSK, их локализация и
 портреты): `install-legacy-data.sh --ahl32` ставит её поверх `out/`. Франшизе с ней нужен порт с врезками
-АХЛ на 32 (legacy-port их готовит); «Играть сейчас» и без них.
+АХЛ на 32 (legacy-port их готовит); «Играть сейчас» и без них. У CV/HSK с 09.10.2026 сила как у соседей по
+АХЛ (`tools/roster/ratings.py`, коммит 35cd8fe). У Legacy сохранённый OVR игроков АХЛ на ~9 ниже их
+атрибутов, а новые игроки строились по связи NHL 27 и выходили на 12 пунктов атрибутов слабее. Теперь
+атрибут полевых 77,0 при 76,7 у соседей, OVR 68,5 при 67,8. Кандидат —
+`game/work/legacy-data/out-ahl32-cvhsk/`: в нём изменены только строки игроков CV/HSK, `out-ahl32` пока
+прежний.
 
 Пересборка всего с нуля — `bash game/work/legacy-data/build-all.sh [этап…] [--ahl32]` (этапы base, roster,
 photos, equip, collect, fonts, music, models, art; сеть — только докачка недостающих портретов лиг).
