@@ -15,7 +15,8 @@
     Опция --game {nhl13,legacy} (или NHL_GAME, tools/gameprofile.py) у всех команд — из архивов какой игры брать
     шаблоны; по умолчанию NHL 13, как раньше. Для NHL Legacy (docs/logos-arenas.md, «NHL Legacy») build берёт
     шаблоны и контейнеры из её архивов, размеры t/d/r — по замерам её логотипов, шайбу — в её стиле (тёмная грань,
-    логотип с белой каймой внутри кольца «National Hockey League»); alias для Legacy не сделан.
+    логотип с белой каймой внутри кольца «National Hockey League»; у клубов АХЛ — под овалом AHL); alias для Legacy
+    берёт файлы формы из её распакованных архивов.
     SPEC может наследовать другой: {"base": "путь к SPEC", "artid": 100, …} — свои ключи поверх (docs там же).
 
 Где что лежит (подробности — docs/logos-arenas.md):
@@ -945,6 +946,13 @@ PUCKS = {
     # закрашивается цветом грани, логотип вписывается в радиус 52, кайма — белая, 1 px.
     'nhl_legacy': {'template': 'rendering/puck/puck_23_cm.rx2', 'center': (127.0, 172.0), 'r_clear': 70.0,
                    'face': (21, 22, 21), 'r_logo': 52.0, 'keyline': (1.0, '#F4F4F4')},
+    # NHL Legacy, клубы АХЛ (замер puck_131…165 Legacy, кроме 136): грань (21, 22, 21), тонкий круг радиуса ~59 с
+    # центром (127,5; 172), на нём сверху — овал AHL (низ овала на 48 px выше центра), по бокам — линии, ниже —
+    # «Official Game Puck»; логотип клуба внутри круга: рамка в среднем ±41 по вертикали, наибольший радиус 45…54,
+    # чаще со светлой каймой. Шаблон — «Провиденс» puck_150 (логотип в радиусе 45): круг до 48 закрашивается цветом
+    # грани, но не выше 46 px над центром (овал цел); логотип — в радиус 44, кайма белая 1 px.
+    'ahl_legacy': {'template': 'rendering/puck/puck_150_cm.rx2', 'center': (127.5, 172.5), 'r_clear': 48.0,
+                   'clear_top': -46.0, 'face': (21, 22, 21), 'r_logo': 44.0, 'keyline': (1.0, '#F4F4F4')},
 }
 
 
@@ -969,7 +977,8 @@ def fit_logo(spec, size, r_logo, tmpdir, name, extra=''):
 
 
 def puck_style(spec):
-    """Стиль шайбы (PUCKS) по spec["league"] и игре: у Legacy — свой стиль клубов НХЛ («nhl_legacy»)."""
+    """Стиль шайбы (PUCKS) по spec["league"] и игре: у Legacy — свои стили клубов НХЛ и АХЛ («nhl_legacy»,
+    «ahl_legacy»)."""
     style = spec.get('league', 'nhl')
     if game_name() == 'nhl13':
         return style
@@ -979,8 +988,8 @@ def puck_style(spec):
 
 
 def puck_rgba_league(spec, tmpdir):
-    """Шайба по spec["league"] (nhl | ahl, PUCKS; у Legacy — nhl_legacy): логотип по центру грани, вписан по
-    наибольшему радиусу. Прежняя puck_rgba — НХЛ, центр (128, 169), рамка 70×70."""
+    """Шайба по spec["league"] (nhl | ahl, PUCKS; у Legacy — nhl_legacy | ahl_legacy): логотип по центру грани,
+    вписан по наибольшему радиусу. Прежняя puck_rgba — НХЛ, центр (128, 169), рамка 70×70."""
     style = puck_style(spec)
     P = PUCKS[style]
     tpl = Rw4.load(extracted(P['template']))
@@ -1001,6 +1010,8 @@ def puck_rgba_league(spec, tmpdir):
             else:
                 rc = P['r_clear']
                 k = 1.0 if d <= rc - 1 else max(0.0, (rc + 1 - d) / 2)   # мягкий край
+                if 'clear_top' in P and y + 0.5 - cy < P['clear_top']:  # выше границы не трогать (овал AHL Legacy)
+                    k = 0.0
                 if k:
                     for c in range(3):
                         out[o + c] = int(P['face'][c] * k + out[o + c] * (1 - k) + 0.5)
@@ -1280,7 +1291,8 @@ UNIFORM_SETS = [
 
 def alias_uniforms(src, dst, outdir, game=None):
     """Копии всех файлов формы команды с artid src под номер dst (имена растров внутри — тоже на dst).
-    Номера с одинаковым числом цифр (имена растров переписываются на месте)."""
+    Номера с одинаковым числом цифр (имена растров переписываются на месте). NHL 13 — из образа диска, другая игра
+    (set_game) — из её распакованных архивов (_alias_uniforms_extracted)."""
     import re
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                     'ref', 'nhl-legacy-recomp', 'docs', 'nhl12-decomp-reference', 'tools'))
@@ -1290,8 +1302,7 @@ def alias_uniforms(src, dst, outdir, game=None):
     if len(str(src)) != len(str(dst)):
         raise SystemExit('номера должны быть одной длины (имена растров внутри файлов)')
     if game_name() != 'nhl13':
-        raise SystemExit(f'alias для {GAME.title} не сделан (читает образ диска NHL 13); форму под свой номер '
-                         'собирают tools/czkit.py и tools/kitpaint.py с --game')
+        return _alias_uniforms_extracted(src, dst, outdir)
     g = game or ph.game_dir()
     made = []
     for arc in sorted({a for a, _ in UNIFORM_SETS}):
@@ -1323,6 +1334,42 @@ def alias_uniforms(src, dst, outdir, game=None):
                     open(out, 'wb').write(blob)
                     made.append((rel, len(blob), len(renamed)))
                     print(f'{e.path} → {rel} ({len(blob)} байт, имён растров: {len(renamed)})')
+    return made
+
+
+def _alias_uniforms_extracted(src, dst, outdir):
+    """alias для другой игры (set_game: NHL Legacy) — файлы формы src из её распакованных архивов (папки по профилю,
+    первый архив, где файл есть); как у NHL 13: RW4 — имена растров src → dst, превью — как есть."""
+    import re
+    made = []
+    for _, p in UNIFORM_SETS:
+        folder, name = p.rsplit('/', 1)
+        rx = re.compile('^' + re.escape(name).replace(r'\{s\}', r'(\d+)').replace(r'\{v\}', r'(\d+)')
+                        .replace(r'\{a\}', str(src)) + '$')
+        seen = set()
+        for arc in GAME.archive_order:
+            d = GAME.archive_path(arc, folder)
+            if not os.path.isdir(d):
+                continue
+            for f in sorted(os.listdir(d)):
+                if f in seen or not rx.match(f):
+                    continue
+                seen.add(f)
+                blob = open(os.path.join(d, f), 'rb').read()
+                if blob[:8] in (b'chunklzx', b'chunkzip'):
+                    import unchunk
+                    blob = unchunk.unchunk(blob)
+                renamed = []
+                if blob[:8] == RW4_MAGIC:
+                    r = Rw4(blob, f)
+                    renamed = r.rename(src, dst)
+                    blob = r.bytes()
+                rel = folder + '/' + re.sub(r'(?<![0-9])' + str(src) + r'(?![0-9])', str(dst), f)
+                out = os.path.join(outdir, *rel.split('/'))
+                os.makedirs(os.path.dirname(out), exist_ok=True)
+                open(out, 'wb').write(blob)
+                made.append((rel, len(blob), len(renamed)))
+                print(f'{arc}: {folder}/{f} → {rel} ({len(blob)} байт, имён растров: {len(renamed)})')
     return made
 
 
