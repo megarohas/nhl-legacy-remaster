@@ -31,6 +31,9 @@
   218/219 ключей нет, а BLU — это Espoo Blues).
 - Поля «команда НХЛ» в exhibitionplayerbiotable (proteam, draftteam: номер + 1, 5 бит)
   расширяются до 6 бит — иначе у Вегаса (31 + 1 = 32) они не влезают.
+- NHL Legacy (--game legacy) строит таблицы франшизы по заголовкам таблиц базы, а не по схеме:
+  те же поля франшизы (META_WIDEN, при --ahl32 ещё META_WIDEN_AHL32 и leagueteams.ahlaffiliate)
+  расширяются и в заголовках заготовок league* (widen_headers).
 - --ahl32 (Матча звёзд во франшизе нет: сборным не хватает места — 126 команд, предел кода) —
   АХЛ на 32: свои фарм-клубы Сиэтла и Вегаса (Coachella Valley Firebirds, Henderson
   Silver Knights) на заготовках Custom Team 02/03 (строки 220/221; у каждой лиги свой
@@ -189,6 +192,11 @@ META_WIDEN_AHL32 = {
 
 AUDIOID2_NONE = 0                  # exhibitionteams.audioid2 «нет второго звука» (у Legacy — 4095)
 FUTURE_SCHEDULE = None             # Legacy: nhlfutureschedule — календарь следующих сезонов (+ его Матч звёзд)
+# NHL 13 создаёт таблицы франшизы по схеме (META_WIDEN хватает). NHL Legacy — по заголовкам таблиц
+# самой базы (заготовки league* без строк; сверено с сейвом франшизы): там те же поля надо
+# расширить и в заголовках, иначе у игроков Вегаса proteam = 32 → 0, состав VGK пустой (игроки
+# уезжают в ARZ), пики драфта VGK без владельца — симуляция виснет на первой игре VGK.
+DB_WIDEN = False
 
 
 # --- NHL Legacy (--game legacy; docs/legacy-data.md) ------------------------------------------
@@ -216,6 +224,7 @@ def legacy_config():
         c3: dict(AHL_NEW[221], parent=31, rival=c2, strategy=58, kit=48, art=P.free_art[3]),   # Texas, Providence
     }
     widen['leagueplayerbiotable'] = widen['leagueplayerbiotable'] + ['tradeblockteam']   # новое поле Legacy
+    widen['exhibitiondraftpick'] = ['origteamid', 'owner']     # пики выставочной базы — тоже «номер + 1», 5 бит
     return dict(
         SWAP={30: P.custom[0], 31: P.custom[1]}, ALLSTAR_ROWS=P.custom[:2], TEMPLATE_ARENA=P.arena_template,
         NEW_TEAMS=new,
@@ -236,7 +245,7 @@ def legacy_config():
         ALLSTAR=((0, 30), (32, 33)),
         FUTURE_SCHEDULE=('nhlfutureschedule', ((0, 24), (33, 32))),
         META_WIDEN=widen,
-        AUDIOID2_NONE=P.audioid2_none,
+        AUDIOID2_NONE=P.audioid2_none, DB_WIDEN=True,
         # --ahl32 у Legacy: АХЛ 2015/16 — 30 клубов, конференции 8 (Запад) / 9 (Восток), дивизионы
         # 10 Atlantic, 11 North (Восток), 12 Central, 13 Pacific (Запад), leaguegroup 7; фарм-клубы SEA/VGK —
         # на Custom 02/03 (224/225: 220/221 — EASHL), арт 102/103 (у помощника art — копии формы
@@ -631,6 +640,22 @@ def add_allstar(db, table, allstar=None):
         for f, v in (('index', i), ('home', h), ('away', a), ('month', month), ('day', day), ('round', 0), ('status', 0)):
             db.set(table, f, i, v)
 
+def widen_headers(db, ahl32=False):
+    """Те же поля, что в схеме (patch_meta), — в заголовках таблиц базы (DB_WIDEN, NHL Legacy):
+    META_WIDEN → 6 бит, при --ahl32 META_WIDEN_AHL32 → 7 и leagueteams.ahlaffiliate → 8
+    (exhibitionteams.ahlaffiliate расширяет realign_ahl). Уже широкие поля не трогаются."""
+    want = {(t, f): 6 for t, fields in META_WIDEN.items() for f in fields}
+    if ahl32:
+        want.update({(t, f): 7 for t, fields in META_WIDEN_AHL32.items() for f in fields})
+        want[('leagueteams', 'ahlaffiliate')] = 8
+    plan = defaultdict(list)
+    for (t, f), width in sorted(want.items()):
+        if db.by_name[t]['fields'][f][1] < width:
+            plan[(t, width)].append(f)
+    for (t, width), fields in sorted(plan.items()):
+        db.widen(t, fields, width)
+    return {f'{t}.{f}': width for (t, width), fields in sorted(plan.items()) for f in fields}
+
 def patch_meta(text, ahl32=False):
     if ahl32:
         for table in ('exhibitionteams', 'leagueteams'):
@@ -711,6 +736,9 @@ def main():
         plan = schedule(pairs, days, counts, rng)
         write_schedule(db, 'ahlschedule', plan)
         print(f'календарь АХЛ: {len(plan)} игр в {len(days)} игровых днях')
+    if DB_WIDEN:
+        wide = widen_headers(db, a.ahl32)
+        print(f'заголовки таблиц базы (франшиза Legacy строит таблицы по ним): {len(wide)} полей шире — {wide}')
     db.fix()
     assert not db.verify()
     open(a.db_out, 'wb').write(db.d)
