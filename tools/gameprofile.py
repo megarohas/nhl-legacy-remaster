@@ -19,6 +19,10 @@
 | образ default.xex | game/extracted/xex/default.bin | game/other/legacy/xex/default.bin |
 | работа инструментов | game/work/<папка>/ | game/work/legacy-data/<папка>/ |
 | cache: порта | game/userdata/cache/guest/ | строка «CACHE: …» статуса legacy-port или `NHL_LEGACY_CACHE` |
+
+Константы, нужные одному инструменту, живут в нём по ключу профиля (MUSIC в music.py — вторые версии
+песен, слоты EA Trax; LOWER_NAMES в fefont.py — строчные имена файлов в cache: у Legacy; legacy_config
+в nhl32.py — берёт отсюда строки, арт и прожекторы). Сводка — docs/legacy-data.md.
 """
 import argparse, os, re, struct, sys
 
@@ -212,7 +216,7 @@ NHL13 = Profile(
     nhl_divisions={3: 1, 4: 1, 5: 1, 6: 2, 7: 2, 8: 2},
     skater_prefix='p_', goalie_prefix='g_', skater_style='p_style', goalie_style='g_style',
     artid_bits=14, generic_heads=(10000, 10999),
-    music_alternates=True,
+    new_team_spotlight=(45, 46),        # прожекторы SEA/VGK (nhl32)
 )
 
 LEGACY = Profile(
@@ -236,7 +240,7 @@ LEGACY = Profile(
     nhl_divisions={3: 1, 4: 1, 5: 2, 6: 2},
     skater_prefix='c_', goalie_prefix='c_', skater_style='playerstyle', goalie_style='playerstyle',
     artid_bits=16, generic_heads=(60000, 60210),
-    music_alternates=None,              # выяснить (docs/legacy-data.md, музыка)
+    new_team_spotlight=(46, 47),        # у Legacy есть texlib_0…45
 )
 
 PROFILES = {'nhl13': NHL13, 'legacy': LEGACY}

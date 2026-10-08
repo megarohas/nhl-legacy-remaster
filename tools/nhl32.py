@@ -199,17 +199,22 @@ FUTURE_SCHEDULE = None             # Legacy: nhlfutureschedule — календ�
 # «нет» = 4095. Календарь второго и следующих сезонов франшизы — своя таблица nhlfutureschedule
 # (1230 игр + Матч звёзд), её тоже переписываем на 32 × 84.
 def legacy_config():
+    P = gameprofile.LEGACY            # строки Custom, арена-шаблон, доноры формы, свободный арт, прожекторы
     new = copy.deepcopy(NEW_TEAMS)
-    new[30].update(kit=88, art=100, spotlight=46, third=(104, 162, 185),     # Shadow Blue
+    new[30].update(kit=P.tappara_tps[0], art=P.free_art[0], spotlight=P.new_team_spotlight[0],
+                   third=(104, 162, 185),                                     # Shadow Blue
                    # у Tappara в Legacy ещё тёмно-синие 1D2A3C/0F1C4F и красно-оранжевый C5431D
                    equip={0x253B73: 0x001628, 0x1D2A3C: 0x001628, 0x0F1C4F: 0x001628, 0xE35B17: 0x99D9D9,
                           0xDE5818: 0x99D9D9, 0xC5431D: 0x99D9D9, 0x202020: 0x001628})
-    new[31].update(kit=89, art=101, spotlight=47, third=(200, 16, 46))        # красный Вегаса
+    new[31].update(kit=P.tappara_tps[1], art=P.free_art[1], spotlight=P.new_team_spotlight[1],
+                   third=(200, 16, 46))                                       # красный Вегаса
     widen = {t: list(f) for t, f in META_WIDEN.items() if t != 'leagueretirementtable'}   # у Legacy уже 8 бит
     widen['leagueplayerbiotable'] = widen['leagueplayerbiotable'] + ['tradeblockteam']   # новое поле Legacy
     return dict(
-        SWAP={30: 222, 31: 223}, ALLSTAR_ROWS=(222, 223), TEMPLATE_ARENA=181, NEW_TEAMS=new,
-        ALLSTAR_NAMES={222: ('EAS', 'Eastern', 'Eastern All-Stars'), 223: ('WES', 'Western', 'Western All-Stars')},
+        SWAP={30: P.custom[0], 31: P.custom[1]}, ALLSTAR_ROWS=P.custom[:2], TEMPLATE_ARENA=P.arena_template,
+        NEW_TEAMS=new,
+        ALLSTAR_NAMES={P.custom[0]: ('EAS', 'Eastern', 'Eastern All-Stars'),
+                       P.custom[1]: ('WES', 'Western', 'Western All-Stars')},
         DIVISIONS={
             3: [0, 4, 11, 13, 25, 28, 30, 31],     # Pacific: ANA CGY EDM LA SJ VAN + SEA VGK
             4: [1, 6, 7, 9, 14, 16, 22, 24],       # Central: WPG CHI COL DAL MIN NSH UTA(ARZ) STL
@@ -225,7 +230,7 @@ def legacy_config():
         ALLSTAR=((0, 30), (32, 33)),
         FUTURE_SCHEDULE=('nhlfutureschedule', ((0, 24), (33, 32))),
         META_WIDEN=widen,
-        AUDIOID2_NONE=4095,
+        AUDIOID2_NONE=P.audioid2_none,
     )
 
 
