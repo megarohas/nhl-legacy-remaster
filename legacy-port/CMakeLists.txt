@@ -21,6 +21,7 @@ set(NHLLEGACY_SOURCES
     src/nhllegacy_fencewait.cpp
     src/nhllegacy_composite.cpp
     src/nhllegacy_dbtrace.cpp
+    src/nhllegacy_year.cpp
 )
 
 if(WIN32)

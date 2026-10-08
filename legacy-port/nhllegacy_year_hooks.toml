@@ -1,0 +1,1652 @@
+# Сгенерировано tools/year_hooks.py — не править руками.
+# Сдвиг года: 275 мест (season_year в nhllegacy.toml, код — src/nhllegacy_year.cpp).
+
+[[midasm_hook]]
+address = 0x82955A2C
+name = "NhlLegacyYearSub"
+registers = ["r15"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8296EBD0
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82971508
+name = "NhlLegacyYearAdd"
+registers = ["r30"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829715D4
+name = "NhlLegacyYearAdd"
+registers = ["r30"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82974D50
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8297627C
+name = "NhlLegacyYearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829762D8
+name = "NhlLegacyYearCmpS2015"
+registers = ["r31", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82976B00
+name = "NhlLegacyYearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82976B34
+name = "NhlLegacyYearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82976E18
+name = "NhlLegacyYearCmpS2014"
+registers = ["r31", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82976E7C
+name = "NhlLegacyYearAdd"
+registers = ["r31"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82980408
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829808FC
+name = "NhlLegacyYearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829883DC
+name = "NhlLegacyYearAdd"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829AC3A8
+name = "NhlLegacyYearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829C4EE0
+name = "NhlLegacyYearAdd"
+registers = ["r3"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829C4EE8
+name = "NhlLegacyYearAdd"
+registers = ["r3"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829C8330
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829C8784
+name = "NhlLegacyYearAdd"
+registers = ["r3"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829C878C
+name = "NhlLegacyYearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829C9278
+name = "NhlLegacyYearAdd"
+registers = ["r3"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829C92F8
+name = "NhlLegacyYearCmpS2015"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829C94F0
+name = "NhlLegacyYearCmpS2015"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829C9AE0
+name = "NhlLegacyYearAdd"
+registers = ["r3"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829CF0D8
+name = "NhlLegacyYearAdd"
+registers = ["r28"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829CF414
+name = "NhlLegacyYearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829CF460
+name = "NhlLegacyYearCmpS2015"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829DAD9C
+name = "NhlLegacyYearAdd"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829DB6B4
+name = "NhlLegacyYearAdd"
+registers = ["r27"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829DB7C4
+name = "NhlLegacyYearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829DB7C8
+name = "NhlLegacyYearAdd"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829F3CDC
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829F3CE4
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829F3CF8
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829F3D04
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829F6278
+name = "NhlLegacyYearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829F627C
+name = "NhlLegacyYearCmpS1965"
+registers = ["r29", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A1CCE4
+name = "NhlLegacyYearAdd"
+registers = ["r25"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A22454
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A3571C
+name = "NhlLegacyYearAdd"
+registers = ["r29"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A358DC
+name = "NhlLegacyYearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A37E4C
+name = "NhlLegacyYearAdd"
+registers = ["r29"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A38E30
+name = "NhlLegacyYearSub"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A3EB6C
+name = "NhlLegacyYearSub"
+registers = ["r30"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A3FC48
+name = "NhlLegacyYearCmpS2015"
+registers = ["r4", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A4109C
+name = "NhlLegacyYearCmpS2015"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A457F4
+name = "NhlLegacyYearAdd"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A49AD4
+name = "NhlLegacyYearCmpU2014"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A4A6D0
+name = "NhlLegacyYearAdd"
+registers = ["r7"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A4A718
+name = "NhlLegacyYearAdd"
+registers = ["r8"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A4D73C
+name = "NhlLegacyYearSub"
+registers = ["r31"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A4D760
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A4E83C
+name = "NhlLegacyYearAdd"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A543DC
+name = "NhlLegacyYearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A561F4
+name = "NhlLegacyYearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A7A8D0
+name = "NhlLegacyYearAdd"
+registers = ["r3"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A8C9D0
+name = "NhlLegacyYearAdd"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A9FAD4
+name = "NhlLegacyYearAdd"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82AAC790
+name = "NhlLegacyYearAdd"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82AB8F50
+name = "NhlLegacyYearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82ABB4A0
+name = "NhlLegacyYearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82ABB4B4
+name = "NhlLegacyYearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82ABC3D4
+name = "NhlLegacyYearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82AC5ACC
+name = "NhlLegacyYearAdd"
+registers = ["r29"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82AC5AE8
+name = "NhlLegacyYearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82AC6964
+name = "NhlLegacyYearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82ACCBD8
+name = "NhlLegacyYearCmpU2015"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82ACEA08
+name = "NhlLegacyYearCmpU2004"
+registers = ["r18", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82ACF2B8
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82ACF2C4
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82AD4BC8
+name = "NhlLegacyYearSub"
+registers = ["r29"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82ADF598
+name = "NhlLegacyYearAdd"
+registers = ["r6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82ADF5B4
+name = "NhlLegacyYearCmpS2015"
+registers = ["r3", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82ADF5E4
+name = "NhlLegacyYearAdd"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82AF34B0
+name = "NhlLegacyYearSub"
+registers = ["r27"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82AF34B4
+name = "NhlLegacyYearCmpS2014"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82AF547C
+name = "NhlLegacyYearSub"
+registers = ["r27"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82AF6F28
+name = "NhlLegacyYearCmpS2015"
+registers = ["r23", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82AF6F34
+name = "NhlLegacyYearSub"
+registers = ["r28"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82AF71A8
+name = "NhlLegacyYearCmpS2015"
+registers = ["r23", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82AF71C8
+name = "NhlLegacyYearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82AF8A68
+name = "NhlLegacyYearCmpS2014"
+registers = ["r29", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82AF8A70
+name = "NhlLegacyYearAdd"
+registers = ["r29"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82AF8A74
+name = "NhlLegacyYearCmpS2015"
+registers = ["r29", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82AF9D70
+name = "NhlLegacyYearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82AFA6E4
+name = "NhlLegacyYearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82AFB048
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82AFB304
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82AFB328
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82AFCE1C
+name = "NhlLegacyYearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82AFFE30
+name = "NhlLegacyYearSub"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B001E8
+name = "NhlLegacyYearCmpS2015"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B03508
+name = "NhlLegacyYearSub"
+registers = ["r29"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B03A20
+name = "NhlLegacyYearSub"
+registers = ["r29"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B04928
+name = "NhlLegacyYearSub"
+registers = ["r28"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B04CE0
+name = "NhlLegacyYearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B05130
+name = "NhlLegacyYearSub"
+registers = ["r28"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B054E8
+name = "NhlLegacyYearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B0B120
+name = "NhlLegacyYearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B0B3C8
+name = "NhlLegacyYearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B0BC78
+name = "NhlLegacyYearSub"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B15DE8
+name = "NhlLegacyYearSub"
+registers = ["r25"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B16430
+name = "NhlLegacyYearSub"
+registers = ["r25"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B1AEA0
+name = "NhlLegacyYearAdd"
+registers = ["r31"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B1AEB0
+name = "NhlLegacyYearAdd"
+registers = ["r31"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B1B298
+name = "NhlLegacyYearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B1C010
+name = "NhlLegacyYearCmpS2015"
+registers = ["r28", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B1C0C8
+name = "NhlLegacyYearCmpS2015"
+registers = ["r30", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B1C0F8
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B1C438
+name = "NhlLegacyYearCmpS2015"
+registers = ["r24", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B1E048
+name = "NhlLegacyYearCmpS2015"
+registers = ["r29", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B1E3BC
+name = "NhlLegacyYearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B1EA68
+name = "NhlLegacyYearSub"
+registers = ["r24"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B20BD4
+name = "NhlLegacyYearAdd"
+registers = ["r7"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B20BEC
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B219C0
+name = "NhlLegacyYearSub"
+registers = ["r6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B219DC
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B222B0
+name = "NhlLegacyYearCmpS2015"
+registers = ["r29", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B224BC
+name = "NhlLegacyYearCmpS2015"
+registers = ["r29", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B2612C
+name = "NhlLegacyYearCmpS2015"
+registers = ["r28", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B26170
+name = "NhlLegacyYearSub"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B2629C
+name = "NhlLegacyYearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B2645C
+name = "NhlLegacyYearCmpS2015"
+registers = ["r28", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B264A0
+name = "NhlLegacyYearSub"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B265E8
+name = "NhlLegacyYearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B267B4
+name = "NhlLegacyYearCmpS2015"
+registers = ["r28", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B267F8
+name = "NhlLegacyYearSub"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B26940
+name = "NhlLegacyYearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B27F34
+name = "NhlLegacyYearSub"
+registers = ["r28"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B2D480
+name = "NhlLegacyYearSub"
+registers = ["r30"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B2D810
+name = "NhlLegacyYearCmpS2015"
+registers = ["r22", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B2DB50
+name = "NhlLegacyYearCmpS2015"
+registers = ["r22", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B2DC08
+name = "NhlLegacyYearCmpS2015"
+registers = ["r22", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B2DFC4
+name = "NhlLegacyYearSub"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B2E1DC
+name = "NhlLegacyYearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B2E3AC
+name = "NhlLegacyYearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B2E4F4
+name = "NhlLegacyYearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B2EC7C
+name = "NhlLegacyYearSub"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B2EE84
+name = "NhlLegacyYearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B2FBD4
+name = "NhlLegacyYearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B31DBC
+name = "NhlLegacyYearSub"
+registers = ["r29"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B323B8
+name = "NhlLegacyYearSub"
+registers = ["r25"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B32EF4
+name = "NhlLegacyYearSub"
+registers = ["r29"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B334C0
+name = "NhlLegacyYearSub"
+registers = ["r25"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B34E58
+name = "NhlLegacyYearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B35728
+name = "NhlLegacyYearCmpS2015"
+registers = ["r5", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B35730
+name = "NhlLegacyYearSub"
+registers = ["r30"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B35954
+name = "NhlLegacyYearCmpS2015"
+registers = ["r28", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B359CC
+name = "NhlLegacyYearSub"
+registers = ["r26"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B35C40
+name = "NhlLegacyYearSub"
+registers = ["r29"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B36358
+name = "NhlLegacyYearSub"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B363E8
+name = "NhlLegacyYearCmpS2015"
+registers = ["r30", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B37324
+name = "NhlLegacyYearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B37488
+name = "NhlLegacyYearAdd"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B37490
+name = "NhlLegacyYearAdd"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B374B8
+name = "NhlLegacyYearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B374C4
+name = "NhlLegacyYearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3752C
+name = "NhlLegacyYearAdd"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B37538
+name = "NhlLegacyYearAdd"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B37B64
+name = "NhlLegacyYearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B37B7C
+name = "NhlLegacyYearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B37BB0
+name = "NhlLegacyYearCmpS2015"
+registers = ["r28", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B37C4C
+name = "NhlLegacyYearCmpS2015"
+registers = ["r28", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B37CE8
+name = "NhlLegacyYearCmpS2015"
+registers = ["r28", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B37DAC
+name = "NhlLegacyYearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3AF40
+name = "NhlLegacyYearAdd"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3B360
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3BE30
+name = "NhlLegacyYearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3C668
+name = "NhlLegacyYearCmpU2015"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3D754
+name = "NhlLegacyYearSub"
+registers = ["r27"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3D7E4
+name = "NhlLegacyYearSub"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3DD68
+name = "NhlLegacyYearCmpS2015"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3DF10
+name = "NhlLegacyYearAdd"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3E8CC
+name = "NhlLegacyYearAdd"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3FB80
+name = "NhlLegacyYearSub"
+registers = ["r6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3FCF4
+name = "NhlLegacyYearCmpS2015"
+registers = ["r30", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3FD54
+name = "NhlLegacyYearSub"
+registers = ["r28"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B3FFF8
+name = "NhlLegacyYearCmpS2015"
+registers = ["r27", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B4007C
+name = "NhlLegacyYearSub"
+registers = ["r7"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B4017C
+name = "NhlLegacyYearCmpS2015"
+registers = ["r27", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B401D4
+name = "NhlLegacyYearSub"
+registers = ["r7"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B40204
+name = "NhlLegacyYearAdd"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B4085C
+name = "NhlLegacyYearSub"
+registers = ["r23"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B409B0
+name = "NhlLegacyYearCmpS2015"
+registers = ["r30", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B41478
+name = "NhlLegacyYearSub"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B41558
+name = "NhlLegacyYearSub"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B415BC
+name = "NhlLegacyYearSub"
+registers = ["r31"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B43A04
+name = "NhlLegacyYearCmpS2015"
+registers = ["r26", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B43A08
+name = "NhlLegacyYearSub"
+registers = ["r18"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B43B50
+name = "NhlLegacyYearCmpS2015"
+registers = ["r26", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B45878
+name = "NhlLegacyYearSub"
+registers = ["r25"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B49F28
+name = "NhlLegacyYearSub"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B4AD34
+name = "NhlLegacyYearAdd"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B4AD3C
+name = "NhlLegacyYearAdd"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B4B018
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B4B098
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B4B20C
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B4B270
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B4B2D8
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B4B330
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B4BAE0
+name = "NhlLegacyYearSub"
+registers = ["r31"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B4F754
+name = "NhlLegacyYearSub"
+registers = ["r31"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B50800
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B5C514
+name = "NhlLegacyYearAdd"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B5C5F8
+name = "NhlLegacyYearAdd"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B62678
+name = "NhlLegacyYearSub"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B65F54
+name = "NhlLegacyYearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B65FBC
+name = "NhlLegacyYearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B68D20
+name = "NhlLegacyYearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B6AB28
+name = "NhlLegacyYearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B6AFF0
+name = "NhlLegacyYearSub"
+registers = ["r7"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B6D8A4
+name = "NhlLegacyYearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B707EC
+name = "NhlLegacyYearSub"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B7116C
+name = "NhlLegacyYearCmpS2015"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B719C4
+name = "NhlLegacyYearCmpS2015"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B71B4C
+name = "NhlLegacyYearCmpS2015"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B71FFC
+name = "NhlLegacyYearCmpS2015"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B7253C
+name = "NhlLegacyYearCmpS2015"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B726DC
+name = "NhlLegacyYearCmpS2015"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B72EF0
+name = "NhlLegacyYearSub"
+registers = ["r26"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B730A8
+name = "NhlLegacyYearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B730AC
+name = "NhlLegacyYearSub"
+registers = ["r24"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B73A08
+name = "NhlLegacyYearAdd"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B73FF0
+name = "NhlLegacyYearAdd"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B77DB0
+name = "NhlLegacyYearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B790F0
+name = "NhlLegacyYearSub"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B7C4C8
+name = "NhlLegacyYearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B80644
+name = "NhlLegacyYearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B84BD8
+name = "NhlLegacyYearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B87550
+name = "NhlLegacyYearAdd"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B876E8
+name = "NhlLegacyYearAdd"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B88924
+name = "NhlLegacyYearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B896A0
+name = "NhlLegacyYearSub"
+registers = ["r30"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B896A4
+name = "NhlLegacyYearAdd"
+registers = ["r28"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B8CC44
+name = "NhlLegacyYearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B91600
+name = "NhlLegacyYearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B94ED4
+name = "NhlLegacyYearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B9B174
+name = "NhlLegacyYearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B9BC8C
+name = "NhlLegacyYearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B9C294
+name = "NhlLegacyYearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B9C560
+name = "NhlLegacyYearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B9DD38
+name = "NhlLegacyYearSub"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B9EBDC
+name = "NhlLegacyYearAdd"
+registers = ["r23"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82BA3BE0
+name = "NhlLegacyYearCmpU2004"
+registers = ["r11", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82BA5F58
+name = "NhlLegacyYearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82BA634C
+name = "NhlLegacyYearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82BA6484
+name = "NhlLegacyYearSub"
+registers = ["r30"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82BA648C
+name = "NhlLegacyYearCmpS2015"
+registers = ["r31", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82BA6578
+name = "NhlLegacyYearCmpS2015"
+registers = ["r31", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82BA6598
+name = "NhlLegacyYearSub"
+registers = ["r6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82BA8EF8
+name = "NhlLegacyYearAdd"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82BA8F14
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82BA8F28
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82BA9298
+name = "NhlLegacyYearAdd"
+registers = ["r27"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82BAB0C8
+name = "NhlLegacyYearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82BAB19C
+name = "NhlLegacyYearSub"
+registers = ["r6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82BAB998
+name = "NhlLegacyYearSub"
+registers = ["r28"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82BAE018
+name = "NhlLegacyYearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82BB0200
+name = "NhlLegacyYearCmpS2015"
+registers = ["r31", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82BB0230
+name = "NhlLegacyYearCmpS2015"
+registers = ["r31", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82BB0244
+name = "NhlLegacyYearSub"
+registers = ["r6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82BB02B4
+name = "NhlLegacyYearCmpS2015"
+registers = ["r30", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82BB02E8
+name = "NhlLegacyYearCmpS2015"
+registers = ["r30", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82BB0300
+name = "NhlLegacyYearSub"
+registers = ["r6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82BB03B8
+name = "NhlLegacyYearSub"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82BB05BC
+name = "NhlLegacyYearSub"
+registers = ["r6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82BB43B4
+name = "NhlLegacyYearAdd"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x83117884
+name = "NhlLegacyYearSub"
+registers = ["r28"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8316E10C
+name = "NhlLegacyYearAdd"
+registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x831A6F64
+name = "NhlLegacyYearSub"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x831E56B4
+name = "NhlLegacyYearAdd"
+registers = ["r31"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x831E56B8
+name = "NhlLegacyYearCmpS2015"
+registers = ["r27", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x831E56C4
+name = "NhlLegacyYearSub"
+registers = ["r5"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x831E5714
+name = "NhlLegacyYearCmpS2015"
+registers = ["r25", "cr6"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x831E5764
+name = "NhlLegacyYearCmpS2015"
+registers = ["r30", "cr6"]
+after_instruction = true

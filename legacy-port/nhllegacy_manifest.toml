@@ -8,7 +8,7 @@ game_root = "../game/other/legacy/disc"
 [entrypoint]
 file_path = "../game/other/legacy/disc/default.xex"
 out_directory_path = "generated/default"
-includes = ["nhllegacy_functions.toml"]
+includes = ["nhllegacy_functions.toml", "nhllegacy_year_hooks.toml"]
 # Пара setjmp/longjmp CRT EA. setjmp 0x830801C0: проверка слота-хука 0x83E022E0 (статически 0,
 # в BSS) — lis/lwz/cmpwi/mtctr/bnectr — затем сохранение f14-f31, r13-r31, VMX; без явного
 # адреса генератор считает bnectr концом функции и теряет сохранение — загрузка падает.
