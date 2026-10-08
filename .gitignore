@@ -8,6 +8,12 @@
 *.db
 *.fsb
 *.xma
+# музыка: банк игры и свои песни (tools/music.py) — только в game/
+*.sbs
+*.sbr
+*.mp3
+*.flac
+*.wav
 Data[0-9][0-9][0-9][0-9]
 _netrc
 .netrc

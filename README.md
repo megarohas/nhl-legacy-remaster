@@ -21,6 +21,7 @@
 | [docs/port.md](docs/port.md) | Тулчейн порта, генерация кода ReXGlue, что дальше |
 | [docs/research.md](docs/research.md) | Соседние рекомпилы (NHL 14, 3 on 3, Skate 3…) и что из них взято |
 | [docs/modding.md](docs/modding.md) | Моды базы через cache: — игроки (nhlng.db) и названия (локализация) |
+| [docs/music.md](docs/music.md) | Музыка: банк audio/music (EALayer3), EA Trax, как игра выбирает трек, замена саундтрека |
 | [docs/teams.md](docs/teams.md) | Команды, лиги, ссылки на команду и календари в базе; НХЛ на 32 команды |
 | [docs/graphics-settings.md](docs/graphics-settings.md) | Настройки графики порта: cvar'ы рантайма, апскейл, RTV/ROV, задержка ввода, лаунчер |
 | `port/` | Проект порта ReXGlue (сгенерированный код — не в git) |
@@ -35,6 +36,7 @@
 | [tools/locdb.py](tools/locdb.py) | Строки локализации (Хаффман): выгрузка и правка |
 | [tools/year_hooks.py](tools/year_hooks.py) | Поиск годов-констант в коде и врезки сдвига года для порта |
 | [tools/nhl32.py](tools/nhl32.py) | НХЛ на 32 команды: перенос двух команд, дивизионы, календарь на 84 игры |
+| [tools/music.py](tools/music.py) | Свой саундтрек: MP3/FLAC/WAV → банк музыки игры, названия и обложки EA Trax (через ffmpeg) |
 | `game/` | Локальные файлы игры, не в git |
 | `ref/` | Клоны репозиториев puckhead73 для справки, не в git |
 
