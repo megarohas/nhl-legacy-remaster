@@ -157,10 +157,11 @@ SHA-256 `default.xex` = `d818eb15…c55624`) в `game\` рядом с exe. Пу�
 - **Нужно в базе** (делает legacy-data, `tools/nhl32.py --game legacy`): `leaguegmdata` и `leaguestaffdata` —
   `maxinsert` 30 → 32; поля «команда −1…30» (номер + 1, 5 бит) — 6 бит **в заголовках таблиц самой
   `nhlng.db`**, не только в `nhlng-meta.xml`: Legacy строит таблицы франшизы по заголовкам пустых `league*`
-  базы (NHL 13 — по схеме). Без этого у игроков Вегаса `proteam` = 32 обрезалось до 0: при создании лиги
-  21 игрок VGK уехал в Аризону (у VGK 0, у ARZ 45, у строк состава VGK `key` = 31·40 + место, а `team` = 22),
-  пики VGK остались без владельца, а 9.10 (VGK–PIT) симуляция висла в `rand() % 0` (8298A438 → 82A57670) —
-  как зависание NHL 13 «10–11 октября». Поля: `leagueplayerbiotable` proteam/draftteam/tradeblockteam,
+  базы (NHL 13 — по схеме). Без этого у игроков Вегаса `proteam` = 32 обрезалось до 0 («нет команды»), и при
+  создании лиги игра удалила все 22 записи состава VGK (по живым записям `leaguerostertable`: у VGK 0, у ARZ —
+  свои 23; «45 у ARZ» в первом разборе — удалённые строки, у которых первые 16 бит — ссылка списка свободных
+  и накрывают `team`, см. «Прогон франшизы»), 42 пика VGK остались без владельца (`owner` = 0), а 9.10
+  (VGK–PIT) симуляция висла в `rand() % 0` (8298A438 → 82A57670) — как зависание NHL 13 «10–11 октября». Поля: `leagueplayerbiotable` proteam/draftteam/tradeblockteam,
   `leaguedraftpick` owner/origteamid, `leaguefreeagentdata` originalteamid/signedteamid,
   `leaguerookiedata.draftteam`, `leaguecontractoffers.teamnotification`, `leaguegamemodesvars.team`,
   `leaguescoutvisits.team`, `exhibitiondraftpick` owner/origteamid. Сейвы франшизы, созданные на 5-битной
