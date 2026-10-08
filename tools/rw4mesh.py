@@ -361,6 +361,75 @@ class Mesh:
     def bytes(self):
         return self.f.bytes()
 
+    # --- другая топология: новый буфер вершин и/или индексов
+    def vertex_raw(self, i):
+        b = self.vo + i * self.stride
+        return bytes(self.f.raw[b:b + self.stride])
+
+    def pack_vertex(self, base, pos=None, nrm=None, tan=None, uv=None, bones=None, weights=None):
+        """Новая вершина (байты шага) по образцу base (байты вершины этой сетки): заменяются заданные атрибуты."""
+        v = bytearray(base)
+        if pos is not None:
+            struct.pack_into('>3H', v, self.e_pos.off, *(half_enc(float(c)) for c in pos))
+        for e, val in ((self.e_nrm, nrm), (self.e_tan, tan)):
+            if val is not None and e is not None:
+                top = u32(v, e.off) >> 30
+                struct.pack_into('>I', v, e.off, dec3n_enc(val, top))
+        if uv is not None and self.e_uv:
+            struct.pack_into('>2H', v, self.e_uv.off, *(max(0, min(65535, int(round(c * 65535)))) for c in uv))
+        if bones is not None and self.e_bi:
+            struct.pack_into('>4H', v, self.e_bi.off, *(b * 3 for b in bones))
+        if weights is not None and self.e_bw:
+            q = [max(0, min(255, int(round(w * 255)))) for w in weights]
+            v[self.e_bw.off:self.e_bw.off + 4] = bytes(q[::-1])
+        return bytes(v)
+
+    def rebuilt(self, vb, indices):
+        """Файл с другим буфером вершин vb (байты, кратно шагу) и индексами indices — те же секции в том же порядке;
+        меняются: размеры и смещения двух секций данных (вершины с добивкой нулями до 32 байт, индексы — до 16),
+        размер данных в заголовке (+0x54), в D3DVertexBuffer — размер в словах и число вершин, в D3DIndexBuffer —
+        размер и число индексов, в записи вызова — числа вершин и индексов. rebuilt(свои буферы) == исходный файл
+        (проверка layout_ok)."""
+        f = self.f
+        st = self.stride
+        if len(vb) % st:
+            raise ValueError('буфер вершин не кратен шагу')
+        datas = [x for x in f.sections if x.type == TYPE_DATA]
+        if (len(datas) != 2 or self.vsec.off != 0 or self.isec.off != self.vsec.size
+                or f.data_size != self.vsec.size + self.isec.size):
+            raise ValueError(f'{self.path}: раскладка данных не «вершины, затем индексы» — пересборка не поддержана')
+        nv = len(vb) // st
+        if indices and max(i for i in indices if i != STRIP_RESTART) >= nv:
+            raise ValueError('индекс за пределами нового буфера вершин')
+        vb = bytes(vb) + bytes((-len(vb)) % 32)               # секция вершин — с добивкой до 32 байт
+        ib = struct.pack('>%dH' % len(indices), *indices)
+        ib += bytes((-len(ib)) % 16)
+        raw = bytearray(f.raw[:f.data_start])
+        table = u32(raw, 0x30)
+        for sec, off, size in ((self.vsec, 0, len(vb)), (self.isec, len(vb), len(ib))):
+            struct.pack_into('>I', raw, table + 24 * sec.index, off)
+            struct.pack_into('>I', raw, table + 24 * sec.index + 8, size)
+        struct.pack_into('>I', raw, 0x54, len(vb) + len(ib))
+        o = f.one(TYPE_VB).off
+        w1 = u32(raw, o + 0x1C)
+        struct.pack_into('>I', raw, o + 0x1C, (w1 & ~(0xFFFFFF << 2)) | ((len(vb) // 4) << 2))
+        struct.pack_into('>I', raw, o + 0x24, nv)
+        o = f.one(TYPE_IB).off
+        struct.pack_into('>I', raw, o + 0x1C, len(ib))
+        struct.pack_into('>I', raw, o + 0x20, len(indices))
+        for sd in f.find(TYPE_DRAW):
+            struct.pack_into('>I', raw, sd.off + 0x04, nv)
+            struct.pack_into('>I', raw, sd.off + 0x0C, len(indices))
+        return bytes(raw) + vb + ib
+
+    def layout_ok(self):
+        """Пересборка своими же буферами даёт исходный файл байт в байт."""
+        vb = bytes(self.f.raw[self.vo:self.vo + self.stride * self.nv])
+        try:
+            return self.rebuilt(vb, self.indices) == self.bytes()
+        except ValueError:
+            return False
+
     # --- служебное
     def raw_key(self, i):
         """Ключ сварки: позиция (с w) и кости/веса байт в байт — дубликаты вершины по швам UV/нормалей."""
@@ -1571,12 +1640,13 @@ def cmd_roundtrip(args):
             continue
         res = reencode_check(m)
         same = m.bytes() == unchunk_any(data)
-        if res or not same:
+        lay = m.layout_ok()
+        if res or not same or not lay:
             bad += 1
-            print(f'НЕ СОШЛОСЬ {p}: {res or "контейнер"}')
+            print(f'НЕ СОШЛОСЬ {p}: {res or ("контейнер" if not same else "пересборка буферов")}')
         else:
             ok += 1
-    print(f'сеток: {ok} байт в байт, {bad} с расхождением; не сетки: {skip}')
+    print(f'сеток: {ok} байт в байт (атрибуты, контейнер, пересборка буферов), {bad} с расхождением; не сетки: {skip}')
     return bad == 0
 
 
