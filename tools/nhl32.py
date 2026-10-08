@@ -31,6 +31,9 @@
   218/219 ключей нет, а BLU — это Espoo Blues).
 - Поля «команда НХЛ» в exhibitionplayerbiotable (proteam, draftteam: номер + 1, 5 бит)
   расширяются до 6 бит — иначе у Вегаса (31 + 1 = 32) они не влезают.
+- Игровые дни — только те, что есть в сезоне 2026/27 (SEASON_YEAR): у Legacy в исходном календаре 29.02.2016 —
+  его игры расходятся по остальным дням; в календарях, которые nhl32 не составляет (юниоры, Европа), игра такого
+  дня переезжает на соседний свободный день (fix_missing_days; у Legacy — 2 игры WHL на 28.02).
 - NHL Legacy (--game legacy) строит таблицы франшизы по заголовкам таблиц базы, а не по схеме:
   те же поля франшизы (META_WIDEN, при --ahl32 ещё META_WIDEN_AHL32 и leagueteams.ahlaffiliate)
   расширяются и в заголовках заготовок league* (widen_headers).
@@ -45,7 +48,7 @@
   переезжают на Custom 222/223, дивизионы — нынешние 8/8/8/8 (у Legacy их уже 4), арт 100/101, ещё и
   календарь следующих сезонов nhlfutureschedule; --ahl32 у Legacy — CV/HSK на 224/225, АХЛ 8/8/8/8, 72 игры.
 """
-import argparse, copy, random, re, struct, sys
+import argparse, calendar, copy, datetime, random, re, struct, sys
 from collections import Counter, defaultdict
 from tdb import Tdb, DEFAULT_META
 from tdb_read import load_meta
@@ -539,18 +542,71 @@ def ahl_pair_games_div8(rng):
     assert all(per[t] == AHL_GAMES and home[t] == AHL_HOME for t in range(len(AHL_ORDER))), (per, home)
     return games
 
+# Календарь — сезона 2026/27: сентябрь–декабрь — 2026 год, январь–август — 2027. Исходные игровые дни берутся
+# из календарей игры (NHL 13 — 2012/13, Legacy — 2015/16), а там бывает день, которого в 2027 году нет:
+# у Legacy — 29 февраля 2016-го. Игры на такой день игра не играет (у legacy-port 14 клубов закончили
+# регулярку с 83 играми из 84).
+SEASON_YEAR = 2026
+
+def season_day(month, day, season=SEASON_YEAR):
+    """Есть ли день (месяц и день — с нуля, как в календарях базы) в сезоне season/season+1."""
+    year = season if month >= 8 else season + 1
+    return day < calendar.monthrange(year, month + 1)[1]
+
 def game_days(db, table='nhlschedule'):
-    """Игровые дни регулярки 2012/13 по порядку и сколько в них было игр (без Матча звёзд)."""
+    """Игровые дни регулярки исходного календаря по порядку и сколько в них было игр (без Матча звёзд и без
+    дней, которых нет в сезоне SEASON_YEAR: их игры расходятся по остальным дням)."""
     days, counts = [], Counter()
     for r in range(db.by_name[table]['rows']):
         h, a = db.get(table, 'home', r), db.get(table, 'away', r)
         if h >= 30 or a >= 30:
             continue
         d = (db.get(table, 'month', r), db.get(table, 'day', r))
+        if not season_day(*d):
+            continue
         if d not in counts:
             days.append(d)
         counts[d] += 1
     return days, counts
+
+def fix_missing_days(db):
+    """Календари, которые nhl32 не составляет заново (юниорские, европейские…): игра на дне, которого нет в сезоне
+    SEASON_YEAR, переезжает на ближайший день, где у обеих команд в этом календаре игры нет (сначала на
+    соседние — 28 февраля, 1 марта: порядок строк по дате не меняется). {таблица: [(строка, было, стало)]}."""
+    moved = {}
+    for t in sorted(db.by_name):
+        if not {'month', 'day', 'home', 'away'} <= set(db.by_name[t]['fields']):
+            continue
+        n = db.by_name[t]['rows']
+        date = [(db.get(t, 'month', r), db.get(t, 'day', r)) for r in range(n)]
+        bad = [r for r in range(n) if not season_day(*date[r])]
+        if not bad:
+            continue
+        busy = defaultdict(set)
+        for r in range(n):
+            busy[date[r]].update((db.get(t, 'home', r), db.get(t, 'away', r)))
+        for r in bad:
+            m, d = date[r]
+            year = SEASON_YEAR if m >= 8 else SEASON_YEAR + 1
+            last = calendar.monthrange(year, m + 1)[1]
+            pos = datetime.date(year, m + 1, last).toordinal() + (d + 1 - last) - 0.5
+            g = (db.get(t, 'home', r), db.get(t, 'away', r))
+            for k in range(1, 30):
+                for o in (int(pos - k + 0.5), int(pos + k - 0.5)):
+                    c = datetime.date.fromordinal(o)
+                    cand = (c.month - 1, c.day - 1)
+                    if not (busy[cand] & set(g)):
+                        break
+                else:
+                    continue
+                break
+            db.set(t, 'month', r, cand[0])
+            db.set(t, 'day', r, cand[1])
+            busy[cand].update(g)
+            moved.setdefault(t, []).append((r, (m, d), cand))
+        new = [(SEASON_MONTHS.index(db.get(t, 'month', r)), db.get(t, 'day', r)) for r in range(n)]
+        assert new == sorted(new), f'{t}: после переноса игр строки не по дате'
+    return moved
 
 def schedule(games, days, counts, rng):
     total = len(games)
@@ -736,6 +792,11 @@ def main():
         plan = schedule(pairs, days, counts, rng)
         write_schedule(db, 'ahlschedule', plan)
         print(f'календарь АХЛ: {len(plan)} игр в {len(days)} игровых днях')
+    moved = fix_missing_days(db)
+    if moved:
+        print(f'дни, которых нет в сезоне {SEASON_YEAR}/{(SEASON_YEAR + 1) % 100:02d}: игры перенесены — ' + '; '.join(
+            f'{t} ' + ', '.join(f'{d0 + 1}.{m0 + 1:02d}→{d1 + 1}.{m1 + 1:02d}' for _, (m0, d0), (m1, d1) in v)
+            for t, v in moved.items()))
     if DB_WIDEN:
         wide = widen_headers(db, a.ahl32)
         print(f'заголовки таблиц базы (франшиза Legacy строит таблицы по ним): {len(wide)} полей шире — {wide}')
