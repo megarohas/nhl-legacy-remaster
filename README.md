@@ -25,6 +25,7 @@
 | [docs/team-editor.md](docs/team-editor.md) | Встроенный редактор команд: кто отсекает обычные команды, что ломает сохранение, вариант «форма-донор» |
 | [docs/fe-fonts.md](docs/fe-fonts.md) | Шрифты интерфейса (TrueType в fe/ion/fonts): какой для чего, замена своим; шрифт меню NHL 12 — стоит в игре, установка и откат |
 | [docs/fe-background.md](docs/fe-background.md) | Фон меню (анимация Apt): синий → любой цвет, tools/febg.py |
+| [docs/fe-menu.md](docs/fe-menu.md) | Главное меню NHL 12 в NHL 13: фон-арена, плашки и шрифт списка, панель Features, современные игроки с фамилиями; tools/menu12.py, menuplayers.py, feapt.py (ActionScript Apt) |
 | [docs/player-models.md](docs/player-models.md) | 3D-модели игроков: из чего собран игрок, детализации, формат сетки RW4, гетры (skatesocktuck) и правка голени, клюшка и обмотка до носка, нижний край свитера сзади как в NHL 10 |
 | [docs/player-equipment.md](docs/player-equipment.md) | Экипировка игроков по фото (НХЛ + Wikimedia Commons): обмотка клюшки, гетры, свитер, визор — поля базы и охват |
 | [docs/teams.md](docs/teams.md) | Команды, лиги, ссылки на команду и календари в базе; НХЛ на 32 команды |
