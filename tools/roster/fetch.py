@@ -13,6 +13,8 @@
 - en.wikipedia.org: «List of current NHL captains and alternate captains» (wikitext);
 - dailyfaceoff.com: сочетания звеньев 32 клубов (`/teams/{slug}/line-combinations`, данные —
   JSON `__NEXT_DATA__` страницы); перед ними — robots.txt (там `Disallow: /api/`, `/cms/`).
+- ahl (--ahl32 или --only ahl): составы клубов АХЛ из Wikipedia, их ID НХЛ (search.d3 по имени) и
+  карточки landing — ahl.py.
 """
 import re
 import time
@@ -158,7 +160,7 @@ PARTS = ['nhl', 'ea', 'nhlratings', 'wiki', 'dfo']
 
 
 def run(paths, parts=None, pause=1.0, refresh=False, log=print):
-    parts = parts or PARTS
+    parts = parts or (PARTS + ['ahl'] if paths.ahl else PARTS)
     h = Http(paths.cache, pause=pause, refresh=refresh, log=log)
     if 'nhl' in parts:
         rosters = nhl_rosters(h, log)
@@ -174,6 +176,9 @@ def run(paths, parts=None, pause=1.0, refresh=False, log=print):
         nhlratings(h, log)
     if 'dfo' in parts:
         dfo(h, log)
+    if 'ahl' in parts:
+        from . import ahl
+        ahl.fetch(h, log)
     write_json(h.path(f'_fetched-{"-".join(parts)}.json'),
                {'date': time.strftime('%Y-%m-%d %H:%M:%S'), 'parts': parts, 'requests': h.requests})
     log(f'fetch: готово, запросов в сеть {h.requests}')

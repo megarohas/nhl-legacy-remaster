@@ -75,6 +75,7 @@ class Paths:
         self.registry = os.path.join(self.work, 'artid-registry.json')
         # artid новых игроков общие для всех папок: в новой папке таблица берётся из основной
         self.registry_main = os.path.join(self.game, 'work', 'roster', 'artid-registry.json')
+        self.ahl = False                # --ahl32: ещё и клубы АХЛ из AHL_CLUBS (составы из Wikipedia)
 
     def meta_for(self, db_path):
         """Схема рядом с базой (nhl32 кладёт свою, с вместимостью франшизы), иначе анкер."""
@@ -209,6 +210,14 @@ TEAM_SLOT = {
     'VAN': 28, 'WSH': 29, 'SEA': 30, 'VGK': 31,
 }
 SLOT_TEAM = {v: k for k, v in TEAM_SLOT.items()}
+# Клубы АХЛ, которые конвейер заполняет сам (--ahl32; база tools/nhl32.py --ahl32, там те же строки
+# в AHL_NEW): строка exhibitionteams → аббревиатура, клуб-хозяин в НХЛ, статья Wikipedia с составом.
+AHL_CLUBS = {
+    220: dict(abbr='CV', name='Coachella Valley Firebirds', wiki='Coachella_Valley_Firebirds', parent='SEA',
+              parent_nick='Kraken'),
+    221: dict(abbr='HSK', name='Henderson Silver Knights', wiki='Henderson_Silver_Knights', parent='VGK',
+              parent_nick='Golden Knights'),
+}
 # прежние и сменившие город клубы → нынешний слот (для команды драфта)
 TEAM_ALIAS = {'PHX': 'UTA', 'ARI': 'UTA', 'ATL': 'WPG', 'L.A': 'LAK', 'N.J': 'NJD', 'S.J': 'SJS', 'T.B': 'TBL',
               'LA': 'LAK', 'NJ': 'NJD', 'SJ': 'SJS', 'TB': 'TBL', 'MDA': 'ANA', 'HFD': 'CAR', 'QUE': 'COL',
@@ -232,3 +241,12 @@ assert TEAM_URL_SLUG['STL'] == 'st-louis-blues' and TEAM_URL_SLUG['UTA'] == 'uta
 def team_slot(abbr):
     abbr = (abbr or '').upper()
     return TEAM_SLOT.get(TEAM_ALIAS.get(abbr, abbr))
+
+
+def club_abbr(slot):
+    """Аббревиатура клуба по строке: НХЛ или клуб АХЛ из AHL_CLUBS."""
+    return SLOT_TEAM.get(slot) or AHL_CLUBS[slot]['abbr']
+
+
+def club_name(abbr):
+    return TEAM_NAMES.get(abbr) or next(c['name'] for c in AHL_CLUBS.values() if c['abbr'] == abbr)

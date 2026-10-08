@@ -14,6 +14,8 @@
 """
 from collections import defaultdict
 
+from .common import AHL_CLUBS
+
 B, S, G = 'exhibitionplayerbiotable', 'exhibitionskaterai', 'exhibitiongoalieai'
 P, R, F = 'exhibitionplayers', 'exhibitionrostertable', 'exhibitionfreeagents'
 T = 'exhibitionteams'
@@ -21,7 +23,7 @@ NHL = range(0, 32)
 ALLSTAR = (218, 219)               # сборные Матча звёзд после tools/nhl32.py (на месте заготовок Custom Team 00/01)
 NATIONAL = range(128, 149)
 SPECIAL = set(NATIONAL) | set(ALLSTAR) | set(range(209, 218))   # сборные, проспекты, легенды, Зимняя классика
-CLUBS = (set(range(32, 128)) | set(range(149, 209))) - set(ALLSTAR)
+CLUBS = (set(range(32, 128)) | set(range(149, 209)) | set(AHL_CLUBS)) - set(ALLSTAR)
 LINK_LIMIT = 16000                 # с 16000 — связи создаваемых игроков
 FLAGS = ([f'l{n}{p}' for n in (1, 2, 3) for p in ('lw', 'c', 'rw', 'ld', 'rd')] + ['l4lw', 'l4c', 'l4rw']
          + [f'pp{n}{p}' for n in (1, 2) for p in ('lw', 'c', 'rw', 'ld', 'rd')]

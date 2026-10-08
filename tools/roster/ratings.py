@@ -137,6 +137,11 @@ class Model:
         adj = -2 if a <= 21 else -1 if a <= 23 else 0
         name = f"{p['first']} {p['last']}"
         spread = zlib.crc32(name.encode()) % 3 - 1          # −1…+1, постоянный для игрока
+        if p.get('ahl'):
+            from .ahl import target_ovr
+            ovr = target_ovr(p, spread)                   # клуб АХЛ: уровень АХЛ, не НХЛ
+            self.estimated[p['nhl_id']] = ovr
+            return ovr
         ovr = self.depth.get(c, 75) + adj + spread
         self.estimated[p['nhl_id']] = ovr
         return ovr

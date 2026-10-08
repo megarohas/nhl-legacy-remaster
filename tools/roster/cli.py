@@ -8,6 +8,8 @@
     python tools/roster report                      # → game/work/roster/report.md, report-lines.md
     python tools/roster all    [--offline]          # всё подряд
     python tools/roster all --offline --work roster-lines   # всё в другую папку: game/work/roster-lines/
+    python tools/roster all --ahl32 --db-in game/work/nhl32-ahl32/nhlng.db --work roster-ahl32
+                                                    # и фарм-клубы Сиэтла и Вегаса (база nhl32.py --ahl32)
 
 Вход по умолчанию — game/work/nhl32/nhlng.db (НХЛ на 32 команды, tools/nhl32.py), выход —
 game/work/roster/nhlng.db (или --work/nhlng.db); в game/userdata/ ничего не пишется.
@@ -32,13 +34,16 @@ def main():
                                    '(по умолчанию game/work/roster)')
     ap.add_argument('--db-in', help='входная база (по умолчанию game/work/nhl32/nhlng.db)')
     ap.add_argument('--db-out', help='выходная база (по умолчанию <work>/nhlng.db)')
-    ap.add_argument('--only', help='fetch: части через запятую (nhl, ea, nhlratings, wiki, dfo)')
+    ap.add_argument('--only', help='fetch: части через запятую (nhl, ea, nhlratings, wiki, dfo, ahl)')
+    ap.add_argument('--ahl32', action='store_true',
+                    help='и клубы АХЛ из common.AHL_CLUBS (фарм-клубы Сиэтла и Вегаса; база tools/nhl32.py --ahl32)')
     ap.add_argument('--refresh', action='store_true', help='fetch: скачать заново, не глядя в кэш')
     ap.add_argument('--offline', action='store_true', help='только кэш; нет файла — ошибка')
     ap.add_argument('--pause', type=float, default=1.0, help='пауза между запросами к хосту, с (не меньше 1)')
     ap.add_argument('--rating-lines', action='store_true', help='write: звенья всех клубов по рейтингу, без lines.json')
     a = ap.parse_args()
     paths = Paths(a.game, a.work)
+    paths.ahl = a.ahl32
     if a.db_in:
         paths.db_in = a.db_in
     if a.db_out:

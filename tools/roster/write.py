@@ -36,7 +36,7 @@ from tdb import Tdb
 
 from . import lines as lines_mod
 from .codes import NONE, country_code, state_code
-from .common import SEASON, SEASON_YEAR, SLOT_TEAM, fit_utf8, norm, read_json, team_slot, write_json
+from .common import SEASON, SEASON_YEAR, SLOT_TEAM, club_abbr, fit_utf8, norm, read_json, team_slot, write_json
 from .dbview import (B, CLUBS, F, FLAGS, G, LINK_LIMIT, NHL, P, POS_CODE, POS_NAME, R, S, SPECIAL, View)
 from .match import load_db
 from .ratings import BASE, SK_BIAS, TRAITS, Model, age, clamp_rating
@@ -233,7 +233,10 @@ class Writer:
             notes.append('нет хвата')
         put('position', POS_CODE[p['pos']])
         put('team', p['slot'] + 1)
-        if p['slot'] + 1 < 1 << db.by_name[B]['fields']['proteam'][1]:
+        if p.get('ahl'):
+            # клуб АХЛ: права — у клуба-хозяина, если контракт с ним (иначе контракт с клубом АХЛ — 0)
+            put('proteam', team_slot(p['ahl']['parent']) + 1 if p['ahl']['nhl_contract'] else 0)
+        elif p['slot'] + 1 < 1 << db.by_name[B]['fields']['proteam'][1]:
             put('proteam', p['slot'] + 1)
         else:
             put('proteam', 0)
@@ -360,7 +363,7 @@ class Writer:
     def team_lines(self, team, tp):
         """Звенья клуба: по реальным сочетаниям (lines.json), если источник дал хотя бы
         lines.MIN_REAL игроков клуба в тройки, пары и ворота, иначе по рейтингу."""
-        abbr = SLOT_TEAM[team]
+        abbr = club_abbr(team)
         lp = [{'key': p['nhl_id'], 'pos': p['pos'], 'ovr': p['_ovr'], 'shoots': p.get('shoots'), 'attrs': p['_attrs'],
                'out': bool(p.get('omitted'))} for p in tp]
         src = self.real.get(abbr)
@@ -582,14 +585,16 @@ class Writer:
             team = v2.g('team', r)
             if team and r not in club_of and team - 1 not in v2.teams_of[r]:
                 bad.append(f"{v2.name(r)}: team {team} — команды нет среди его записей")
-        for team in NHL:
+        # клубы НХЛ и заполненные конвейером клубы АХЛ (--ahl32): 71 место, 20 одетых, буквы, номера
+        own = list(NHL) + sorted({p['slot'] for p in self.players if p.get('ahl')})
+        for team in own:
             te = [e for e in es if e['team'] == team]
             for f in FLAGS:
                 n = sum(e[f] for e in te)
                 if n != 1:
                     bad.append(f'команда {team}: место {f} у {n} игроков')
             # амплуа по местам: вратари — только g1/g2; у звеньев из источника — как в исходной базе
-            strict = (self.lines_info.get(SLOT_TEAM[team]) or {}).get('source', 'rating') != 'rating'
+            strict = (self.lines_info.get(club_abbr(team)) or {}).get('source', 'rating') != 'rating'
             for f in FLAGS:
                 for e in (e for e in te if e[f]):
                     r = v2.row_of_gid.get(v2.link_gid.get(e['playerindex']))
@@ -665,7 +670,7 @@ def run(paths, log=print, real_lines=True):
         'events': w.events, 'teamless': [{'row': r, 'name': w.v.name(r), 'birth': list(w.v.birth(r)),
                                           'special': [t for t in w.v.teams_of[r] if t in SPECIAL]} for r in w.teamless],
         'new_links': w.new_links, 'stats_removed': removed, 'problems': bad,
-        'lines': {SLOT_TEAM[t]: k for t, k in w.lines_of.items()},
+        'lines': {club_abbr(t): k for t, k in w.lines_of.items()},
         'lines_info': w.lines_info,
         'rows': {'roster': w.db.by_name[R]['rows'], 'free_agents': w.db.by_name[F]['rows'],
                  'links': w.db.by_name[P]['rows']},

@@ -10,7 +10,7 @@ import os
 import time
 from collections import Counter, defaultdict
 
-from .common import SLOT_TEAM, TEAM_NAMES, read_json
+from .common import AHL_CLUBS, SLOT_TEAM, TEAM_NAMES, club_abbr, club_name, read_json
 from .dbview import FLAGS, NHL, View
 from .lines_real import GROUP_NAME as GROUP
 
@@ -108,12 +108,13 @@ def run(paths, log=print):
         cap = ', '.join(o['name'] for o in os_ if o.get('letter') == 'C') or '—'
         alt = ', '.join(o['name'] for o in os_ if o.get('letter') == 'A')
         top = ', '.join(f"{o['name']} {o['ovr']}" for o in sorted(os_, key=lambda o: -o['ovr'])[:3])
-        abbr = SLOT_TEAM[slot]
-        add(f"| {slot} | {abbr} {TEAM_NAMES[abbr]} | {len(os_)} ({pos['G']}/{pos['D']}/{pos['F']}) | "
+        abbr = club_abbr(slot)
+        add(f"| {slot} | {abbr} {club_name(abbr)} | {len(os_)} ({pos['G']}/{pos['D']}/{pos['F']}) | "
             f"{sum(not o['new'] for o in os_)} | {sum(o['new'] for o in os_)} | {cap} | {alt} | {top} |")
     add('')
-    add('Слоты 30 и 31 в базе — бывшие Tappara и TPS (tools/nhl32.py): названия, эмблемы и формы Сиэтла и Вегаса —')
-    add('следующий этап. Слот 22 — бывший Phoenix (Юта).')
+    add('Слоты 30 и 31 — Сиэтл и Вегас на бывших заготовках Custom Team 00/01 (tools/nhl32.py), слот 22 — бывший')
+    add('Phoenix (Юта).' + (f" Слоты {', '.join(str(s) for s in sorted(AHL_CLUBS))} — фарм-клубы АХЛ "
+                            '(составы из Wikipedia, --ahl32).' if any(s in by_team for s in AHL_CLUBS) else ''))
     add('')
     # --- поля
     add('## Не заполнено или заглушка')
@@ -191,8 +192,8 @@ def run(paths, log=print):
     add('## Игроки')
     add('')
     for slot in sorted(by_team):
-        abbr = SLOT_TEAM[slot]
-        add(f'### {slot} {abbr} {TEAM_NAMES[abbr]}')
+        abbr = club_abbr(slot)
+        add(f'### {slot} {abbr} {club_name(abbr)}')
         add('')
         add('| # | Игрок | Поз. | Род. | OVR | Рейтинг | Стиль | Буква | Строка базы | Примечания |')
         add('|---|---|---|---|---|---|---|---|---|---|')
@@ -214,7 +215,7 @@ def run(paths, log=print):
     with open(paths.report, 'w', encoding='utf-8', newline='\n') as f:
         f.write('\n'.join(L) + '\n')
     log(f'report: {len(L)} строк -> {paths.report}')
-    assert all(s in NHL for s in by_team)
+    assert all(s in NHL or s in AHL_CLUBS for s in by_team)
     run_lines(paths, log)
 
 

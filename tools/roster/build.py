@@ -66,13 +66,13 @@ def _scoring(land):
     return out
 
 
-def base_record(abbr, e, land, bio):
+def base_record(abbr, e, land, bio, slot=None):
     y, m, d = (int(x) for x in e['birthDate'].split('-'))
     gp, total, pro = _season_gp(land)
     dd = land.get('draftDetails')
     nat = (bio or {}).get('nationalityCode') or e.get('birthCountry')
     return {
-        'nhl_id': e['id'], 'team': abbr, 'slot': TEAM_SLOT[abbr],
+        'nhl_id': e['id'], 'team': abbr, 'slot': TEAM_SLOT[abbr] if slot is None else slot,
         'first': e['firstName']['default'].strip(), 'last': e['lastName']['default'].strip(),
         'pos': POS[e['positionCode']], 'shoots': e.get('shootsCatches') or land.get('shootsCatches'),
         'num': e.get('sweaterNumber') or land.get('sweaterNumber'),
@@ -253,12 +253,24 @@ def run(paths, log=print):
     cap_found, cap_miss = attach_captains(players, caps)
     for p in players:
         p['rating'] = choose_rating(p)
+    ahl_added = []
+    if paths.ahl:
+        # клубы АХЛ — после сшивки рейтингов НХЛ (EA и nhlratings.net — только игроки НХЛ); кто уже в
+        # составе НХЛ (вызван, а Wikipedia не успела) — остаётся в НХЛ
+        from . import ahl
+        for p in ahl.players(cache, bios, base_record, entry_from_landing, sources.nhl_landing, log):
+            if p['nhl_id'] in on or any(q['nhl_id'] == p['nhl_id'] for q in ahl_added):
+                continue
+            p['rating'] = choose_rating(p)
+            ahl_added.append(p)
+        players += ahl_added
     by_src = defaultdict(int)
     for p in players:
         by_src[p['rating']['source']] += 1
     meta = {
         'season': SEASON, 'generated': time.strftime('%Y-%m-%d %H:%M:%S'),
         'counts': {'players': len(players), 'omitted_added': len(extras), 'no_landing': len(no_landing),
+                   'ahl': len(ahl_added), 'ahl_wiki_only': sum(1 for p in ahl_added if p.get('wiki_only')),
                    'ea_top300': len(ea),
                    'ea_matched': len(ea) - len(ea_unmatched), 'nhlratings_pages': len(nr),
                    'nhlratings_matched': nr_used, 'captains_teams': len(caps), 'letters_found': cap_found,
@@ -270,6 +282,8 @@ def run(paths, log=print):
     players.sort(key=lambda p: (p['slot'], {'C': 0, 'L': 1, 'R': 2, 'D': 3, 'G': 4}[p['pos']], p['last'], p['first']))
     write_json(paths.players, {'meta': meta, 'players': players})
     c = meta['counts']
+    if ahl_added:
+        log(f"build: клубы АХЛ — {c['ahl']} игроков (без ID НХЛ {c['ahl_wiki_only']})")
     log(f"build: {c['players']} игроков 32 клубов (из них вне /roster/current {c['omitted_added']}); "
         f"EA {c['ea_matched']}/{c['ea_top300']}, nhlratings.net "
         f"{c['nhlratings_matched']}; рейтинги {dict(by_src)}; буквы {cap_found} ({len(caps)} клубов) -> {paths.players}")
