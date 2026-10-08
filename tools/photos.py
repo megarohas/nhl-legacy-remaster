@@ -154,18 +154,22 @@ def cmd_db():
     meta = os.path.join(os.path.dirname(db_in), 'nhlng-meta.xml')
     db = Tdb(open(db_in, 'rb').read(), load_meta(meta))
     photos = json.load(open(os.path.join(OUT, 'photos.json'), encoding='utf-8'))
+    # строки игроков — из write.json текущей папки конвейера (--work): после пересборки базы
+    # строки могут быть другими, artid стабилен (artid-registry.json)
+    rows = {p['nhl_id']: p['row'] for p in load('write.json')['players']}
     t = 'exhibitionplayerbiotable'
     on = skip = mism = 0
     for p in photos:
-        if p['status'] != 'ok' or p['row'] is None:
+        row = rows.get(p['nhl_id'])
+        if p['status'] != 'ok' or row is None:
             skip += 1
             continue
-        if db.get(t, 'artid', p['row']) != p['artid']:
-            print(f"  строка {p['row']} ({p['name']}): artid в базе {db.get(t, 'artid', p['row'])}, у фото {p['artid']} — пропуск")
+        if db.get(t, 'artid', row) != p['artid']:
+            print(f"  строка {row} ({p['name']}): artid в базе {db.get(t, 'artid', row)}, у фото {p['artid']} — пропуск")
             mism += 1
             continue
-        if db.get(t, 'hasportrait', p['row']) != 1:
-            db.set(t, 'hasportrait', p['row'], 1)
+        if db.get(t, 'hasportrait', row) != 1:
+            db.set(t, 'hasportrait', row, 1)
         on += 1
     db.fix()
     assert not db.verify()
