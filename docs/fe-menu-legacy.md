@@ -6,7 +6,7 @@
 в Legacy — [legacy-data.md](legacy-data.md). Формат роликов — [fe-background.md](fe-background.md).
 
 Собранное лежит в `game/work/legacy-data/menu/` и `game/work/legacy-data/out/`, вне git.
-**В игре не проверялось.**
+**Проверено в игре** 08.10.2026, 23:05–23:10 (legacy-data, Release legacy-port, снимки `game/work/legacy-data/ingame/t5-*`): главное меню грузится, игроки сменяются, кольца в цвет клуба, плашка NHL 12 с кнопкой A и ►; вход и выход — PLAY, Play Now → Select Teams → назад, CUSTOMIZE → назад. Мелочь: в подменю на 9 пунктов (CUSTOMIZE) подзаголовок наезжает на потускневшую табличку LEGACY EDITION под кубком. Остальное из §5 (хаб Be a GM, меню паузы, Scenario Mode, легенды) не смотрели.
 
 ## Коротко
 
