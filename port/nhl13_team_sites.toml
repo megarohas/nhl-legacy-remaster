@@ -1,5 +1,6 @@
 # Сгенерировано tools/team_hooks.py — не править руками. Разбор — docs/teams.md.
 # «30 команд НХЛ → 32»: границы, константы, смещения АХЛ (src/nhl13_team_sites.cpp).
+# Места ahl32 (docs/ahl32.md): «30 клубов АХЛ → 32», профи-команды 64 — при nhl_ahl_teams = 32.
 
 # ARRAY_SIZE 82758DB8: CTR обнуления stats+156 bytes[30] → [32] (пара к 8276DD80)
 # li r9, 30 → 32
@@ -97,11 +98,11 @@ name = "Nhl13Add_p2"
 registers = ["r11"]
 after_instruction = true
 
-# PRO_TEAMS 827D8388: свойство игрока: команда < 60 → объект команды
-# cmps r4, 60 → 62
+# PRO_TEAMS/PRO_TEAMS_64 827D8388: свойство игрока: команда < 60 → объект команды | свойство игрока: команда < 64 (НХЛ 0…31 + АХЛ 32…63) → объект команды (82847640)
+# cmps r4, 60 → 62 / 64 (ahl32)
 [[midasm_hook]]
 address = 0x827D8B24
-name = "Nhl13CmpS_62"
+name = "Nhl13CmpS_62_a64"
 registers = ["r4", "cr6"]
 after_instruction = true
 
@@ -113,11 +114,11 @@ name = "Nhl13CmpS_32"
 registers = ["r3", "cr6"]
 after_instruction = true
 
-# PRO_TEAMS 82804D20: статус игрока: команда < 60 → «в другой профи-команде»
-# cmps r5, 60 → 62
+# PRO_TEAMS/PRO_TEAMS_64 82804D20: статус игрока: команда < 60 → «в другой профи-команде» | статус игрока: команда < 64 → «в другой профи-команде»
+# cmps r5, 60 → 62 / 64 (ahl32)
 [[midasm_hook]]
 address = 0x82804D64
-name = "Nhl13CmpS_62"
+name = "Nhl13CmpS_62_a64"
 registers = ["r5", "cr6"]
 after_instruction = true
 
@@ -129,27 +130,27 @@ name = "Nhl13CmpS_32"
 registers = ["r4", "cr6"]
 after_instruction = true
 
-# DBQUERY 82804EE0: запрос по полю team < 60
-# li r4, 60 → 62
+# DBQUERY/DBQUERY_64 82804EE0: запрос по полю team < 60 | leaguerostertable WHERE team < 64 (8264C070 — условие «<»)
+# li r4, 60 → 62 / 64 (ahl32)
 [[midasm_hook]]
 address = 0x82805470
-name = "Nhl13Li_62"
+name = "Nhl13Li_62_a64"
 registers = ["r4"]
 after_instruction = true
 
-# DBQUERY 82805600: запрос по полю team < 60
-# li r4, 60 → 62
+# DBQUERY/DBQUERY_64 82805600: запрос по полю team < 60 | leaguerostertable WHERE team < 64
+# li r4, 60 → 62 / 64 (ahl32)
 [[midasm_hook]]
 address = 0x82805660
-name = "Nhl13Li_62"
+name = "Nhl13Li_62_a64"
 registers = ["r4"]
 after_instruction = true
 
-# DBQUERY 82805820: leaguerostertable WHERE team < 60 (офлайн)
-# li r4, 60 → 62
+# DBQUERY/DBQUERY_64 82805820: leaguerostertable WHERE team < 60 (офлайн) | leaguerostertable WHERE team < 64 (офлайн)
+# li r4, 60 → 62 / 64 (ahl32)
 [[midasm_hook]]
 address = 0x82805890
-name = "Nhl13Li_62"
+name = "Nhl13Li_62_a64"
 registers = ["r4"]
 after_instruction = true
 
@@ -201,11 +202,11 @@ name = "Nhl13CmpU_32"
 registers = ["r11", "cr6"]
 after_instruction = true
 
-# PRO_TEAMS 82843900: рекорды: команда (колонка 9) < 60, иначе −1
-# cmps r11, 60 → 62
+# PRO_TEAMS/PRO_TEAMS_64 82843900: рекорды: команда (колонка 9) < 60, иначе −1 | рекорды: команда (колонка 9) < 64, иначе −1
+# cmps r11, 60 → 62 / 64 (ahl32)
 [[midasm_hook]]
 address = 0x82843A04
-name = "Nhl13CmpS_62"
+name = "Nhl13CmpS_62_a64"
 registers = ["r11", "cr6"]
 after_instruction = true
 
@@ -231,6 +232,14 @@ after_instruction = true
 address = 0x8289AB5C
 name = "Nhl13CmpS_32"
 registers = ["r11", "cr6"]
+after_instruction = true
+
+# AHL_TEAMS 828CEBF0: 828CEBF0 (конец создания франшизы): цикл по клубам АХЛ 0…31 — сведения о команде (номер = i + 32, 828CF224) и освобождение объекта +772[i]
+# cmps r30, 30 → 32 (ahl32)
+[[midasm_hook]]
+address = 0x828CF3C4
+name = "Nhl13CmpS_a32"
+registers = ["r30", "cr6"]
 after_instruction = true
 
 # NHL_TEAMS 828D46A8: потолок зарплат у CPU: цикл по командам НХЛ
@@ -329,19 +338,19 @@ name = "Nhl13CmpS_32"
 registers = ["r30", "cr6"]
 after_instruction = true
 
-# PLAYOFF_RUN : 828EF198: Alloc this+80 u32[60] → [62]
-# li r3, 240 → 248
+# PLAYOFF_RUN/PLAYOFF_RUN_64 : 828EF198: Alloc this+80 u32[60] → [62] | 828EF198: Alloc this+80 u32[60] → [64] (значение по месту прошлого сезона на профи-команду)
+# li r3, 240 → 248 / 256 (ahl32)
 [[midasm_hook]]
 address = 0x828EF1D0
-name = "Nhl13Li_248"
+name = "Nhl13Li_248_a256"
 registers = ["r3"]
 after_instruction = true
 
-# PLAYOFF_RUN : 828EF198: обнуление this+80 60 → 62
-# li r10, 60 → 62
+# PLAYOFF_RUN/PLAYOFF_RUN_64 : 828EF198: обнуление this+80 60 → 62 | 828EF198: CTR обнуления this+80 → 64
+# li r10, 60 → 62 / 64 (ahl32)
 [[midasm_hook]]
 address = 0x828EF1DC
-name = "Nhl13Li_62"
+name = "Nhl13Li_62_a64"
 registers = ["r10"]
 after_instruction = true
 
@@ -425,11 +434,11 @@ name = "Nhl13CmpS_32"
 registers = ["r30", "cr6"]
 after_instruction = true
 
-# PLAYOFF_RUN : 828EF198: профи < 62
-# cmps r30, 60 → 62
+# PLAYOFF_RUN/PLAYOFF_RUN_64 : 828EF198: профи < 62 | 828EF198: запись B (АХЛ) только для номера < 64; массив B на стеке остаётся на 30 (teamid 32…61, у новых клубов истории нет)
+# cmps r30, 60 → 62 / 64 (ahl32)
 [[midasm_hook]]
 address = 0x828EF6A4
-name = "Nhl13CmpS_62"
+name = "Nhl13CmpS_62_a64"
 registers = ["r30", "cr6"]
 after_instruction = true
 
@@ -441,11 +450,11 @@ name = "Nhl13Add_p16"
 registers = ["r1"]
 after_instruction = true
 
-# PLAYOFF_RUN : 828F6A60: чтение this+80 по номеру профи-команды < 62
-# cmps r30, 60 → 62
+# PLAYOFF_RUN/PLAYOFF_RUN_64 : 828F6A60: чтение this+80 по номеру профи-команды < 62 | 828F6A60: чтение this+80 по номеру профи-команды < 64
+# cmps r30, 60 → 62 / 64 (ahl32)
 [[midasm_hook]]
 address = 0x828F6A98
-name = "Nhl13CmpS_62"
+name = "Nhl13CmpS_62_a64"
 registers = ["r30", "cr6"]
 after_instruction = true
 
@@ -625,11 +634,11 @@ name = "Nhl13CmpS_32"
 registers = ["r31", "cr6"]
 after_instruction = true
 
-# PRO_TEAMS 82928740: смена потолка зарплат: пересчёт составов всех профи-команд
-# cmps r31, 60 → 62
+# PRO_TEAMS/PRO_TEAMS_64 82928740: смена потолка зарплат: пересчёт составов всех профи-команд | смена потолка зарплат: пересчёт составов всех профи-команд 0…63
+# cmps r31, 60 → 62 / 64 (ahl32)
 [[midasm_hook]]
 address = 0x82928800
-name = "Nhl13CmpS_62"
+name = "Nhl13CmpS_62_a64"
 registers = ["r31", "cr6"]
 after_instruction = true
 
@@ -641,68 +650,84 @@ name = "Nhl13Li_32"
 registers = ["r4"]
 after_instruction = true
 
-# STANDINGS 8292A8B8: отметки x/y/z/e (8292A8B8): первая запись второй конференции 15 → 16
-# li r11, 15 → 16
+# STANDINGS 8292A8B8: отметки x/y/z/e (8292A8B8): первая запись второй конференции 15 → 16 — только у таблицы на 16 + 16 (НХЛ; АХЛ — при ahl32), r31 — таблица
+# li r11, 15 → 16 при Nhl13StandingsWide(r31)
 [[midasm_hook]]
 address = 0x8292AC04
-name = "Nhl13Li_16"
-registers = ["r11"]
+name = "Nhl13Li_16_StandingsWide"
+registers = ["r11", "r31"]
 after_instruction = true
 
-# STANDINGS 8292A8B8: отметки x/y/z/e: лидеры второй конференции 15/16/17 → 16/17/18
-# li r11, 15 → 16
+# STANDINGS 8292A8B8: отметки x/y/z/e: лидеры второй конференции 15/16/17 → 16/17/18 — только у таблицы на 16 + 16 (НХЛ; АХЛ — при ahl32), r31 — таблица
+# li r11, 15 → 16 при Nhl13StandingsWide(r31)
 [[midasm_hook]]
 address = 0x8292ACC0
-name = "Nhl13Li_16"
-registers = ["r11"]
+name = "Nhl13Li_16_StandingsWide"
+registers = ["r11", "r31"]
 after_instruction = true
 
-# STANDINGS 8292A8B8: отметки x/y/z/e: лидеры второй конференции
-# li r9, 16 → 17
+# STANDINGS 8292A8B8: отметки x/y/z/e: лидеры второй конференции — только у таблицы на 16 + 16 (НХЛ; АХЛ — при ahl32), r31 — таблица
+# li r9, 16 → 17 при Nhl13StandingsWide(r31)
 [[midasm_hook]]
 address = 0x8292ACC8
-name = "Nhl13Li_17"
-registers = ["r9"]
+name = "Nhl13Li_17_StandingsWide"
+registers = ["r9", "r31"]
 after_instruction = true
 
-# STANDINGS 8292A8B8: отметки x/y/z/e: лидеры второй конференции
-# li r8, 17 → 18
+# STANDINGS 8292A8B8: отметки x/y/z/e: лидеры второй конференции — только у таблицы на 16 + 16 (НХЛ; АХЛ — при ahl32), r31 — таблица
+# li r8, 17 → 18 при Nhl13StandingsWide(r31)
 [[midasm_hook]]
 address = 0x8292ACD0
-name = "Nhl13Li_18"
-registers = ["r8"]
+name = "Nhl13Li_18_StandingsWide"
+registers = ["r8", "r31"]
 after_instruction = true
 
-# STANDINGS 8292A8B8: отметки x/y/z/e: смещение второй конференции 15·24 → 16·24
-# li r11, 360 → 384
+# STANDINGS 8292A8B8: отметки x/y/z/e: смещение второй конференции 15·24 → 16·24 — только у таблицы на 16 + 16 (НХЛ; АХЛ — при ahl32), r31 — таблица
+# li r11, 360 → 384 при Nhl13StandingsWide(r31)
 [[midasm_hook]]
 address = 0x8292AEF0
-name = "Nhl13Li_384"
-registers = ["r11"]
+name = "Nhl13Li_384_StandingsWide"
+registers = ["r11", "r31"]
 after_instruction = true
 
-# STANDINGS 8292A8B8: отметки x/y/z/e: конец мест плей-офф второй конференции 23·24 → 24·24
-# cmps r11, 552 → 576
+# STANDINGS 8292A8B8: отметки x/y/z/e: конец мест плей-офф второй конференции 23·24 → 24·24 — только у таблицы на 16 + 16 (НХЛ; АХЛ — при ahl32), r31 — таблица
+# cmps r11, 552 → 576 при Nhl13StandingsWide(r31)
 [[midasm_hook]]
 address = 0x8292AF0C
-name = "Nhl13CmpS_576"
-registers = ["r11", "cr6"]
+name = "Nhl13CmpS_576_StandingsWide"
+registers = ["r11", "cr6", "r31"]
 after_instruction = true
 
-# STANDINGS 8292A8B8: отметки x/y/z/e: смещение второй конференции 15·24 → 16·24
-# li r11, 360 → 384
+# STANDINGS 8292A8B8: отметки x/y/z/e: смещение второй конференции 15·24 → 16·24 — только у таблицы на 16 + 16 (НХЛ; АХЛ — при ahl32), r31 — таблица
+# li r11, 360 → 384 при Nhl13StandingsWide(r31)
 [[midasm_hook]]
 address = 0x8292B1A8
-name = "Nhl13Li_384"
-registers = ["r11"]
+name = "Nhl13Li_384_StandingsWide"
+registers = ["r11", "r31"]
 after_instruction = true
 
-# STANDINGS 8292A8B8: отметки x/y/z/e: конец мест плей-офф второй конференции 23·24 → 24·24
-# cmps r11, 552 → 576
+# STANDINGS 8292A8B8: отметки x/y/z/e: конец мест плей-офф второй конференции 23·24 → 24·24 — только у таблицы на 16 + 16 (НХЛ; АХЛ — при ahl32), r31 — таблица
+# cmps r11, 552 → 576 при Nhl13StandingsWide(r31)
 [[midasm_hook]]
 address = 0x8292B1C4
-name = "Nhl13CmpS_576"
-registers = ["r11", "cr6"]
+name = "Nhl13CmpS_576_StandingsWide"
+registers = ["r11", "cr6", "r31"]
+after_instruction = true
+
+# ARRAY_SIZE 8292FFB0: CTR обнуления bytes[30] @объект сима +0xB2768 (тот же массив, что 82919190; до +0xB2788 место есть)
+# li r10, 30 → 32
+[[midasm_hook]]
+address = 0x82930050
+name = "Nhl13Li_32"
+registers = ["r10"]
+after_instruction = true
+
+# ARRAY_SIZE 8292FFB0: второе обнуление того же массива +0xB2768
+# li r10, 30 → 32
+[[midasm_hook]]
+address = 0x829300CC
+name = "Nhl13Li_32"
+registers = ["r10"]
 after_instruction = true
 
 # DRAFT : 82931B70: пиков в раунде = число команд
@@ -823,6 +848,14 @@ after_instruction = true
 address = 0x82942538
 name = "Nhl13MulSame_30_32"
 registers = ["r11"]
+after_instruction = true
+
+# ARRAY_SIZE 829473C8: CTR обнуления флагов команд +14613 [30] (цикл выше — по [r30+4] командам лиги; до +14648 место есть)
+# li r10, 30 → 32
+[[midasm_hook]]
+address = 0x82947424
+name = "Nhl13Li_32"
+registers = ["r10"]
 after_instruction = true
 
 # NHL_TEAMS 82958480: карточка игрока (офлайн): команда 0…29 → «в НХЛ» (+108)

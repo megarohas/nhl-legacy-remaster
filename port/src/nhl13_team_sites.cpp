@@ -1,11 +1,14 @@
 // Сгенерировано tools/team_hooks.py — не править руками.
 // Врезки «30 команд НХЛ → 32» (port/nhl13_team_sites.toml); действуют при nhl_teams = 32.
+// Варианты ahl32 (nhl_ahl_teams = 32, только вместе с nhl_teams = 32) — docs/ahl32.md.
 
 #include <cstdint>
 
 #include <rex/ppc.h>
 
 bool Nhl13ThirtyTwo();
+bool Nhl13Ahl32();
+bool Nhl13StandingsWide(PPCRegister& r);
 
 void Nhl13Add_m2(PPCRegister& d) {
   if (Nhl13ThirtyTwo()) {
@@ -52,8 +55,8 @@ void Nhl13CmpS_32(PPCRegister& a, PPCCRRegister& cr) {
   }
 }
 
-void Nhl13CmpS_576(PPCRegister& a, PPCCRRegister& cr) {
-  if (Nhl13ThirtyTwo()) {
+void Nhl13CmpS_576_StandingsWide(PPCRegister& a, PPCCRRegister& cr, PPCRegister& g) {
+  if (Nhl13StandingsWide(g)) {
     const int32_t v = a.s32, n = 576;
     cr.lt = v < n;
     cr.gt = v > n;
@@ -61,13 +64,32 @@ void Nhl13CmpS_576(PPCRegister& a, PPCCRRegister& cr) {
   }
 }
 
-void Nhl13CmpS_62(PPCRegister& a, PPCCRRegister& cr) {
-  if (Nhl13ThirtyTwo()) {
-    const int32_t v = a.s32, n = 62;
-    cr.lt = v < n;
-    cr.gt = v > n;
-    cr.eq = v == n;
+void Nhl13CmpS_62_a64(PPCRegister& a, PPCCRRegister& cr) {
+  int32_t n;
+  if (Nhl13Ahl32()) {
+    n = 64;
+  } else if (Nhl13ThirtyTwo()) {
+    n = 62;
+  } else {
+    return;
   }
+  const int32_t v = a.s32;
+  cr.lt = v < n;
+  cr.gt = v > n;
+  cr.eq = v == n;
+}
+
+void Nhl13CmpS_a32(PPCRegister& a, PPCCRRegister& cr) {
+  int32_t n;
+  if (Nhl13Ahl32()) {
+    n = 32;
+  } else {
+    return;
+  }
+  const int32_t v = a.s32;
+  cr.lt = v < n;
+  cr.gt = v > n;
+  cr.eq = v == n;
 }
 
 void Nhl13CmpU_32(PPCRegister& a, PPCCRRegister& cr) {
@@ -97,8 +119,20 @@ void Nhl13Li_16(PPCRegister& d) {
   }
 }
 
+void Nhl13Li_16_StandingsWide(PPCRegister& d, PPCRegister& g) {
+  if (Nhl13StandingsWide(g)) {
+    d.s64 = 16;
+  }
+}
+
 void Nhl13Li_17(PPCRegister& d) {
   if (Nhl13ThirtyTwo()) {
+    d.s64 = 17;
+  }
+}
+
+void Nhl13Li_17_StandingsWide(PPCRegister& d, PPCRegister& g) {
+  if (Nhl13StandingsWide(g)) {
     d.s64 = 17;
   }
 }
@@ -109,16 +143,28 @@ void Nhl13Li_18(PPCRegister& d) {
   }
 }
 
+void Nhl13Li_18_StandingsWide(PPCRegister& d, PPCRegister& g) {
+  if (Nhl13StandingsWide(g)) {
+    d.s64 = 18;
+  }
+}
+
 void Nhl13Li_224(PPCRegister& d) {
   if (Nhl13ThirtyTwo()) {
     d.s64 = 224;
   }
 }
 
-void Nhl13Li_248(PPCRegister& d) {
-  if (Nhl13ThirtyTwo()) {
-    d.s64 = 248;
+void Nhl13Li_248_a256(PPCRegister& d) {
+  int64_t n;
+  if (Nhl13Ahl32()) {
+    n = 256;
+  } else if (Nhl13ThirtyTwo()) {
+    n = 248;
+  } else {
+    return;
   }
+  d.s64 = n;
 }
 
 void Nhl13Li_31(PPCRegister& d) {
@@ -145,10 +191,22 @@ void Nhl13Li_384(PPCRegister& d) {
   }
 }
 
-void Nhl13Li_62(PPCRegister& d) {
-  if (Nhl13ThirtyTwo()) {
-    d.s64 = 62;
+void Nhl13Li_384_StandingsWide(PPCRegister& d, PPCRegister& g) {
+  if (Nhl13StandingsWide(g)) {
+    d.s64 = 384;
   }
+}
+
+void Nhl13Li_62_a64(PPCRegister& d) {
+  int64_t n;
+  if (Nhl13Ahl32()) {
+    n = 64;
+  } else if (Nhl13ThirtyTwo()) {
+    n = 62;
+  } else {
+    return;
+  }
+  d.s64 = n;
 }
 
 void Nhl13Li_64(PPCRegister& d) {
