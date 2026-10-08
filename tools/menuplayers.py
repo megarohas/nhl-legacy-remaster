@@ -11,9 +11,16 @@ PRIMARY_COLOUR места. Инструмент собирает эти файл
     python menuplayers.py plan SPEC.json [--top 21] [--must ID,ID…] [--players players.json]
         # список: обязательные (по умолчанию — Кучеров, Макдэвид, Маккиннон, Квинн и Джек Хьюзы, Макар,
         # Шестёркин, Василевский) + лучшие по рейтингу базы; клуб и цвет — из базы. Правится руками.
+    python menuplayers.py scout SPEC.json [--slots …] [--max 60] [--skip-done]
+        # кандидаты фото: кэш конвейера, players/src/<id>/, категории Commons, картинки статей NHL.com с тегом
+        # игрока → быстрая вырезка и оценка → лист players/scout/<место>_<id>.jpg и scout/<id>.json
+    python menuplayers.py try SPEC.json --slot N --cand 0,5,7   # примерка кандидатов «на экране меню»
+    python menuplayers.py pick SPEC.json [--slots …]        # автоматический выбор (ручной — "photo_locked")
     python menuplayers.py cut SPEC.json                     # вырезка фона (rembg) → кэш players/cut/
-    python menuplayers.py build SPEC.json OUTDIR            # раскладка cache:: fe/ion/artassets/backgrounds/
-                                                            # mainmenuplayers(blur)/nhl<N>.big + фон с цветами
+    python menuplayers.py build SPEC.json OUTDIR [--only N,…] [--no-names] [--no-legends]
+        # раскладка cache: fe/ion/artassets/backgrounds/mainmenuplayers(blur)/nhl<N>.big, легенды с фамилиями,
+        # фон NHL 12 с цветами колец и правками проезда; OUTDIR/_preview — кадры и вид «на экране»
+    python menuplayers.py screens OUTDIR [--out JPG]        # лист «на экране меню» (видимые обрезы — пурпурным)
     python menuplayers.py sheet OUTDIR [--out PNG]          # контактный лист собранного (как в игре: на арене)
 
 Поля игрока в SPEC.json: slot (ASSET_ID), nhl_id, name, team (аббревиатура НХЛ), photo ("auto" или путь),
