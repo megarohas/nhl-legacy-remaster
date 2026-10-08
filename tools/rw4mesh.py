@@ -43,7 +43,9 @@ exhibitionskaterequipment.skatesocktuck (0…3, у игры — байт +690 з
 +Z — вперёд, к носку конька), нормаль и касательная DEC3N (10 бит на X, Y, Z от младших битов слова, /511; старшие
 2 бита — 0), UV USHORT2N, индексы костей USHORT4 (номер кости × 3 — номер регистра матрицы 3×4), веса UBYTE4N
 (в файле байты в обратном порядке: вес X — последний байт слова). Индексы — 16 бит, полосы треугольников, 0xFFFF —
-разрыв полосы; у нечётных треугольников полосы порядок обхода обратный.
+разрыв полосы; у нечётных треугольников полосы порядок обхода обратный. Сетки NHL 10 (шаг 40: позиция FLOAT3 —
+float32, веса USHORT4N — 4 × u16 в порядке файла) тоже разбираются и кодируются обратно байт в байт (pos_f32,
+w_u16); set_skin — кости и веса вершины (сумма весов ровно 255 / 65535).
 
 Только стандартная библиотека (+ Chrome/Edge без окна — подписи листа превью, как в teamart). teamart, kitpaint,
 czkit, playerhead — как библиотеки, не меняются.
@@ -65,13 +67,15 @@ TYPE_NAMES = 0x00EC0010      # имена растров
 
 # D3DDECLTYPE Xbox 360: биты 0–5 — формат выборки Xenos, 6–9 — знак/целое, 10–21 — перестановка компонент
 DECL_FLOAT16_4 = 0x1A2360
+DECL_FLOAT3 = 0x2A23B9           # позиция у NHL 10 (шаг вершины 40)
 DECL_DEC3N = 0x2A2187
 DECL_USHORT2N = 0x2C2059
 DECL_USHORT4 = 0x1A225A
 DECL_UBYTE4N = 0x1A2086
+DECL_USHORT4N = 0x1A205A         # веса у NHL 10: 4 × u16 / 65535, в порядке файла
 DECL_INFO = {DECL_FLOAT16_4: ('FLOAT16_4', 8), DECL_DEC3N: ('DEC3N', 4), DECL_USHORT2N: ('USHORT2N', 4),
-             DECL_USHORT4: ('USHORT4', 8), DECL_UBYTE4N: ('UBYTE4N', 4),
-             0x2A23B9: ('FLOAT3', 12), 0x2C23A5: ('FLOAT2', 8), 0x1A23A6: ('FLOAT4', 16), 0x2C83A4: ('FLOAT1', 4),
+             DECL_USHORT4: ('USHORT4', 8), DECL_UBYTE4N: ('UBYTE4N', 4), DECL_USHORT4N: ('USHORT4N', 8),
+             DECL_FLOAT3: ('FLOAT3', 12), 0x2C23A5: ('FLOAT2', 8), 0x1A23A6: ('FLOAT4', 16), 0x2C83A4: ('FLOAT1', 4),
              0x182886: ('D3DCOLOR', 4), 0x2C2159: ('SHORT2N', 4), 0x1A215A: ('SHORT4N', 8),
              0x2C235F: ('FLOAT16_2', 4), 0x1A2286: ('UBYTE4', 4), 0x2C2359: ('SHORT2', 4)}
 USAGE = {0: 'position', 1: 'blendweight', 2: 'blendindices', 3: 'normal', 4: 'psize', 5: 'texcoord', 6: 'tangent',
@@ -316,15 +320,22 @@ class Mesh:
 
     def _decode(self):
         raw, vo, st, nv = self.f.raw, self.vo, self.stride, self.nv
-        ep, en, et = self.elem(0, DECL_FLOAT16_4), self.elem(3, DECL_DEC3N), self.elem(6, DECL_DEC3N)
-        eu, ei, ew = self.elem(5, DECL_USHORT2N), self.elem(2, DECL_USHORT4), self.elem(1, DECL_UBYTE4N)
+        ep = self.elem(0, DECL_FLOAT16_4) or self.elem(0, DECL_FLOAT3)
+        en, et = self.elem(3, DECL_DEC3N), self.elem(6, DECL_DEC3N)
+        eu, ei = self.elem(5, DECL_USHORT2N), self.elem(2, DECL_USHORT4)
+        ew = self.elem(1, DECL_UBYTE4N) or self.elem(1, DECL_USHORT4N)
         if ep is None:
-            raise ValueError(f'{self.path}: нет позиции FLOAT16_4')
+            raise ValueError(f'{self.path}: нет позиции FLOAT16_4 / FLOAT3')
         self.e_pos, self.e_nrm, self.e_tan, self.e_uv, self.e_bi, self.e_bw = ep, en, et, eu, ei, ew
+        self.pos_f32 = ep.type == DECL_FLOAT3            # NHL 10: позиция float32, веса u16
+        self.w_u16 = ew is not None and ew.type == DECL_USHORT4N
         self.pos, self.nrm, self.tan, self.uv, self.bones, self.weights = [], [], [], [], [], []
         for i in range(nv):
             b = vo + i * st
-            self.pos.append([half_dec(h) for h in struct.unpack_from('>3H', raw, b + ep.off)])
+            if self.pos_f32:
+                self.pos.append(list(struct.unpack_from('>3f', raw, b + ep.off)))
+            else:
+                self.pos.append([half_dec(h) for h in struct.unpack_from('>3H', raw, b + ep.off)])
             if en:
                 self.nrm.append(dec3n_dec(u32(raw, b + en.off)))
             if et:
@@ -333,17 +344,30 @@ class Mesh:
                 self.uv.append([x / 65535.0 for x in struct.unpack_from('>2H', raw, b + eu.off)])
             if ei:
                 self.bones.append(tuple(x // 3 for x in struct.unpack_from('>4H', raw, b + ei.off)))
-            if ew:
+            if ew and self.w_u16:
+                self.weights.append(tuple(x / 65535.0 for x in struct.unpack_from('>4H', raw, b + ew.off)))
+            elif ew:
                 self.weights.append(tuple(x / 255.0 for x in raw[b + ew.off:b + ew.off + 4][::-1]))
 
     # --- запись (только изменённые вершины)
     def _vb(self, i, e):
         return self.vo + i * self.stride + e.off
 
+    def _pos_bytes(self, p):
+        if self.pos_f32:
+            return struct.pack('>3f', *(float(c) for c in p))
+        return struct.pack('>3H', *(half_enc(float(c)) for c in p))
+
+    def _pos_read(self, buf, o):
+        if self.pos_f32:
+            return list(struct.unpack_from('>3f', buf, o))
+        return [half_dec(h) for h in struct.unpack_from('>3H', buf, o)]
+
     def set_pos(self, i, p):
         o = self._vb(i, self.e_pos)
-        struct.pack_into('>3H', self.f.raw, o, *(half_enc(float(c)) for c in p))
-        self.pos[i] = [half_dec(h) for h in struct.unpack_from('>3H', self.f.raw, o)]
+        b = self._pos_bytes(p)
+        self.f.raw[o:o + len(b)] = b
+        self.pos[i] = self._pos_read(self.f.raw, o)
 
     def _set_dec3n(self, e, i, v):
         o = self._vb(i, e)
@@ -358,6 +382,29 @@ class Mesh:
     def set_tan(self, i, t):
         self.tan[i] = self._set_dec3n(self.e_tan, i, t)
 
+    def set_skin(self, i, bones, weights):
+        """Кости (номера скелета, до 4) и веса вершины i: веса квантуются в формат файла так, чтобы сумма была
+        ровно 255 (u16 — 65535); пустые места — последняя кость с весом 0 (как у EA)."""
+        bones, weights = list(bones)[:4], list(weights)[:4]
+        while len(bones) < 4:
+            bones.append(bones[-1] if bones else 0)
+            weights.append(0.0)
+        full = 65535 if self.w_u16 else 255
+        s = sum(weights) or 1.0
+        raw_q = [w / s * full for w in weights]
+        q = [int(x) for x in raw_q]
+        for k in sorted(range(4), key=lambda k: raw_q[k] - q[k], reverse=True)[:full - sum(q)]:
+            q[k] += 1
+        o = self._vb(i, self.e_bi)
+        struct.pack_into('>4H', self.f.raw, o, *(b * 3 for b in bones))
+        o = self._vb(i, self.e_bw)
+        if self.w_u16:
+            struct.pack_into('>4H', self.f.raw, o, *q)
+        else:
+            self.f.raw[o:o + 4] = bytes(q[::-1])
+        self.bones[i] = tuple(bones)
+        self.weights[i] = tuple(x / full for x in q)
+
     def bytes(self):
         return self.f.bytes()
 
@@ -370,7 +417,8 @@ class Mesh:
         """Новая вершина (байты шага) по образцу base (байты вершины этой сетки): заменяются заданные атрибуты."""
         v = bytearray(base)
         if pos is not None:
-            struct.pack_into('>3H', v, self.e_pos.off, *(half_enc(float(c)) for c in pos))
+            b = self._pos_bytes(pos)
+            v[self.e_pos.off:self.e_pos.off + len(b)] = b
         for e, val in ((self.e_nrm, nrm), (self.e_tan, tan)):
             if val is not None and e is not None:
                 top = u32(v, e.off) >> 30
@@ -379,7 +427,9 @@ class Mesh:
             struct.pack_into('>2H', v, self.e_uv.off, *(max(0, min(65535, int(round(c * 65535)))) for c in uv))
         if bones is not None and self.e_bi:
             struct.pack_into('>4H', v, self.e_bi.off, *(b * 3 for b in bones))
-        if weights is not None and self.e_bw:
+        if weights is not None and self.e_bw and self.w_u16:
+            struct.pack_into('>4H', v, self.e_bw.off, *(max(0, min(65535, int(round(w * 65535)))) for w in weights))
+        elif weights is not None and self.e_bw:
             q = [max(0, min(255, int(round(w * 255)))) for w in weights]
             v[self.e_bw.off:self.e_bw.off + 4] = bytes(q[::-1])
         return bytes(v)
@@ -434,11 +484,11 @@ class Mesh:
     def raw_key(self, i):
         """Ключ сварки: позиция (с w) и кости/веса байт в байт — дубликаты вершины по швам UV/нормалей."""
         b = self.vo + i * self.stride
-        k = bytes(self.f.raw[b + self.e_pos.off:b + self.e_pos.off + 8])
+        k = bytes(self.f.raw[b + self.e_pos.off:b + self.e_pos.off + (12 if self.pos_f32 else 8)])
         if self.e_bi:
             k += bytes(self.f.raw[b + self.e_bi.off:b + self.e_bi.off + 8])
         if self.e_bw:
-            k += bytes(self.f.raw[b + self.e_bw.off:b + self.e_bw.off + 4])
+            k += bytes(self.f.raw[b + self.e_bw.off:b + self.e_bw.off + (8 if self.w_u16 else 4)])
         return k
 
     def main_bone(self, i):
@@ -473,7 +523,8 @@ def reencode_check(m):
     for i in range(m.nv):
         b = m.vo + i * m.stride
         o = b + m.e_pos.off
-        if struct.pack('>3H', *(half_enc(c) for c in m.pos[i])) != raw[o:o + 6]:
+        pb = m._pos_bytes(m.pos[i])
+        if pb != raw[o:o + len(pb)]:
             bad['position'] = bad.get('position', 0) + 1
         for name, e, vals in (('normal', m.e_nrm, m.nrm), ('tangent', m.e_tan, m.tan)):
             if e is None:
@@ -490,7 +541,11 @@ def reencode_check(m):
             o = b + m.e_bi.off
             if struct.pack('>4H', *(x * 3 for x in m.bones[i])) != raw[o:o + 8]:
                 bad['blendindices'] = bad.get('blendindices', 0) + 1
-        if m.e_bw:
+        if m.e_bw and m.w_u16:
+            o = b + m.e_bw.off
+            if struct.pack('>4H', *(int(round(x * 65535)) for x in m.weights[i])) != raw[o:o + 8]:
+                bad['blendweight'] = bad.get('blendweight', 0) + 1
+        elif m.e_bw:
             o = b + m.e_bw.off
             if bytes(int(round(x * 255)) for x in m.weights[i])[::-1] != raw[o:o + 4]:
                 bad['blendweight'] = bad.get('blendweight', 0) + 1
