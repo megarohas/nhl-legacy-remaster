@@ -329,3 +329,128 @@ python tools/newteams_art.py [DB] [--out OUT] [--spotlight] [--jerseys] [--stadi
 `puck_rgba_league`, `SIZE_TARGET`, `EA_MASKS`, `ea_mask`, `apply_mask`, `alpha_stats`, `fit_logo`,
 `RX_TEMPLATES`, `rx_template` и параметр `build(..., ea_fit=False)`. Только стандартная библиотека Python + браузер. Подсобные
 скрипты разбора (дамп базы, поиск ссылок в коде, листы превью) — `game/work/logos/scripts/`.
+
+## 9. NHL Legacy: арт SEA/VGK (08.10.2026)
+
+Перенос в NHL Legacy Edition (Xbox 360, TitleID 454109EC) — те же инструменты с `--game legacy`
+(`tools/gameprofile.py`): шаблоны и контейнеры — из распакованных архивов Legacy
+(`game/other/legacy/big/<архив>/…`), готовое — дерево `cache:` в `game/work/legacy-data/out/`
+(ставит legacy-data своим install-скриптом). **В игре** (порт Legacy, 08.10.2026, проверка legacy-data,
+снимки `game/work/legacy-data/ingame/t4-*.png`): логотипы Kraken и Golden Knights на выборе команд, в
+стартовых составах и предматчевой заставке, табло SEA/VGK, логотип VGK в центре льда; в логе порта ни
+одного промаха `cache:` по нашим файлам. Шайба, прожекторы, r, календарь — отдельно не смотрели.
+
+**Номера.** У Legacy арт 98 и 99 заняты (Vaasan Sport, KooKoo), свободны 100–107: **SEA — 100,
+VGK — 101** (файлов с этими номерами в наборах арта Legacy нет — проверено по распакованным архивам).
+Прожекторы у Legacy — `spotlight/texlib_0…45` (45 — Verizon), команды берут 0…41: **SEA — 46, VGK — 47**.
+База Legacy (`tools/nhl32.py` у legacy-data, `game/work/legacy-data/nhl32/nhlng.db`) так и ставит:
+строки 30/31, `artid` 100/101, `spotlight` 46/47, `table` 0, арены 187/188 («Climate Pledge Arena»,
+«T-Mobile Arena» — копии «EA SPORTS Arena» 181, площадка НХЛ). Проверка базы — `tools/newteams_art.py` с
+`--game legacy` (свои номера Legacy; база другой игры — отказ):
+
+```bash
+python tools/newteams_art.py game/work/legacy-data/nhl32/nhlng.db --game legacy --spotlight --jerseys
+```
+
+На базе nhl32 08.10.2026 — «изменений: 0», замечаний нет (artid 100/101 только у строк 30/31, `table` 0,
+арены и названия на месте, `stockteamjerseys` 703–708 — `teamartid` 100/101).
+
+### Что у Legacy не так, как в NHL 13
+
+| Что | NHL Legacy | Что сделано |
+|---|---|---|
+| шаблоны интерфейса `t0/s0/d0/c0/w0/r0`, маски растушёвки `c1/c3/c11`, `w2/w4/w5` | байт в байт как в NHL 13 | те же контейнеры и маски; s/c/w SEA/VGK вышли **байт в байт** как в NHL 13 |
+| t клубов НХЛ | 24 из 30 перерисованы мельче: площадь (альфа > 128) медиана 14 980 (в NHL 13 — 17 111), w 137…212, h 97…182 (у перерисованных ≤ 169) | `SIZE_TARGET_LEGACY` t: площадь 14 980, h ≤ 166, w ≤ 191 → SEA 132×166, VGK 114×153 |
+| d | почти как в NHL 13 (перерисованы 3): медиана 4 400, h ≤ 91 | d: площадь 4 400, h ≤ 88 → SEA 70×88, VGK 62×83 |
+| r (только 0…29) | перерисованные — логотип в кадре t (центр 128, 128, размер как у t), отражение слабое: альфа ≤ 0,1…0,35 на ~40 px, в 10–20 px под логотипом | `html_for_r_legacy`, `R_LEGACY` (зазор 10, 0,22 → 0 за 40 px) |
+| центр льда | тот же кадр (диск 388, синее кольцо 380–385, прозрачная полоса x 494…529), `centerlogo_150` той же структуры | пиксели как у NHL 13 98/99, контейнер — 3-значный `centerlogo_150` |
+| **шайбы клубов НХЛ** | новый рисунок (196 из 218 шайб перерисованы): тёмная грань (21, 22, 21), светлое кольцо радиуса 92, надписи «National Hockey League» / «Official Game Puck», тонкий круг радиуса 74 с центром (127, 172), логотип прямо на грани (наибольший радиус 41…65, медиана 52), почти у всех со светлой каймой; низ — щит НХЛ, «Rondelle de match officielle» и подпись; `puck_255` (EA SPORTS) — тот же, что в NHL 13 | стиль `PUCKS['nhl_legacy']`: шаблон — шайба «Питтсбурга» `puck_23` (вне круга у всех 30 одинаково), круг до радиуса 70 закрашивается цветом грани, логотип вписан в радиус 52, кайма белая 1 px; контейнер — `puck_150` |
+| шайбы АХЛ | тоже новый рисунок (овал AHL сверху, круг, клуб посередине, «Official Game Puck») | стиль `PUCKS['ahl_legacy']` — для CV/HSK (102/103), ниже |
+| баннер | `banner_93`, `banner_150` — те же | как в NHL 13, контейнер `banner_150` |
+| прожекторы | тот же стиль (логотип на прозрачном, 256² DXT5), часть перерисована (Liiga), `texlib_33` той же структуры | как в NHL 13 (пиксели те же), номера 46/47 |
+
+### Сборка
+
+SPEC Legacy — наследники SPEC NHL 13 (`teamart.load_spec`, ключ `"base"`; лежат в
+`game/work/legacy-data/art/src/`, вне git):
+
+```json
+{"base": "../../../logos/src/SEA.json", "team": "Seattle Kraken (NHL Legacy)", "artid": 100, "spotlight": 46}
+{"base": "../../../logos/src/VGK.json", "team": "Vegas Golden Knights (NHL Legacy)", "artid": 101, "spotlight": 47}
+```
+
+```bash
+A=game/work/legacy-data/art
+python tools/teamart.py build $A/src/SEA.json game/work/legacy-data/out --preview $A/preview/logos --game legacy
+python tools/teamart.py build $A/src/VGK.json game/work/legacy-data/out --preview $A/preview/logos --game legacy
+python $A/scripts/verify_out.py game/work/legacy-data/out --game legacy          # сверка с шаблонами Legacy
+python $A/scripts/sheet_art.py $A/preview/sheet_ui.png $A/preview/sheet_3d.png game/other/legacy/big 23 \
+    "SEA (свой)=game/work/legacy-data/out:100:46" "VGK (свой)=game/work/legacy-data/out:101:47"
+```
+
+Сборка двух клубов — около двух минут (Chrome без окна). Тот же вывод даёт сборка в другую папку
+(повторяемо: NHL 13-сборка SEA новым кодом совпала с `game/work/logos/out.sha1`).
+
+| Файл (`game/work/legacy-data/out/…`) | Байт SEA / VGK | Что |
+|---|---:|---|
+| `fe/ion/artassets/teamlogos/t100.big`, `t101.big` | 24 624 / 19 568 | основной логотип (размер Legacy) |
+| `fe/ion/artassets/teamlogossmall/s100.big`, `s101.big` | 10 672 / 10 480 | «таблетка» (как NHL 13 s98/s99) |
+| `fe/ion/artassets/teamlogosdynasty/d100.big`, `d101.big` | 11 760 / 9 776 | франшиза |
+| `fe/ion/artassets/teamlogoscalendar/c100.big`, `c101.big` | 10 736 / 10 800 | календарь (как c98/c99) |
+| `fe/ion/artassets/teamlogoswide/w100.big`, `w101.big` | 78 128 / 85 488 | крупный план (как w98/w99) |
+| `fe/ion/artassets/teamlogosreflection/r100.big`, `r101.big` | 28 656 / 23 920 | с отражением, стиль Legacy |
+| `rendering/icesurface/centerlogo_100_cm.rx2`, `_101_` | 1 445 888 | центр льда |
+| `rendering/puck/puck_100_cm.rx2`, `_101_` | 110 592 | шайба в стиле Legacy |
+| `rendering/banner/banner_100_cm.rx2`, `_101_` | 397 312 | баннер |
+| `rendering/spotlight/texlib_46.rx2` (SEA), `texlib_47.rx2` (VGK) | 135 168 | прожекторы |
+
+### Проверено
+
+- `verify_out.py --game legacy`: все 20 файлов — как шаблон Legacy вне пикселей и имён растров (BIGF:
+  записи, Apt, заголовок XPR2, константа выборки, сцена; RW4: заголовки, описания, размеры), имена растров
+  с 100/101/46/47, разбор → сборка байт в байт (контейнер, тайлинг; у RW4 — все уровни мипов, соседние уровни
+  28…57 дБ).
+- Листы `game/work/legacy-data/art/preview/sheet_ui.png`, `sheet_3d.png` (сверху — оригиналы Legacy
+  «Питтсбурга»): размеры t/d/r как у логотипов Legacy, шайба — как шайбы клубов Legacy (кайма видна,
+  кольца и надписи целы).
+- NHL 13 не изменился: без `--game` новые `teamart.py`, `kitpaint.py`, `czkit.py`, `newteams_art.py` дают
+  те же файлы и логи, что код до правки (итоговая сверка — 210 файлов и 19 логов: build SEA, CVF, VGK
+  `--legacy`, info, roundtrip, decode, alias; paint, verify, roundtrip, unpack/pack; czkit build, verify;
+  план и `--out` newteams_art); сборки совпали с `game/work/logos/out`, `uniforms/kits`, `uniforms/kits-cz`.
+
+### Фарм-клубы CV и HSK (арт 102/103, на будущее)
+
+База Legacy АХЛ на 32 ещё не сделана (номера решены группой: CV — 102, HSK — 103), арт готов заранее и лежит
+в `out/` (номера свободны — ни один файл и ни одна строка базы на них не ссылаются, пока их не поставит база):
+
+- t, s, d, c, w (у клубов АХЛ нет r и своего прожектора — `spotlight`/`tunnel` 34), центр льда, баннер — как у
+  SEA/VGK; SPEC — `art/src/CVF.json`, `HSK.json` (наследники `game/work/logos/ahl-src/*.json`, `artid` 102/103);
+- шайба — свой стиль `PUCKS['ahl_legacy']`: у Legacy шайбы клубов АХЛ тоже перерисованы (грань (21, 22, 21),
+  тонкий круг радиуса ~59 с центром (127,5; 172), сверху на нём овал AHL — низ овала в 48 px над центром, по
+  бокам линии, ниже «Official Game Puck»; логотип клуба в круге, рамка ±41 по вертикали, наибольший радиус
+  45…54). Шаблон — шайба «Провиденса» `puck_150`: круг радиуса 48 закрашивается цветом грани, кроме полосы выше
+  46 px над центром (овал цел), логотип — в радиус 44 с белой каймой 1 px; низ (логотип AHL, подпись,
+  Sher-Wood) — как у EA.
+
+```bash
+python tools/teamart.py build $A/src/CVF.json game/work/legacy-data/out --preview $A/preview/ahl-logos --game legacy
+python tools/teamart.py build $A/src/HSK.json game/work/legacy-data/out --preview $A/preview/ahl-logos --game legacy
+```
+
+16 файлов (t/s/d/c/w 102/103 — 11…91 КБ, `centerlogo_102/103_cm` 1 445 888, `puck_102/103_cm` 110 592,
+`banner_102/103_cm` 397 312), `verify_out.py --game legacy` — 0 ошибок; листы —
+`$A/preview/ahl_sheet_ui.png`, `ahl_sheet_3d.png` (сверху — «Провиденс» Legacy). Форма — временная, копии
+формы клубов АХЛ Legacy (`teamart.py alias … --game legacy`, uniforms.md §12).
+
+### Проверить в игре (Legacy)
+
+1. «Играть сейчас» SEA — VGK: t на выборе команд, табло, центр льда хозяина — **видны** (см. выше); ещё не
+   смотрели: s/d/c/w на других экранах, r — если экран-карусель есть в Legacy; шайба хозяина вблизи;
+   прожекторы при выходе (46/47).
+2. В логе порта (аналог `NtCreateFile FAILED` в NHL 13) — не должно быть запросов `cache:\…\t100.big`,
+   `centerlogo_100_cm.rx2` и т. п. без ответа.
+3. Шайба: кайма и размер логотипа рядом с шайбами других клубов; низ — щит НХЛ.
+4. Свободные `.rx2` в `cache:` — без chunklzx (как в NHL 13; у порта puckhead73 `cache_root/guest` — слой
+   поверх `_compiled`, должно читаться так же).
+5. CV/HSK — только когда база Legacy получит АХЛ на 32 (`artid` 102/103): логотипы в меню франшизы, шайба
+   АХЛ (овал и линии целы), центр льда хозяина.

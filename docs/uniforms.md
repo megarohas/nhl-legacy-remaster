@@ -571,3 +571,133 @@ T ∈ {0, 1, 2, 4, 5} — крой (свои швы и нормали), V ∈ {0
 Не проверено в игре: вид рисунков в матче (сборка шейдером EA могла отличаться от «маски × цвет +
 dm альфой»), размеры номеров и буквы капитана по картам `czname` (рамки крупнее, чем у EA),
 нормали/блеск после медианы, превью меню в другой позе, чем у EA.
+
+## 12. NHL Legacy: форма SEA/VGK (08.10.2026)
+
+Те же инструменты с `--game legacy` (`tools/gameprofile.py`): элементы конструктора, сетки, шаблоны
+и контейнеры — из распакованных архивов Legacy (`game/other/legacy/big/<архив>/…`), готовое — в
+`game/work/legacy-data/out/` (раскладка `cache:`; ставит legacy-data). Логотипы, лёд, шайба —
+[logos-arenas.md](logos-arenas.md) §9. **В игре** (порт Legacy, 08.10.2026, проверка legacy-data, снимки
+`game/work/legacy-data/ingame/t4-*.png`): превью формы в меню (SEA белая выездная, VGK золотая), в матче —
+форма SEA/VGK в 3D с номерами, фамилиями и нашивками, капитанская C; в логе порта промахов `cache:` по нашим
+файлам нет.
+
+### Отличия Legacy
+
+| Что | NHL Legacy | Следствие |
+|---|---|---|
+| сетки и UV | `jersey_1_0_0_0_0_2`, `pant_1_0_0_2`, `playersock_1_2`, затенение `jersey/texlib_1_999`, `pant/texlib_1_999` — байт в байт как в NHL 13 (часть лежит в новом `renderboot.big`) | разметка (`kitsrc`, `kitsrc-cz`) годится как есть |
+| файлы комплекта | те же имена (`jersey/texlib_S_A_V`, `name_S_A_V_cm`, `pant/texlib_S_A_V`, `sock/sock_S_A_V_cm`, `fe/ion/artassets/jerseys/jersey_S_A_F.big`) и та же структура: у `1_28_0` всё вне пикселей и имён — байт в байт, текстуры те же (свитер 1024² DXT1/DXT1/DXN, шрифт 512² DXT5/DXN/DXT1, карта 256² 8888, шорты, гетры 1024×512, превью 256² 8888) | контейнеры Legacy |
+| текстуры клубов | перерисованы (форма 2015/16): у «Ванкувера» `1_28_0` — 13 % пикселей `jersey_cm` (плоские панели без теней, нашивки мельче), 83 % блеска, 56 % нормалей, шорты 86 %, гетры 22 %, карта номеров 10 %; превью в меню — та же поза манекена, цвета насыщеннее | kitpaint перекрашивает шаблоны Legacy (зоны уточняются сами), ниже |
+| конструктор `cz*` | все файлы, которые берёт форма SEA/VGK, — те же; 6 файлов (`czsock/texlib_2`, `czpant/pantct_1_dm`, `pantct_2_dm`, `czjersey/jerseyct_4_0_0_tm`, `jerseyct_4_1_0_tm`) пережаты иначе — в пикселях отличие ≤ 4 точек | czkit даёт те же пиксели, что в NHL 13: у свитеров, шрифтов, карт номеров и превью буферы текстур совпадают с NHL 13 байт в байт, у шорт и гетр дома/выезда SEA — отличие в единицы уровней |
+| номер арта | 98/99 заняты (Vaasan Sport, KooKoo) → **100/101**, номер другой длины: имена растров (`jersey_1_98_0_cm.Raster`) на месте не переписать | контейнер с 3-значным номером той же структуры: у Legacy такие все комплекты стиля 1 клубов АХЛ 131…165 и CHL 360…421 (перебор: заголовки, описания текстур, буферы, превью как у `1_28_0`); взят **`1_131_0`** (`kitpaint.CONTAINERS`) |
+| `stockteamjerseys` | те же поля и смысл: `style` 0/1 (Reebok Edge — 1), `variant` = `fevariant`, `jerseyindex`, `locstring` 0 дом / 1 выезд / 2 третья / 3–5 и 6 — старые, `isdefault`, `islightcolor`; у клубов НХЛ `helmetlogo` 1, `helmetnumbers` 1 у стиля 1; `rendering/logo/texlib_999_0_0` (пустая наклейка) есть | значения для SEA/VGK — как в NHL 13 (ниже) |
+
+### Что собрано
+
+Форма из элементов конструктора (`czkit.py`, как стоит в NHL 13: дом, выезд, третья) — 15 файлов на
+клуб, `game/work/legacy-data/out/`:
+
+| Файлы (A = 100 SEA, 101 VGK; V = 0 дом, 1 выезд, 2 третья) | Байт |
+|---|---:|
+| `rendering/jersey/texlib_1_A_V.rx2` | 3 870 720 |
+| `rendering/jersey/name_1_A_V_cm.rx2` | 364 544 |
+| `rendering/pant/texlib_1_A_V.rx2` | 659 456 |
+| `rendering/sock/sock_1_A_V_cm.rx2` | 372 736 |
+| `fe/ion/artassets/jerseys/jersey_1_A_V.big` | 51 440 … 60 784 |
+
+Рисунки, шрифты, цвета — §11.4 (SPEC NHL 13), листы превью — `game/work/legacy-data/art/preview/kits-cz/SEA.png`,
+`VGK.png`. Наклейки на шлем (`rendering/logo/texlib_A_1_V`) нет: `helmetlogo` 0, как в NHL 13. (У клубов НХЛ в
+Legacy наклейка есть: логотип в `logo_A_1_V_0` 256×128 DXT5 по центру (128; 58,5), рамка в среднем 102×81,
+`_1`/`_2` пустые — можно сделать отдельно, тогда базе `helmetlogo` 1.)
+
+```bash
+A=game/work/legacy-data/art
+python tools/czkit.py build $A/src/SEA-cz.json game/work/legacy-data/out --preview $A/preview/kits-cz --game legacy
+python tools/czkit.py build $A/src/VGK-cz.json game/work/legacy-data/out --preview $A/preview/kits-cz --game legacy
+python tools/kitpaint.py verify game/work/legacy-data/out 1_100_0=1_131_0 1_100_1=1_131_0 1_100_2=1_131_0 \
+    1_101_0=1_131_0 1_101_1=1_131_0 1_101_2=1_131_0 --game legacy
+```
+
+SPEC Legacy (`game/work/legacy-data/art/src/`, вне git) наследуют SPEC NHL 13 и меняют только номера:
+
+```json
+{"base": "../../../uniforms/kitsrc-cz/SEA.json", "title": "Seattle Kraken — … (NHL Legacy, арт 100)",
+ "kits": {"home": {"kit": "1_100_0"}, "away": {"kit": "1_100_1"}, "third": {"kit": "1_100_2"}}}
+```
+
+Контейнер `1_28_0` из SPEC под 3-значный номер сам меняется на `1_131_0` (`kitpaint.default_container`).
+Сборка клуба — 7–9 минут; кеш чистых карт кроя — `game/work/legacy-data/art/czwork/clean/`.
+
+**Запасной вариант — перекраска шаблонов Legacy** (`kitpaint.py`, дом и выезд, SPEC
+`$A/src/SEA-paint.json`, `VGK-paint.json` — наследники `kitsrc/*.json`): те же имена файлов, поэтому собирается
+в `game/work/legacy-data/art/kits-paint/` (в `out/` не кладётся), лист — `$A/preview/kits-paint/`:
+
+```bash
+python tools/kitpaint.py paint $A/src/SEA-paint.json $A/kits-paint --preview $A/preview/kits-paint --mask-game nhl13 --game legacy
+python tools/kitpaint.py paint $A/src/VGK-paint.json $A/kits-paint --preview $A/preview/kits-paint --mask-game nhl13 --game legacy
+```
+
+Шаблоны («Ванкувер» `1_28_0/1`, «Лос-Анджелес» `1_13_2/4`) — Legacy, зоны цвета уточняются по ним сами, стирание
+старых логотипов — по тем же рамкам. Но у VGK в SPEC есть маски по слою «Ванкувера» (заливка от точки 512, 520):
+у Legacy этот свитер без швов панелей, заливка растекается по всему свитеру, и вокруг дыр маски (буквы
+VANCOUVER) рисуется красная кайма. Поэтому `--mask-game nhl13`: маски разметки — из шаблонов NHL 13 (UV те же),
+остальное — из Legacy (`kitpaint.MASK_GAME`, у маски можно и `"game": "nhl13"`).
+
+### База Legacy для SEA/VGK
+
+Чтобы игра взяла эти файлы (так и делает `tools/nhl32.py` у legacy-data, строки 703–708):
+
+| Таблица | Значения |
+|---|---|
+| `exhibitionteams[30]` SEA / `[31]` VGK | `artid` 100 / 101, `table` 0, `spotlight` 46 / 47 |
+| `stockteamjerseys`, на клуб 3 строки | `teamid` 30 / 31, `teamartid` 100 / 101, `style` 1, `variant` = `fevariant` 0 / 1 / 2, `jerseyindex` 0 / 1 / 2, `locstring` 0 / 1 / 2, `isdefault` 1 / 1 / 0, `islightcolor` 0 / 1 / 0, `hastie` 0, `helmetlogo` 0, `helmetnumbers` 1, `islockable` 0 |
+
+### Фарм-клубы CV и HSK (арт 102/103, на будущее)
+
+Как в NHL 13 (§6а logos-arenas.md) — временно форма клубов АХЛ под своим номером, теперь из архивов Legacy
+(`teamart.py alias SRC DST OUTDIR --game legacy` берёт файлы из распакованного дерева; номера одной длины,
+переименовываются только имена растров):
+
+```bash
+python tools/teamart.py alias 153 102 game/work/legacy-data/out --game legacy   # CV  ← Springfield Falcons (строка 55)
+python tools/teamart.py alias 150 103 game/work/legacy-data/out --game legacy   # HSK ← Providence Bruins (строка 48)
+```
+
+44 файла, 39 МБ: у 153 — свитеры, карты, шорты v0…2, гетры и превью v0/1, наклейки на шлем `logo/texlib_102_1_0…2`;
+у 150 — свитеры, карты, гетры, превью v2…5, шорты v0…5, наклейки v0…5. Проверено: `kitpaint verify` шести
+полных комплектов (1_102_0/1, 1_103_2…5) против исходных — OK, `teamart roundtrip` всех 44 — OK.
+
+Строки `stockteamjerseys` для базы АХЛ на 32 (когда она будет; `teamid` — строка клуба в `exhibitionteams`) —
+копии строк клубов-доноров Legacy с новым `teamartid`:
+
+| Клуб | Строки-образцы Legacy | Значения (кроме `teamid`) |
+|---|---|---|
+| CV, `teamartid` 102 | 327, 328 (Springfield) | `style` 1; `variant` = `fevariant` 1 / 0; `jerseyindex` 0 / 1; `locstring` 0 / 1; `isdefault` 1 / 1; `islightcolor` 1 / 0; `hastie` 0; `helmetlogo` 1; `helmetnumbers` 0; `islockable` 0 |
+| HSK, `teamartid` 103 | 309, 310, 311 (Providence) | `style` 1; `variant` = `fevariant` 2 / 3 / 5; `jerseyindex` 0 / 1 / 2; `locstring` 0 / 1 / 2; `isdefault` 1 / 1 / 0; `islightcolor` 1 / 0 / 0; `hastie` 1; `helmetlogo` 1; `helmetnumbers` 0; `islockable` 0 |
+
+`exhibitionteams` у CV/HSK: `artid` 102/103, `table` 0, `league` 1, `tunnel` 34, `spotlight` 34 (как у клубов АХЛ).
+
+### Проверено
+
+- `kitpaint verify --game legacy`: все 30 файлов — имена растров под 100/101, всё вне буферов текстур —
+  байт в байт как у контейнера `1_131_0`, раскладка и все уровни мипов разбираются (`teamart.roundtrip --deep`),
+  соседние уровни мипов ≥ 16 дБ (как у сборки NHL 13); превью — записи BIGF, Apt, константа выборки и сцена
+  как у контейнера.
+- Превью формы у Legacy — BIGF с меткой L288 (в NHL 13 таких нет): пустые метки `sg1`/`sg2` занимают по 0x40.
+  `playerhead.Bigf` собирал их как L286 (вплотную) — исправлено (коммит про L288): все 4557 файлов L288 Legacy
+  разбираются и собираются байт в байт, превью SEA/VGK собраны так же.
+- Пиксели против формы NHL 13 (`game/work/uniforms/kits-cz`, 98/99): свитера, шрифты, карты номеров и превью
+  — те же; шорты и гетры дома/выезда SEA — с крошечными отличиями из-за пережатых cz-шаблонов Legacy.
+- NHL 13 не изменился: без `--game` `kitpaint.py` (paint SEA, VGK, verify, roundtrip, unpack/pack, files) и
+  `czkit.py` (build SEA, VGK, verify) дают те же файлы и логи, что код до правки; сборки совпали с
+  `game/work/uniforms/kits` и `kits-cz`.
+
+### Проверить в игре (Legacy)
+
+1. Матч SEA — VGK: свитер, номер и фамилия, нашивки, C — **видны** (см. выше); ещё не смотрели вблизи шорты и
+   гетры, третью форму (выбор формы перед матчем) и тёмную/светлую пары наоборот (SEA дома, VGK в гостях).
+2. Превью формы в меню выбора — **видны** для выездной SEA и домашней VGK; остальные (`jersey_1_100_0/2`,
+   `jersey_1_101_1/2`) — в выборе формы.
+3. Шлем без наклейки (`helmetlogo` 0 → `texlib_999_0_0`) — как в NHL 13; у клубов НХЛ в Legacy наклейки есть
+   (`helmetlogo` 1) — свои наклейки SEA/VGK можно сделать отдельно.
