@@ -31,7 +31,8 @@
   218/219 ключей нет, а BLU — это Espoo Blues).
 - Поля «команда НХЛ» в exhibitionplayerbiotable (proteam, draftteam: номер + 1, 5 бит)
   расширяются до 6 бит — иначе у Вегаса (31 + 1 = 32) они не влезают.
-- --ahl32: АХЛ на 32 — свои фарм-клубы Сиэтла и Вегаса (Coachella Valley Firebirds, Henderson
+- --ahl32 (Матча звёзд во франшизе нет: сборным не хватает места — 126 команд, предел кода) —
+  АХЛ на 32: свои фарм-клубы Сиэтла и Вегаса (Coachella Valley Firebirds, Henderson
   Silver Knights) на заготовках Custom Team 02/03 (строки 220/221; у каждой лиги свой
   конструктор дерева с зашитыми строками, поэтому шведская лига 62–73 не двигается), Charlotte
   переезжает на Восток (16 + 16, 6 + 5 + 5 — как у НХЛ), календарь АХЛ — 32 × 76 игр,
@@ -564,7 +565,10 @@ def main():
     plan = schedule(pair_games(rng), days, counts, rng)
     for table in ('nhlschedule', 'favoriteteamschedule'):
         write_schedule(db, table, plan)
-        add_allstar(db, table)
+        if not a.ahl32:
+            # при --ahl32 сборных нет (126 команд — предел кода), Матч звёзд порт выключает
+            # состоянием лиги 52 = 0 — строки в календаре быть не должно (docs/ahl32.md)
+            add_allstar(db, table)
     print(f'календарь НХЛ: {len(plan)} игр в {len(days)} игровых днях')
     if a.ahl32:
         print('АХЛ, новые клубы:', fill_ahl_teams(db))
