@@ -1,24 +1,34 @@
-"""НХЛ на 32 команды: две команды финской лиги (Tappara, TPS) переезжают в НХЛ.
+"""НХЛ на 32 команды: Seattle Kraken и Vegas Golden Knights — новые клубы на пустых слотах.
 
-    python nhl32.py DB_IN DB_OUT LOC_IN LOC_OUT [--seed N]
+    python nhl32.py DB_IN DB_OUT LOC_IN LOC_OUT [--seed N] [--meta META_IN META_OUT]
 
 Почему так (разбор — docs/teams.md):
 - Календарь НХЛ (nhlschedule) хранит номер команды в лиге 5 битами (0–31), а команды
-  НХЛ — строки 0–29 базы. Строки 30/31 занимали сборные Матча звёзд (Red/Blue, в
-  календаре — одна игра 31 против 30). Новые команды встают на 30 и 31, сборные — на
-  их старые места 86/87 (конец финской лиги, номера остальных финских команд не
-  сдвигаются).
-- Строки exhibitionteams и exhibitionteamstrategies меняются местами целиком (с
-  названием, цветами, artid, ареной), во всех таблицах ссылки на номера переписываются:
-  где номер хранится с нуля — 30↔86, 31↔87, где «номер + 1» (0 = нет) — 31↔87, 32↔88.
+  НХЛ — строки 0–29 базы. Строки 30/31 занимали сборные Матча звёзд (Red/Blue). Новые
+  клубы встают на 30 и 31 из пустых заготовок «Custom Team 00/01» (строки 218/219 — места
+  игры под созданные команды), сборные переезжают на их место. Другие лиги не трогаются
+  (до 08.10.2026 клубами 30/31 были Tappara и TPS из финской лиги).
+- Строки exhibitionteams и exhibitionteamstrategies меняются местами целиком, во всех
+  таблицах ссылки на номера переписываются: где номер хранится с нуля — 30↔218, 31↔219,
+  где «номер + 1» (0 = нет) — 31↔219, 32↔220. Поле, в которое новый номер не влезает
+  (цвета команд, 7 бит), не переписывается: записи остаются у строк 30/31.
+- Заготовки заполняются как клубы НХЛ (fill_new_teams): названия, цвета, активность, лига,
+  тактика (как у соседа по дивизиону), своя арена НХЛ-размера (копия нейтральной «EA SPORTS
+  Arena»), комплекты формы (пока копии Tappara/TPS — своих текстур ещё нет), цвета шлемов,
+  перчаток и прочей экипировки (строки Tappara/TPS, перекрашенные в цвета клуба), арт
+  логотипов — нейтральный арт заготовок (20054) до своих логотипов. Вратарская экипировка
+  в базе — по вратарям (game_id + команда), командной нет: вратари новых клубов — со
+  стандартной.
 - Календарь — формат НХЛ с сезона 2026/27: 84 игры (по 4 с соперниками по дивизиону,
   по 3 с остальной конференцией, по 2 с другой конференцией), 42 дома, по нынешним
   4 дивизионам; раскладывается на игровые дни календаря 2012/13. В самой игре 6
   дивизионов (пустой опасен: плей-офф 2012 года ищет победителя каждого), поэтому
   турнирная таблица делится на «поддивизионы» нынешних — 6 + 5 + 5 в конференции.
-- Из календаря финской лиги убираются игры ушедших команд.
-- Строки локализации по номеру (NHLTeamName_30 и т. п.) указывают на строки
-  Tappara/TPS (меняются только указатели, пул строк не трогается).
+- Строки локализации: ключи по номеру (NHLTeamName_30…) — на новые строки, ключи по
+  аббревиатуре (NHLTeamName_SEA…) добавляются; сборным — ключи по EAS/WES (по номеру
+  218/219 ключей нет, а BLU — это Espoo Blues).
+- Поля «команда НХЛ» в exhibitionplayerbiotable (proteam, draftteam: номер + 1, 5 бит)
+  расширяются до 6 бит — иначе у Вегаса (31 + 1 = 32) они не влезают.
 """
 import argparse, random, re, struct, sys
 from collections import Counter, defaultdict
@@ -26,8 +36,27 @@ from tdb import Tdb, DEFAULT_META
 from tdb_read import load_meta
 from locdb import LocDb
 
-SWAP = {30: 86, 31: 87}            # новая команда НХЛ ← строка финской лиги
-LIIGA_REL = {86 - 74, 87 - 74}     # их номера внутри финской лиги (строки 74–87)
+SWAP = {30: 218, 31: 219}          # новый клуб НХЛ ← пустая заготовка «Custom Team 00/01»
+ALLSTAR_ROWS = (218, 219)          # сборные Матча звёзд после обмена
+TEMPLATE_ARENA = 168               # «EA SPORTS Arena»: нейтральная, площадка НХЛ (arenatype 0)
+CUSTOM_ART = 20054                 # нейтральный арт заготовок: логотипы всех наборов есть
+# Новые клубы. kit — строка, чьи комплекты формы и цвета экипировки копируются (пока своих
+# текстур нет), equip — перекраска экипировки kit (цвет → цвет), strategy — чья тактика,
+# rival — соперник (номер строки).
+NEW_TEAMS = {
+    30: dict(short='Seattle', full='Seattle Kraken', abbr='SEA', nick='Kraken', rival=28, strategy=28, kit=86,
+             primary=(0, 22, 40), secondary=(153, 217, 217),
+             # Tappara: синий, оранжевый, чёрный шлем → глубоководный синий, ледяной голубой
+             equip={0x253B73: 0x001628, 0xE35B17: 0x99D9D9, 0xDE5818: 0x99D9D9, 0x202020: 0x001628},
+             arena=dict(name='Climate Pledge Arena', city='Seattle, WA', capacity=17151)),
+    31: dict(short='Vegas', full='Vegas Golden Knights', abbr='VGK', nick='Golden Knights', rival=13, strategy=13, kit=87,
+             primary=(51, 63, 72), secondary=(185, 151, 91),
+             # TPS: чёрный шлем, серый → стальной серый, золото
+             equip={0x202020: 0x333F48, 0xB3B3B3: 0xB9975B},
+             arena=dict(name='T-Mobile Arena', city='Las Vegas, NV', capacity=17500)),
+}
+# Сборные: имена — по ключам их аббревиатуры (своих ключей по номеру у строк 218/219 нет).
+ALLSTAR_NAMES = {218: ('EAS', 'Eastern', 'Eastern All-Stars'), 219: ('WES', 'Western', 'Western All-Stars')}
 
 # Поля-ссылки на команду: (таблица, поле, кодировка). 'zero' — номер строки,
 # 'plus1' — номер + 1 (0 = нет команды). Проверено по известным игрокам и командам
@@ -59,8 +88,8 @@ WEST, EAST = 1, 2
 # 8 Northeast (Восток). 6 + 5 + 5 в каждой конференции.
 DIVISIONS = {
     5: [6, 7, 9, 14, 16, 24],      # CHI COL DAL MIN NSH STL
-    3: [1, 4, 11, 28, 30],         # WPG CGY EDM VAN + Tappara (будущий Сиэтл)
-    4: [0, 13, 25, 22, 31],        # ANA LA SJ PHX + TPS (будущий Вегас)
+    3: [1, 4, 11, 28, 30],         # WPG CGY EDM VAN SEA
+    4: [0, 13, 25, 22, 31],        # ANA LA SJ PHX VGK
     6: [5, 8, 10, 12, 26, 29],     # CAR CBJ DET FLA TB WSH
     7: [17, 18, 19, 21, 23],       # NJ NYI NYR PHI PIT
     8: [2, 3, 15, 20, 27],         # BOS BUF MTL OTT TOR
@@ -96,11 +125,6 @@ META_WIDEN = {
     'leaguegamemodesvars': ['team'],
     'leaguescoutvisits': ['team'],
 }
-LOC_ALIASES = {  # ключ по номеру команды ← ключ по аббревиатуре
-    'NHLTeamName_{n}': 'NHLTeamName_{a}', 'NHLCityName_{n}': 'NHLCityName_{a}',
-    'NICKLINE2_{n}': 'Teamline2_{a}', 'CITYLINE1_{n}': 'Teamline1_{a}',
-    'NHLTeamName_Abbr3_{n}': 'NHLTeamName_ABBR3_{a}',
-}
 
 def swap_map(encoding):
     m = {}
@@ -121,13 +145,17 @@ def move_teams(db):
     report = {f'{ROSTER}.team': move_roster(db)}
     for table, field, enc in TEAM_FIELDS:
         m = swap_map(enc)
-        n = 0
+        limit = (1 << db.by_name[table]['fields'][field][1]) - 1
+        n = kept = 0
         for r in range(db.by_name[table]['rows']):
             v = db.get(table, field, r)
             if v in m:
+                if m[v] > limit:
+                    kept += 1  # не влезает (цвета команд, 7 бит) — запись остаётся у строки
+                    continue
                 db.set(table, field, r, m[v])
                 n += 1
-        report[f'{table}.{field}'] = n
+        report[f'{table}.{field}'] = n if not kept else f'{n} (оставлено {kept}: номер не влезает)'
     return report
 
 def move_roster(db):
@@ -147,6 +175,69 @@ def move_roster(db):
     for r, (_, raw) in enumerate(rows):
         db.put_record(ROSTER, r, raw)
     return moved
+
+def append_copies(db, table, rows, change):
+    """Копии строк rows в конец таблицы; change(новая_строка, исходная) правит поля."""
+    n = db.by_name[table]['rows']
+    raws = [db.record(table, r) for r in rows]
+    db.resize(table, n + len(raws))
+    for i, (src, raw) in enumerate(zip(rows, raws)):
+        db.put_record(table, n + i, raw)
+        if 'index' in db.by_name[table]['fields']:
+            db.set(table, 'index', n + i, n + i)
+        change(n + i, src)
+    return list(range(n, n + len(raws)))
+
+def fill_new_teams(db):
+    t = 'exhibitionteams'
+    report = {}
+    for row, spec in NEW_TEAMS.items():
+        for f, v in (('shortname', spec['short']), ('fullname', spec['full']), ('abbrname', spec['abbr']),
+                     ('artabbr', spec['abbr'])):
+            db.set_string(t, f, row, v)
+        for f, v in (('active', 1), ('table', 0), ('state', 0), ('league', 0), ('leaguegroup', 0),
+                     ('artid', CUSTOM_ART), ('audioid', 0), ('audioid2', 0), ('rivalteam', spec['rival'] + 1),
+                     ('rivalteam2', 0)):
+            db.set(t, f, row, v)
+        for prefix, rgb in (('primarycolor', spec['primary']), ('secondarycolor', spec['secondary'])):
+            for c, v in zip('rgb', rgb):
+                db.set(t, f'{prefix}_{c}', row, v)
+        # тактика — как у соседа
+        db.put_record('exhibitionteamstrategies', row, db.record('exhibitionteamstrategies', spec['strategy']))
+        # арена: копия нейтральной арены НХЛ-размера со своим названием
+        a = spec['arena']
+        def arena(new, src, a=a):
+            db.set_string('exhibitionarena', 'arenaname', new, a['name'])
+            db.set_string('exhibitionarena', 'cityname', new, a['city'])
+            db.set('exhibitionarena', 'maxattendance', new, a['capacity'])
+        new_arena = append_copies(db, 'exhibitionarena', [TEMPLATE_ARENA], arena)[0]
+        db.set(t, 'arenaid', row, new_arena)
+        # комплекты формы — копии (у заготовки их нет)
+        j = [r for r in range(db.by_name['stockteamjerseys']['rows']) if db.get('stockteamjerseys', 'teamid', r) == spec['kit']]
+        append_copies(db, 'stockteamjerseys', j, lambda new, src, row=row: db.set('stockteamjerseys', 'teamid', new, row))
+        # цвета экипировки (шлемы, перчатки…): строки kit, перекрашенные по equip; team — номер + 1
+        e = 'stockteamequipmenttable'
+        def recolor(new, src, row=row, m=spec['equip']):
+            db.set(e, 'team', new, row + 1)
+            for z in range(1, 10):
+                rgb = tuple(db.get(e, f'zone{z}_{c}', new) for c in 'rgb')
+                v = m.get(rgb[0] << 16 | rgb[1] << 8 | rgb[2])
+                if v is not None:
+                    for c, x in zip('rgb', (v >> 16, v >> 8 & 0xFF, v & 0xFF)):
+                        db.set(e, f'zone{z}_{c}', new, x)
+        q = [r for r in range(db.by_name[e]['rows']) if db.get(e, 'team', r) == spec['kit'] + 1]
+        append_copies(db, e, q, recolor)
+        # цвета команды (запись осталась у строки — 7-битное поле не переписывалось)
+        for r in range(db.by_name['stockteamcolorstable']['rows']):
+            if db.get('stockteamcolorstable', 'team', r) == row:
+                rgb = spec['primary'] if db.get('stockteamcolorstable', 'colorid', r) == 0 else spec['secondary']
+                for c, v in zip('rgb', rgb):
+                    db.set('stockteamcolorstable', f'color_{c}', r, v)
+        report[spec['abbr']] = dict(arena=new_arena, jerseys=len(j), equipment=len(q))
+    # сборные: аббревиатура для ключей строк (EAS/WES)
+    for row, (abbr, _, _) in ALLSTAR_NAMES.items():
+        db.set_string(t, 'abbrname', row, abbr)
+    return report
 
 def realign(db):
     seen = sorted(t for teams in DIVISIONS.values() for t in teams)
@@ -301,20 +392,6 @@ def add_allstar(db, table):
         for f, v in (('index', i), ('home', h), ('away', a), ('month', month), ('day', day), ('round', 0), ('status', 0)):
             db.set(table, f, i, v)
 
-def prune_liiga(db):
-    t = 'finnishschedule'
-    keep = []
-    for r in range(db.by_name[t]['rows']):
-        row = {f: db.get(t, f, r) for f in db.by_name[t]['fields']}
-        if row['home'] not in LIIGA_REL and row['away'] not in LIIGA_REL:
-            keep.append(row)
-    db.resize(t, len(keep))
-    for i, row in enumerate(keep):
-        row['index'] = i
-        for f, v in row.items():
-            db.set(t, f, i, v)
-    return len(keep)
-
 def patch_meta(text):
     for table, n in META_MAXINSERT.items():
         pat = re.compile(r'(<table name="%s"[^>]*maxinsert=")(\d+)(")' % table)
@@ -344,24 +421,39 @@ def main():
     print('переезд:', {f'{b}→{a_}': names[b] for a_, b in SWAP.items()})
     for k, v in move_teams(db).items():
         print(f'  ссылки {k}: {v}')
+    print('новые клубы:', fill_new_teams(db))
     realign(db)
+    db.widen('exhibitionplayerbiotable', ['proteam', 'draftteam'], 6)
     days, counts = game_days(db)
     plan = schedule(pair_games(rng), days, counts, rng)
     for table in ('nhlschedule', 'favoriteteamschedule'):
         write_schedule(db, table, plan)
         add_allstar(db, table)
     print(f'календарь НХЛ: {len(plan)} игр в {len(days)} игровых днях')
-    print(f'финская лига: осталось {prune_liiga(db)} игр')
     db.fix()
     assert not db.verify()
     open(a.db_out, 'wb').write(db.d)
     loc_meta = a.loc_meta or a.loc_in.rsplit('.', 1)[0] + '-meta.xml'
     loc = LocDb(open(a.loc_in, 'rb').read(), load_meta(loc_meta))
-    for n, b in SWAP.items():
-        abbr = db.get_string('exhibitionteams', 'abbrname', n)
-        for dst, src in LOC_ALIASES.items():
-            loc.alias(dst.format(n=n), src.format(a=abbr))
+    strings = {}
+    for n, spec in NEW_TEAMS.items():
+        ab = spec['abbr']
+        strings.update({f'NHLTeamName_{n}': spec['full'], f'NHLCityName_{n}': spec['short'],
+                        f'NICKLINE2_{n}': spec['nick'], f'CITYLINE1_{n}': spec['short'],
+                        f'NHLTeamName_Abbr3_{n}': ab,
+                        f'NHLTeamName_{ab}': spec['full'], f'NHLCityName_{ab}': spec['short'],
+                        f'Teamline1_{ab}': spec['short'], f'Teamline2_{ab}': spec['nick'],
+                        f'NHLTeamName_ABBR3_{ab}': ab, f'X_XLA_TEAM_{ab}': ab})
+    for row, (ab, city, full) in ALLSTAR_NAMES.items():
+        strings.update({f'NHLTeamName_{ab}': full, f'NHLCityName_{ab}': city, f'Teamline1_{ab}': city,
+                        f'Teamline2_{ab}': 'All-Stars', f'NHLTeamName_ABBR3_{ab}': ab, f'X_XLA_TEAM_{ab}': ab})
+    added = 0
+    for key, text in strings.items():
+        if loc.put(key, text) is None:
+            added += 1
+    print(f'строки: {len(strings)} ключей, из них новых {added}')
     loc.db.fix()
+    assert not loc.db.verify()
     open(a.loc_out, 'wb').write(loc.db.d)
     if a.meta:
         meta = patch_meta(open(a.meta[0], encoding='utf-8', newline='').read())

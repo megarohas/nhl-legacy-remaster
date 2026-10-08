@@ -124,7 +124,7 @@ bool ThirtyTwo() {
   return on;
 }
 
-// Дивизионы для 32 команд (номера строк базы; 30 — Tappara/«Сиэтл», 31 — TPS/«Вегас»,
+// Дивизионы для 32 команд (номера строк базы; 30 — Сиэтл, 31 — Вегас,
 // 22 — Phoenix/«Юта»). id узлов — как у игры: 3–5 Запад, 6–8 Восток.
 struct Division {
   uint32_t id;
@@ -492,8 +492,9 @@ extern "C" void sub_8292F258(PPCContext& ctx, uint8_t* base) {
 }
 
 // Сборные Матча звёзд: 8289A868 добавляет во франшизу teamid 30/31 (зашито) сразу после АХЛ
-// и пишет их номера в состояния 53/54. При 32 командах сборные — строки 86/87 базы
-// (tools/nhl32.py), и создаются они в конце, после юниоров (номера 124/125), чтобы номера
+// и пишет их номера в состояния 53/54. При 32 командах сборные — строки 218/219 базы (места
+// заготовок Custom Team 00/01, tools/nhl32.py; до 08.10.2026 — 86/87, где стояли Tappara и
+// TPS), и создаются они в конце, после юниоров (номера 124/125), чтобы номера
 // проспектов (62/63) и юниоров (64+) остались как в оригинале: вызов для лиги НХЛ
 // откладывается и выполняется после 828E7AC0 последней группы лиг (юниоры).
 namespace {
@@ -518,15 +519,18 @@ extern "C" void sub_8289A868(PPCContext& ctx, uint8_t* base) {
 }
 
 // li r11, 30 / li r10, 31 в 8289A868 — teamid сборных.
+constexpr uint32_t kAllStarTeamA = 218;
+constexpr uint32_t kAllStarTeamB = 219;
+
 void Nhl13AllStarTeamA(PPCRegister& r) {
   if (ThirtyTwo()) {
-    r.u64 = 86;
+    r.u64 = kAllStarTeamA;
   }
 }
 
 void Nhl13AllStarTeamB(PPCRegister& r) {
   if (ThirtyTwo()) {
-    r.u64 = 87;
+    r.u64 = kAllStarTeamB;
   }
 }
 
@@ -548,7 +552,7 @@ extern "C" void sub_828E7AC0(PPCContext& ctx, uint8_t* base) {
   __imp__sub_8289A868(ctx, base);
   t_allstars_now = false;
   args.Restore(ctx);
-  REXLOG_INFO("[nhl13] All-Star teams (86/87) created after junior leagues");
+  REXLOG_INFO("[nhl13] All-Star teams ({}/{}) created after junior leagues", kAllStarTeamA, kAllStarTeamB);
 }
 
 // --- Номера франшизы при 32 командах (пункт 4 в начале файла) ---

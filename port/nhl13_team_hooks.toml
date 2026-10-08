@@ -266,7 +266,7 @@ name = "Nhl13DraftOrderTable"
 registers = ["r9"]
 after_instruction = true
 
-# 8289A868 — сборные Матча звёзд: teamid 30/31 → 86/87 (после tools/nhl32.py сборные там);
+# 8289A868 — сборные Матча звёзд: teamid 30/31 → 218/219 (после tools/nhl32.py сборные там);
 # вызов откладывается на после юниоров (src/nhl13_teams.cpp, sub_828E7AC0).
 [[midasm_hook]]
 address = 0x8289A89C   # li r11, 30

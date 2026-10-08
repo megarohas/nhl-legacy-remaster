@@ -10,7 +10,7 @@
    artid — свой, из диапазона 9803–16383 (ID EA, если он туда попадает), с таблицей
    соответствия game/work/roster/artid-registry.json.
 2. Биография: имя, дата и место рождения, провинция/страна, гражданство, рост, вес, хват,
-   амплуа, номер, команда и права (proteam: у команды 31 — Вегаса — 0, не влезает в 5 бит),
+   амплуа, номер, команда и права (proteam/draftteam — номер + 1; tools/nhl32.py расширяет их до 6 бит),
    драфт, дебют, игры в НХЛ, новичок. Контракт — заглушка по OVR и возрасту (следующий этап).
 3. Рейтинги NHL 27 (ratings.py) и стиль.
 4. exhibitionrostertable целиком пересобирается: составы 32 клубов НХЛ со звеньями и буквами —
@@ -233,11 +233,11 @@ class Writer:
             notes.append('нет хвата')
         put('position', POS_CODE[p['pos']])
         put('team', p['slot'] + 1)
-        if p['slot'] + 1 <= 31:
+        if p['slot'] + 1 < 1 << db.by_name[B]['fields']['proteam'][1]:
             put('proteam', p['slot'] + 1)
         else:
             put('proteam', 0)
-            notes.append('proteam = 0 (команда 31 не влезает в 5 бит)')
+            notes.append('proteam = 0 (номер команды не влезает в поле; tools/nhl32.py расширяет до 6 бит)')
         dr = p.get('draft')
         if dr and dr.get('year'):
             put('draftyear', dr['year'] - 1900)
@@ -247,9 +247,9 @@ class Writer:
             if ds is None:
                 put('draftteam', 0)
                 notes.append(f"draftteam = 0 (клуб драфта {dr.get('team')} не найден)")
-            elif ds + 1 > 31:
+            elif ds + 1 >= 1 << db.by_name[B]['fields']['draftteam'][1]:
                 put('draftteam', 0)
-                notes.append('draftteam = 0 (Вегас, команда 31, не влезает в 5 бит)')
+                notes.append('draftteam = 0 (номер команды не влезает в поле; tools/nhl32.py расширяет до 6 бит)')
             else:
                 put('draftteam', ds + 1)
         else:
