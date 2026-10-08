@@ -258,7 +258,9 @@ class Bigf:
         names = b''.join(n.encode('ascii') + b'\0' for n, _ in self.entries)
         hsize = 16 + 8 * len(self.entries) + len(names) + len(self.tag)
         pos, offs = align(hsize, self.ALIGN), []
-        l287 = self.tag[:4] == b'L287'          # у L287 пустая метка занимает своё место 0x40
+        # у L287 и L288 (NHL Legacy: 4557 файлов fe/ion/artassets — все собираются так байт в байт; в NHL 13 L288
+        # нет) пустая метка занимает своё место 0x40
+        l287 = self.tag[:4] in (b'L287', b'L288')
         for _, b in self.entries:
             pos = align(pos, self.ALIGN)
             offs.append(pos)
