@@ -1,0 +1,44 @@
+# NHL Legacy на ПК (свой порт, ReXGlue) — настройки. Файл читается при запуске; F4 в игре —
+# окно настроек («Save to config» перезапишет этот файл без комментариев).
+
+# Файлы игры: содержимое диска NHL Legacy Edition (Xbox 360): default.xex и *.big. Пусто — папка
+# game рядом с nhllegacy.exe. Можно указать свою папку, например "D:/Games/NHL Legacy".
+game_data_root = ""
+
+# Сейвы, кэш шейдеров и моды (userdata/cache/guest). Пусто — папка userdata рядом с exe.
+user_data_root = ""
+
+# Рендер: D3D12 с путём ROV — точный вариант (эмуляция EDRAM растровыми UAV).
+gpu_plugin = "xenos"
+render_target_path_d3d12 = "rov"
+readback_resolve = "some"
+protect_zero = false
+gpu_allow_invalid_fetch_constants = true
+# Быстрее для видеокарты — хостовые render target'ы (RTV): матч рисуется только вместе с
+# execute_unclipped_draw_vs_on_cpu = true (без него, по опыту соседей, 3D чёрное). Раскомментировать обе строки,
+# а строку render_target_path_d3d12 = "rov" выше убрать.
+# render_target_path_d3d12 = "rtv"
+# execute_unclipped_draw_vs_on_cpu = true
+
+# Vulkan вместо D3D12 (если D3D12 глючит): раскомментировать обе строки.
+# gpu_backend = "vulkan"
+# render_target_path_vulkan = "fsi"
+
+# Геймпад: XInput (Xbox; DualShock/DualSense — через DS4Windows или Steam). Клавиатура как
+# геймпад — true (Start — Enter, A — Space, B — Backspace, X — L, Y — P, стик — WASD,
+# крестовина — Shift+стрелки, LT/RT — Q/E, LB/RB — 1/3, Back — Tab).
+input_backend = "xinput"
+mnk_mode = false
+
+# Сезон: первый год (2026 = сезон 2026/27). Возраст игроков и даты считаются от него; 2015 —
+# как на диске. Франшизу грузить с тем же годом, с которым она создана.
+season_year = 2026
+
+# Качество: анизотропная фильтрация 16x; масштаб разрешения 1 = 1280×720, 2 = 2560×1440.
+anisotropic_override = 5
+resolution_scale = 1
+# Резкость/апскейл при выводе: "bilinear" | "cas" | "fsr".
+present_effect = "bilinear"
+
+# Лог последнего запуска (рядом с exe) — пришлите его вместе с nhllegacy_crash.txt, если упало.
+log_file = "nhllegacy.log"

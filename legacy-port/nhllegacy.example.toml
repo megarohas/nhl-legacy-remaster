@@ -5,9 +5,12 @@
 
 # Рендер: плагин rexgpu-xenos (D3D12; в сборке со своим SDK — и Vulkan, см. ниже).
 gpu_plugin = "xenos"
-# Путь EDRAM: с RTV (хостовые render target'ы) 3D матча чёрное — нужен ROV на D3D12 или FSI на
-# Vulkan (опыт NHL Legacy у puckhead73 и нашего NHL 13).
+# Путь EDRAM: ROV на D3D12 или FSI на Vulkan — точная эмуляция; RTV — см. ниже.
 render_target_path_d3d12 = "rov"
+# Быстрее: "rtv" + execute_unclipped_draw_vs_on_cpu = true — матч рисуется (проверено 08.10.2026,
+# ARZ–ANA: лёд, игроки, табло); без этого флага RTV даёт чёрное 3D, как видели у соседей.
+# render_target_path_d3d12 = "rtv"
+# execute_unclipped_draw_vs_on_cpu = true
 # Чтение resolve процессором: "some" — копия только при промахе кэша (быстро); композиции шлемов,
 # перчаток и вратарской амуниции порт сам переводит в "full" (nhl_composite_readback = true).
 readback_resolve = "some"

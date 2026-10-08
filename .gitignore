@@ -44,6 +44,8 @@ best_of_nhl/
 !/legacy-port/CMakePresets.json
 !/legacy-port/build.cmd
 !/legacy-port/nhllegacy_*.toml
+!/legacy-port/nhllegacy_*.json
+!/legacy-port/dist-template/
 !/legacy-port/nhllegacy.example.toml
 !/legacy-port/generated/
 /legacy-port/generated/*

@@ -15,6 +15,7 @@ ReXGlue SDK 0.10.0.24 (ночной и своя сборка `ref/rexglue-sdk-cu
 | Главное меню, «Играть сейчас», выбор команд и формы | да |
 | Матч: арена, заставка выхода, табло, игроки, шлемы и формы, номера, трибуны | да (CPU против CPU, ANA–SJ) |
 | Спин потока рендера (`nhl_fence_wait`) и композиты экипировки (`nhl_composite_readback`) | да — функции те же, что в NHL 13 |
+| D3D12 RTV (быстрее ROV) | да, но только с `execute_unclipped_draw_vs_on_cpu = true`: матч ARZ–ANA целиком — лёд, игроки, табло, трибуны (08.10, 20:30). У соседей «RTV — чёрный матч» — без этого флага (умолчание SDK — false, в Xenia было true) |
 
 ## Устройство
 
@@ -59,3 +60,18 @@ S:\Claude\megarohas_nhl13\legacy-port\build.cmd win-amd64-relwithdebinfo
 `nhllegacy.toml` рядом с exe (шаблон — `nhllegacy.example.toml`; `build.cmd` кладёт его, если
 своего нет). Проверка без геймпада — `tools/gameshot.ps1 -Game legacy` (`--mnk_mode=true`),
 замок `game/work/status/game.lock` общий с NHL 13.
+
+## Для друзей
+
+`bash legacy-port/scripts/make_dist.sh [--mods]` собирает папку `legacy-port/dist/NHL Legacy`
+(не в git): `nhllegacy.exe`, `rexruntime.dll`, `rexgpu-xenos.dll` (Release, свой SDK — D3D12 и
+Vulkan), `nhllegacy_snap.exe`, DLL рантайма MSVC (app-local: `msvcp140`, `msvcp140_atomic_wait`, `vcruntime140`,
+`vcruntime140_1` из VC Redist BuildTools — ставить VC++ Redistributable не нужно),
+`nhllegacy.toml` и `README.txt` из `legacy-port/dist-template/`, пустые `game\` и
+`userdata\cache\guest\`. С `--mods` — моды-данные из `legacy-port/userdata/cache/guest` (без
+кэша, который пишет сама игра: `*.ver`, `admanager_cache_images`, `highlights.sav`).
+
+Файлов игры в папке нет: друг кладёт свою копию NHL Legacy (default.xex и `*.big`, диск без TU,
+SHA-256 `default.xex` = `d818eb15…c55624`) в `game\` рядом с exe. Пути в `nhllegacy.toml` пустые —
+`game\` и `userdata\` рядом с exe; можно указать свои. Публиковать папку — решает пользователь
+(в ней производное кода игры — exe порта).
