@@ -6,21 +6,36 @@
     python fefont.py extents [--check] [--out FILE]    # font_extents.txt по метрикам шрифтов (формула игры);
                                                        # --check — сверка с файлом игры построчно
     python fefont.py build OUTDIR --face KEY=SRC[#N][@СТИЛЬ] [--face …] [--fit cap|x|em] [--scale K]
-                           [--width 1|auto|K] [--track N] [--no-kern] [--keep-marks] [--caps]
+                           [--width 1|auto|K] [--track N] [--no-kern] [--keep-marks] [--caps] [--no-squeeze]
                            [--vmetrics game|source] [--preview DIR]
+    python fefont.py build OUTDIR --keep --face KEY=SRC [--face …]    # шрифт как есть (см. ниже)
         # KEY — conbold, med, hv (интерфейс) или indicator (подписи игроков на льду);
         # SRC — TTF/OTF/TTC (#N — номер шрифта в TTC), @СТИЛЬ — именованный стиль вариативного шрифта
         # («SemiBold», «Bold Condensed») или оси («wght=600,wdth=80»).
         # --fit: под высоту прописных оригинала (cap, по умолчанию), строчных (x) или кегль в кегль (em);
         # --width auto — сжать/растянуть по ширине до средней ширины оригинала; --track — разрядка (ед. из 1000),
         # разная для разных KEY — отдельными запусками в один OUTDIR; --caps — строчные рисуются прописными;
-        # ®, ™, ℠ вписываются в рамку маленьких надстрочных знаков EA (--keep-marks — оставить как в шрифте).
+        # ®, ™, ℠ вписываются в рамку маленьких надстрочных знаков EA (--keep-marks — оставить как в шрифте);
+        # ℠, которого нет в шрифте, собирается из его S и M в рамке ™. Знаки над прописными и выносные, что
+        # вылезают за usWinAscent/Descent игры (например, после --fit cap), ужимаются по вертикали в эту рамку
+        # (--no-squeeze — не трогать).
+        # --keep — шрифт SRC как есть (TrueType того же unitsPerEm, например шрифт меню NHL 12): его глифы,
+        # ширины и хинтинг байт в байт, меняются только имена/классы (как у шрифта игры) и вертикальные метрики;
+        # недостающие символы дописываются (похожий символ, ℠ из S и M, иначе глиф игры), крупный ® — уменьшенной
+        # копией. --fit/--scale/--width/--track с --keep не сочетаются.
         # Результат — дерево как в cache: OUTDIR/fe/ion/fonts/EAHelveticaNeue…-Mod.ttf
         # (+ OUTDIR/fe/ion/fonts/font_extents.txt при --vmetrics source), отчёт — OUTDIR/fefont-build.json.
     python fefont.py preview OUTDIR PREVIEW_DIR [--shot PNG|WEBP] [--nhl12 JPG]
         # образцы «до/после» через Chrome/Edge без окна (+ сравнение с кусками снимка экрана
         # «Starting Lineups» 1651×982, если дан --shot; --nhl12 — главное меню NHL 12 1000×563 рядом
         # с теми же пунктами шрифтом «Hv» до и после)
+    python fefont.py compare OUTDIR PNG [--label ИМЯ]   # три колонки: шрифты NHL 13 как были | исходные файлы
+                                                       # сборки как есть (ИМЯ, например «NHL 12») | сборка
+    python fefont.py coverage [OUTDIR|FONT…] [--all-loc]
+        # все ли символы строк интерфейса (fe/loc/NHL_ENG_US.db, --all-loc — все языки) и строк базы
+        # (db/nhlng.db: имена игроков, команды, арены) — из cache: порта, иначе с диска — есть в шрифтах сборки;
+        # какие из них нарисованы глифом оригинала (другой рисунок); без аргументов — шрифты игры. Код выхода 1,
+        # если символа не хватает
 
 Как устроено (подробности — docs/fe-fonts.md):
   * Интерфейс (Apt/ION) рисует текст шрифтами TrueType на лету (растеризатор Bitstream FontFusion
@@ -40,7 +55,8 @@
     (--vmetrics game) — таблица остаётся верной, базовая линия не сдвигается.
   * Сборка: контуры исходного шрифта (TrueType как есть, CFF — кубические кривые в квадратичные,
     вариативный — в выбранном стиле, gvar/avar/HVAR) масштабируются под высоту прописных оригинала
-    (--fit cap), составные глифы раскрываются, хинтинг не переносится. Набор символов — ровно как у
+    (--fit cap), составные глифы раскрываются, хинтинг не переносится (игра его и не применяет: тот же шрифт
+    с хинтингом и без даёт в игре попиксельно одну картинку — проверено 08.10.2026). Набор символов — ровно как у
     оригинала; чего нет в исходном шрифте — заменяется похожим (пробел, дефис, Ё → Ë, ﬁ → f+i)
     или берётся глиф оригинала (список — в отчёте). Кернинг (GPOS/kern) — в таблицу kern.
 
@@ -1489,10 +1505,53 @@ def _bbox(contours):
     return min(xs), min(ys), max(xs), max(ys)
 
 
+def _fit_mark(cs, aw, target, c):
+    """®, ™, ℠ шрифта-источника заметно крупнее маленьких надстрочных знаков EA → вписать в рамку знака target.
+    → (контуры, ширина, коэффициент) или None (не нужно)."""
+    if c not in target.cmap:
+        return None
+    tcs, taw = target.outline(target.cmap[c])
+    tb, sb = _bbox(tcs), _bbox(cs)
+    if not (tb and sb and sb[3] > sb[1] and (tb[3] - tb[1]) < 0.75 * (sb[3] - sb[1])):
+        return None
+    kk = (tb[3] - tb[1]) / (sb[3] - sb[1])
+    return [[((x - sb[0]) * kk + tb[0], (y - sb[1]) * kk + tb[1], on) for x, y, on in ct] for ct in cs], taw, kk
+
+
+def _compose_sm(letter, tm):
+    """℠, которого нет в шрифте-источнике: буквы S и M (letter(ch) → контуры, ширина) в рамке готового ™ (tm —
+    контуры, ширина): та же высота и нижний край, те же боковые поля. → (контуры, ширина) или None."""
+    s_cs, s_aw = letter('S')
+    m_cs, _ = letter('M')
+    cs = [list(ct) for ct in s_cs] + [[(x + s_aw, y, on) for x, y, on in ct] for ct in m_cs]
+    b, tb = _bbox(cs), _bbox(tm[0])
+    if not b or not tb or b[3] <= b[1]:
+        return None
+    k = (tb[3] - tb[1]) / (b[3] - b[1])
+    out = [[((x - b[0]) * k + tb[0], (y - b[1]) * k + tb[1], on) for x, y, on in ct] for ct in cs]
+    return out, tm[1] - (tb[2] - tb[0]) + (b[2] - b[0]) * k
+
+
+def _squeeze(cs, top, win_a, win_d):
+    """Части глифа выше top (знаки над прописными) и ниже базовой линии (выносные) — ужать по вертикали в рамку
+    usWinAscent/Descent (win_a, win_d): y' = top + (y − top)·k сверху, y' = y·k снизу. → (контуры, ужато ли)."""
+    b = _bbox(cs)
+    if not b:
+        return cs, False
+    ka = (win_a - top) / (b[3] - top) if b[3] > win_a and b[3] > top else 1.0
+    kd = win_d / -b[1] if b[1] < -win_d else 1.0
+    if ka == 1.0 and kd == 1.0:
+        return cs, False
+    return [[(x, top + (y - top) * ka if y > top else y * kd if y < 0 else y, on) for x, y, on in ct]
+            for ct in cs], True
+
+
 def transplant(target, source, fit='cap', scale=1.0, width='1', track=0.0, kern=True, vmetrics='game',
-               marks=True, caps=False, max_size=None, log=print):
+               marks=True, caps=False, max_size=None, squeeze=True, log=print):
     """Контуры source в «скелет» target (имена, классы, вертикальные метрики, набор символов).
-    max_size — предел размера файла (по умолчанию в build — размер оригинала): лишнее — за счёт кернинга."""
+    max_size — предел размера файла (по умолчанию в build — размер оригинала): лишнее — за счёт кернинга.
+    squeeze — при метриках игры (vmetrics='game') знаки над прописными и выносные, вылезающие за usWinAscent/Descent
+    (например, после увеличения --fit cap), ужимаются по вертикали в эту рамку (в игре края могли бы обрезаться)."""
     charset = sorted(target.cmap)
     if fit == 'cap':
         s = target.cap_height() / source.cap_height()
@@ -1522,6 +1581,10 @@ def transplant(target, source, fit='cap', scale=1.0, width='1', track=0.0, kern=
             picks[c] = ('lig', LIGATURES[c])
             notes.append(f'U+{c:04X} ← {LIGATURES[c]}')
             continue
+        if c == 0x2120 and all(ord(ch) in source.cmap for ch in 'SM™'):
+            picks[c] = ('sm',)
+            notes.append('U+2120 ℠ ← S и M исходного шрифта в рамке ™')
+            continue
         picks[c] = ('t', target.cmap[c])
         fallback.append(c)
     if caps:                                              # строчные → глифы прописных (шрифт «только прописные»)
@@ -1542,20 +1605,19 @@ def transplant(target, source, fit='cap', scale=1.0, width='1', track=0.0, kern=
             out.append(k)
         cmap[c] = index[k]
 
-    glyphs, names = [], []
-    for k in out:
+    def scaled(gid):
+        cs, aw = source.outline(gid)
+        return [[(x * s * kx, y * s, on) for x, y, on in ct] for ct in cs], aw * s * kx
+
+    def make(k, quiet=False):
         if k[0] in ('s', 'mark'):
-            cs, aw = source.outline(k[1])
-            cs = [[(x * s * kx, y * s, on) for x, y, on in ct] for ct in cs]
-            aw = aw * s * kx
+            cs, aw = scaled(k[1])
             if k[0] == 'mark':
-                tcs, taw = target.outline(target.cmap[k[2]])
-                tb, sb = _bbox(tcs), _bbox(cs)
-                if tb and sb and sb[3] > sb[1] and (tb[3] - tb[1]) < 0.75 * (sb[3] - sb[1]):
-                    kk = (tb[3] - tb[1]) / (sb[3] - sb[1])
-                    cs = [[((x - sb[0]) * kk + tb[0], (y - sb[1]) * kk + tb[1], on) for x, y, on in ct] for ct in cs]
-                    aw = taw
-                    notes.append(f'U+{k[2]:04X} {chr(k[2])} — уменьшен до размера оригинала (×{kk:.2f})')
+                fit = _fit_mark(cs, aw, target, k[2])
+                if fit:
+                    cs, aw, kk = fit
+                    if not quiet:
+                        notes.append(f'U+{k[2]:04X} {chr(k[2])} — уменьшен до размера оригинала (×{kk:.2f})')
             elif aw > 0 and track:
                 cs = [[(x + track / 2, y, on) for x, y, on in ct] for ct in cs]
                 aw += track
@@ -1566,8 +1628,22 @@ def transplant(target, source, fit='cap', scale=1.0, width='1', track=0.0, kern=
                 cs += [[((x + aw) * s * kx, y * s, on) for x, y, on in ct] for ct in sub]
                 aw += sa
             aw = aw * s * kx + track
+        elif k[0] == 'sm':
+            got = _compose_sm(lambda ch: scaled(source.cmap[ord(ch)]), make(picks[0x2122], quiet=True))
+            cs, aw = got if got else target.outline(target.cmap[0x2120])
         else:
             cs, aw = target.outline(k[1])
+        return cs, aw
+
+    glyphs, names = [], []
+    squeezed = set()
+    box_a, box_d = target.os2['win'][0] - 1, target.os2['win'][1] - 1
+    for k in out:
+        cs, aw = make(k)
+        if squeeze and vmetrics == 'game' and k[0] != 't':
+            cs, hit = _squeeze(cs, target.cap_height(), box_a, box_d)
+            if hit:
+                squeezed.add(len(glyphs))
         glyphs.append((cs, max(0, int(round(aw)))))
     seen = set()
     rev = {}
@@ -1695,7 +1771,9 @@ def transplant(target, source, fit='cap', scale=1.0, width='1', track=0.0, kern=
         'cap_height': new_cap, 'x_height': new_x, 'target_cap_height': int(round(target.cap_height())),
         'target_x_height': int(round(target.x_height())), 'win': win, 'upem': target.upem,
         'from_original': [f'U+{c:04X} {chr(c)}' for c in fallback], 'substituted': notes,
-        'size': len(font)}
+        'composed': [f'U+{c:04X} {chr(c)}' for c in charset if picks[c][0] in ('sm', 'lig')],
+        'squeezed': ''.join(chr(c) for c in charset if cmap[c] in squeezed),
+        'mode': 'transplant', 'hinting': False, 'size': len(font)}
     log(f'  масштаб {s:.4f} (по {"высоте прописных" if fit == "cap" else "высоте строчных" if fit == "x" else "кеглю"}), '
         f'ширина ×{kx:.3f} (своя ширина шрифта к оригиналу: {natural:.3f}), кернинг: {len(pairs)} пар'
         + (f' (ещё {cut} слабых — сверх предела таблицы kern)' if cut else '')
@@ -1707,10 +1785,212 @@ def transplant(target, source, fit='cap', scale=1.0, width='1', track=0.0, kern=
     if natural > 1.08 and kx == 1.0:
         log(f'  внимание: шрифт шире оригинала на {100 * (natural - 1):.0f}% — длинные надписи могут не влезть '
             f'(--width auto или --width 0.9)')
+    if report['squeezed']:
+        log(f'  ужаты по вертикали в рамку usWin ({win[0]}/{win[1]}): {report["squeezed"]}')
     over = [chr(c) for c in charset if picks[c][0] != 't' and (lambda b: b and (b[3] > win[0] + 0.5 or b[1] < -win[1] - 0.5))(
         _bbox(glyphs[cmap[c]][0]))]
     if over:
         report['beyond_win'] = ''.join(over)
+        log(f'  выходят за usWinAscent/Descent ({win[0]}/{win[1]}): {"".join(over)} — в игре края могут обрезаться')
+    return font, report
+
+
+def _glyph_box(data):
+    """bbox из заголовка глифа glyf (простого или составного) или None для пустого."""
+    if len(data) < 10:
+        return None
+    return struct.unpack_from('>4h', data, 2)
+
+
+def keep_build(target, source, marks=True, vmetrics='game', max_size=None, log=print):
+    """Шрифт source как есть — свои контуры, ширины и хинтинг (fpgm/prep/cvt, инструкции глифов, hdmx, LTSH,
+    VDMX, gasp) — с «лицом» target: таблица name, классы веса/ширины и fsSelection (OS/2), macStyle, вертикальные
+    метрики (vmetrics='game' — hhea, typo, win target'а, font_extents.txt остаётся верным). Глифы source не
+    меняются байт в байт; символы target, которых нет в source, дописываются в конец глифами без инструкций:
+    похожий символ (ALIAS — тот же глиф), лигатуры fi/fl из букв, ℠ из S и M в рамке ™, иначе глиф target.
+    marks — ®, ™, ℠ заметно крупнее маленьких надстрочных знаков target вписываются в их рамку (новым глифом)."""
+    if 'glyf' not in source.t or source.cff:
+        raise SystemExit(f'{source.path}: --keep только для TrueType (glyf)')
+    if source.axes:
+        raise SystemExit(f'{source.path}: --keep не для вариативного шрифта — нужен обычный TTF')
+    if source.upem != target.upem:
+        raise SystemExit(f'{source.path}: --keep — unitsPerEm {source.upem}, у шрифта игры {target.upem}; нужна '
+                         f'пересадка (без --keep)')
+    ng0 = source.ng
+    glyf = source.t['glyf']
+    raw = [glyf[source.loca[g]:source.loca[g + 1]] for g in range(ng0)]
+    adv, lsb = list(source.adv[:ng0]), list(source.lsb[:ng0])
+    names = list(source.glyph_names() or ['.notdef'] + [f'glyph{i}' for i in range(1, ng0)])
+    cmap = {c: g for c, g in source.cmap.items()}
+    boxes = [_glyph_box(d) for d in raw]
+    added, notes, fallback, composed = [], [], [], []
+    seen = set(names)
+    tnames = target.glyph_names() or []
+
+    def uname(base):
+        nm = base
+        while nm in seen:
+            nm += '.alt'
+        seen.add(nm)
+        return nm
+
+    def add(cs, aw, base):
+        data, box, npts, nct = encode_glyph(cs)
+        raw.append(data)
+        adv.append(max(0, int(round(aw))))
+        lsb.append(box[0] if box else 0)
+        boxes.append(box)
+        names.append(uname(base))
+        added.append((len(raw) - 1, npts, nct))
+        return len(raw) - 1
+
+    def tname(c):
+        tg = target.cmap.get(c)
+        return tnames[tg] if tg is not None and tg < len(tnames) else f'uni{c:04X}'
+
+    final = {}                                            # готовые контуры знаков (для рамки ℠)
+    for c in MARKS:
+        if c in source.cmap:
+            cs, aw = source.outline(source.cmap[c])
+            final[c] = (cs, aw)
+            fit = _fit_mark(cs, aw, target, c) if marks else None
+            if fit:
+                cs, aw, kk = fit
+                cmap[c] = add(cs, aw, tname(c) + '.ea')
+                final[c] = (cs, aw)
+                notes.append(f'U+{c:04X} {chr(c)} — уменьшен до размера оригинала (×{kk:.2f}), новым глифом')
+    for c in sorted(target.cmap):
+        if c in cmap:
+            continue
+        alt = next((a for a in ALIAS.get(c, []) if a in source.cmap), None)
+        if alt is not None:
+            cmap[c] = source.cmap[alt]
+            notes.append(f'U+{c:04X} ← U+{alt:04X}')
+            continue
+        if c in LIGATURES and all(ord(ch) in source.cmap for ch in LIGATURES[c]):
+            cs, aw = [], 0.0
+            for ch in LIGATURES[c]:
+                sub, sa = source.outline(source.cmap[ord(ch)])
+                cs += [[(x + aw, y, on) for x, y, on in ct] for ct in sub]
+                aw += sa
+            cmap[c] = add(cs, aw, tname(c))
+            composed.append(c)
+            notes.append(f'U+{c:04X} ← {LIGATURES[c]}')
+            continue
+        if c == 0x2120 and all(ord(ch) in source.cmap for ch in 'SM') and 0x2122 in final:
+            got = _compose_sm(lambda ch: source.outline(source.cmap[ord(ch)]), final[0x2122])
+            if got:
+                cmap[c] = add(got[0], got[1], tname(c))
+                composed.append(c)
+                notes.append('U+2120 ℠ ← S и M исходного шрифта в рамке ™')
+                continue
+        cs, aw = target.outline(target.cmap[c])
+        cmap[c] = add(cs, aw, tname(c))
+        fallback.append(c)
+    ng = len(raw)
+
+    glyf_b, loca = bytearray(), []
+    for d in raw:
+        loca.append(len(glyf_b))
+        glyf_b += d + b'\0' * (-len(d) % 4)
+    loca.append(len(glyf_b))
+    short = len(glyf_b) < 0x20000
+    loca_b = struct.pack('>%dH' % len(loca), *[v // 2 for v in loca]) if short else \
+        struct.pack('>%dI' % len(loca), *loca)
+    hm = b''.join(struct.pack('>Hh', a, l) for a, l in zip(adv, lsb))
+
+    bb = [32767, 32767, -32768, -32768]
+    adv_max, min_l, min_r, max_ext = max(adv), 32767, 32767, -32768
+    for a, l, box in zip(adv, lsb, boxes):
+        if box:
+            bb = [min(bb[0], box[0]), min(bb[1], box[1]), max(bb[2], box[2]), max(bb[3], box[3])]
+            min_l, min_r, max_ext = min(min_l, box[0]), min(min_r, a - box[2]), max(max_ext, box[2])
+    head = bytearray(source.t['head'])
+    struct.pack_into('>I', head, 8, 0)
+    struct.pack_into('>q', head, 28, int(time.time()) + 2082844800)
+    struct.pack_into('>4h', head, 36, *bb)
+    struct.pack_into('>H', head, 44, target.mac_style)
+    struct.pack_into('>h', head, 50, 0 if short else 1)
+    hhea = bytearray(source.t['hhea'])
+    if vmetrics == 'game':
+        hhea[4:10] = target.t['hhea'][4:10]
+    struct.pack_into('>Hhhh', hhea, 10, adv_max, min_l, min_r, max_ext)
+    struct.pack_into('>H', hhea, 34, ng)
+    maxp = bytearray(source.t['maxp'])
+    struct.pack_into('>H', maxp, 4, ng)
+    if len(maxp) >= 10 and added:
+        struct.pack_into('>HH', maxp, 6, max(u16(maxp, 6), max(n for _, n, _ in added)),
+                         max(u16(maxp, 8), max(n for _, _, n in added)))
+    os2 = bytearray(source.t['OS/2'])
+    tos2 = target.t['OS/2']
+    os2[4:8] = tos2[4:8]                                  # usWeightClass, usWidthClass
+    os2[62:64] = tos2[62:64]                              # fsSelection
+    codes = [c for c in cmap if c <= 0xFFFF]
+    struct.pack_into('>HH', os2, 64, min(codes), max(codes))
+    if vmetrics == 'game':
+        os2[68:74] = tos2[68:74]                          # sTypoAscender/Descender/LineGap
+        os2[74:78] = tos2[74:78]                          # usWinAscent/Descent
+    if u16(os2, 0) >= 2 and len(os2) >= 90:
+        struct.pack_into('>2h', os2, 86, int(round(source.x_height())), int(round(source.cap_height())))
+    tables = {k: v for k, v in source.t.items() if k in ('fpgm', 'prep', 'cvt ', 'gasp', 'VDMX', 'kern')}
+    tables.update({'head': bytes(head), 'hhea': bytes(hhea), 'maxp': bytes(maxp), 'OS/2': bytes(os2), 'hmtx': hm,
+                   'cmap': build_cmap(cmap), 'loca': loca_b, 'glyf': bytes(glyf_b), 'name': target.t['name'],
+                   'post': build_post(names, source.t['post'])})
+    if 'kern' not in tables:
+        pairs = source.kerning(range(ng0))
+        if pairs:
+            tables['kern'] = build_kern({k: int(round(v)) for k, v in pairs.items() if int(round(v))})
+    if 'hdmx' in source.t:                                # ширины по кеглям: новым глифам — линейные
+        h = source.t['hdmx']
+        nrec, rsz = s16(h, 2), s32(h, 4)
+        nsz = (2 + ng + 3) & ~3
+        out = bytearray(struct.pack('>hhi', 0, nrec, nsz))
+        for r in range(nrec):
+            rec = h[8 + r * rsz:8 + (r + 1) * rsz]
+            ppem = rec[0]
+            widths = list(rec[2:2 + ng0]) + [min(255, int(round(adv[g] * ppem / source.upem))) for g in range(ng0, ng)]
+            out += bytes([ppem, max(widths)]) + bytes(widths) + b'\0' * (nsz - 2 - ng)
+        tables['hdmx'] = bytes(out)
+    if 'LTSH' in source.t:                                # новым глифам — «линейны с 1 px»
+        lt = source.t['LTSH']
+        tables['LTSH'] = struct.pack('>HH', 0, ng) + lt[4:4 + ng0] + b'\x01' * (ng - ng0)
+    font = pack_sfnt(tables)
+
+    check = Font(font, path='сборка')
+    cg = check.t['glyf']
+    for g in range(ng0):                                  # глифы источника — байт в байт (с инструкциями)
+        if cg[check.loca[g]:check.loca[g] + len(raw[g])] != raw[g]:
+            raise SystemExit(f'--keep: глиф {g} изменился при сборке')
+    if not set(target.cmap) <= set(check.cmap):
+        raise SystemExit('--keep: в сборке не все символы шрифта игры')
+    win = list(struct.unpack_from('>2H', os2, 74))
+    if max_size and len(font) > max_size:
+        log(f'  внимание: файл больше оригинала ({len(font)} > {max_size} байт) — буфер шрифтов игры может быть '
+            f'рассчитан на оригинал')
+    both = [c for c in map(ord, WIDTH_SAMPLE) if c in target.cmap and c in source.cmap]
+    t_mean = sum(target.adv[target.cmap[c]] for c in both) / max(1, len(both))
+    s_mean = sum(source.adv[source.cmap[c]] for c in both) / max(1, len(both))
+    over = sorted({chr(c) for c, g in cmap.items() if boxes[g] and (boxes[g][3] > win[0] or boxes[g][1] < -win[1])})
+    report = {
+        'mode': 'keep', 'hinting': any(t in source.t for t in ('fpgm', 'prep')), 'scale': 1.0, 'width_factor': 1.0,
+        'natural_width': round(s_mean / t_mean, 4) if t_mean else 1.0, 'track': 0, 'glyphs': ng, 'glyphs_added': ng - ng0,
+        'chars': len(cmap), 'kern_pairs': len(source.kerning(range(ng0))) if 'kern' in source.t or 'GPOS' in source.t else 0,
+        'cap_height': int(round(source.cap_height())), 'x_height': int(round(source.x_height())),
+        'target_cap_height': int(round(target.cap_height())), 'target_x_height': int(round(target.x_height())),
+        'win': win, 'upem': target.upem, 'from_original': [f'U+{c:04X} {chr(c)}' for c in fallback],
+        'substituted': notes, 'composed': [f'U+{c:04X} {chr(c)}' for c in composed],
+        'extra_chars': [f'U+{c:04X} {chr(c)}' for c in sorted(set(cmap) - set(target.cmap))], 'size': len(font)}
+    if over:
+        report['beyond_win'] = ''.join(over)
+    log(f'  как есть (--keep): контуры, ширины и хинтинг источника; прописные {report["cap_height"]} '
+        f'(у оригинала {report["target_cap_height"]}), строчные {report["x_height"]} ({report["target_x_height"]}), '
+        f'средняя ширина ×{report["natural_width"]:.3f}; глифов {ng} (+{ng - ng0}), символов {len(cmap)}')
+    if fallback:
+        log(f'  из оригинала ({len(fallback)}): ' + ' '.join(chr(c) if c > 0x20 and c != 0x7F else f'U+{c:04X}'
+                                                         for c in fallback))
+    for n in notes:
+        log(f'  {n}')
+    if over:
         log(f'  выходят за usWinAscent/Descent ({win[0]}/{win[1]}): {"".join(over)} — в игре края могут обрезаться')
     return font, report
 
@@ -1895,6 +2175,63 @@ def _preview_nhl12(shot, outdir, css, prevdir, game=None):
     print(f'  {out}')
 
 
+COMPARE_ROWS = [   # ключ шрифта, кегль, текст ('|' — перенос, '*' в начале — выделенный пункт), подпись
+    ('hv', 26, '*PLAY NOW|HOCKEY ULTIMATE TEAM|GM CONNECTED|NHL™ MOMENTS LIVE|OTHER GAME MODES|XBOX LIVE|MY NHL™ 13'
+               '|SIGN IN TO EA', 'пункты главного меню — «Hv»'),
+    ('conbold', 26, 'PLAY NOW / STARTING LINEUPS', 'заголовок экрана — «Con Bold»'),
+    ('conbold', 22, 'LW  RW  A. TUCH  PWF 90|D  D  M. FEHÉRVÁRY  DFD 89|C  C  T. STÜTZLE  PLY 88',
+     'составы (прописные) — «Con Bold»'),
+    ('conbold', 22, 'Štěpán Hřebejk · Miloslav Čermák · Roman Němeček|Per Åslund · Per-Age Skrøder · '
+                    'Alexander Weiß|Tim Stützle · Juuso Välimäki · Alexis Lafrenière', 'имена с диакритикой'),
+    ('conbold', 30, 'Washington Capitals®|Xcel Energy Center℠ · EA SPORTS™', 'команды, ®/™/℠'),
+    ('hv', 34, '3 : 2   1ST 12:45   SOG 24 – 18|0123456789', 'цифры счёта и табло — «Hv»'),
+    ('med', 20, 'Earn your place in the Elite/Pro/Amateur Divisions|and compete in monthly playoffs for the '
+                'EASHL Championship.', 'текст — «Med»'),
+    ('hv', 24, 'ИГРАТЬ · РЕЖИМЫ ИГРЫ · ВЫПОЛНИТЕ ВХОД', 'кириллица — «Hv»'),
+]
+
+
+def compare(outdir, out_png, game=None, ref_label='источник'):
+    """Три колонки: шрифты NHL 13 как были | исходные файлы сборки (как есть, например NHL 12) | сборка."""
+    rep_path = os.path.join(outdir, 'fefont-build.json')
+    report = json.load(open(rep_path, encoding='utf-8')) if os.path.exists(rep_path) else {}
+    tmp = tempfile.mkdtemp(prefix='fefont_cmp_')
+    try:
+        css = ''
+        for k in ('conbold', 'med', 'hv'):
+            orig = os.path.join(tmp, f'orig_{k}.ttf')
+            open(orig, 'wb').write(game_file(*FACES[k][1], game))
+            new = os.path.join(outdir, *FACES[k][0].split('/'))
+            new = new if os.path.exists(new) else orig
+            ref = report.get(k, {}).get('source') or orig
+            for fam, path in (('o', orig), ('r', ref), ('n', new)):
+                css += f"@font-face{{font-family:'{fam}_{k}';src:url('{file_url(path)}')}}\n"
+        cols = [('o', 'NHL 13 — как было'), ('r', ref_label + ' — оригинал'), ('n', 'NHL 13 — новый шрифт')]
+        body = '<div class="row hdr">' + ''.join(f'<div class="col h">{t}</div>' for _, t in cols) + '</div>'
+        for k, px, text, label in COMPARE_ROWS:
+            body += f'<div class="lab">{label}</div><div class="row">'
+            for fam, _ in cols:
+                lines = ''
+                for ln in text.split('|'):
+                    sel = ln.startswith('*')
+                    ln = ln.lstrip('*')
+                    lines += (f'<div class="ln{" sel" if sel else ""}" style="font-family:{fam}_{k};font-size:{px}px">'
+                              f'{ln}</div>')
+                body += f'<div class="col">{lines}</div>'
+            body += '</div>'
+        html = ('<!doctype html><html><head><meta charset="utf-8"><style>' + css +
+                'body{margin:0;background:#0b1626;color:#e8edf3}.row{display:flex;gap:18px;padding:4px 18px 10px}'
+                '.col{flex:1;min-width:0;overflow:hidden;background:#111c2b;padding:8px 12px;border-radius:4px}'
+                '.hdr .col{background:none;padding:10px 12px 0}.h{font:600 17px Segoe UI,sans-serif;color:#ffd27a}'
+                '.lab{font:13px Segoe UI,sans-serif;color:#8fa3bd;padding:6px 30px 0}'
+                '.ln{white-space:nowrap;line-height:1.3}.sel{background:linear-gradient(#e9ecef,#aab0b7);color:#1b1d20;'
+                'padding:0 8px;margin:0 -8px;border-radius:3px}</style></head><body>' + body + '</body></html>')
+        render_page(html, out_png, 1800, 1200)
+        print(f'  {out_png}')
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 # ---------------------------------------------------------------- команды
 
 def load_source(spec):
@@ -1974,16 +2311,133 @@ def cmd_extents(args):
                 print(f'   по метрикам indicatorfont.ttf (77 Bold Condensed): расхождений {bad2}')
 
 
+USER_CACHE = ('userdata', 'cache', 'guest')         # cache: порта (свободные файлы поверх архивов)
+
+
+def used_chars(game=None, all_loc=False):
+    """Символы, которые игра выводит этими шрифтами: строки интерфейса (fe/loc/NHL_ENG_US.db, с all_loc —
+    все языки диска) и строковые поля базы (имена игроков, команд, арен — db/nhlng.db). Берётся то, что
+    стоит в cache: порта (game/userdata/cache/guest), иначе — с диска. → {символ: [сколько, пример, источник]}."""
+    from locdb import LocDb
+    from tdb_read import load_meta, read_db
+    g = game or ph.game_dir()
+    cache = os.path.join(g, *USER_CACHE)
+    locdir = os.path.join(g, 'extracted', 'big', 'cache', 'fe', 'loc')
+    out = {}
+
+    def note(text, where, src):
+        for ch in text:
+            if ch in '\r\n':
+                continue
+            rec = out.setdefault(ch, [0, '', src])
+            rec[0] += 1
+            if not rec[1]:
+                rec[1] = f'{where}: {text[:70]}'
+    langs = sorted(f[:-3] for f in os.listdir(locdir) if f.endswith('.db')) if os.path.isdir(locdir) else []
+    for lang in langs if all_loc else [x for x in langs if x == 'nhl_eng_us']:
+        meta = os.path.join(locdir, lang + '-meta.xml')
+        path = next((p for p in (os.path.join(cache, 'fe', 'loc', lang.upper() + '.db'),
+                                 os.path.join(cache, 'fe', 'loc', lang + '.db'), os.path.join(locdir, lang + '.db'))
+                     if os.path.exists(p)), None)
+        if not path or not os.path.exists(meta):
+            continue
+        ld = LocDb(open(path, 'rb').read(), load_meta(meta))
+        for _, sid, off in ld.rows():
+            note(ld.text(off), sid, os.path.relpath(path, g))
+    dbp = os.path.join(cache, 'db', 'nhlng.db')
+    metap = os.path.join(cache, 'db', 'nhlng-meta.xml')
+    if not os.path.exists(metap):
+        metap = os.path.join(os.path.dirname(__file__), '..', 'ref', 'nhl-modding-studio', 'anchors', 'xbox360', 'nhl13',
+                             'databases', 'nhlng-meta.xml')
+    if os.path.exists(dbp) and os.path.exists(metap):
+        d, tables = read_db(dbp, load_meta(metap))
+        for tname, (rows, reclen, rb, fds, fmeta) in tables.items():
+            for kind, bitoff, fid, w in fds:
+                if kind != 0:                                  # 0 — строка (UTF-8 фиксированной длины)
+                    continue
+                fname = fmeta.get(fid, (fid,))[0]
+                for r in range(rows):
+                    st = rb + r * reclen + bitoff // 8
+                    s = bytes(d[st:st + w // 8]).split(b'\0', 1)[0].decode('utf-8', errors='replace')
+                    if s:
+                        note(s, f'{tname}.{fname}[{r}]', os.path.relpath(dbp, g))
+    return out
+
+
+def _fmt_chars(cs):
+    return ' '.join(chr(c) if c > 0x20 and c not in (0x7F, 0xA0) else f'U+{c:04X}' for c in sorted(cs))
+
+
+def cmd_coverage(args):
+    """Покрытие символов: все ли символы строк интерфейса и базы есть в шрифтах (сборке OUTDIR или файлах) и
+    какие из них в сборке нарисованы глифами оригинала NHL 13 (другой стиль)."""
+    all_loc = '--all-loc' in args
+    paths = [a for a in args if not a.startswith('--')]
+    used = used_chars(all_loc=all_loc)
+    want = {ord(c) for c in used if ord(c) >= 0x20}
+    upper = {ord(c.upper()) for c in used if len(c.upper()) == 1 and ord(c) >= 0x20} - want   # пункты меню — toUpperCase()
+    orig_have = set(game_font('conbold').cmap)
+    never = sorted(c for c in want if c not in orig_have)
+    print(f'символов в строках: {len(want)} (не ASCII: {len([c for c in want if c > 0x7E])}); '
+          f'источники: {", ".join(sorted({v[2] for v in used.values()}))}')
+    print('   не ASCII: ' + _fmt_chars(c for c in want if c > 0x7E))
+    if never:
+        print(f'   нет и в шрифтах NHL 13 ({len(never)}, игра их и так не рисует): ' + _fmt_chars(never))
+        for c in never[:3]:
+            print(f'      U+{c:04X} — {used[chr(c)][1]}')
+    targets = []
+    if not paths:
+        targets = [(k, game_font(k), None) for k in ('conbold', 'med', 'hv')]
+    for p in paths:
+        if os.path.isdir(p):
+            rp = os.path.join(p, 'fefont-build.json')
+            rep = json.load(open(rp, encoding='utf-8')) if os.path.exists(rp) else {}
+            for k in FACES:
+                fp = os.path.join(p, *FACES[k][0].split('/'))
+                if os.path.exists(fp):
+                    targets.append((f'{p}: {k}', Font(open(fp, 'rb').read(), path=fp), rep.get(k)))
+        else:
+            targets.append((p, load_source(p)[0], None))
+    bad = 0
+    for label, f, rep in targets:
+        have = set(f.cmap)
+        miss = sorted(c for c in want if c not in have and c in orig_have)
+        miss_up = sorted(c for c in upper if c not in have and c in orig_have)
+        print(f'== {label}: {len(have)} символов в шрифте')
+        if miss:
+            bad += 1
+            print(f'   НЕТ ({len(miss)}): ' + _fmt_chars(miss))
+            for c in miss[:12]:
+                n, ex, src = used[chr(c)]
+                print(f'      U+{c:04X} ×{n} — {ex}')
+        else:
+            print('   все символы строк, что есть в шрифтах NHL 13, есть')
+        if miss_up:
+            print(f'   нет прописных к строчным из строк ({len(miss_up)}): ' + _fmt_chars(miss_up))
+        if rep:
+            orig = {int(x.split()[0][2:], 16) for x in rep.get('from_original', [])}
+            comp = {int(x.split()[0][2:], 16) for x in rep.get('composed', [])}
+            hit = sorted(c for c in orig if c in want)
+            print(f'   глифом оригинала NHL 13 (другой рисунок) — из строк: {_fmt_chars(hit) if hit else "ни одного"}'
+                  + (f'; всего в шрифте {len(orig)}' if orig else ''))
+            if comp:
+                print(f'   собраны из буквы и знака: {_fmt_chars(sorted(comp))}')
+    return bad
+
+
 def cmd_build(args):
     if not args or args[0].startswith('--'):
         raise SystemExit('нужен OUTDIR')
     outdir, args = args[0], args[1:]
     opts = {'fit': 'cap', 'scale': '1', 'width': '1', 'track': '0', 'vmetrics': 'game', 'preview': None}
-    faces, kern, marks, caps = [], True, True, False
+    faces, kern, marks, caps, keep, squeeze = [], True, True, False, False, True
     i = 0
     while i < len(args):
         a = args[i]
-        if a == '--face':
+        if a == '--keep':
+            keep = True
+            i += 1
+        elif a == '--face':
             key, spec = args[i + 1].split('=', 1)
             if key not in FACES:
                 raise SystemExit(f'неизвестный KEY {key}; есть: {", ".join(FACES)}')
@@ -1994,6 +2448,9 @@ def cmd_build(args):
             i += 1
         elif a == '--keep-marks':
             marks = False
+            i += 1
+        elif a == '--no-squeeze':
+            squeeze = False
             i += 1
         elif a == '--caps':
             caps = True
@@ -2012,11 +2469,16 @@ def cmd_build(args):
         orig = game_file(*FACES[key][1])
         target = Font(orig, path=f'{FACES[key][1][0]}.big:{FACES[key][1][1]}')
         print(f'{key} ← {path}' + (f' @{style}' if style else '') + f'  ({FACES[key][2]})')
-        font, rep = transplant(target, src, fit=opts['fit'], scale=float(opts['scale']), width=opts['width'],
-                               track=float(opts['track']), kern=kern, vmetrics=opts['vmetrics'], marks=marks,
-                               caps=caps, max_size=len(orig))
+        if keep:
+            if (opts['fit'], opts['scale'], opts['width'], opts['track']) != ('cap', '1', '1', '0') or caps:
+                raise SystemExit('--keep — шрифт как есть: без --fit/--scale/--width/--track/--caps')
+            font, rep = keep_build(target, src, marks=marks, vmetrics=opts['vmetrics'], max_size=len(orig))
+        else:
+            font, rep = transplant(target, src, fit=opts['fit'], scale=float(opts['scale']), width=opts['width'],
+                                   track=float(opts['track']), kern=kern, vmetrics=opts['vmetrics'], marks=marks,
+                                   caps=caps, max_size=len(orig), squeeze=squeeze)
         check = Font(font, path='сборка')                # самопроверка: файл читается, набор символов тот же
-        assert set(check.cmap) == set(target.cmap), 'набор символов не совпал'
+        assert set(target.cmap) <= set(check.cmap) and (keep or set(check.cmap) == set(target.cmap)),             'набор символов не совпал'
         dst = os.path.join(outdir, *FACES[key][0].split('/'))
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         open(dst, 'wb').write(font)
@@ -2061,6 +2523,11 @@ def main():
         cmd_extents(rest)
     elif cmd == 'build':
         cmd_build(rest)
+    elif cmd == 'coverage':
+        sys.exit(1 if cmd_coverage(rest) else 0)
+    elif cmd == 'compare':
+        label = rest[rest.index('--label') + 1] if '--label' in rest else 'источник'
+        compare(rest[0], rest[1], ref_label=label)
     elif cmd == 'preview':
         shot = rest[rest.index('--shot') + 1] if '--shot' in rest else None
         nhl12 = rest[rest.index('--nhl12') + 1] if '--nhl12' in rest else None
