@@ -34,9 +34,9 @@
 - Игровые дни — только те, что есть в сезоне 2026/27 (SEASON_YEAR): у Legacy в исходном календаре 29.02.2016 —
   его игры расходятся по остальным дням; в календарях, которые nhl32 не составляет (юниоры, Европа), игра такого
   дня переезжает на соседний свободный день (fix_missing_days; у Legacy — 2 игры WHL на 28.02).
-- NHL Legacy (--game legacy) строит таблицы франшизы по заголовкам таблиц базы, а не по схеме:
-  те же поля франшизы (META_WIDEN, при --ahl32 ещё META_WIDEN_AHL32 и leagueteams.ahlaffiliate)
-  расширяются и в заголовках заготовок league* (widen_headers).
+- Таблицы франшизы игра строит по заголовкам таблиц базы, а не по схеме (NHL Legacy и, как оказалось
+  09.10.2026, NHL 13): те же поля франшизы (META_WIDEN, при --ahl32 ещё META_WIDEN_AHL32 и
+  leagueteams.ahlaffiliate) расширяются и в заголовках заготовок league* (widen_headers).
 - --ahl32 (Матча звёзд во франшизе нет: сборным не хватает места — 126 команд, предел кода) —
   АХЛ на 32: свои фарм-клубы Сиэтла и Вегаса (Coachella Valley Firebirds, Henderson
   Silver Knights) на заготовках Custom Team 02/03 (строки 220/221; у каждой лиги свой
@@ -195,11 +195,15 @@ META_WIDEN_AHL32 = {
 
 AUDIOID2_NONE = 0                  # exhibitionteams.audioid2 «нет второго звука» (у Legacy — 4095)
 FUTURE_SCHEDULE = None             # Legacy: nhlfutureschedule — календарь следующих сезонов (+ его Матч звёзд)
-# NHL 13 создаёт таблицы франшизы по схеме (META_WIDEN хватает). NHL Legacy — по заголовкам таблиц
-# самой базы (заготовки league* без строк; сверено с сейвом франшизы): там те же поля надо
-# расширить и в заголовках, иначе у игроков Вегаса proteam = 32 → 0, состав VGK пустой (игроки
-# уезжают в ARZ), пики драфта VGK без владельца — симуляция виснет на первой игре VGK.
-DB_WIDEN = False
+# Таблицы франшизы игра создаёт по заголовкам таблиц самой базы (заготовки league* без строк), а не по
+# схеме — и NHL Legacy, и NHL 13 (сверено с сейвами франшизы: ширины полей в сейве — как в заголовках
+# базы, не как в nhlng-meta.xml). Поэтому те же поля расширяются и в заголовках (widen_headers), иначе
+# у игроков Вегаса proteam = 32 → 0, пики драфта VGK без владельца, а при --ahl32 фарм-клуб Вегаса
+# (Henderson, номер 63 + 1 = 64 в 6-битном leagueteams.ahlaffiliate) → −1: у NHL 13 сим первого игрового
+# дня VGK срывался окном «EA server…» и порчей кучи (docs/franchise-seasons.md), у Legacy — зависание.
+# До 09.10.2026 у NHL 13 было False (считалось, что хватает схемы) — франшизы, созданные на такой базе,
+# у Вегаса повреждены, нужна новая.
+DB_WIDEN = True
 
 
 # --- NHL Legacy (--game legacy; docs/legacy-data.md) ------------------------------------------
@@ -697,7 +701,7 @@ def add_allstar(db, table, allstar=None):
             db.set(table, f, i, v)
 
 def widen_headers(db, ahl32=False):
-    """Те же поля, что в схеме (patch_meta), — в заголовках таблиц базы (DB_WIDEN, NHL Legacy):
+    """Те же поля, что в схеме (patch_meta), — в заголовках таблиц базы (DB_WIDEN, NHL 13 и Legacy):
     META_WIDEN → 6 бит, при --ahl32 META_WIDEN_AHL32 → 7 и leagueteams.ahlaffiliate → 8
     (exhibitionteams.ahlaffiliate расширяет realign_ahl). Уже широкие поля не трогаются."""
     want = {(t, f): 6 for t, fields in META_WIDEN.items() for f in fields}
@@ -799,7 +803,7 @@ def main():
             for t, v in moved.items()))
     if DB_WIDEN:
         wide = widen_headers(db, a.ahl32)
-        print(f'заголовки таблиц базы (франшиза Legacy строит таблицы по ним): {len(wide)} полей шире — {wide}')
+        print(f'заголовки таблиц базы (франшиза строит таблицы по ним): {len(wide)} полей шире — {wide}')
     db.fix()
     assert not db.verify()
     open(a.db_out, 'wb').write(db.d)
