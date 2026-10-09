@@ -38,6 +38,12 @@ def load_rules(path, club=None, kit=None, profiles=()):
     if club and kit:
         for k, v in r.get("club", {}).get(club, {}).get(kit, {}).items():
             rules.setdefault(k, {}).update(v)
+    sp = r.get("sponsor", {})
+    if sp.get("drop"):
+        for k in sp.get("patches", []):
+            if k in rules:
+                rules[k]["enabled"] = False
+                rules[k]["sponsor"] = True
     return r.get("defaults", {}), rules
 
 
@@ -116,10 +122,31 @@ def meshes(with_tie=True):
     return src, dst
 
 
-def standard_patches(comp, rules, defaults, names=("neck_shield", "back_neck"), win=0.022):
+def fill_rows(img, hole):
+    """Закраска области hole построчной линейной интерполяцией между краями (горизонтальные полосы сохраняются)."""
+    out = img.copy()
+    ys = np.unique(np.nonzero(hole)[0])
+    for y in ys:
+        row = hole[y]
+        xs = np.nonzero(row)[0]
+        # отрезки подряд
+        splits = np.split(xs, np.nonzero(np.diff(xs) > 1)[0] + 1)
+        for seg in splits:
+            x0, x1 = seg[0] - 1, seg[-1] + 1
+            if x0 < 0 or x1 >= img.shape[1]:
+                continue
+            a, b = img[y, x0], img[y, x1]
+            t = (np.arange(len(seg)) + 1)[:, None] / (len(seg) + 1)
+            out[y, seg] = a * (1 - t) + b * t
+    return out
+
+
+def standard_patches(comp, rules, defaults, names=None, win=0.022):
     """Для комплектов без base-слоёв: нашивки в стандартных местах развёртки (у всех adidas-свитеров NHL 24 щит NHL
     у ворота и логотип сзади лежат в одних и тех же uv). В окне вокруг uv правила фон — медиана рамки окна, нашивка —
     пиксели, отличные от фона; связная область у центра. -> (псевдо-основа с закрашенными нашивками, метки, нашивки)."""
+    if names is None:
+        names = ("neck_shield", "back_neck") + tuple(k for k, r in rules.items() if r.get("sponsor"))
     H = comp.shape[0]
     lab = np.zeros((H, H), dtype=np.int32)
     patches = []
@@ -130,7 +157,7 @@ def standard_patches(comp, rules, defaults, names=("neck_shield", "back_neck"), 
         if not r or "uv" not in r:
             continue
         cx, cy = int(r["uv"][0] * H), int(r["uv"][1] * H)
-        w = int(win * H)
+        w = int(r.get("win", win) * H)
         y0, y1, x0, x1 = max(cy - w, 0), min(cy + w, H), max(cx - w, 0), min(cx + w, H)
         box = comp[y0:y1, x0:x1, :3]
         border = np.concatenate([box[0], box[-1], box[:, 0], box[:, -1]])
@@ -156,11 +183,13 @@ def standard_patches(comp, rules, defaults, names=("neck_shield", "back_neck"), 
         ys, xs = np.nonzero(mk)
         sl = (slice(y0 + ys.min(), y0 + ys.max() + 1), slice(x0 + xs.min(), x0 + xs.max() + 1))
         patches.append((i, sl, int(mk.sum())))
-        # закрасить нашивку растеканием цвета соседей — только в окне (быстро)
-        from .kit3d import fill_holes
-        crop = fill_holes(base[y0:y1, x0:x1], ~hole[y0:y1, x0:x1], iters=48)
+        # закрасить нашивку: спонсор — построчно (полосы рядом не размываются), прочие — растеканием цвета соседей
         a = base[y0:y1, x0:x1, 3].copy()
-        base[y0:y1, x0:x1] = crop
+        if r.get("sponsor"):
+            base[y0:y1, x0:x1] = fill_rows(base[y0:y1, x0:x1], hole[y0:y1, x0:x1])
+        else:
+            from .kit3d import fill_holes
+            base[y0:y1, x0:x1] = fill_holes(base[y0:y1, x0:x1], ~hole[y0:y1, x0:x1], iters=48)
         base[y0:y1, x0:x1, 3] = a
     return base, lab, patches
 
