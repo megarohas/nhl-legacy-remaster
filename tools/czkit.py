@@ -6,6 +6,9 @@
     python czkit.py build SPEC.json OUTDIR [--kits home,away] [--preview DIR] [--work DIR]
                                                       # комплекты из элементов конструктора по SPEC (раскладка cache:)
     python czkit.py sheet SPEC.json OUTDIR OUT.png    # лист превью уже собранных комплектов SPEC
+    python czkit.py fe SPEC.json OUTDIR [--kits …] [--pose MODEL] [--preview DIR]
+                                                      # только превью меню собранных комплектов — в позе EA
+                                                      # (модель tools/fepose.py; по умолчанию pose.bin игры)
     python czkit.py verify OUTDIR NEW=CONTAINER…      # собранное против контейнера (kitpaint.verify)
     … --game legacy                                   # у любой команды: элементы и контейнеры NHL Legacy (ниже)
 
@@ -39,8 +42,11 @@
 
 Сборка (build): маски зон × свои цвета + детали dm (альфой) → jersey_cm / pant_cm / sock_cm; нормали/блеск — из
 конструктора (свитер — медиана по логотипам, шорты — czpant); свои логотипы — на цвет, блеск и рельеф (kitpaint);
-шрифт — czfont в своих цветах, уменьшенный до 512² (как у EA); карта номеров — czname; превью меню — своя отрисовка
-сетки свитера (rendering/jersey/jersey_1_0_0_0_0_2.rx2) 256² в манере превью EA. Контейнеры файлов (имена, заголовки,
+шрифт — czfont в своих цветах, уменьшенный до 512² (как у EA); карта номеров — czname; превью меню — в позе EA: манекен
+с опущенными руками, складки и свет EA, по модели позы tools/fepose.py (карта «пиксель превью → UV свитера» и затенение,
+выведенные из сотен превью и текстур EA стиля 1; файл pose.bin — game/work/…/fepose/, у каждой игры свой). Без модели —
+прежняя своя отрисовка сетки свитера (rendering/jersey/jersey_1_0_0_0_0_2.rx2) в позе привязки (руки вперёд и в
+стороны — «кривое» превью, как стояло 08.10). Контейнеры файлов (имена, заголовки,
 форматы, мипы) — от комплекта EA стиля 1 (container в SPEC), пиксели — все свои; запись — kitpaint.build_kit.
 
 SPEC (JSON, пример — game/work/uniforms/kitsrc-cz/SEA.json):
@@ -962,6 +968,79 @@ def catalog(outdir, log=print):
 
 # ---------------------------------------------------------------- превью меню (256², как превью EA)
 
+class FePose:
+    """Поза превью EA (tools/fepose.py fit): по пикселю превью — точка развёртки свитера (u, v), затенение
+    gain/bias по каналам (подогнаны по сотням превью и текстур EA стиля 1, мип 512²), база RGBA (манекен, фон,
+    прозрачность) и альфа свитера. Файл — game/work/…/fepose/pose.bin (из арта EA, не в git)."""
+    REC = struct.Struct('<ff3f3f4BB')
+
+    def __init__(self, data, path=''):
+        if data[:8] != b'FEPOSE1\0':
+            raise SystemExit(f'{path}: не модель позы превью (fepose.py)')
+        self.path = path
+        self.w, self.h = struct.unpack_from('<II', data, 8)
+        self.base = bytearray(self.w * self.h * 4)
+        self.items = []                                  # (пиксель, u, v, g3, b3, альфа)
+        for i, r in enumerate(self.REC.iter_unpack(data[16:16 + self.REC.size * self.w * self.h])):
+            self.base[i * 4:i * 4 + 4] = bytes(r[8:12])
+            if r[0] >= 0:
+                self.items.append((i, r[0], r[1], r[2:5], r[5:8], r[12]))
+
+    @classmethod
+    def load(cls, path):
+        return cls(open(path, 'rb').read(), path)
+
+
+def pose_path(game=None):
+    """Модель позы для игры: NHL 13 — game/work/uniforms/fepose/pose.bin, NHL Legacy — game/work/legacy-data/fepose/."""
+    g = game or ta.game_name()
+    import gameprofile
+    P = gameprofile.get(g)
+    return (os.path.join(P.game, 'work', 'uniforms', 'fepose', 'pose.bin') if g == 'nhl13'
+            else P.work_dir('fepose', 'pose.bin'))
+
+
+def half_img(img):
+    """Img вдвое меньше (среднее 2×2) — как мип 1 развёртки, на котором подогнана поза."""
+    w, h = img.w // 2, img.h // 2
+    s, out = img.px, bytearray(w * h * 4)
+    for y in range(h):
+        r0, r1 = (2 * y) * img.w * 4, (2 * y + 1) * img.w * 4
+        for x in range(w):
+            a, b = r0 + 8 * x, r1 + 8 * x
+            o = (y * w + x) * 4
+            for c in range(4):
+                out[o + c] = (s[a + c] + s[a + 4 + c] + s[b + c] + s[b + 4 + c] + 2) // 4
+    return Img(w, h, out)
+
+
+def fe_preview_pose(cm, pose):
+    """Превью меню в позе EA: пиксель = gain · свитер(u, v) + bias (развёртка — мип 512²), вне свитера — манекен и фон
+    EA (база модели)."""
+    tex = cm
+    while tex.w > 512:
+        tex = half_img(tex)
+    out = bytearray(pose.base)
+    for i, u, v, g, b, a in pose.items:
+        c = _sample(tex, u, v)
+        o = i * 4
+        for k in range(3):
+            x = g[k] * c[k] + b[k]
+            out[o + k] = 0 if x < 0 else 255 if x > 255 else int(x + 0.5)
+        out[o + 3] = a
+    return Img(pose.w, pose.h, out)
+
+
+def make_fe(cm, nm, ks, log=print):
+    """Превью меню комплекта: в позе EA по модели (fepose.py), если она есть; иначе — своя отрисовка сетки."""
+    fs = ks.get('fe', {})
+    path = fs.get('pose') or pose_path()
+    if os.path.exists(path):
+        return fe_preview_pose(cm, FePose.load(path))
+    log(f'  превью: нет модели позы {path} (tools/fepose.py fit) — своя отрисовка сетки в позе привязки')
+    return fe_preview(cm, nm, fs.get('yaw', 14.0))
+
+
 def _sleeve_ends(m):
     """Середины манжет в позе привязки (рукава вперёд): вершины рук ближе всего к камере (по сторонам)."""
     out = []
@@ -1104,7 +1183,7 @@ def build(spec_path, outdir, only=None, preview=None, work=None, log=print):
             log(f'  шорты: pants{ps["design"]}')
         scm = make_sock(ks['sock'], palette)
         log(f'  гетры: sock{ks["sock"]["design"]}')
-        fe = fe_preview(jl['cm'], jl['nm'], ks.get('fe', {}).get('yaw', 14.0))
+        fe = make_fe(jl['cm'], jl['nm'], ks, log)
         layers = {'jersey_cm': jl['cm'], 'jersey_sm': jl['sm'], 'jersey_nm': jl['nm'],
                   'font_cm': fcm, 'font_nm': fnm, 'font_sm': fsm, 'name_cm': nmap,
                   'pant_cm': pl['cm'], 'pant_nm': pl['nm'], 'pant_sm': pl['sm'], 'sock_cm': scm, 'fe': fe}
@@ -1123,6 +1202,30 @@ def build(spec_path, outdir, only=None, preview=None, work=None, log=print):
 
 
 # ---------------------------------------------------------------- лист превью клуба
+
+def rebuild_fe(spec_path, outdir, only=None, pose=None, log=print):
+    """Только превью меню уже собранных комплектов SPEC: развёртка свитера — из файла OUTDIR (мип 512², как её
+    видит игра), превью — в позе EA (FePose), контейнер превью — сам файл OUTDIR (меняются только пиксели)."""
+    spec = ta.load_spec(spec_path)
+    pose = FePose.load(pose or pose_path())
+    made = []
+    for name, ks in spec['kits'].items():
+        if only and name not in only:
+            continue
+        kit = kp.Kit.parse(ks['kit'])
+        rel_t, rel_f = kit.path('jersey'), kit.path('fe')
+        rw = ta.Rw4(open(os.path.join(outdir, *rel_t.split('/')), 'rb').read(), rel_t)
+        t = next(x for x in rw.textures if kp.layer_name(x.name) == 'jersey_cm')
+        cm = Img(*kp.tex_decode(rw, t, 1))
+        fe = fe_preview_pose(cm, pose)
+        fp = os.path.join(outdir, *rel_f.split('/'))
+        u = ta.UiLogo(open(fp, 'rb').read(), rel_f)
+        data = u.build(bytes(fe.px), 'md5')
+        open(fp, 'wb').write(data)
+        log(f'{spec.get("team", "")} {name}: {rel_f} — превью в позе EA ({os.path.basename(pose.path)}), {len(data)} байт')
+        made.append(rel_f)
+    return made
+
 
 def kit_layers(outdir, kit):
     """Слои собранного комплекта из файлов (как их увидит игра — после сжатия): {слой: Img}."""
@@ -1234,6 +1337,15 @@ def main():
     elif cmd == 'sheet':
         only = args[args.index('--kits') + 1].split(',') if '--kits' in args else None
         sheet(args[0], args[1], args[2], only)
+    elif cmd == 'fe':
+        only = args[args.index('--kits') + 1].split(',') if '--kits' in args else None
+        pose = args[args.index('--pose') + 1] if '--pose' in args else None
+        made = rebuild_fe(args[0], args[1], only, pose)
+        if '--preview' in args:
+            spec = ta.load_spec(args[0])
+            d = args[args.index('--preview') + 1]
+            sheet(args[0], args[1], os.path.join(d, f'{spec.get("team", "kits")}.png'), only)
+        print(f'превью: {len(made)}')
     elif cmd == 'verify':
         outdir, bad = args[0], 0
         for pair in args[1:]:
