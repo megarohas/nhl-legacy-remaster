@@ -193,9 +193,11 @@ def load_manifest(pack):
     path = os.path.join(pack, 'manifest.json')
     if not os.path.exists(path):
         sys.exit(f'нет манифеста {path} — пакет nhl24 ещё не готов')
-    man = json.load(open(path, encoding='utf-8'))
+    raw = open(path, 'rb').read()                # читается один раз: nhl24 может дописывать пакет во время сборки
+    man = json.loads(raw.decode('utf-8'))
     if man.get('format') != 1:
         sys.exit(f'{path}: format {man.get("format")!r}, понимаю только 1 (docs/legacy-data.md, «Пакет NHL 24»)')
+    man['_raw'] = raw
     return man
 
 
@@ -373,6 +375,9 @@ def cmd_build(args):
         p = os.path.join(part, *rel.split('/'))
         os.makedirs(os.path.dirname(p), exist_ok=True)
         shutil.copyfile(os.path.join(pack, 'cache', *rel.split('/')), p)
+        if md5(p) != files[rel]['md5']:              # файл пакета сменился после сверки (пакет дописывают)
+            sys.exit(f'{rel}: изменился во время сборки — пакет ещё дописывается, повторите позже '
+                     f'(недособранная накладка — {part}, прежняя не тронута)')
     write_db(part, db_out)
     if ahl32:
         write_db(part_ahl32, db_ahl32)
@@ -381,13 +386,14 @@ def cmd_build(args):
     os.replace(part, DST)
     if ahl32:
         os.replace(part_ahl32, DST_AHL32)
-    report = {'pack': pack, 'manifest_md5': md5(os.path.join(pack, 'manifest.json')),
+    report = {'pack': pack, 'manifest_md5': hashlib.md5(man['_raw']).hexdigest(),
               'made': time.strftime('%Y-%m-%d %H:%M:%S'), 'files': len(files),
               'types': {t: sum(1 for e in files.values() if e['type'] == t) for t in TYPES}, 'out': rep_out}
     if ahl32:
         report['out-ahl32'] = rep_ahl32
     os.makedirs(INFO, exist_ok=True)
-    shutil.copyfile(os.path.join(pack, 'manifest.json'), os.path.join(INFO, 'manifest.json'))
+    with open(os.path.join(INFO, 'manifest.json'), 'wb') as f:   # тот манифест, по которому собрано
+        f.write(man['_raw'])
     # список путей накладки (cache:) — для тех, кому нужно знать, что в cache: от NHL 24 (папка для друзей и т. п.)
     paths = set()
     for d in (DST, DST_AHL32):
