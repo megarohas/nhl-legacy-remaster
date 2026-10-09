@@ -84,6 +84,7 @@ extern "C" void __imp__sub_82AFC398(PPCContext& ctx, uint8_t* base);  // фар�
 extern "C" void __imp__sub_82B0A178(PPCContext& ctx, uint8_t* base);  // номер НХЛ по teamid (+644)
 extern "C" void __imp__sub_82AFBED0(PPCContext& ctx, uint8_t* base);  // фарм-клубы из leagueteams
 extern "C" void __imp__sub_82B0C1F0(PPCContext& ctx, uint8_t* base);  // фарм-клубы из базы
+extern "C" void __imp__sub_829CA650(PPCContext& ctx, uint8_t* base);  // фарм-клуб команды вне франшизы
 extern "C" void __imp__sub_829CCA18(PPCContext& ctx, uint8_t* base);  // меню франшизы: списки
 extern "C" void __imp__sub_82B07C08(PPCContext& ctx, uint8_t* base);  // teamid → номер франшизы
 extern "C" void __imp__sub_82B63708(PPCContext& ctx, uint8_t* base);  // конструктор кэша сводок
@@ -1052,6 +1053,29 @@ bool NhlLegacyAhlTeamObjectFreed(PPCRegister& index, PPCRegister& league) {
 void NhlLegacyAffiliateByte(PPCRegister& r) {
   if (AhlThirtyTwo()) {
     r.s64 = UnsignedTeamByte(r.s32);
+  }
+}
+
+// Фарм-клуб команды НХЛ вне франшизы (829CA650: r4 = teamid, r5 = куда, r3 = 1 — найден) — его берёт экран
+// Select Team новой франшизы. Ветка без франшизы читает байт +190 сведений через extsb @829CA740 (там врезки нет,
+// есть только у ветки АХЛ @829CA780): у Сиэтла/Вегаса при АХЛ 32 это teamid 224/225 (Coachella Valley /
+// Henderson), в знаковом байте −32/−31 — на экране вместо фарм-клуба был логотип Анахайма, полузвезда, без имени.
+// Отрицательное, кроме −1 («нет»), — байт без знака. Проверено 09.10: у SEA/VGK — Coachella Valley Firebirds /
+// Henderson Silver Knights с логотипами и рейтингом, у остальных как было.
+extern "C" void sub_829CA650(PPCContext& ctx, uint8_t* base) {
+  const uint32_t teamid = ctx.r4.u32;
+  const uint32_t out = ctx.r5.u32;
+  __imp__sub_829CA650(ctx, base);
+  if (!ThirtyTwo() || teamid >= 32 || out == 0) {
+    return;
+  }
+  const int32_t v = ctx.r3.u32 == 1 ? static_cast<int32_t>(Load32(base, out)) : 0;
+  if (AhlThirtyTwo() && ctx.r3.u32 == 1 && v < -1) {
+    Store32(base, out, static_cast<uint32_t>(UnsignedTeamByte(v)));
+    static std::atomic<int> logged{0};
+    if (logged.fetch_add(1) < 4) {
+      REXLOG_INFO("[nhllegacy] menu affiliate of team {}: {} -> {} (Select Team)", teamid, v, UnsignedTeamByte(v));
+    }
   }
 }
 
