@@ -404,6 +404,7 @@ Team Rosters (11), хаб Be a GM (9). Кубок с табличкой — ка
 путь картинки ещё пуст), `_DelayedMenuImageAssignment` ставит `mcFeatureImage._visible = true` и ведёт
 `_alpha` 0 → 100. Ключа `aa` (прозрачность в `setTransform`) в пуле констант ролика нет. Если нужно совсем
 без следа таблички — `FEATURE_FADED = (20, 0)`, та же правка: кубок в подменю станет ровным чёрным силуэтом.
+Пользователь посмотрел 6 % и оставил их («6 — норм», 09.10.2026); 0 % не собирали.
 
 **Проверено в игре** (09.10.2026, 08:55–09:03, копия `game/work/legacy-fe/userdata-gm`): SETTINGS, лиги
 TEAM ROSTERS, CUSTOMIZE, возврат в корень. Лист «до/после» — `game/work/legacy-fe/submenu-before-after.png`,
