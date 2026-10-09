@@ -223,8 +223,9 @@ def check_manifest(pack, man, reg):
     return bad, files
 
 
-def build_db(base, dst, man, reg, files):
-    """База накладки: hastie = 0 у клубов пакета, новые строки в конец stockteamjerseys. → отчёт."""
+def build_db(base, man, reg, files):
+    """База накладки: hastie = 0 у клубов пакета, новые строки в конец stockteamjerseys. → (байты базы, отчёт);
+    на диск ничего не пишет (пишет cmd_build, когда обе базы собрались)."""
     db_path, db = open_db(base)
     rows = rows_of(db)
     scope = set(range(256)) if man['clubs'] == 'all' else {CLUBS[c][0] for c in man['clubs']}
@@ -234,6 +235,15 @@ def build_db(base, dst, man, reg, files):
     regmap = {(k['club'], k['kit']): k for k in reg['kits']}
     new = [regmap[(k['club'], k['kit'])] | {'islightcolor': k['islightcolor']} for k in man.get('kits', [])]
     new.sort(key=lambda k: reg['kits'].index(regmap[(k['club'], k['kit'])]))
+    # jerseyindex у клуба — подряд 0…N−1, как у всех 224 команд EA (с дырой игра не проверялась): форма из реестра
+    # может не попасть в пакет, только если за ней в реестре нет форм этого клуба, которые в пакет попали
+    for code in sorted({k['club'] for k in new}):
+        team = CLUBS[code][0]
+        idx = sorted([r['jerseyindex'] for r in rows if r['teamid'] == team] +
+                     [k['jerseyindex'] for k in new if k['club'] == code])
+        if idx != list(range(len(idx))):
+            sys.exit(f'{code}: jerseyindex {idx} — не подряд (в пакете нет формы из середины реестра); '
+                     f'добавьте её в пакет или уберите из пакета формы после неё')
     added = []
     if new:
         n = db.by_name[T]['rows']
@@ -259,12 +269,15 @@ def build_db(base, dst, man, reg, files):
     if db.verify():
         sys.exit(f'{db_path}: CRC не сошлись после правки')
     out = bytes(db.d)
+    return out, {'base': db_path, 'base_md5': md5(db_path), 'md5': hashlib.md5(out).hexdigest(),
+                 'hastie_zeroed': len(tie), 'rows_added': added}
+
+
+def write_db(dst, data):
     os.makedirs(os.path.join(dst, 'db'), exist_ok=True)
-    for name in ('nhlng.db', 'draft_roster.db'):
+    for name in ('nhlng.db', 'draft_roster.db'):           # draft_roster.db — та же база (docs/legacy-data.md)
         with open(os.path.join(dst, 'db', name), 'wb') as f:
-            f.write(out)
-    return {'base': db_path, 'base_md5': md5(db_path), 'md5': hashlib.md5(out).hexdigest(),
-            'hastie_zeroed': len(tie), 'rows_added': added}
+            f.write(data)
 
 
 def to_stale(path, tag):
@@ -273,7 +286,11 @@ def to_stale(path, tag):
             if any(os.path.islink(os.path.join(root, n)) for n in dirs + names):
                 sys.exit(f'в {path} есть ссылки (symlink/junction) — разберитесь вручную')
         os.makedirs(STALE, exist_ok=True)
-        old = os.path.join(STALE, f'{tag}-{time.strftime("%Y%m%d-%H%M%S")}')
+        old = base = os.path.join(STALE, f'{tag}-{time.strftime("%Y%m%d-%H%M%S")}')
+        n = 1
+        while os.path.exists(old):
+            n += 1
+            old = f'{base}-{n}'
         os.replace(path, old)
         print(f'прежняя {tag} → {old}')
 
@@ -285,18 +302,30 @@ def cmd_build(args):
     if bad:
         print('\n'.join('  ' + b for b in bad))
         sys.exit(f'пакет {pack}: {len(bad)} ошибок — накладку не собираю')
-    to_stale(DST, 'out-nhl24')
-    to_stale(DST_AHL32, 'out-nhl24-ahl32')
+    # сначала обе базы — в памяти (их проверки могут остановить сборку), потом запись в .part и замена накладки
+    db_out, rep_out = build_db(OUT, man, reg, files)
+    ahl32 = os.path.isfile(os.path.join(OUT_AHL32, 'db', 'nhlng.db'))
+    db_ahl32, rep_ahl32 = build_db(OUT_AHL32, man, reg, files) if ahl32 else (None, None)
+    part, part_ahl32 = DST + '.part', DST_AHL32 + '.part'
+    to_stale(part, 'out-nhl24.part')                   # остатки прерванной сборки
+    to_stale(part_ahl32, 'out-nhl24-ahl32.part')
     for rel in sorted(files):
-        p = os.path.join(DST, *rel.split('/'))
+        p = os.path.join(part, *rel.split('/'))
         os.makedirs(os.path.dirname(p), exist_ok=True)
         shutil.copyfile(os.path.join(pack, 'cache', *rel.split('/')), p)
+    write_db(part, db_out)
+    if ahl32:
+        write_db(part_ahl32, db_ahl32)
+    to_stale(DST, 'out-nhl24')
+    to_stale(DST_AHL32, 'out-nhl24-ahl32')             # и прежняя база --ahl32, если этой сборке её не из чего делать
+    os.replace(part, DST)
+    if ahl32:
+        os.replace(part_ahl32, DST_AHL32)
     report = {'pack': pack, 'manifest_md5': md5(os.path.join(pack, 'manifest.json')),
               'made': time.strftime('%Y-%m-%d %H:%M:%S'), 'files': len(files),
-              'types': {t: sum(1 for e in files.values() if e['type'] == t) for t in TYPES},
-              'out': build_db(OUT, DST, man, reg, files)}
-    if os.path.isfile(os.path.join(OUT_AHL32, 'db', 'nhlng.db')):
-        report['out-ahl32'] = build_db(OUT_AHL32, DST_AHL32, man, reg, files)
+              'types': {t: sum(1 for e in files.values() if e['type'] == t) for t in TYPES}, 'out': rep_out}
+    if ahl32:
+        report['out-ahl32'] = rep_ahl32
     os.makedirs(INFO, exist_ok=True)
     shutil.copyfile(os.path.join(pack, 'manifest.json'), os.path.join(INFO, 'manifest.json'))
     with open(os.path.join(INFO, 'report.json'), 'w', encoding='utf-8', newline='\n') as f:

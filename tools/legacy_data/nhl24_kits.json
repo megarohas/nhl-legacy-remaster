@@ -66,6 +66,28 @@
    "fevariant": 11,
    "jerseyindex": 15,
    "locstring": 6
+  },
+  {
+   "club": "CHI",
+   "kit": "n90_home",
+   "teamid": 6,
+   "style": 1,
+   "art": 6,
+   "variant": 12,
+   "fevariant": 12,
+   "jerseyindex": 16,
+   "locstring": 6
+  },
+  {
+   "club": "CHI",
+   "kit": "n90_away",
+   "teamid": 6,
+   "style": 1,
+   "art": 6,
+   "variant": 13,
+   "fevariant": 13,
+   "jerseyindex": 17,
+   "locstring": 6
   }
  ]
 }
