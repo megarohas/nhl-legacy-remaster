@@ -381,4 +381,6 @@ bash game/work/legacy-fe/install-legacy-fe.sh menu  # при закрытой и
 
 `--exit before-featured` — EXIT перед FEATURED, `--exit none` — без EXIT; `--keep ИМЯ,…` — оставить пункты
 (например `TXT_COMMUNITY`); `--keep-panel` — прежние тексты панели описаний. Локализация в сборке — из `out` (база legacy-data); при пересборке локализации
-legacy-data подпись вернётся к «Xbox Live Marketplace» — тогда `menuitems_legacy.py build` ещё раз.
+legacy-data подпись вернётся к «Xbox Live Marketplace» — тогда `menuitems_legacy.py build` ещё раз. Те же правки
+build вносит и в локализацию накладки «АХЛ на 32» (`game/work/legacy-data/out-ahl32/fe/loc/NHL_ENG_US.db`, CV/HSK):
+ставить её — `install-legacy-fe.sh menu --ahl32` (локализация берётся из накладки).

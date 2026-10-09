@@ -42,6 +42,7 @@ WORK = P.work_dir('menu-items', 'build')
 FILES = P.work_dir('menu-items', 'files.txt')
 MENUITEMS = 'fe/ion/game/menus/mainmenuitems.big'
 LOC = 'fe/loc/NHL_ENG_US.db'
+OUT_AHL32 = os.path.join(os.path.dirname(P.out), 'out-ahl32')     # накладка legacy-data «АХЛ на 32»
 LOC_META = 'fe/loc/nhl_eng_us-meta.xml'
 ROOT = 'objMainMenu.arrRootMenu'
 PUSH, CONCAT = bytes.fromhex('a3018c'), bytes.fromhex('a3024f')      # PushWordConstant «push» #396 / «concat» #591
@@ -474,6 +475,15 @@ def cmd_build(args):
         for key, old, new in loc_edits(sdb, ddb, legacy_src(LOC_META), loc):
             lines.append(f'  {key}: «{old}» → «{new}»' if old != new else f'  {key}: «{new}» (уже)')
         built.append(LOC)
+        # накладка «АХЛ на 32» (out-ahl32, install-legacy-data.sh --ahl32) несёт свою локализацию (CV/HSK):
+        # те же правки и в ней, иначе установка с --ahl32 вернула бы «Xbox Live Marketplace» и прежнюю панель
+        a32 = p(OUT_AHL32, LOC)
+        if os.path.exists(a32):
+            d32 = p(os.path.join(work, 'ahl32'), LOC)
+            os.makedirs(os.path.dirname(d32), exist_ok=True)
+            lines.append(f'{LOC} накладки АХЛ на 32 (из {a32}):')
+            for key, old, new in loc_edits(a32, d32, legacy_src(LOC_META), loc):
+                lines.append(f'  {key}: «{old[:40]}…» → «{new[:40]}…»' if old != new else f'  {key}: (уже)')
     open(os.path.join(work, 'build.log'), 'w', encoding='utf-8').write('\n'.join(lines) + '\n')
     json.dump({'exit': exit_mode, 'hide_spec': [list(h) for h in hide], 'hide': [list(h) for h in hidden],
                'loc': loc, 'files': built},
@@ -492,6 +502,10 @@ def cmd_build(args):
             d = p(P.out, rel)
             os.makedirs(os.path.dirname(d), exist_ok=True)
             shutil.copyfile(p(work, rel), d)
+        d32 = p(os.path.join(work, 'ahl32'), LOC)
+        if os.path.exists(d32):
+            shutil.copyfile(d32, p(OUT_AHL32, LOC))
+            log(f'→ {p(OUT_AHL32, LOC)} (накладка АХЛ на 32)')
         os.makedirs(os.path.dirname(FILES), exist_ok=True)
         with open(FILES, 'w', encoding='utf-8', newline='\n') as f:
             f.write(''.join(r + '\n' for r in built))
