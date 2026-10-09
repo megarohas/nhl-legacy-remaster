@@ -6,7 +6,7 @@
 в Legacy — [legacy-data.md](legacy-data.md). Формат роликов — [fe-background.md](fe-background.md).
 
 Собранное лежит в `game/work/legacy-data/menu/` и `game/work/legacy-data/out/`, вне git.
-**Проверено в игре** 08.10.2026, 23:05–23:10 (legacy-data, Release legacy-port, снимки `game/work/legacy-data/ingame/t5-*`): главное меню грузится, игроки сменяются, кольца в цвет клуба, плашка NHL 12 с кнопкой A и ►; вход и выход — PLAY, Play Now → Select Teams → назад, CUSTOMIZE → назад. Мелочь: в подменю на 9 пунктов (CUSTOMIZE) подзаголовок наезжает на потускневшую табличку LEGACY EDITION под кубком. Остальное из §5 (хаб Be a GM, меню паузы, Scenario Mode, легенды) не смотрели.
+**Проверено в игре** 08.10.2026, 23:05–23:10 (legacy-data, Release legacy-port, снимки `game/work/legacy-data/ingame/t5-*`): главное меню грузится, игроки сменяются, кольца в цвет клуба, плашка NHL 12 с кнопкой A и ►; вход и выход — PLAY, Play Now → Select Teams → назад, CUSTOMIZE → назад. Мелочь: в подменю на 9 пунктов (CUSTOMIZE) подзаголовок наезжает на потускневшую табличку LEGACY EDITION под кубком (исправлено 09.10, §9). Остальное из §5 (хаб Be a GM, меню паузы, Scenario Mode, легенды) не смотрели.
 
 ## Коротко
 
@@ -130,6 +130,7 @@ TEAM, LIVE THE LIFE, NHL™ 94 ANNIVERSARY MODE.
 | `menu.big`, `Menu` | `ROW_SIZE_UNHIGHLIGHTED` / `ROW_SIZE_HIGHLIGHTED` | 23 / 40 → 28 / 45 |
 | `menu.big`, `Menu` | `HIGHLIGHT_OFFSET` | 8 → 10 |
 | `menu.big`, `Menu` | `TXT_ALPHA_START` / `TXT_ALPHA_DECREMENT` | 80 / 10 → 100 / 0 (`--keep-fade` — оставить) |
+| `menu.big`, `Menu.SetFeatureImageFaded` | кубок с табличкой в подменю | цвет ×20 % → ×6 % (§9) |
 | `main.big`, `GetCustomMenuOptions` | кегль четырёх форматов пунктов | 22 → 34 |
 | `main.big`, `GetCustomMenuOptions` | тень выделенного | #FFFFFF → #DDDDDD |
 | `main.big`, `GetCustomMenuOptions` | `mDisabledAlpha` | 30 → 50 |
@@ -384,3 +385,36 @@ bash game/work/legacy-fe/install-legacy-fe.sh menu  # при закрытой и
 legacy-data подпись вернётся к «Xbox Live Marketplace» — тогда `menuitems_legacy.py build` ещё раз. Те же правки
 build вносит и в локализацию накладки «АХЛ на 32» (`game/work/legacy-data/out-ahl32/fe/loc/NHL_ENG_US.db`, CV/HSK):
 ставить её — `install-legacy-fe.sh menu --ahl32` (локализация берётся из накладки).
+
+## 9. Подзаголовок подменю и табличка LEGACY EDITION (09.10.2026, legacy-fe)
+
+**Что было.** Подзаголовок подменю (`Menu.UpdateSubtitle`) стоит на `SUBTITLE_Y_OFFSET` = 35 выше списка:
+y = mcMenu._y − mcMenu._height − 35. Список растёт вверх. С рядами 28/45 (§3) у списков от 8 пунктов
+подзаголовок ложится на табличку LEGACY EDITION и низ надписи NHL: SETTINGS (9), CUSTOMIZE (8), лиги
+Team Rosters (11), хаб Be a GM (9). Кубок с табличкой — картинка меню `mcFeatureImage`: `mcImage`
+(`artAssets/playerMenuBackgrounds/<любимая команда>_0.swf` из `objMainMenu.GetMenuImageData`) и `mcNHLLogo`.
+В подменю `Menu.SetFeatureImageFaded(true)` гасит её цветом ×20 %, и табличка под подзаголовком читается.
+
+**Правка.** В `SetFeatureImageFaded` `PushByte 20` → `PushByte 6`, один байт (`FEATURE_FADED` в
+[tools/menu12_legacy.py](../tools/menu12_legacy.py), `faded_image_edits`). В подменю кубок — почти чёрный
+силуэт, табличку под подзаголовком видно только вблизи. В корне — ×100 %, как было.
+
+Почему цвет, а не прозрачность. Цветовое преобразование меняет только `SetFeatureImageFaded`. Видимость
+и `_alpha` меняют и другие места. Например, когда экран открывается сразу на подменю (новый экземпляр Menu,
+путь картинки ещё пуст), `_DelayedMenuImageAssignment` ставит `mcFeatureImage._visible = true` и ведёт
+`_alpha` 0 → 100. Ключа `aa` (прозрачность в `setTransform`) в пуле констант ролика нет. Если нужно совсем
+без следа таблички — `FEATURE_FADED = (20, 0)`, та же правка: кубок в подменю станет ровным чёрным силуэтом.
+
+**Проверено в игре** (09.10.2026, 08:55–09:03, копия `game/work/legacy-fe/userdata-gm`): SETTINGS, лиги
+TEAM ROSTERS, CUSTOMIZE, возврат в корень. Лист «до/после» — `game/work/legacy-fe/submenu-before-after.png`,
+крупно — `game/work/legacy-fe/shots/plate_zoom.png`.
+
+**Установка, откат.** `menu.big` собирает `menu12_legacy.py build` в `game/work/legacy-data/out` (там уже ×6 %,
+переустановка legacy-data старое не вернёт). Поставить в cache: пользователя:
+
+```bash
+bash game/work/legacy-fe/install-legacy-fe.sh menufade     # при закрытой игре, с бэкапом
+bash game/work/legacy-fe/uninstall-legacy-fe.sh menufade   # откат: прежний menu.big (×20 %)
+```
+
+Поставлено 09.10.2026 в 09:04, бэкап `game/work/legacy-fe/backup-20261009-090440-menufade`.

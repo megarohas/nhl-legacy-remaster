@@ -13,7 +13,8 @@
         #       «New», значок паков) с металлической косой плашкой NHL 12 вместо своей (плашка-гибрид: полоса и
         #       косые края NHL 12 + кнопка A, метка «New» и стрелка подменю Legacy), невыделенные пункты ×0,735
         #       (25/34), ряды 28/45 (у NHL 12 и 13; у Legacy 23/40), сдвиг выделенного 10, без затухания пунктов
-        #       по удалению от выделенного (--keep-fade — оставить);
+        #       по удалению от выделенного (--keep-fade — оставить); кубок с табличкой в подменю ×6 % (у Legacy
+        #       ×20 %: подзаголовок подменю от 8 пунктов ложится на табличку LEGACY EDITION);
         #   fe/ion/main.big — шрифт пунктов 34 (у Legacy 22), тень выделенного #DDDDDD, mDisabledAlpha 50;
         #   fe/ion/artassets/backgrounds/mainmenu{players,legends}{,blur}/nhl<N>.big — игроки menu12;
         #   fe/ion/game/background/nhlbluebackground.big — «цветной фон» под всеми меню (синяя подложка mcColor и
@@ -68,6 +69,7 @@ FADE = {'TXT_ALPHA_START': (80, 100), 'TXT_ALPHA_DECREMENT': (10, 0)}   # зат
 # (кнопка A, метка «New», стрелка) — на ту же величину, что середина полосы: 0,5 → 7,5.
 SEL_DY = -11
 SEL_LEGACY_DY = 7
+FEATURE_FADED = (20, 6)                          # кубок в подменю: яркость 20 % → 6 % (faded_image_edits)
 
 # «цветной фон» (NHLBlueBackground, boot.big; у Legacy и NHL 13 побайтно один): подложка mcColor (Shape 1,
 # заливка #0A09E1) и mcBackground — фото-арена Legacy (NHLBlueBackgroundComponents, cacheboot.big). При входе в
@@ -163,7 +165,7 @@ def const_edits(path, block, values):
 
 
 def menu_list_edits(path, keep_fade=False):
-    """menu.big Legacy: масштаб невыделенных, ряды, сдвиг выделенного, затухание."""
+    """menu.big Legacy: масштаб невыделенных, ряды, сдвиг выделенного, затухание, затемнение кубка в подменю."""
     edits = const_edits(path, '__Packages.game.components.classes.MenuItem»',
                         {'UNHIGHLIGHTING_SCALE': (0.800000011920929, UNHIGHLIGHT)})
     vals = dict(ROWS)
@@ -171,7 +173,34 @@ def menu_list_edits(path, keep_fade=False):
     if not keep_fade:
         vals.update(FADE)
     edits += const_edits(path, '__Packages.game.components.classes.Menu»', vals)
+    edits += faded_image_edits(path)
     return edits
+
+
+def faded_image_edits(path, values=None):
+    """Menu.SetFeatureImageFaded(true) — картинка пункта (кубок с табличкой LEGACY EDITION) в подменю: цвет ×20 %
+    → FEATURE_FADED. Подзаголовок подменю стоит на 35 выше списка, а список растёт вверх; с рядами 28/45 у
+    списков от 8 пунктов (SETTINGS — 9, лиги Team Rosters — 11, хаб Be a GM — 9) он ложится на табличку и
+    надпись NHL кубка. Почти чёрный кубок в подменю (как у NHL 12, где кубка нет) — без наложения при любой длине."""
+    old, new = values or FEATURE_FADED
+    mv, consts = feapt.load_movie(path)
+    code = feapt.Code(mv.apt.data, consts)
+    found = []
+    for title, off in feapt.code_blocks(mv):
+        if '__Packages.game.components.classes.Menu»' not in title:
+            continue
+        fl = flat_code(code, off)
+        for k in range(1, len(fl)):
+            f = fl[k]
+            if f.name == 'DefineFunction2' and fl[k - 1].name in ('PushConstant', 'PushWordConstant') \
+                    and fl[k - 1].args[0] == 'SetFeatureImageFaded' and f.body:
+                body = f.body
+                for j in range(len(body) - 1):
+                    if body[j].name == 'PushByte' and body[j].args[0] == old and body[j + 1].name == 'SetRegister':
+                        found.append((body[j].off + 1, bytes([old]), bytes([new])))
+    if len(found) != 1:
+        raise SystemExit(f'menu.big: SetFeatureImageFaded — найдено {len(found)} мест «PushByte {old}», ждали 1')
+    return found
 
 
 def main_edits(path, old=22, new=SIZE):
@@ -457,7 +486,8 @@ def cmd_build(args):
         os.remove(g1)
         os.remove(g2)
         lines.append(f'menu.big: {len(me)} правок констант (масштаб невыделенных {UNHIGHLIGHT}, ряды 28/45, '
-                     f'сдвиг выделенного 10' + ('' if keep_fade else ', без затухания пунктов') + ')')
+                     f'сдвиг выделенного 10' + ('' if keep_fade else ', без затухания пунктов') +
+                     f', кубок в подменю {FEATURE_FADED[0]} % → {FEATURE_FADED[1]} %)')
         built.append(MENU)
         smain = legacy_src(MAIN)
         dmain = p(work, MAIN)
