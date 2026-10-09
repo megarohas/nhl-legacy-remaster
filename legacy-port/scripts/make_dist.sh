@@ -1,13 +1,13 @@
 #!/bin/bash
 # Папка для друзей: legacy-port/dist/NHL Legacy — порт без файлов игры (docs/legacy-port.md).
-#   bash legacy-port/scripts/make_dist.sh [--mods]
+#   [BUILD=папка] [AHL32=1] bash legacy-port/scripts/make_dist.sh [--mods]   # AHL32=1 — моды с базой «АХЛ на 32»
 # Берёт Release-сборку (out/build/win-amd64-release: свой SDK, D3D12 + Vulkan), DLL рантайма MSVC
 # (app-local, из VC Redist BuildTools), шаблоны dist-template/ (nhllegacy.toml — пути пустые:
 # game\ и userdata\ рядом с exe; README.txt). С --mods — ещё моды-данные из
 # legacy-port/userdata/cache/guest (только файлы игры-модов: без кэша, который пишет сама игра).
 set -euo pipefail
 P=$(cd "$(dirname "$0")/.." && pwd)
-B="$P/out/build/win-amd64-release"
+B="${BUILD:-$P/out/build/win-amd64-release}"   # BUILD=папка сборки (по умолчанию — рабочая)
 D="$P/dist/NHL Legacy"
 CRT="/c/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Redist/MSVC/14.44.35112/x64/Microsoft.VC143.CRT"
 [ -f "$B/nhllegacy.exe" ] || { echo "нет сборки $B/nhllegacy.exe — build.cmd"; exit 1; }
@@ -27,6 +27,10 @@ if [ "${1:-}" = "--mods" ]; then
   # база на 32 команды в модах → франшиза на 32 по умолчанию
   if [ -f "$D/userdata/cache/guest/db/nhlng.db" ]; then
     sed -i 's/^nhl_teams = 30$/nhl_teams = 32/' "$D/nhllegacy.toml"
+  fi
+  # база «АХЛ на 32» (legacy-data --ahl32: в лиге АХЛ 32 клуба — Coachella Valley и Henderson) → АХЛ на 32
+  if [ "${AHL32:-}" = "1" ]; then
+    sed -i 's/^nhl_ahl_teams = 30$/nhl_ahl_teams = 32/' "$D/nhllegacy.toml"
   fi
 fi
 du -sh "$D"
