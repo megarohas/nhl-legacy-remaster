@@ -240,6 +240,8 @@ def check_manifest(pack, man, reg):
         lab = k.get('label')
         if lab is not None and (not isinstance(lab, str) or not 0 < len(lab) <= 32):
             bad.append(f'новая форма {key}: label {lab!r} — строка до 32 символов')
+        if k.get('helmet') not in (None, 'home', 'away'):
+            bad.append(f'новая форма {key}: helmet {k.get("helmet")!r} — home, away или без поля')
         for kind, pat in KIT_FILES.items():
             rel = pat.format(a=r['art'], v=r['variant'], f=r['fevariant'])
             if rel not in files:
@@ -261,8 +263,8 @@ def build_db(base, man, reg, files):
     for r in tie:
         db.set(T, 'hastie', r, 0)
     regmap = {(k['club'], k['kit']): k for k in reg['kits']}
-    new = [regmap[(k['club'], k['kit'])] | {'islightcolor': k['islightcolor'], 'label': k.get('label')}
-           for k in man.get('kits', [])]
+    new = [regmap[(k['club'], k['kit'])] | {'islightcolor': k['islightcolor'], 'label': k.get('label'),
+                                             'helmet': k.get('helmet')} for k in man.get('kits', [])]
     new.sort(key=lambda k: reg['kits'].index(regmap[(k['club'], k['kit'])]))
     # jerseyindex у клуба — подряд 0…N−1, как у всех 224 команд EA (с дырой игра не проверялась): форма из реестра
     # может не попасть в пакет, только если за ней в реестре нет форм этого клуба, которые в пакет попали
@@ -294,17 +296,51 @@ def build_db(base, man, reg, files):
                 db.set(T, f, n + i, v)
             added.append(f"{k['club']} {k['kit']} 1_{art}_{k['variant']} ji{k['jerseyindex']} "
                          f"loc{k['locstring']} light{k['islightcolor']} helmetlogo{int(helmet)} (строка {n + i})")
+    helmets = add_helmets(db, rows, new)
     db.fix()
     if db.verify():
         sys.exit(f'{db_path}: CRC не сошлись после правки')
     out = bytes(db.d)
     rep = {'base': db_path, 'base_md5': md5(db_path), 'md5': hashlib.md5(out).hexdigest(),
-           'hastie_zeroed': len(tie), 'rows_added': added}
+           'hastie_zeroed': len(tie), 'rows_added': added, 'helmets': helmets}
     loc, labels = build_loc(base, new)
     if loc is not None:
         rep.update(loc_base_md5=md5(os.path.join(base, *LOC.split('/'))), loc_md5=hashlib.md5(loc).hexdigest(),
                    labels=labels)
     return (out, loc), rep
+
+
+def add_helmets(db, rows, new):
+    """Цвет шлема новых форм. stockteamequipmenttable: team = строка клуба + 1, era 1 — формы стиля 1, variant — вариант
+    формы, equipment 8 — шлем (зона 1 — цвет каски). Сверено по CHI: era 1 / variant 0 — чёрный (в игре у домашней 1_6_0
+    чёрные шлемы), 3 и 4 — чёрный (тёмные спецформы), 5 — белый (светлая 1_6_5); строки нет — шлем белый (выездная
+    1_6_1 и новые формы в ТЕСТ CHI, 09.10). Новой форме — копия строки шлема домашней формы клуба (тёмной новой) или
+    выездной (светлой; у выездной строки обычно нет — тогда ничего, белый); manifest kits[].helmet = home | away —
+    явно. → [описание добавленного]."""
+    E = 'stockteamequipmenttable'
+    erows = [(r, db.get(E, 'team', r), db.get(E, 'era', r), db.get(E, 'variant', r), db.get(E, 'equipment', r))
+             for r in db.live_rows(E)]
+    copies, done = [], []
+    for k in new:
+        team = CLUBS[k['club']][0]
+        like = k.get('helmet') or ('away' if k['islightcolor'] else 'home')
+        src = next((r['variant'] for r in rows if r['teamid'] == team and r['style'] == 1 and
+                    r['locstring'] == (0 if like == 'home' else 1)), None)
+        if any(t == team + 1 and era == 1 and v == k['variant'] for _, t, era, v, _ in erows):
+            sys.exit(f"{k['club']} {k['kit']}: у варианта {k['variant']} уже есть строки экипировки — не тот номер?")
+        found = [r for r, t, era, v, e in erows if t == team + 1 and era == 1 and v == src and e == 8]
+        copies += [(r, k['variant']) for r in found]
+        done.append(f"{k['club']} {k['kit']}: шлем как у {'домашней' if like == 'home' else 'выездной'} "
+                    f"(1_{k['art']}_{src}) — " + (f'строка {found[0]}' if found else 'строки нет, белый по умолчанию'))
+    if copies:
+        n = db.by_name[E]['rows']
+        raws = [db.record(E, r) for r, _ in copies]
+        db.resize(E, n + len(copies))
+        for i, (raw, (_, v)) in enumerate(zip(raws, copies)):
+            db.put_record(E, n + i, raw)
+            db.set(E, 'variant', n + i, v)
+            db.set(E, 'index', n + i, n + i)
+    return done
 
 
 def build_loc(base, new):
@@ -410,6 +446,8 @@ def cmd_build(args):
         print('   +', line)
     for key, text in report['out'].get('labels', {}).items():
         print(f'   подпись {key}: {text}')
+    for line in report['out'].get('helmets', []):
+        print('   шлем', line)
 
 
 def stamp():
