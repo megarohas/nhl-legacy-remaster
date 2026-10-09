@@ -88,16 +88,18 @@ def mip_dims(h, level):
     return max(1, h["width"] >> level), max(1, h["height"] >> level)
 
 
-def decode_mip(h, data, level=0, slice_index=0, tiled=True):
-    """data — содержимое чанка (весь чанк). -> PIL.Image уровня level (по умолчанию mip0)."""
+def decode_mip(h, data, level=0, slice_index=0, tiled=True, data_first=0):
+    """data — содержимое чанка с мипа data_first (обычно весь чанк, 0). -> PIL.Image уровня level."""
     from PIL import Image
     fmt = FORMATS.get(h["format"])
     if fmt is None:
         raise ValueError(f"формат {h['format']} не поддержан")
     name, mode, dec, arg, eb, block = fmt
     sizes = h["mip_sizes"]
-    first = h["first_mip"]
-    ofs = sum(sizes[first:level]) if level >= first else 0
+    first = data_first
+    if level < first:
+        raise ValueError(f"мип {level} не в данных (с {first})")
+    ofs = sum(sizes[first:level])
     per_slice = sum(sizes[first:])
     ofs += slice_index * per_slice
     w, hh = mip_dims(h, level)
