@@ -211,7 +211,7 @@ def push_pull(img, mask):
     return np.where(mask[..., None], img, up)
 
 
-def transfer(src_tex, src_mesh, dst_mesh, size=1024, ss=2, seam=0.04):
+def transfer(src_tex, src_mesh, dst_mesh, size=1024, ss=2, seam=0.04, post=None):
     """Текстура src (по UV src_mesh) → развёртка dst_mesh, size², суперсэмплинг ss×ss.
 
     Соответствие считается в вершинах dst (ближайшая точка src той же стороны) и интерполируется по треугольникам dst
@@ -247,6 +247,10 @@ def transfer(src_tex, src_mesh, dst_mesh, size=1024, ss=2, seam=0.04):
     img[mask] = col
     dist = np.full((S, S), np.nan)
     dist[mask] = dist_v
+    if post is not None:  # слои поверх основы (нашивки), на сверхвыборке: post(img, mask, P, N) по текселям mask
+        Pm = interp(dst_mesh["pos"], T[t], b)
+        Nm = _unit(interp(dst_mesh["nrm"], T[t], b))
+        img = post(img, mask, Pm, Nm)
     if ss > 1:
         mk = mask.reshape(size, ss, size, ss).astype(np.float64)
         num = (img.reshape(size, ss, size, ss, -1) * mk[..., None]).sum((1, 3))
