@@ -164,7 +164,7 @@ def cmd_sheet(a):
             if cur is not None:
                 sheet.paste(tile(cur), (xx, y))
             p = os.path.join(OUT, f"{code}_{kit}", "font_cm.png")
-            if os.path.exists(p):
+            if rec.get("status") == "ok" and os.path.exists(p):  # только проверенные (sha1) — не старые файлы
                 sheet.paste(tile(np.asarray(Image.open(p).convert("RGBA"))), (xx + cw + 6, y))
             else:
                 d.text((xx + cw + 20, y + chh // 2 - 8), rec.get("status", "нет"), fill=(220, 130, 130), font=small)
