@@ -287,3 +287,83 @@ NHL 12 проявлялась (`_alpha` 0 → 100 за `m_speedZoomIn` 90 кад
 `legacy-gray`), в нём свой `nhlbluebackground.big` с прежними `INACTIVE_*`. Синее (или серое) тогда
 вернётся — те же четыре константы надо поправить и там. В NHL 13 с menu12 то же устройство: подложка
 #0A09E1 перекрашена вариантом «b» в приглушённый синий и тоже открывается на входе в главное меню.
+
+## 8. Пункты меню: без онлайна, с EXIT (09.10.2026, legacy-fe)
+
+Решение пользователя: скрыть онлайн-пункты, оставить офлайн-режимы, CUSTOMIZE и настройки, а вместо
+«SIGN IN TO EA» поставить **EXIT** — выход из программы. Инструмент — [tools/menuitems_legacy.py](../tools/menuitems_legacy.py).
+Разбор всех пунктов и вариантов — `game/work/legacy-fe/menu-items/` (`menu-tree.md` — полное дерево, `mechanism.md` —
+устройство).
+
+**Как заданы пункты.**
+- Все пункты — операторы `objMainMenu.<массив>.push({name: …, …})` кадра 0 ролика
+  `boot:fe/ion/game/menus/mainmenuitems.big`: 161 оператор, 39 массивов. Свободный файл `cache:` игра берёт
+  раньше архива.
+- `name` — это и ключ подписи (`ltxt`), и ключ `switch` в `objMainMenu.MenuCallback`. Подменю — прямая ссылка
+  на массив. Номер пункта нужен только курсору и стеку возврата.
+- Список и логика — `MenuDataManager` (`classloader.big`) и `Menu`/`MenuItem` (`menu.big`). Код игры
+  добавляет только категории настроек и легенд.
+- Панель описаний внизу справа с пунктами не связана: её 5 страниц — строки
+  `TXT_OFFLINE_DYNAMIC_MSG_TITLE/BODY_0…4` из exe.
+
+**Скрытие — пункт не добавляется.** Имя метода `push` (PushWordConstant #396) меняется на `concat` (#591).
+Объект пункта строится, `Array.concat` ничего не меняет, клип пункта не создаётся. Правка — 2 байта той же
+длины. Курсор и возврат назад считаются по готовому массиву, «дыр» нет. Флаг `isHidden` не годится для HUT:
+в конце загрузки игра ставит курсор на `TXT_HUT` по имени (`IS_AUTO_SELECT_HUT_ON_BOOT`,
+`SetHighlightedMenuItem` видимость не проверяет). Без пункта в массиве поиск его не находит, и курсор
+остаётся на PLAY.
+
+| Меню | Скрыто | Осталось |
+|---|---|---|
+| корень | приглашение в онлайн-матч, COMMUNITY (Player Hub, Leaderboards, Lobby; My Highlights есть в Media Hub), HOCKEY ULTIMATE TEAM, Rivalry / Game of the Week | PLAY, CUSTOMIZE, FEATURED: LIVE THE LIFE, NHL™ 94 ANNIVERSARY MODE, **EXIT** |
+| PLAY | HOCKEY ULTIMATE TEAM, ONLINE (GM Connected, Versus, EASHL, Arena, Team Play, Online Shootout) | PLAY NOW, QUICK MODES, CAREER, TOURNAMENTS |
+| QUICK MODES | Rivalry | NHL™ 94, MOMENTS LIVE (сценарии с диска), WINTER CLASSIC, TRAINING (практика, буллиты, обучение) |
+| CAREER, TOURNAMENTS | — | Live the Life, Be a GM, (Be a Legend), Season; Playoff, Tournament, Battle for the Cup |
+| CUSTOMIZE | OFFER CODE ENTRY (коды Xbox Live) | 8 пунктов |
+| EA SPORTS™ MEDIA HUB | CUSTOM MUSIC, CUSTOM MUSIC TUTORIAL (музыка с жёсткого диска Xbox — в порте её нет; `--keep-custom-music` — оставить) | MY HIGHLIGHTS, EA SPORTS™ TRAX |
+| ROSTER MANAGEMENT | DOWNLOAD ROSTERS | 5 пунктов |
+| SETTINGS | ONLINE SETTINGS | Hospitality, Celebrations, Controller, Video Calibration, [категории настроек из кода], Credits |
+
+Меню режимов (хабы Be a GM, сезона, плей-офф, турнира, Live the Life) и паузы — отдельные ролики. Онлайна в
+них нет; GM Connected (`mud.big`) и HUT (`cards/futmenuitems.big`) без своих пунктов недостижимы.
+
+**EXIT.** Пункта «Sign in to EA» в меню Legacy нет. Колбэк `OSDK_SIGN_IN_EA` описан в `zoneonlinemain.big`,
+но ни в один массив не попадает. EXIT — новый пункт `{name: "XboxLiveMarketplace", screenID: null}` в конце
+корня. Для этого имени в `MenuCallback` уже есть ветка: она зовёт родную
+`ION_GameSetup.ShowMarketplaceUI(EA_ZONE.gControllerIDCurrentScreen)`. Больше её не зовёт ни один из 27 262
+роликов fe.
+- Корень переписан участком той же длины 0x44F7…0x4565: копии байт операторов LIVE THE LIFE и NHL 94 (без
+  указателей и переходов), новый пункт (22 байта), заполнитель PushZero/Pop.
+- Подпись — `ltxt("XboxLiveMarketplace")`. В локализации у ключа `XboxLiveMarketPlace` (регистр игра не
+  различает) текст «Xbox Live Marketplace» → «Exit». Правка через `locdb put` — своя строка в конце пула,
+  чужие ключи с тем же текстом не трогаются. На экране — прописными.
+- Действие — в exe (агент legacy-port): обёртка `ShowMarketplaceUI` 0x832EFE28, регистрация в 0x833019C8
+  (natives GameSetup). При cvar `nhl_menu_exit = true` программа закрывается, как от крестика окна, в лог
+  пишется «[nhllegacy] menu exit (ShowMarketplaceUI)». Без перехвата игра покажет «нужен вход в Xbox Live»
+  и вернётся в меню — ничего не ломается.
+
+**Проверено в игре** (09.10.2026, 06:22–06:35, своя копия userdata; снимки `game/work/legacy-fe/shots/menus-before/`,
+`menus-after/`, лист `game/work/legacy-fe/menu-before-after.png`):
+- Все подменю открываются и закрываются, курсор при загрузке — на PLAY, подзаголовки и панель описаний
+  работают.
+- До правки онлайн-пункт (Community → View Player Hub) давал попап «You must be signed in to Xbox Live and
+  the EA servers…».
+- Play Now → SEA–VGK → Select Jerseys → назад → главное меню — без сбоев.
+- EXIT с exe legacy-port (`--nhl_menu_exit=true`): «[nhllegacy] menu exit (ShowMarketplaceUI): closing like the
+  window close button» → «Window closing, shutting down…» → «Title terminated» за 0,2 с.
+
+Панель описаний («Features», 5 страниц из exe) по-прежнему рекламирует EASHL, HUT Online Seasons и GM
+Connected (`TXT_OFFLINE_DYNAMIC_MSG_BODY_0…2`). Переписать их — правка локализации, по желанию пользователя.
+
+**Сборка, установка, откат.**
+
+```bash
+python tools/menuitems_legacy.py build      # → game/work/legacy-data/menu-items/build и out; список — menu-items/files.txt
+python tools/menuitems_legacy.py check      # разбор: ролик целиком, отличия от оригинала — только правки, что в массивах
+python tools/menuitems_legacy.py list [FILE.big]   # все пункты: номер, имя, подпись, смещение push
+bash game/work/legacy-fe/install-legacy-fe.sh menu  # при закрытой игре, с бэкапом; откат — uninstall-legacy-fe.sh
+```
+
+`--exit before-featured` — EXIT перед FEATURED, `--exit none` — без EXIT; `--keep ИМЯ,…` — оставить пункты
+(например `TXT_COMMUNITY`). Локализация в сборке — из `out` (база legacy-data); при пересборке локализации
+legacy-data подпись вернётся к «Xbox Live Marketplace» — тогда `menuitems_legacy.py build` ещё раз.
