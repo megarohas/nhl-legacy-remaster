@@ -60,6 +60,22 @@ def chunks():
                     src = by_sha[c["sha1"]]
                     c.update(cas=src["cas"], ofs=src["ofs"], csize=src["csize"], missing=0, orphan=1,
                              stored=src.get("stored"))
+        tp = os.path.join(CAT, "toc_chunks.json")
+        if os.path.exists(tp):  # оглавления (.toc): точное место каждого чанка — главнее догадок прохода без TOC
+            with open(tp, encoding="utf-8") as f:
+                toc = json.load(f)
+            for cid, t in toc.items():
+                c = _chunks.get(cid)
+                rec = {"cas": t["cas"], "ofs": t["ofs"], "csize": t["csize"], "missing": 0, "toc": 1,
+                       "toc_sha1": t.get("sha1")}  # sha1 есть только у мест из записей бандлов (поток бандла)
+                if c is None:
+                    rec.update(lo=t.get("lo"), ls=t.get("ls"), sha1=t.get("sha1"))
+                    _chunks[cid] = rec
+                elif c.get("lo") and c.get("orphan") and c.get("stored") == (c.get("lo") or 0) + c["ls"]:
+                    continue  # уже есть целый поток (найден по sha1, с мипом 0) — лучше хвоста из записи бандла
+                else:
+                    c.update(rec)
+                    c.pop("stored", None)
     return _chunks
 
 
@@ -81,11 +97,28 @@ def read_header(r):
 def read_chunk(h):
     """-> (данные, номер мипа, с которого они начинаются) или (None, 0).
 
-    Поток в CAS бывает двух видов: весь чанк (так находятся «бесхозные» по sha1 — stored = lo+ls) или только хвост
-    [lo, lo+ls), который нужен бандлу (сразу за манифестом, stored = ls) — тогда данные начинаются с first_mip."""
+    Место — из оглавлений (.toc), если есть: тогда читается весь сохранённый поток [ofs, ofs+csize) и по его длине
+    понятно, целый это чанк или только хвост мипов с first_mip. Без TOC — как раньше (sha1-сверка мест прохода)."""
     c = chunks().get(h["chunk"])
     if not c or c.get("missing"):
         return None, 0
+    if c.get("toc"):
+        d = cas.read_stored(cas_file(c["cas"]), c["ofs"], c["csize"])
+        full = sum(h["mip_sizes"])
+        tail = sum(h["mip_sizes"][h["first_mip"]:])
+        if c.get("toc_sha1") and not c.get("lo") and VERIFY:
+            # место из записи бандла — сверка с sha1 манифеста; у частичного чанка (lo > 0) запись TOC указывает на
+            # хвост внутри потока, а sha1 манифеста — от всего потока, так что там не сверяем
+            import hashlib
+            f = cas_file(c["cas"])
+            f.seek(c["ofs"])
+            if hashlib.sha1(f.read(c["csize"])).hexdigest() != c["toc_sha1"]:
+                raise ValueError("sha1 не совпал (место из записи бандла в TOC)")
+        if len(d) >= full:
+            return d, 0
+        if len(d) >= tail:
+            return d, h["first_mip"]
+        raise ValueError(f"поток {len(d)} Б меньше хвоста мипов {tail} Б")
     lo, ls = c["lo"] or 0, c["ls"]
     stored = c.get("stored") or (ls if (lo and not c.get("orphan")) else lo + ls)
     if VERIFY and c.get("csize"):

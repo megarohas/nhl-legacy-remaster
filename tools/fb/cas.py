@@ -80,3 +80,18 @@ def read_entry(f, offset, size):
         out += decompress_block(ctype, usize, payload)
         pos += 8 + n
     return bytes(out[:size]), pos
+
+
+def read_stored(f, offset, csize):
+    """Распаковать все блоки сохранённого потока [offset, offset+csize) (место из TOC)."""
+    out = bytearray()
+    pos, end = offset, offset + csize
+    while pos + 8 <= end:
+        f.seek(pos)
+        h = f.read(8)
+        usize, uflags, ctype, flags, cs = parse_block_header(h)
+        n = usize if (ctype & 0x7F) == 0 else cs
+        out += decompress_block(ctype, usize, f.read(n))
+        pos += 8 + n
+    return bytes(out)
+
