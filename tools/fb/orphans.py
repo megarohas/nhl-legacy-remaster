@@ -138,11 +138,44 @@ def scan_cas2(item):
     return key, found, tested
 
 
+def list_streams(item):
+    """Все потоки orphan-участков (по короткому блоку): cas, ofs, csize, usize, sha1 — для поиска чанков без
+    манифеста (например, геометрии сеток — она в TOC) по размеру и содержимому."""
+    key, regs = item
+    out = []
+    with open(cas_path(key), "rb", buffering=0) as f:
+        for ofs, csize in regs:
+            f.seek(ofs)
+            data = f.read(csize)
+            pos = start = 0
+            us = 0
+            while pos + 8 <= len(data):
+                usize, uflags, ctype, flags, cs = cas.parse_block_header(data[pos:pos + 8])
+                n = 8 + (usize if (ctype & 0x7F) == 0 else cs)
+                us += usize
+                pos += n
+                if usize < FULL:
+                    out.append((ofs + start, pos - start, us, hashlib.sha1(data[start:pos]).hexdigest()))
+                    start, us = pos, 0
+    return key, out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--jobs", type=int, default=2)
     ap.add_argument("--pass2", action="store_true", help="второй проход (начало чанка внутри серии полных блоков)")
+    ap.add_argument("--streams", action="store_true", help="список всех потоков orphan-участков -> orphan_streams.jsonl")
     a = ap.parse_args()
+    if a.streams:
+        regs = regions()
+        n = 0
+        with open(os.path.join(CAT, "orphan_streams.jsonl"), "w", encoding="utf-8") as fo, Pool(a.jobs) as pool:
+            for key, out in pool.imap_unordered(list_streams, sorted(regs.items())):
+                for o, c, u, h in out:
+                    fo.write(json.dumps({"cas": key, "ofs": o, "csize": c, "usize": u, "sha1": h}) + chr(10))
+                n += len(out)
+                print(f"{key}: потоков {len(out)} (всего {n})", flush=True)
+        return
     regs = regions()
     by_sha, sizes = wanted()
     if a.pass2:

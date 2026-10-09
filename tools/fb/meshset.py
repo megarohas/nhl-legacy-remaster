@@ -14,12 +14,20 @@ import numpy as np
 FMT = {3: ("<f4", 3), 6: ("<f2", 2), 8: ("<f2", 4), 0x0D: ("u1", 4), 0x17: ("<u2", 4), 2: ("<f4", 2), 4: ("<f4", 4)}
 
 
-def parse(res, meta):
-    hdr = struct.unpack_from("<I", meta, 0)[0]
+def lod_chunk(res):
+    """GUID чанка с буферами LOD0 (если геометрия не внутри res): LOD+0x160."""
+    import uuid
+    lod = struct.unpack_from("<Q", res, 0x20)[0]
+    return str(uuid.UUID(bytes_le=bytes(res[lod + 0x160:lod + 0x170])))
+
+
+def parse(res, meta, chunk_data=None):
+    """chunk_data — буферы из чанка, если meta[1] (размер встроенных данных) = 0."""
+    hdr, inline = struct.unpack_from("<II", meta, 0)
     lod = struct.unpack_from("<Q", res, 0x20)[0]
     nsec, sec_ptr = struct.unpack_from("<II", res, lod + 0x08)
     ib_size, vb_size = struct.unpack_from("<II", res, lod + 0x58)
-    data = res[hdr:]
+    data = res[hdr:] if inline or chunk_data is None else chunk_data
     vb = data[:vb_size]
     ib = np.frombuffer(data[vb_size:vb_size + ib_size], dtype="<u2")
     sections = []

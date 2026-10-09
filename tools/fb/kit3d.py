@@ -40,9 +40,18 @@ def find_res(name):
 
 def load_nhl24(name=NHL24_JERSEY):
     from .extract import cas_file
+    from .extract import chunks
+    import struct as _st
     r = find_res(name)
     d, _ = cas.read_entry(cas_file(r["cas"]), r["ofs"], r["size"])
-    s = meshset.parse(d, bytes.fromhex(r["meta"]))[0]
+    meta = bytes.fromhex(r["meta"])
+    cd = None
+    if _st.unpack_from("<I", meta, 4)[0] == 0:  # геометрия — в чанке
+        c = chunks().get(meshset.lod_chunk(d))
+        if not c or c.get("missing"):
+            raise SystemExit(f"{name}: чанк геометрии не найден")
+        cd, _ = cas.read_entry(cas_file(c["cas"]), c["ofs"], (c["lo"] or 0) + c["ls"])
+    s = meshset.parse(d, meta, cd)[0]
     return {"pos": s["pos"].astype(np.float64), "uv": s["uv"][:, :2].astype(np.float64),
             "tri": s["tri"], "nrm": s["nrm"][:, :3].astype(np.float64)}
 
