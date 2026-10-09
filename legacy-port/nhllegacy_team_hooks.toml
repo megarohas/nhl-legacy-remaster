@@ -503,6 +503,22 @@ name = "NhlLegacyTreeTeamMissing"
 registers = ["r9"]
 jump_address_on_true = 0x82B6C05C   # addi r31, r31, 1 (было 82925E98)
 
+# 82A783D8 (ION_NHLSeries.GetTeamIDsForDivisionId, ветка без загруженной франшизы — экран выбора команды новой
+# Be a GM): записи команд по 200 байт на стеке r1+96 на 30 команд (кадр 6160), число — от структуры меню. При
+# nhl_menu32 (меню на 32) записи 30/31 затирали сохранённые регистры вызывающего — падение в скрипте экрана
+# (чтение 0x00010004 в 8249F0C0, как в NHL 13 — «0x00020005»). Кадр +400 (две записи); пара к эпилогу ниже.
+[[midasm_hook]]
+address = 0x82A783E4   # stwu r1, -6160(r1)
+name = "NhlLegacyStackGrow400"
+registers = ["r1"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82A786A4   # addi r1, r1, 6160
+name = "NhlLegacyStackShrink400"
+registers = ["r1"]
+after_instruction = true
+
 # 82B4D060 — загрузка драфта из базы (leaguedraftpick → объект драфта; в NHL 13 такой функции нет, поэтому
 # в списке мест NHL 13 её нет): пиков в раунде +336 = 30, по нему раунд = номер / +336, массивы порядка раундов
 # +316/+320 на +336 мест — при 32 командах драфт шёл по 30 выборов в раунде (210 вместо 224, у двух последних

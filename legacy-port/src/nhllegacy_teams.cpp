@@ -61,6 +61,11 @@ REXCVAR_DEFINE_INT32(nhl_ahl_teams, 30, "NHLLegacy",
     .range(30, 32)
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
+REXCVAR_DEFINE_BOOL(nhl_menu32, false, "NHLLegacy",
+                    "Franchise menus (team select of a new Be a GM and the menu league structure 829CCA18) on 32 NHL "
+                    "teams: Seattle and Vegas selectable. Experimental (in NHL 13 the screen script crashed)")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
+
 REXCVAR_DEFINE_BOOL(nhl_guest_print_log, false, "NHLLegacy",
                     "Log what the game passes to its empty stub 833FBEA0 (first 200 texts): slow, the stub "
                     "is called from thousands of places every frame - only for crash hunts")
@@ -307,6 +312,19 @@ bool IsMenuNhlList(uint8_t* base, uint32_t list) {
   return true;
 }
 
+// С nhl_menu32 меню уже на 32: список лиги при создании — teamid 0…31 по порядку.
+bool IsMenuNhlList32(uint8_t* base, uint32_t list) {
+  if (Load32(base, list) != 32) {
+    return false;
+  }
+  for (uint32_t i = 0; i < 32; ++i) {
+    if (Load32(base, list + 4 + 4 * i) != i) {
+      return false;
+    }
+  }
+  return true;
+}
+
 // Аргументы r3…r10 подменённой функции — сохранить перед своими гостевыми вызовами.
 struct SavedArgs {
   uint64_t r[8];
@@ -327,11 +345,15 @@ struct SavedArgs {
 // Перед записью команд лиги: в список НХЛ из меню (30) — 30 и 31, их teamid — в LeagueExtra.
 void AppendExtraTeams(PPCContext& ctx, uint8_t* base, uint32_t league) {
   const uint32_t list = league + 16;
-  if (!ThirtyTwo() || !IsMenuNhlList(base, list)) {
+  if (!ThirtyTwo()) {
+    return;
+  }
+  const bool menu30 = IsMenuNhlList(base, list);
+  if (!menu30 && !(REXCVAR_GET(nhl_menu32) && IsMenuNhlList32(base, list))) {
     return;
   }
   const SavedArgs args(ctx);
-  for (uint32_t k = 0; k < kExtra; ++k) {
+  for (uint32_t k = 0; menu30 && k < kExtra; ++k) {
     ctx.r3.u64 = list;
     ctx.r4.u64 = 30 + k;
     sub_82AEB120(ctx, base);
@@ -407,7 +429,7 @@ thread_local bool t_menu_structure = false;
 extern "C" void sub_82A2F2B8(PPCContext& ctx, uint8_t* base) {
   const uint32_t lr = static_cast<uint32_t>(ctx.lr);
   const bool prev = t_menu_structure;
-  t_menu_structure = lr >= 0x829CCA18 && lr < 0x829CCDE8;
+  t_menu_structure = !REXCVAR_GET(nhl_menu32) && lr >= 0x829CCA18 && lr < 0x829CCDE8;
   __imp__sub_82A2F2B8(ctx, base);
   t_menu_structure = prev;
 }
@@ -785,6 +807,18 @@ extern "C" void sub_829CCA18(PPCContext& ctx, uint8_t* base) {
   const uint32_t self = ctx.r3.u32;
   const int32_t league = ctx.r5.s32;
   __imp__sub_829CCA18(ctx, base);
+  if (ThirtyTwo() && REXCVAR_GET(nhl_menu32)) {
+    static int logged = 0;
+    if (logged++ < 6) {
+      const uint32_t list = self + 6040 + 484 * static_cast<uint32_t>(league);
+      const uint32_t n = Load32(base, list);
+      std::string ids;
+      for (uint32_t i = 0; i < n && i < 40; ++i) {
+        ids += std::to_string(Load32(base, list + 4 + 4 * i)) + " ";
+      }
+      REXLOG_INFO("[nhllegacy] menu league {} (nhl_menu32): {} teams: {}", league, n, ids);
+    }
+  }
   if (!ThirtyTwo() || league != 1) {
     return;
   }
@@ -1073,6 +1107,20 @@ void NhlLegacyStatsCacheCount(PPCRegister& r) {
 void NhlLegacyStackGrow16(PPCRegister& r1) {
   if (ThirtyTwo()) {
     r1.u64 -= 16;
+  }
+}
+
+// 82A783D8 (GetTeamIDsForDivisionId): кадр +400 — записи команд 30/31 (по 200 байт) на стеке. Пара: пролог
+// (после stwu) и эпилог (после addi r1, 6160); условие одно и то же на весь вызов.
+void NhlLegacyStackGrow400(PPCRegister& r1) {
+  if (ThirtyTwo()) {
+    r1.u64 -= 400;
+  }
+}
+
+void NhlLegacyStackShrink400(PPCRegister& r1) {
+  if (ThirtyTwo()) {
+    r1.u64 += 400;
   }
 }
 
