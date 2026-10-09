@@ -116,23 +116,64 @@ def meshes(with_tie=True):
     return src, dst
 
 
-def hybrid(comp_path, base_path, out_path, club=None, kit=None, rules_path=RULES, size=1024, ss=2, report=None,
-           with_tie=True, profiles=()):
-    src, dst = meshes(with_tie)
-    n_jersey_tri = len(load_legacy()["tri"])  # нашивки — только на свитер, не на шнуровку
-    comp = load_tex(comp_path)
-    base = load_tex(base_path)
-    defaults, rules = load_rules(rules_path, club, kit, profiles)
-    lab, patches = find_patches(comp, base, defaults)
+def standard_patches(comp, rules, defaults, names=("neck_shield", "back_neck"), win=0.022):
+    """Для комплектов без base-слоёв: нашивки в стандартных местах развёртки (у всех adidas-свитеров NHL 24 щит NHL
+    у ворота и логотип сзади лежат в одних и тех же uv). В окне вокруг uv правила фон — медиана рамки окна, нашивка —
+    пиксели, отличные от фона; связная область у центра. -> (псевдо-основа с закрашенными нашивками, метки, нашивки)."""
     H = comp.shape[0]
-    tid24, _ = raster_uv(src, 1024)
+    lab = np.zeros((H, H), dtype=np.int32)
+    patches = []
+    base = comp.copy()
+    hole = np.zeros((H, H), dtype=bool)
+    for i, name in enumerate(names, 1):
+        r = rules.get(name)
+        if not r or "uv" not in r:
+            continue
+        cx, cy = int(r["uv"][0] * H), int(r["uv"][1] * H)
+        w = int(win * H)
+        y0, y1, x0, x1 = max(cy - w, 0), min(cy + w, H), max(cx - w, 0), min(cx + w, H)
+        box = comp[y0:y1, x0:x1, :3]
+        border = np.concatenate([box[0], box[-1], box[:, 0], box[:, -1]])
+        bg = np.median(border, axis=0)
+        m = np.abs(box - bg).sum(-1) > defaults.get("threshold", 30) * 1.3
+        m = ndi.binary_closing(m, iterations=2)
+        m = ndi.binary_fill_holes(m)
+        l, n = ndi.label(m)
+        if n == 0:
+            continue
+        # компонента ближе всех к центру окна
+        best, bd = 0, 1e9
+        for k in range(1, n + 1):
+            ys, xs = np.nonzero(l == k)
+            dd = np.hypot(ys.mean() - (cy - y0), xs.mean() - (cx - x0))
+            if dd < bd and len(ys) >= 40:
+                best, bd = k, dd
+        if not best or bd > w * 0.6:
+            continue
+        mk = ndi.binary_dilation(l == best, iterations=2)
+        lab[y0:y1, x0:x1][mk] = i
+        hole[y0:y1, x0:x1] |= mk
+        ys, xs = np.nonzero(mk)
+        sl = (slice(y0 + ys.min(), y0 + ys.max() + 1), slice(x0 + xs.min(), x0 + xs.max() + 1))
+        patches.append((i, sl, int(mk.sum())))
+        # закрасить нашивку растеканием цвета соседей — только в окне (быстро)
+        from .kit3d import fill_holes
+        crop = fill_holes(base[y0:y1, x0:x1], ~hole[y0:y1, x0:x1], iters=48)
+        a = base[y0:y1, x0:x1, 3].copy()
+        base[y0:y1, x0:x1] = crop
+        base[y0:y1, x0:x1, 3] = a
+    return base, lab, patches
+
+
+def plan_decals(comp, lab, patches, rules, defaults, src, dst, tid24):
+    """Рамки декалей: центр и якобиан на свитере NHL 24 → правила → посадка на Legacy. -> (placed, soft)."""
+    H = comp.shape[0]
     soft = {}
     placed = []
     for lid, sl, area in patches:
         ys, xs = np.nonzero(lab[sl] == lid)
         u_c = (xs.mean() + sl[1].start + 0.5) / H
         v_c = (ys.mean() + sl[0].start + 0.5) / H
-        # правило — ближайшее по uv
         best, bd = None, 1e9
         for name, r in rules.items():
             if "uv" not in r:
@@ -144,19 +185,20 @@ def hybrid(comp_path, base_path, out_path, club=None, kit=None, rules_path=RULES
         rule = rules.get(name, {}) if name in rules else {}
         if not rule.get("enabled", True):
             continue
+        Ht = tid24.shape[0]
+        if tid24[min(int(v_c * Ht), Ht - 1), min(int(u_c * Ht), Ht - 1)] < 0:
+            continue  # центр вне развёртки свитера NHL 24 (запас под другие сетки/варианты) — не нашивка
         t, p, J, n = tri_frame(src, tid24, u_c, v_c)
         p = p + np.array(rule.get("offset_cm", [0, 0, 0]), dtype=np.float64) / 100.0
-        # на свитер Legacy: ближайшая точка той же стороны
         lt, lb, ld = project(p[None], n[None], dst, k=32)
         T = dst["tri"][lt[0]]
         cL = lb[0] @ dst["pos"][T]
         nL = _unit(lb[0] @ dst["nrm"][T])
-        JL = J - np.outer(nL, nL @ J)              # в касательную плоскость Legacy
+        JL = J - np.outer(nL, nL @ J)
         sc = float(rule.get("scale", 1.0))
         th = np.radians(float(rule.get("rotate_deg", 0.0)))
         R = np.array([[np.cos(th), -np.sin(th)], [np.sin(th), np.cos(th)]])
-        pinv = np.linalg.pinv(JL)                  # 2×3: 3D → Δuv
-        # радиус нашивки (м): по bbox в uv
+        pinv = np.linalg.pinv(JL)
         bw = (sl[1].stop - sl[1].start) / H
         bh = (sl[0].stop - sl[0].start) / H
         rad = 0.5 * np.hypot(np.linalg.norm(J[:, 0]) * bw, np.linalg.norm(J[:, 1]) * bh) * sc * 1.25 + 0.01
@@ -164,11 +206,14 @@ def hybrid(comp_path, base_path, out_path, club=None, kit=None, rules_path=RULES
         mask[sl] = (lab[sl] == lid)
         mask = ndi.gaussian_filter(ndi.binary_dilation(mask > 0, iterations=1).astype(np.float64), 0.8)
         soft[lid] = mask
-        placed.append({"name": name, "uv": [round(u_c, 4), round(v_c, 4)], "area": area,
+        placed.append({"name": name, "uv": [round(float(u_c), 4), round(float(v_c), 4)], "area": area,
                        "nhl24_3d": np.round(p, 4).tolist(), "legacy_3d": np.round(cL, 4).tolist(),
                        "snap_cm": round(float(ld[0]) * 100, 2), "rule": {k: v for k, v in rule.items() if k != "note"},
                        "_frame": (cL, nL, pinv, R, sc, rad, u_c, v_c), "_lid": lid})
+    return placed, soft
 
+
+def decal_post(comp, placed, soft, n_jersey_tri):
     def post(img, msk, P, N, tri):
         out = img.copy()
         flat = out[msk]
@@ -178,6 +223,7 @@ def hybrid(comp_path, base_path, out_path, club=None, kit=None, rules_path=RULES
             d = P - cL
             sel = (on_jersey & (np.linalg.norm(d, axis=1) < rad) & ((N @ nL) > 0.25) & (np.abs(d @ nL) < 0.06))
             if not sel.any():
+                pl["texels"] = 0
                 continue
             duv = (d[sel] @ pinv.T) / sc
             duv = duv @ R.T
@@ -191,8 +237,24 @@ def hybrid(comp_path, base_path, out_path, club=None, kit=None, rules_path=RULES
             pl["texels"] = int((a > 0.5).sum())
         out[msk] = flat
         return out
+    return post
 
-    img, mask, dist, info = kit3d.transfer(base, src, dst, size, ss, post=post)
+
+def hybrid(comp_path, base_path, out_path, club=None, kit=None, rules_path=RULES, size=1024, ss=2, report=None,
+           with_tie=True, profiles=()):
+    """base_path = None — комплект без base-слоёв: нашивки ищутся в стандартных местах (standard_patches)."""
+    src, dst = meshes(with_tie)
+    n_jersey_tri = len(load_legacy()["tri"])  # нашивки — только на свитер, не на шнуровку
+    comp = load_tex(comp_path)
+    defaults, rules = load_rules(rules_path, club, kit, profiles)
+    if base_path:
+        base = load_tex(base_path)
+        lab, patches = find_patches(comp, base, defaults)
+    else:
+        base, lab, patches = standard_patches(comp, rules, defaults)
+    tid24, _ = raster_uv(src, 1024)
+    placed, soft = plan_decals(comp, lab, patches, rules, defaults, src, dst, tid24)
+    img, mask, dist, info = kit3d.transfer(base, src, dst, size, ss, post=decal_post(comp, placed, soft, n_jersey_tri))
     Image.fromarray(np.clip(img, 0, 255).astype(np.uint8)).save(out_path)
     rep = [{k: v for k, v in pl.items() if not k.startswith("_")} for pl in placed]
     if report:

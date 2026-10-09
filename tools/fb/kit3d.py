@@ -220,6 +220,9 @@ def push_pull(img, mask):
     return np.where(mask[..., None], img, up)
 
 
+_MAPCACHE = {}
+
+
 def transfer(src_tex, src_mesh, dst_mesh, size=1024, ss=2, seam=0.04, post=None):
     """Текстура src (по UV src_mesh) → развёртка dst_mesh, size², суперсэмплинг ss×ss.
 
@@ -228,29 +231,34 @@ def transfer(src_tex, src_mesh, dst_mesh, size=1024, ss=2, seam=0.04, post=None)
     (разброс UV > seam), считается по текселям.
     """
     S = size * ss
-    tid, bar = raster_uv(dst_mesh, S)
-    mask = tid >= 0
-    t, b = tid[mask], bar[mask]
     T = dst_mesh["tri"]
 
     def interp(attr, tri, bb):
         return bb[:, :1] * attr[tri[:, 0]] + bb[:, 1:2] * attr[tri[:, 1]] + bb[:, 2:] * attr[tri[:, 2]]
 
-    # соответствие в вершинах dst
-    vt, vb, vd = project(dst_mesh["pos"], _unit(dst_mesh["nrm"]), src_mesh)
-    vuv = interp(src_mesh["uv"], src_mesh["tri"][vt], vb)
-    tri_uv = vuv[T]                                   # (ntri, 3, 2)
-    spread = np.max(np.linalg.norm(tri_uv[:, :, None, :] - tri_uv[:, None, :, :], axis=-1), axis=(1, 2))
-    bad_tri = spread > seam
-    UV = interp(vuv, T[t], b)
-    dist_v = interp(vd[:, None], T[t], b)[:, 0]
-    fb = bad_tri[t]
-    if fb.any():                                      # швы: по текселям
-        P = interp(dst_mesh["pos"], T[t[fb]], b[fb])
-        N = _unit(interp(dst_mesh["nrm"], T[t[fb]], b[fb]))
-        st, sb, sd = project(P, N, src_mesh)
-        UV[fb] = interp(src_mesh["uv"], src_mesh["tri"][st], sb)
-        dist_v[fb] = sd
+    key = (id(src_mesh), id(dst_mesh), size, ss, seam)
+    cached = _MAPCACHE.get(key)
+    if cached is None:  # соответствие зависит только от сеток — считаем один раз на все комплекты
+        tid, bar = raster_uv(dst_mesh, S)
+        mask = tid >= 0
+        t, b = tid[mask], bar[mask]
+        vt, vb, vd = project(dst_mesh["pos"], _unit(dst_mesh["nrm"]), src_mesh)
+        vuv = interp(src_mesh["uv"], src_mesh["tri"][vt], vb)
+        tri_uv = vuv[T]
+        spread = np.max(np.linalg.norm(tri_uv[:, :, None, :] - tri_uv[:, None, :, :], axis=-1), axis=(1, 2))
+        bad_tri = spread > seam
+        UV = interp(vuv, T[t], b)
+        dist_v = interp(vd[:, None], T[t], b)[:, 0]
+        fb = bad_tri[t]
+        if fb.any():
+            Pf = interp(dst_mesh["pos"], T[t[fb]], b[fb])
+            Nf = _unit(interp(dst_mesh["nrm"], T[t[fb]], b[fb]))
+            st, sb, sd = project(Pf, Nf, src_mesh)
+            UV[fb] = interp(src_mesh["uv"], src_mesh["tri"][st], sb)
+            dist_v[fb] = sd
+        cached = (mask, t, b, UV, dist_v, bad_tri)
+        _MAPCACHE[key] = cached
+    mask, t, b, UV, dist_v, bad_tri = cached
     col = sample_bilinear(src_tex, UV[:, 0], UV[:, 1])
     img = np.zeros((S, S, src_tex.shape[2]))
     img[mask] = col

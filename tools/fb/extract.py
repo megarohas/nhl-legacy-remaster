@@ -20,6 +20,7 @@ CAT = os.path.join(WORK, "catalog")
 
 _files = {}
 _chunks = None
+VERIFY = True  # сверять sha1 чанка перед распаковкой
 
 
 def cas_path(key):
@@ -87,6 +88,14 @@ def read_chunk(h):
         return None, 0
     lo, ls = c["lo"] or 0, c["ls"]
     stored = c.get("stored") or (ls if (lo and not c.get("orphan")) else lo + ls)
+    if VERIFY and c.get("csize"):
+        # проход без TOC мог перепутать два чанка одного размера в бандле (свой лежит не здесь, а здесь — соседний):
+        # сверка sha1 сжатых байт с манифестом
+        import hashlib
+        f = cas_file(c["cas"])
+        f.seek(c["ofs"])
+        if hashlib.sha1(f.read(c["csize"])).hexdigest() != c["sha1"]:
+            raise ValueError("sha1 не совпал: на этом месте чужой чанк (перепутан при проходе без TOC)")
     d, _ = cas.read_entry(cas_file(c["cas"]), c["ofs"], stored)
     start = 0
     if lo and stored == ls:
