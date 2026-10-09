@@ -19,7 +19,8 @@ jerseyindex — следующий за последним у клуба; locstr
 Этап build (после collect): сверяет каждый файл пакета с манифестом (путь по типу, md5, размер), копирует их в
 out-nhl24 и собирает базу накладки из out/db/nhlng.db (и out-ahl32/db/nhlng.db → out-nhl24-ahl32): hastie = 0 у строк
 клубов пакета («clubs» манифеста, "all" — у всех), новые строки stockteamjerseys в конец таблицы (номера прежних
-строк не сдвигаются) — только для форм, все файлы которых есть в пакете. Та же база — db/draft_roster.db. Отчёт и копия
+строк не сдвигаются) — только для форм, все файлы которых есть в пакете. Та же база — db/draft_roster.db. Подписи
+новых форм с locstring 6 (RR, ретро) — ключи Vintage_1_<арт>_<вариант> в fe/loc/NHL_ENG_US.db накладки. Отчёт и копия
 манифеста — game/work/legacy-data/nhl24/ (не в out-nhl24: всё, что лежит в накладке, ставится в cache:).
 """
 import hashlib
@@ -46,6 +47,8 @@ DST, DST_AHL32 = os.path.join(W, 'out-nhl24'), os.path.join(W, 'out-nhl24-ahl32'
 INFO = os.path.join(W, 'nhl24')                  # отчёт этапа и манифест, по которому собрана накладка
 STALE = os.path.join(W, '_stale')
 T = 'stockteamjerseys'
+LOC = 'fe/loc/NHL_ENG_US.db'                   # подписи форм в меню (out и out-ahl32 — у каждого своя)
+LOC_META = os.path.join(REF, 'cacheboot', 'fe', 'loc', 'nhl_eng_us-meta.xml')
 
 # код клуба (как у tools/fb) → строка exhibitionteams (teamid) и номер арта
 CODES = ['ANA', 'WPG', 'BOS', 'BUF', 'CGY', 'CAR', 'CHI', 'COL', 'CBJ', 'DAL', 'DET', 'EDM', 'FLA', 'LAK', 'MIN',
@@ -74,6 +77,21 @@ TYPES = {
     'stick': r'rendering/playerstick/[a-z0-9_]+\.rx2',            # клюшки
     'other': r'(rendering|fe)/[a-z0-9_/]+\.(rx2|big)',            # прочее (с полем note)
 }
+
+
+# подпись формы в меню (Select Jerseys): у строки с locstring 6 игра берёт текст ключа Vintage_<style>_<art>_<variant>
+# (так у 50 винтажных форм EA: Vintage_0_9_3 «1968-69 Away», Vintage_1_2_3 «2009-10 Classic»); нет ключа — подписи
+# нет (тест DAL25). У третьей (locstring 2) — своя «Alternate». «label» в манифесте главнее этих:
+LABELS = {'rr22': 'Reverse Retro 2022', 'rr23': 'Reverse Retro 2023', 'n90_home': '1990s Home',
+          'n90_away': '1990s Away', 'n90_three': '1990s Alternate'}
+
+
+def label_of(kit, man_label=None):
+    if man_label:
+        return man_label
+    if kit in LABELS:
+        return LABELS[kit]
+    return '1990s Retro' if kit.startswith('n90_') else None
 
 
 def md5(path):
@@ -216,6 +234,9 @@ def check_manifest(pack, man, reg):
             bad.append(f'новая форма {key}: variant {k["variant"]}, в реестре {r["variant"]}')
         if k.get('islightcolor') not in (0, 1):
             bad.append(f'новая форма {key}: islightcolor {k.get("islightcolor")!r} — нужен 0 или 1')
+        lab = k.get('label')
+        if lab is not None and (not isinstance(lab, str) or not 0 < len(lab) <= 32):
+            bad.append(f'новая форма {key}: label {lab!r} — строка до 32 символов')
         for kind, pat in KIT_FILES.items():
             rel = pat.format(a=r['art'], v=r['variant'], f=r['fevariant'])
             if rel not in files:
@@ -233,7 +254,8 @@ def build_db(base, man, reg, files):
     for r in tie:
         db.set(T, 'hastie', r, 0)
     regmap = {(k['club'], k['kit']): k for k in reg['kits']}
-    new = [regmap[(k['club'], k['kit'])] | {'islightcolor': k['islightcolor']} for k in man.get('kits', [])]
+    new = [regmap[(k['club'], k['kit'])] | {'islightcolor': k['islightcolor'], 'label': k.get('label')}
+           for k in man.get('kits', [])]
     new.sort(key=lambda k: reg['kits'].index(regmap[(k['club'], k['kit'])]))
     # jerseyindex у клуба — подряд 0…N−1, как у всех 224 команд EA (с дырой игра не проверялась): форма из реестра
     # может не попасть в пакет, только если за ней в реестре нет форм этого клуба, которые в пакет попали
@@ -269,15 +291,48 @@ def build_db(base, man, reg, files):
     if db.verify():
         sys.exit(f'{db_path}: CRC не сошлись после правки')
     out = bytes(db.d)
-    return out, {'base': db_path, 'base_md5': md5(db_path), 'md5': hashlib.md5(out).hexdigest(),
-                 'hastie_zeroed': len(tie), 'rows_added': added}
+    rep = {'base': db_path, 'base_md5': md5(db_path), 'md5': hashlib.md5(out).hexdigest(),
+           'hastie_zeroed': len(tie), 'rows_added': added}
+    loc, labels = build_loc(base, new)
+    if loc is not None:
+        rep.update(loc_base_md5=md5(os.path.join(base, *LOC.split('/'))), loc_md5=hashlib.md5(loc).hexdigest(),
+                   labels=labels)
+    return (out, loc), rep
+
+
+def build_loc(base, new):
+    """Подписи новых форм с locstring 6 в локализации накладки (ключ Vintage_1_<арт>_<вариант>). → (байты | None,
+    {ключ: текст}); подписей нет — None (локализация накладкой не ставится)."""
+    want = {f"Vintage_1_{k['art']}_{k['variant']}": label_of(k['kit'], k.get('label'))
+            for k in new if k['locstring'] == 6}
+    want = {key: text for key, text in want.items() if text}
+    if not want:
+        return None, {}
+    src = os.path.join(base, *LOC.split('/'))
+    if not os.path.isfile(src):
+        sys.exit(f'нет {src} — подписи новых форм некуда записать (build-all.sh collect, menu)')
+    import locdb
+    loc = locdb.LocDb(open(src, 'rb').read(), load_meta(LOC_META))
+    for key, text in want.items():
+        loc.put(key, text)
+    bad = loc.check()
+    if bad:
+        sys.exit(f'{src}: ' + '; '.join(bad[:3]))
+    loc.db.fix()
+    return bytes(loc.db.d), want
 
 
 def write_db(dst, data):
+    db, loc = data
     os.makedirs(os.path.join(dst, 'db'), exist_ok=True)
     for name in ('nhlng.db', 'draft_roster.db'):           # draft_roster.db — та же база (docs/legacy-data.md)
         with open(os.path.join(dst, 'db', name), 'wb') as f:
-            f.write(data)
+            f.write(db)
+    if loc is not None:
+        p = os.path.join(dst, *LOC.split('/'))
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, 'wb') as f:
+            f.write(loc)
 
 
 def to_stale(path, tag):
@@ -335,6 +390,8 @@ def cmd_build(args):
           f'новых строк {len(report["out"]["rows_added"])}' + (', и out-nhl24-ahl32' if 'out-ahl32' in report else ''))
     for line in report['out']['rows_added']:
         print('   +', line)
+    for key, text in report['out'].get('labels', {}).items():
+        print(f'   подпись {key}: {text}')
 
 
 def stamp():
@@ -358,16 +415,20 @@ def cmd_verify(args):
             print(f'  не как в манифесте: {e["file"]}')
             bad += 1
     dbmd5 = md5(os.path.join(cache, 'db', 'nhlng.db'))
-    want = {rep['out']['md5']: 'out-nhl24'}
-    if 'out-ahl32' in rep:
-        want[rep['out-ahl32']['md5']] = 'out-nhl24-ahl32'
+    want = {rep[k]['md5']: k for k in ('out', 'out-ahl32') if k in rep}
+    key = want.get(dbmd5)
     print(f'файлов пакета: {len(man["files"])}, не совпало {bad}; база cache: {dbmd5[:8]} — '
-          + (want.get(dbmd5) or 'НЕ база накладки'))
-    for name in ('draft_roster.db',):
-        if md5(os.path.join(cache, 'db', name)) != dbmd5:
-            print(f'  {name} не та же, что nhlng.db')
-            bad += 1
-    sys.exit(1 if bad or dbmd5 not in want else 0)
+          + ({'out': 'out-nhl24', 'out-ahl32': 'out-nhl24-ahl32'}.get(key) or 'НЕ база накладки'))
+    if md5(os.path.join(cache, 'db', 'draft_roster.db')) != dbmd5:
+        print('  draft_roster.db не та же, что nhlng.db')
+        bad += 1
+    if key and 'loc_md5' in rep[key]:                  # подписи новых форм
+        loc = os.path.join(cache, *LOC.split('/'))
+        ok = os.path.isfile(loc) and md5(loc) == rep[key]['loc_md5']
+        print(f'локализация cache: {"с подписями новых форм" if ok else "НЕ локализация накладки"} '
+              f'({len(rep[key]["labels"])} подписей)')
+        bad += not ok
+    sys.exit(1 if bad or not key else 0)
 
 
 def main():

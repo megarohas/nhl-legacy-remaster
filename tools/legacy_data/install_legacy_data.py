@@ -172,6 +172,9 @@ def check_nhl24(ahl32):
             sys.exit(f'у накладки NHL 24 нет базы для {key} (build-all.sh nhl24 после collect{" --ahl32" if ahl32 else ""})')
         if rep[key]['base_md5'] != _md5(os.path.join(base, 'db', 'nhlng.db')):
             sys.exit(f'база {key} пересобрана после накладки NHL 24 — сначала bash tools/legacy_data/build-all.sh nhl24')
+        loc = os.path.join(base, 'fe', 'loc', 'NHL_ENG_US.db')      # подписи новых форм — в локализации накладки
+        if 'loc_base_md5' in rep[key] and (not os.path.exists(loc) or rep[key]['loc_base_md5'] != _md5(loc)):
+            sys.exit(f'локализация {key} пересобрана после накладки NHL 24 — сначала bash tools/legacy_data/build-all.sh nhl24')
 
 
 def install(args, cwd):
