@@ -81,9 +81,62 @@ bash tools/legacy_data/uninstall-legacy-data.sh          # снять (чужи�
   - install без `--ahl32` → совпадает с CACHE, кроме 4 файлов, перекрытых накладкой; там версии `out/`;
   - `--ahl32` поверх → снова совпадает с CACHE;
   - `uninstall db`, затем полный uninstall → снова только файлы порта.
-- **Чего нет до сих пор.** Пропали все `*.json` и `*.xml` в `game/`: `write.json`, `photos.json`, схемы в
-  `game/other/legacy/big/cacheboot/`, базовые спеки арта NHL 13 в `game/work/logos` и `game/work/uniforms`. Пока
-  их нет, этапы `base`/`roster`/`photos`/`art` в `build-all.sh` не пройдут. Набор в `out/` от этого не зависит.
+- **Чего нет до сих пор.** Пропали все `*.json`, `*.xml` и `*.html` в `game/`. Это кэш сети
+  `game/work/roster-cache`, `write.json`, `players.json`, `photos.json` и `artid-registry.json`. Поэтому этапы
+  `roster`, `photos`, `equip` и накладка `--ahl32` (`make_out_ahl32.py`) пересоберутся только после `fetch` из
+  сети (ниже). Остальное восстановлено, сухой прогон сходится с `out/` (следующий раздел).
+
+**Пайплайн с нуля (09.10.2026, 17:30–20:00).**
+- **Справочное дерево.** `game/other/legacy/big/` сверено с диском `game/other/legacy/disc/*.big`
+  (`tools/legacy_data/restore_big.py`: повторная распаковка во временную папку, свой пул процессов). Итог:
+  - добавлено 144 файла: схемы `db` и `fe/loc`, шрифты, `crowddata` (64), `attribdb`, речь;
+  - заменено 35 испорченных (неверно восстановленных: другие байты того же размера) — прежние лежат в
+    `game/work/legacy-data/_stale/other-legacy-big-20261009-170023/`;
+  - лишних нет;
+  - отчёт — `game/work/legacy-data/extract/restore_big-20261009-170023.tsv`.
+
+  Шрифты NHL 12 для этапа `fonts` (4 `*.ttf`) дораспакованы так же:
+  `--disc game/other/nhl12/disc --big game/other/nhl12/big --pattern '^fe/ion/fonts/'`.
+- **Справочные клоны `ref/`.** В `nhl-legacy-recomp` и `nhl-modding-studio` удалённые файлы рабочих копий
+  возвращены из их собственного git (только удалённые, `git restore --source=HEAD`; `git fsck` чист). Восстановлено
+  177 и 339 файлов. Из `nhl-legacy-recomp` инструментам арта нужен `unpack_big.py`.
+- **Спеки арта** (`tools/legacy_data/art/src/`) теперь без `"base"` на спеки NHL 13: база встроена, тексты взяты из
+  транскриптов агентов logos/uniforms. Пути к SVG ведут в `game/work/logos|uniforms` (вне git). У SEA цвета
+  «таблетки» — `#355464`/`#99D9D9`, как в спеке на момент сборки 08.10.
+- **Кольца фона главного меню.** `spec.json` menu12 пропал, в транскриптах его нет. Места → клуб восстановлены
+  обратным счётом по фону в `out/` — `tools/legacy_data/menu/menu12-rings.json`. `build-all.sh` берёт `spec.json`,
+  если он есть, иначе этот файл.
+- **Модель позы для превью формы** (`game/work/legacy-data/fepose/pose.bin`) пересчитана командой
+  `tools/fepose.py fit --game legacy` по уцелевшему `set-legacy.npz`. Нужен питон с numpy и Pillow: venv
+  `game/work/menu12/venv` пропал, взят `game/work/nhl24/venv`. В этап `art` добавлен `czkit.py fe`.
+- **Сухой прогон в отдельную папку.** `LEGACY_DATA_WORK=папка bash tools/legacy_data/build-all.sh …` — переменную
+  понимают `gameprofile`, `photos.py`, `roster`, установщик и `models/*.sh`. Прогон шёл в
+  `game/work/legacy-data/dry/`, этапы base, collect, fonts, music, models, art, menu. Составы с портретами подложены
+  из рабочей папки, потому что без сети их не собрать. Результат — из 2910 файлов `out/` байт в байт совпали 2907:
+  база, локализация с правками меню, музыка, портреты, меню, 3D и арт. Разница только в 3 шрифтах: у них в TTF
+  другое время сборки (`head.modified`). Найдены и исправлены ошибки «с нуля»: `build-all.sh` не создавал
+  `nhl32/`, `models/*.sh` — `models/`.
+- **Что нужно из сети** (`python tools/roster fetch …`, пауза ≥ 1 с, около 2200 запросов, порядка часа; сам не
+  запускал):
+
+  | Источник | Запросы |
+  |---|---|
+  | api-web.nhle.com | составы 32 клубов; карточки landing ≈ 1300 игроков (НХЛ, АХЛ CV/HSK, свободные агенты) |
+  | search.d3.nhle.com | 1 общий + ≈ 50 по именам игроков АХЛ |
+  | api.nhle.com/stats/rest | bios полевых и вратарей за 2024/25–2026/27 (≈ 6) |
+  | ea.com/games/nhl/ratings | 6 страниц |
+  | nhlratings.net | 32 клуба + 13 вратарских списков + ≈ 740 игроков |
+  | dailyfaceoff.com | 32 страницы звеньев |
+  | liiga.fi | состав и статистика 4 сезонов (≈ 9) |
+
+  Wikipedia (капитаны, клубы АХЛ) и фото (`roster-cache/photos`) — в кэше.
+- **Порядок после fetch:**
+  1. `python tools/roster build …` — флаги как в `build-all.sh`.
+  2. `python tools/legacy_data/registry_from_db.py game/work/legacy-data/roster/players.json` — artid новых
+     игроков по нынешней базе, иначе портреты получат другие имена.
+  3. `python tools/roster lines`, `match`, `write`, `report`, затем этапы photos, equip, collect.
+  4. С `--ahl32` — то же для `roster-ahl32`, потом `make_out_ahl32.py`.
+  5. Сверка с `out/` — `game/work/legacy-data/tmp/cmp_dry.py` (на копии, `LEGACY_DATA_WORK`).
 
 Вариант «АХЛ на 32» — накладка `game/work/legacy-data/out-ahl32/` (база с CV/HSK, их локализация и
 портреты): `install-legacy-data.sh --ahl32` ставит её поверх `out/`. Франшизе с ней нужен порт с врезками
