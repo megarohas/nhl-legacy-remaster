@@ -1100,6 +1100,45 @@ bool NhlLegacyTreeTeamMissing(PPCRegister& r9) {
 }
 
 namespace {
+// Команд под узлом дерева лиги (как 82AEBCA8): +4 — свои, +16 — число детей, +20 — массив детей.
+int32_t TreeTeamCount(uint8_t* base, uint32_t node, int depth = 0) {
+  if (!node || depth > 4) {
+    return 0;
+  }
+  int32_t n = static_cast<int32_t>(Load32(base, node + 4));
+  const int32_t kids = static_cast<int32_t>(Load32(base, node + 16));
+  const uint32_t arr = Load32(base, node + 20);
+  for (int32_t i = 0; arr && i < kids && i < 16; ++i) {
+    n += TreeTeamCount(base, Load32(base, arr + 4 * i), depth + 1);
+  }
+  return n;
+}
+}  // namespace
+
+// 82B6C838 (ветка 131 сортировки 82B6BA58 — посев плей-офф АХЛ): при ahl32 дивизион на 8 в конференции без
+// дивизиона на 7 — без перехода: 4 лучших в плей-офф, 5–8 в хвост таблицы. true — переход на 82B6C84C.
+bool NhlLegacyAhlNoCrossover(PPCRegister& r27, PPCRegister& r17) {
+  if (!AhlThirtyTwo() || r27.s32 != 8) {
+    return false;
+  }
+  uint8_t* base = GuestBase();
+  const uint32_t conf = r17.u32;
+  const int32_t kids = static_cast<int32_t>(Load32(base, conf + 16));
+  const uint32_t arr = Load32(base, conf + 20);
+  for (int32_t i = 0; arr && i < kids && i < 16; ++i) {
+    if (TreeTeamCount(base, Load32(base, arr + 4 * i)) == 7) {
+      return false;  // есть дивизион на 7 — переход, как в оригинале
+    }
+  }
+  static int logged = 0;
+  if (logged++ < 4) {
+    REXLOG_INFO("[nhllegacy] AHL playoffs: conference {} has no 7-team division - top 4 of each division, "
+                "no crossover", Load32(base, conf));
+  }
+  return true;
+}
+
+namespace {
 // Таблица статистики (объект Legacy): записи по 24 байта с +36, число — +48, объекты команд — массив с
 // +40 по 200 байт (номер — байт +8). Цела, если каждая запись указывает на свой объект без повторов.
 bool StatsTableOk(uint8_t* base, uint32_t self, std::string* teams = nullptr) {
