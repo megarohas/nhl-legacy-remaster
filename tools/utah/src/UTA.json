@@ -1,0 +1,55 @@
+{
+ "team": "Utah Mammoth (NHL Legacy)",
+ "artid": 104,
+ "spotlight": 48,
+ "svg": "../../../game/work/utah/src/UTA_primary.svg",
+ "strip_paths": [],
+ "colors": [
+  "#1F3A55",
+  "#5C8FBF"
+ ],
+ "small_focus": [
+  0.56,
+  0.46,
+  1.75
+ ],
+ "wide_focus": [
+  0.55,
+  0.47,
+  1.55
+ ],
+ "center_box": 700,
+ "calendar_zoom": 1.15,
+ "arena_text": {
+  "text": "DELTA CENTER",
+  "color": "#262626",
+  "font": "Segoe UI",
+  "weight": 700,
+  "size": 56,
+  "spacing": 14,
+  "baseline": 455,
+  "span": 88
+ },
+ "ui_extra": {
+  "tw_bg": "#13212E",
+  "tw_focus": [
+   0.5,
+   0.5,
+   1.0
+  ],
+  "pb_tint": "#A9D3F5",
+  "pb_alpha": 0.3,
+  "pb_box": [
+   560,
+   230,
+   470,
+   330
+  ],
+  "digits": {
+   "source": "block",
+   "slant": 10,
+   "weight": 1.0,
+   "round": 1.0
+  }
+ }
+}

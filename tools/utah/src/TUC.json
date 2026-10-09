@@ -1,0 +1,33 @@
+{
+ "team": "Tucson Roadrunners (NHL Legacy, AHL; логотип AHL 2026/27 «Dusty»)",
+ "league": "ahl",
+ "artid": 105,
+ "svg": "../../../game/work/utah/src/TUC_dusty.svg",
+ "strip_paths": [],
+ "colors": [
+  "#4A0016",
+  "#8A1A30"
+ ],
+ "small_focus": [
+  0.55,
+  0.42,
+  1.6
+ ],
+ "wide_focus": [
+  0.55,
+  0.42,
+  1.45
+ ],
+ "calendar_zoom": 1.2,
+ "center_box": 640,
+ "arena_text": {
+  "text": "TUCSON ARENA",
+  "color": "#262626",
+  "font": "Segoe UI",
+  "weight": 700,
+  "size": 56,
+  "spacing": 12,
+  "baseline": 455,
+  "span": 88
+ }
+}
