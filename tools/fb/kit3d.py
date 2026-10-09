@@ -264,10 +264,10 @@ def transfer(src_tex, src_mesh, dst_mesh, size=1024, ss=2, seam=0.04, post=None)
     img[mask] = col
     dist = np.full((S, S), np.nan)
     dist[mask] = dist_v
-    if post is not None:  # слои поверх основы (нашивки), на сверхвыборке: post(img, mask, P, N, tri) по текселям mask
+    if post is not None:  # слои поверх основы, на сверхвыборке: post(img, mask, P, N, tri, uv_src) по текселям mask
         Pm = interp(dst_mesh["pos"], T[t], b)
         Nm = _unit(interp(dst_mesh["nrm"], T[t], b))
-        img = post(img, mask, Pm, Nm, t)
+        img = post(img, mask, Pm, Nm, t, UV)
     if ss > 1:
         mk = mask.reshape(size, ss, size, ss).astype(np.float64)
         num = (img.reshape(size, ss, size, ss, -1) * mk[..., None]).sum((1, 3))
@@ -434,3 +434,172 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+# ---------------------------------------------------------------- рендер с рельефом (карта нормалей + блик)
+
+def vertex_tangents(mesh):
+    """Касательная (вдоль +u) и бинормаль (вдоль +v) в вершинах — по производным позиций по UV (как у DirectX)."""
+    P, UV, T = mesh["pos"], mesh["uv"], mesh["tri"]
+    p0, p1, p2 = P[T[:, 0]], P[T[:, 1]], P[T[:, 2]]
+    w0, w1, w2 = UV[T[:, 0]], UV[T[:, 1]], UV[T[:, 2]]
+    e1, e2 = p1 - p0, p2 - p0
+    d1, d2 = w1 - w0, w2 - w0
+    den = d1[:, 0] * d2[:, 1] - d2[:, 0] * d1[:, 1]
+    r = np.where(np.abs(den) < 1e-12, 0.0, 1.0 / np.where(np.abs(den) < 1e-12, 1.0, den))[:, None]
+    t = (e1 * d2[:, 1:2] - e2 * d1[:, 1:2]) * r
+    b = (e2 * d1[:, 0:1] - e1 * d2[:, 0:1]) * r
+    tv = np.zeros_like(P)
+    bv = np.zeros_like(P)
+    for k in range(3):
+        np.add.at(tv, T[:, k], t)
+        np.add.at(bv, T[:, k], b)
+    n = _unit(mesh["nrm"])
+    tv = _unit(tv - n * (n * tv).sum(-1, keepdims=True))
+    bv = _unit(bv - n * (n * bv).sum(-1, keepdims=True))
+    return tv, bv
+
+
+VIEWS = {  # поворот вокруг Y: (cos, sin) — камера смотрит вдоль −Z
+    "front": (1.0, 0.0), "back": (-1.0, 0.0), "left": (0.0, 1.0), "right": (0.0, -1.0)}
+
+
+def _rot(v, view):
+    c, s = VIEWS[view]
+    out = v.copy()
+    out[..., 0] = c * v[..., 0] + s * v[..., 2]
+    out[..., 2] = -s * v[..., 0] + c * v[..., 2]
+    return out
+
+
+def render_lit(mesh, tex, view="front", width=600, frame=FRAME, nmap=None, smap=None,
+               light=(-1.0, 0.25, 0.35), ambient=0.22, diffuse=0.95, spec=1.0, power=24.0, ss=2, bg=(40, 40, 46),
+               flip_green=True):
+    """Рендер с картой нормалей (касательное пространство, X = R, Y = G) и бликом (smap — серый, 0..255).
+    nmap=None — плоско (нормаль сетки). Свет и камера — в координатах вида (камера вдоль −Z)."""
+    if ss > 1:
+        big = render_lit(mesh, tex, view, width * ss, frame, nmap, smap, light, ambient, diffuse, spec, power, 1, bg,
+                         flip_green)
+        return big.resize((width, big.size[1] // ss), Image.LANCZOS)
+    x0, x1, y0, y1 = frame
+    height = int(round(width * (y1 - y0) / (x1 - x0)))
+    P = _rot(mesh["pos"], view)
+    N = _rot(_unit(mesh["nrm"]), view)
+    if "_tan" not in mesh:
+        mesh["_tan"], mesh["_bit"] = vertex_tangents(mesh)
+    TG = _rot(mesh["_tan"], view)
+    BT = _rot(mesh["_bit"], view)
+    L = _unit(np.array(light, dtype=np.float64))
+    V = np.array([0.0, 0.0, 1.0])
+    Hh = _unit(L + V)
+    sx = (P[:, 0] - x0) / (x1 - x0) * width
+    sy = (y1 - P[:, 1]) / (y1 - y0) * height
+    z = P[:, 2]
+    zbuf = np.full((height, width), -np.inf)
+    out = np.zeros((height, width, 3))
+    out[:] = bg
+    UV = mesh["uv"]
+    for a, b, c in mesh["tri"]:
+        xa, xb, xc = sx[a], sx[b], sx[c]
+        ya, yb, yc = sy[a], sy[b], sy[c]
+        ix0 = max(int(np.floor(min(xa, xb, xc))), 0)
+        ix1 = min(int(np.ceil(max(xa, xb, xc))), width - 1)
+        iy0 = max(int(np.floor(min(ya, yb, yc))), 0)
+        iy1 = min(int(np.ceil(max(ya, yb, yc))), height - 1)
+        if ix1 < ix0 or iy1 < iy0:
+            continue
+        den = (yb - yc) * (xa - xc) + (xc - xb) * (ya - yc)
+        if abs(den) < 1e-12:
+            continue
+        xs, ys = np.meshgrid(np.arange(ix0, ix1 + 1) + 0.5, np.arange(iy0, iy1 + 1) + 0.5)
+        l0 = ((yb - yc) * (xs - xc) + (xc - xb) * (ys - yc)) / den
+        l1 = ((yc - ya) * (xs - xc) + (xa - xc) * (ys - yc)) / den
+        l2 = 1 - l0 - l1
+        m = (l0 >= 0) & (l1 >= 0) & (l2 >= 0)
+        if not m.any():
+            continue
+        zz = (l0 * z[a] + l1 * z[b] + l2 * z[c])[m]
+        py = (ys[m] - 0.5).astype(int)
+        px = (xs[m] - 0.5).astype(int)
+        closer = zz > zbuf[py, px]
+        if not closer.any():
+            continue
+        py, px = py[closer], px[closer]
+        w0, w1, w2 = l0[m][closer][:, None], l1[m][closer][:, None], l2[m][closer][:, None]
+        zbuf[py, px] = zz[closer]
+        u = (w0 * UV[a, 0:1] + w1 * UV[b, 0:1] + w2 * UV[c, 0:1])[:, 0]
+        v = (w0 * UV[a, 1:2] + w1 * UV[b, 1:2] + w2 * UV[c, 1:2])[:, 0]
+        col = sample_bilinear(tex, u, v)[:, :3]
+        n = _unit(w0 * N[a] + w1 * N[b] + w2 * N[c])
+        inner = n[:, 2] < -0.05
+        if nmap is not None:
+            t = _unit(w0 * TG[a] + w1 * TG[b] + w2 * TG[c])
+            bb = _unit(w0 * BT[a] + w1 * BT[b] + w2 * BT[c])
+            nt = sample_bilinear(nmap, u, v)[:, :3] / 127.5 - 1.0
+            gy = -nt[:, 1:2] if flip_green else nt[:, 1:2]  # DirectX: зелёный — «вверх» в текстуре = к −v
+            nw = _unit(t * nt[:, 0:1] + bb * gy + n * np.clip(nt[:, 2:3], 0.05, 1))
+            n = np.where(inner[:, None], n, nw)
+        lam = np.clip((n * L).sum(-1), 0, 1)
+        sp = np.clip((n * Hh).sum(-1), 0, 1) ** power
+        sk = (sample_bilinear(smap, u, v)[:, 0] / 255.0) if smap is not None else np.full(len(u), 0.12)
+        shade = np.where(inner, 0.3, ambient + diffuse * lam)
+        out[py, px] = col * shade[:, None] + (spec * sk * sp * 255.0)[:, None] * (~inner)[:, None]
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))
+
+
+def transfer_normals(src_nmap, src_mesh, dst_mesh, size=1024, ss=2, flip_green=True):
+    """Карта нормалей src (касательное пространство src) → касательное пространство dst через то же соответствие:
+    n_мир = T·x + B·y + N·z на src, затем проекция на T, B, N dst. -> RGB (R = X, G = Y, B = Z), size²."""
+    S = size * ss
+    transfer(np.zeros((4, 4, 3)), src_mesh, dst_mesh, size, ss)  # заполнить кеш соответствия
+    mask, t, b, UV, dist_v, bad_tri = _MAPCACHE[(id(src_mesh), id(dst_mesh), size, ss, 0.04)]
+    T = dst_mesh["tri"]
+
+    def interp(attr, tri, bb):
+        return bb[:, :1] * attr[tri[:, 0]] + bb[:, 1:2] * attr[tri[:, 1]] + bb[:, 2:] * attr[tri[:, 2]]
+
+    if "_tan" not in dst_mesh:
+        dst_mesh["_tan"], dst_mesh["_bit"] = vertex_tangents(dst_mesh)
+    if "_tan" not in src_mesh:
+        src_mesh["_tan"], src_mesh["_bit"] = vertex_tangents(src_mesh)
+    Nd = _unit(interp(dst_mesh["nrm"], T[t], b))
+    Td = _unit(interp(dst_mesh["_tan"], T[t], b))
+    Bd = _unit(interp(dst_mesh["_bit"], T[t], b))
+    # треугольник src под uv: растр развёртки src
+    key = ("tid", id(src_mesh), 2048)
+    if key not in _MAPCACHE:
+        _MAPCACHE[key] = raster_uv(src_mesh, 2048)[0]
+    tid_s = _MAPCACHE[key]
+    xs = np.clip((UV[:, 0] * 2048).astype(int), 0, 2047)
+    ys = np.clip((UV[:, 1] * 2048).astype(int), 0, 2047)
+    ts = tid_s[ys, xs]
+    ok = ts >= 0
+    ts = np.where(ok, ts, 0)
+    Ts = src_mesh["tri"][ts]
+    # барицентры uv внутри треугольника src — гладкая интерполяция T, B, N (без граней)
+    u0, u1, u2 = src_mesh["uv"][Ts[:, 0]], src_mesh["uv"][Ts[:, 1]], src_mesh["uv"][Ts[:, 2]]
+    den = (u1[:, 1] - u2[:, 1]) * (u0[:, 0] - u2[:, 0]) + (u2[:, 0] - u1[:, 0]) * (u0[:, 1] - u2[:, 1])
+    den = np.where(np.abs(den) < 1e-12, 1e-12, den)
+    l0 = ((u1[:, 1] - u2[:, 1]) * (UV[:, 0] - u2[:, 0]) + (u2[:, 0] - u1[:, 0]) * (UV[:, 1] - u2[:, 1])) / den
+    l1 = ((u2[:, 1] - u0[:, 1]) * (UV[:, 0] - u2[:, 0]) + (u0[:, 0] - u2[:, 0]) * (UV[:, 1] - u2[:, 1])) / den
+    bb = np.clip(np.stack([l0, l1, 1 - l0 - l1], -1), 0, 1)
+    bb /= np.maximum(bb.sum(-1, keepdims=True), 1e-9)
+    Ns = _unit(interp(src_mesh["nrm"], Ts, bb))
+    Tsv = _unit(interp(src_mesh["_tan"], Ts, bb))
+    Bsv = _unit(interp(src_mesh["_bit"], Ts, bb))
+    nt = sample_bilinear(src_nmap, UV[:, 0], UV[:, 1])[:, :3] / 127.5 - 1.0
+    gy = -nt[:, 1:2] if flip_green else nt[:, 1:2]
+    nz = np.sqrt(np.clip(1 - nt[:, 0:1] ** 2 - nt[:, 1:2] ** 2, 0, 1))
+    nw = _unit(Tsv * nt[:, 0:1] + Bsv * gy + Ns * nz)
+    x = (nw * Td).sum(-1)
+    y = (nw * Bd).sum(-1)
+    z = (nw * Nd).sum(-1)
+    if flip_green:
+        y = -y
+    out = np.zeros((S, S, 3))
+    out[...] = (127.5, 127.5, 255.0)
+    out[mask] = np.stack([x, y, z], -1) * 127.5 + 127.5
+    out[mask][~ok] = (127.5, 127.5, 255.0)
+    if ss > 1:
+        out = out.reshape(size, ss, size, ss, 3).mean((1, 3))
+    return np.clip(out, 0, 255)

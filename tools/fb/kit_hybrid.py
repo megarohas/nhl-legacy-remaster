@@ -213,11 +213,38 @@ def plan_decals(comp, lab, patches, rules, defaults, src, dst, tid24):
     return placed, soft
 
 
-def decal_post(comp, placed, soft, n_jersey_tri):
-    def post(img, msk, P, N, tri):
+def collar_color(src_tex, rule):
+    """Основной цвет свитера под воротом: медиана окна на развёртке NHL 24 (по правилу [collar.v_insert])."""
+    H = src_tex.shape[0]
+    u, v = rule.get("sample_uv", [0.5, 0.605])
+    b = max(int(rule.get("sample_box", 0.008) * H), 2)
+    x, y = int(u * H), int(v * H)
+    win = src_tex[max(y - b, 0):y + b, max(x - b, 0):x + b, :]
+    return np.median(win.reshape(-1, win.shape[-1]), axis=0)
+
+
+LEGACY_SHIRT = "rendering/jersey/shirt_1_1_2.rx2"  # «рубашка» в вырезе ворота Edge (V-вставка): её развёртка —
+                                                  # угол текстуры свитера u 0,08…0,18, v 0,85…0,90
+
+
+def legacy_with_shirt():
+    """Свитер Legacy + сетка «рубашки» в V-вырезе ворота (в игре она видна в вырезе; цвет — из той же текстуры)."""
+    j = load_legacy()
+    return merge(j, load_legacy(LEGACY_SHIRT)), len(j["tri"])
+
+
+def decal_post(comp, placed, soft, n_jersey_tri, collar=None):
+    """collar — (правило, цвет): V-вставка ворота Edge — сетка «рубашки» (треугольники после свитера) — заливается
+    цветом свитера под воротом: у adidas ворот круглый, выреза нет."""
+    def post(img, msk, P, N, tri, UV=None):
         out = img.copy()
         flat = out[msk]
         on_jersey = tri < n_jersey_tri
+        if collar is not None:
+            rule, color = collar
+            sel = ~on_jersey
+            flat[sel] = color[: flat.shape[1]]
+            post.v_insert = int(sel.sum())
         for pl in placed:
             cL, nL, pinv, R, sc, rad, u_c, v_c = pl["_frame"]
             d = P - cL
