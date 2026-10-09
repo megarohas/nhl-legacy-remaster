@@ -25,6 +25,8 @@ ALLSTAR = (218, 219)               # сборные Матча звёзд пос
 NATIONAL = range(128, 149)
 SPECIAL = set(NATIONAL) | set(ALLSTAR) | set(range(209, 218))   # сборные, проспекты, легенды, Зимняя классика
 CLUBS = (set(range(32, 128)) | set(range(149, 209)) | set(AHL_CLUBS)) - set(ALLSTAR)
+JUNIOR = set(range(149, 209))      # клубы юниоров CHL (OHL, QMJHL, WHL): при создании франшизы все их игроки без прав
+                                   # НХЛ попадают в пул драфта, возраст игра не проверяет (docs/draft-pool.md)
 LINK_LIMIT = 16000                 # с 16000 — связи создаваемых игроков
 GENERIC_HEAD = 10000               # headid с 10000 — типовые головы (не сканы EA)
 LEGACY = common.GAME.name == 'legacy'
@@ -36,6 +38,7 @@ if LEGACY:
     NATIONAL = range(133, 154)
     SPECIAL = set(NATIONAL) | set(ALLSTAR) | set(range(214, 222))
     CLUBS = (set(range(32, 133)) | set(range(154, 214)) | set(common.AHL_CLUBS)) - set(ALLSTAR)
+    JUNIOR = set(range(154, 214))
     GENERIC_HEAD = common.GAME.generic_heads[0]
 
 

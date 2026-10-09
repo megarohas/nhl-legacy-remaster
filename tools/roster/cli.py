@@ -64,6 +64,11 @@ def main():
     ap.add_argument('--fa-only', action='store_true',
                     help='write, с --fa: в пуле свободных агентов (exhibitionfreeagents) — только настоящие; свободные '
                          'агенты исходной базы, чьи строки не ушли новым игрокам, из пула убираются (у Legacy там 2015 год)')
+    ap.add_argument('--retire-veterans', nargs='?', type=int, const=1989, metavar='ГОД',
+                    help='write: ушедшие из НХЛ игроки исходной базы ГОД г. р. и старше (по умолчанию 1989) не занимают '
+                         'места ушедших в НХЛ — остаются без клуба и во франшизу не попадают; в клубы юниоров CHL ушедшие '
+                         'из НХЛ не ставятся вовсе (иначе они в пуле драфта). Место отдаётся запасному того же амплуа из '
+                         'клуба, затем из клуба той же лиги (docs/draft-pool.md)')
     a = ap.parse_args()
     profile = None
     if a.game and a.game.lower() in gameprofile.GAMES:      # --game legacy — игра, а не каталог
@@ -77,6 +82,7 @@ def main():
     paths.league = a.league
     paths.payroll_max = a.payroll_max
     paths.fa_only = a.fa_only
+    paths.retire_veterans = a.retire_veterans
     if a.db_in:
         paths.db_in = a.db_in
     if a.db_out:

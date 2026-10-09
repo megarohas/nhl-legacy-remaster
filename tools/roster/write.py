@@ -37,8 +37,8 @@ from tdb import Tdb
 from . import lines as lines_mod
 from .codes import NONE, country_code, state_code
 from .common import SEASON, SEASON_YEAR, SLOT_TEAM, club_abbr, fit_utf8, norm, read_json, team_slot, write_json
-from .dbview import (B, CLUBS, F, FLAGS, G, GENERIC_HEAD, LEGACY, LINK_LIMIT, NATIONAL, NHL, P, POS_CODE, POS_NAME, R,
-                     S, SPECIAL, View, fld)
+from .dbview import (B, CLUBS, F, FLAGS, G, GENERIC_HEAD, JUNIOR, LEGACY, LINK_LIMIT, NATIONAL, NHL, P, POS_CODE,
+                     POS_NAME, R, S, SPECIAL, T, View, fld)
 from .match import load_db
 from .ratings import BASE, SK_BIAS, TRAITS, Model, age, clamp_rating
 
@@ -99,6 +99,9 @@ class Writer:
         self.fa_only = getattr(paths, 'fa_only', False) and bool(self.fa_players)   # --fa-only: пул FA — только настоящие
         self.fa_dropped = []
         self.payroll = None
+        # --retire-veterans ГОД: ушедшие из НХЛ ≤ ГОД г. р. — на пенсию (без клуба), в клубы CHL — никто из ушедших
+        self.retire_year = getattr(paths, 'retire_veterans', None)
+        self.vacancy_actions = Counter()
 
     # --- 1. строки игроков -----------------------------------------------------------------
     def spare_rows(self):
@@ -575,6 +578,12 @@ class Writer:
         for e in sorted(vacancies, key=lambda e: (e['team'], e['playerindex'])):
             r_old = row_of_link(e['playerindex'])
             pos = self.orig.get(B, 'position', r_old)      # амплуа того, кто занимал место (до правок)
+            if self.retire_year is not None:
+                # --retire-veterans: без ветеранов ≤ ГОД, в клубе CHL — без ушедших из НХЛ (free_vacancy)
+                ne = self.free_vacancy(e, r_old, pos, kept, displaced, pick_link, orig_name)
+                if ne is not None:
+                    refill.append(ne)
+                continue
             same_kind = [r for r in displaced if v.is_goalie(r) == (pos == 4)
                          and (v.g('position', r) == 3) == (pos == 3)]
             if not same_kind:
@@ -656,6 +665,108 @@ class Writer:
                 e['key'] = team * MAX_PER_TEAM + k
                 final.append(e)
         self.entries, self.fa_keep = final, fa_keep
+
+    # --- 4а. --retire-veterans: место ушедшего в НХЛ без ветеранов ----------------------------
+    def free_vacancy(self, e, r_old, pos, kept, displaced, pick_link, orig_name):
+        """Место того, кто из клуба АХЛ/Европы/юниоров ушёл в НХЛ (e — его запись состава), при --retire-veterans ГОД.
+
+        Без флага его занимает ушедший из НХЛ того же амплуа, младшие первыми: так в клубах CHL оказались
+        Торнтон, Седин, Лундквист… — а при создании франшизы все игроки клубов CHL без прав НХЛ идут в пул драфта,
+        возраст игра не проверяет (docs/draft-pool.md). С флагом:
+        1) клуб не CHL — ушедший из НХЛ того же амплуа моложе ГОД (как без флага);
+        2) запись не одета, без звеньев и буквы — убирается (в клубе на игрока меньше);
+        3) иначе её звенья, rosterstatus и букву получает запасной клуба того же амплуа (не одет, без звеньев);
+        4) нет такого — запасной того же амплуа из другого клуба той же лиги (больше всего запасных), с номером и
+           условиями места ушедшего, как у ушедшего из НХЛ без флага;
+        5) клуб не CHL — ушедший из НХЛ моложе ГОД другого амплуа полевых; 6) иначе — как без флага (и с ветераном).
+        Кому места нет, остаются без клуба и контракта (team 0 или особая команда + 1): во франшизу такие
+        игроки не попадают. Возвращает новую запись для состава или None."""
+        v, db = self.v, self.db
+        t = e['team']
+        junior = t in JUNIOR
+        kind = lambda p: 'G' if p == 4 else 'D' if p == 3 else 'F'
+        want = kind(pos)
+        young = [r for r in displaced if v.birth(r)[0] > self.retire_year]
+
+        def take(r, how):                      # ушедший из НХЛ на место — как в rebuild_entries без флага
+            displaced.remove(r)
+            ne = dict(e)
+            ne['playerindex'] = pick_link(r, t)
+            t_ai, row_ai = v.ai(r)
+            ne['playerstyle'] = db.get(t_ai, fld('p_style' if t_ai == S else 'g_style'), row_ai)
+            db.set(B, 'team', r, t + 1)
+            db.set(B, 'jersey', r, e['jersey'])
+            for f in (f for f in SLOT_TERMS if f in db.by_name[B]['fields']):
+                db.set(B, f, r, self.orig.get(B, f, r_old))
+            self.vacancy_actions[how] += 1
+            self.events.append({'team': t, 'what': 'место ушедшего в НХЛ', 'player': v.name(r),
+                                'instead': orig_name(r_old), 'retire': how})
+            return ne
+
+        def spare(x, team):
+            r = v.row_of_gid.get(v.link_gid.get(x['playerindex']))
+            return (x['team'] == team and r is not None and v.ai(r) is not None and not x['rosterstatus']
+                    and not x['captain'] and not any(x[f] for f in FLAGS) and kind(v.g('position', r)) == want), r
+
+        if not junior:
+            same = [r for r in young if v.is_goalie(r) == (pos == 4) and (v.g('position', r) == 3) == (pos == 3)]
+            if same:
+                same.sort(key=lambda r: (v.g('position', r) != pos, -v.birth(r)[0], r))
+                return take(same[0], 'ушедший из НХЛ моложе')
+        busy = e['rosterstatus'] or e['captain'] or any(e[f] for f in FLAGS)
+        if not busy:
+            self.vacancy_actions['место запасного убрано'] += 1
+            self.events.append({'team': t, 'what': 'место ушедшего в НХЛ убрано (запасной)', 'player': None,
+                                'instead': orig_name(r_old), 'retire': 'место запасного убрано'})
+            return None
+        # запасной своего клуба: сначала то же амплуа (C/LW/RW), потом лучший по OVR
+        mine = [(x, r) for x in kept for ok, r in [spare(x, t)] if ok]
+        if mine:
+            x, r = min(mine, key=lambda xr: (v.g('position', xr[1]) != pos, -v.overall(xr[1]), xr[0]['playerindex']))
+            for f in FLAGS:
+                x[f] = e[f]
+            x['rosterstatus'], x['captain'] = e['rosterstatus'], e['captain']
+            self.vacancy_actions['запасной клуба'] += 1
+            self.events.append({'team': t, 'what': 'место ушедшего в НХЛ — запасному клуба', 'player': v.name(r),
+                                'instead': orig_name(r_old), 'retire': 'запасной клуба'})
+            return None
+        # запасной из другого клуба той же лиги (у кого запасных этого амплуа больше всего)
+        league = db.get(T, 'league', t)
+        pool = defaultdict(list)
+        for x in kept:
+            u = x['team']
+            if u == t or u not in CLUBS or u in self.own_clubs or db.get(T, 'league', u) != league:
+                continue
+            ok, r = spare(x, u)
+            if ok:
+                pool[u].append((x, r))
+        if pool:
+            u = min(pool, key=lambda u: (-len(pool[u]), u))
+            x, r = min(pool[u], key=lambda xr: (v.g('position', xr[1]) != pos, -v.overall(xr[1]), xr[0]['playerindex']))
+            kept.remove(x)
+            ne = dict(e)
+            ne['playerindex'], ne['playerstyle'] = x['playerindex'], x['playerstyle']
+            db.set(B, 'team', r, t + 1)
+            db.set(B, 'jersey', r, e['jersey'])
+            for f in (f for f in SLOT_TERMS if f in db.by_name[B]['fields']):
+                db.set(B, f, r, self.orig.get(B, f, r_old))
+            self.vacancy_actions['запасной другого клуба лиги'] += 1
+            self.events.append({'team': t, 'what': 'место ушедшего в НХЛ — запасному другого клуба', 'player': v.name(r),
+                                'from_team': u, 'instead': orig_name(r_old), 'retire': 'запасной другого клуба лиги'})
+            return ne
+        if not junior:
+            same = [r for r in young if v.is_goalie(r) == (pos == 4)]
+            if same:
+                same.sort(key=lambda r: (v.g('position', r) != pos, -v.birth(r)[0], r))
+                return take(same[0], 'ушедший из НХЛ моложе (другое амплуа)')
+        same = [r for r in displaced if v.is_goalie(r) == (pos == 4) and (v.g('position', r) == 3) == (pos == 3)]
+        if not same:
+            same = [r for r in displaced if v.is_goalie(r) == (pos == 4)]
+        if not same:
+            self.events.append({'team': t, 'what': 'место осталось пустым', 'player': orig_name(r_old)})
+            return None
+        same.sort(key=lambda r: (v.g('position', r) != pos, -v.birth(r)[0], r))
+        return take(same[0], 'ветеран оставлен (нет замены)')
 
     # --- 5. запись таблиц ------------------------------------------------------------------
     def write_table_rows(self, table, rows):
@@ -911,6 +1022,14 @@ def run(paths, log=print, real_lines=True):
         summary['fa_dropped'] = w.fa_dropped
         log(f'  свободные агенты исходной базы убраны из пула (--fa-only): {len(w.fa_dropped)} — '
             + ', '.join(w.fa_dropped[:8]) + (' …' if len(w.fa_dropped) > 8 else ''))
+    if w.retire_year is not None:
+        retired = [{'row': r, 'name': w.v.name(r), 'birth': list(w.v.birth(r))} for r in w.teamless
+                   if w.v.birth(r)[0] <= w.retire_year]
+        kept_vets = [e for e in w.events if e.get('retire') == 'ветеран оставлен (нет замены)']
+        summary['retire_veterans'] = {'year': w.retire_year, 'actions': dict(w.vacancy_actions), 'retired': retired,
+                                      'veterans_kept': kept_vets}
+        log(f'  ушедшие из НХЛ ≤ {w.retire_year} г. р. — без клуба (--retire-veterans): {len(retired)}; места ушедших '
+            f'в НХЛ: {dict(w.vacancy_actions)}' + (f'; ветеран оставлен: {len(kept_vets)}' if kept_vets else ''))
     if w.payroll is not None:
         summary['payroll'] = {'max_mln': w.payroll_max, 'clubs': w.payroll}
         log(f'  ведомости ≤ {w.payroll_max:g} млн: ужато клубов {len(w.payroll)} — '
