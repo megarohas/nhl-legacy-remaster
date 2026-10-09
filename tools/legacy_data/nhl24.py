@@ -17,9 +17,10 @@ game/work/nhl24/out/pack (или переменная NHL24_PACK). Формат 
 jerseyindex — следующий за последним у клуба; locstring 2 у третьей (three), 6 у остальных (RR, ретро 90-х).
 
 Этап build (после collect): сверяет каждый файл пакета с манифестом (путь по типу, md5, размер), копирует их в
-out-nhl24 и собирает базу накладки из out/db/nhlng.db (и out-ahl32/db/nhlng.db → out-nhl24-ahl32): hastie = 0 у строк
-клубов пакета («clubs» манифеста, "all" — у всех), новые строки stockteamjerseys в конец таблицы (номера прежних
-строк не сдвигаются) — только для форм, все файлы которых есть в пакете. Та же база — db/draft_roster.db. Подписи
+out-nhl24 и собирает базу накладки из out/db/nhlng.db (и out-ahl32/db/nhlng.db → out-nhl24-ahl32): hastie = 0 у строк,
+чей свитер (texlib_1_<арт>_<вариант>.rx2) есть в пакете, — формы EA, которые пакет не меняет, остаются со своим hastie;
+новые строки stockteamjerseys (hastie 0) в конец таблицы (номера прежних строк не сдвигаются) — только для форм, все
+файлы которых есть в пакете. Та же база — db/draft_roster.db. Подписи
 новых форм с locstring 6 (RR, ретро) — ключи Vintage_1_<арт>_<вариант> в fe/loc/NHL_ENG_US.db накладки. Отчёт и копия
 манифеста — game/work/legacy-data/nhl24/ (не в out-nhl24: всё, что лежит в накладке, ставится в cache:).
 """
@@ -220,8 +221,8 @@ def check_manifest(pack, man, reg):
         elif os.path.getsize(p) != e.get('size') or md5(p) != e.get('md5'):
             bad.append(f'{rel}: md5/размер не как в манифесте')
         files[rel] = e
-    clubs = man.get('clubs')
-    if clubs != 'all' and (not isinstance(clubs, list) or any(c not in CLUBS for c in clubs)):
+    clubs = man.get('clubs')                         # для людей: клубы пакета (шнуровку определяют файлы свитеров)
+    if clubs is not None and clubs != 'all' and (not isinstance(clubs, list) or any(c not in CLUBS for c in clubs)):
         bad.append(f'clubs: {clubs!r} — список кодов клубов или "all"')
     regmap = {(k['club'], k['kit']): k for k in reg['kits']}
     for k in man.get('kits', []):
@@ -245,12 +246,16 @@ def check_manifest(pack, man, reg):
 
 
 def build_db(base, man, reg, files):
-    """База накладки: hastie = 0 у клубов пакета, новые строки в конец stockteamjerseys. → (байты базы, отчёт);
+    """База накладки: hastie = 0 у строк со свитером из пакета, новые строки в конец stockteamjerseys. → (байты базы, отчёт);
     на диск ничего не пишет (пишет cmd_build, когда обе базы собрались)."""
     db_path, db = open_db(base)
     rows = rows_of(db)
-    scope = set(range(256)) if man['clubs'] == 'all' else {CLUBS[c][0] for c in man['clubs']}
-    tie = [r['row'] for r in rows if r['teamid'] in scope and r['hastie']]
+    # шнуровку снимаем только там, где свитер — из NHL 24 (решение 09.10): у строк, чья текстура свитера
+    # (texlib_1_<арт>_<вариант>.rx2, тип jersey) есть в пакете, и у новых строк; формы EA, которые пакет не меняет
+    # (у CHI спецформы 1_6_3/4/5), остаются со своим hastie
+    replaced = {(1, int(m.group(1)), int(m.group(2))) for rel, e in files.items() if e['type'] == 'jersey'
+                for m in [re.fullmatch(r'rendering/jersey/texlib_1_(\d+)_(\d+)\.rx2', rel)] if m}
+    tie = [r['row'] for r in rows if (r['style'], r['teamartid'], r['variant']) in replaced and r['hastie']]
     for r in tie:
         db.set(T, 'hastie', r, 0)
     regmap = {(k['club'], k['kit']): k for k in reg['kits']}
