@@ -98,12 +98,67 @@ def scan_cas(item):
     return key, found, nstreams
 
 
+def scan_cas2(item):
+    """Второй проход: чанк мог начаться не после короткого блока (перед ним — чанк ровно из полных блоков, которого
+    нет в манифестах). Для каждого короткого блока размера r и каждого нужного размера S с S mod 0x40000 == r
+    начало — за (S − r) / 0x40000 полных блоков до него; sha1 [начало, конец короткого блока] сверяется с нужными."""
+    key, regs = item
+    by_sha, sizes = _W
+    by_rem = {}
+    for sz in sizes:
+        if sz % FULL:
+            by_rem.setdefault(sz % FULL, set()).add(sz // FULL)
+    found = {}
+    tested = 0
+    with open(cas_path(key), "rb", buffering=0) as f:
+        for ofs, csize in regs:
+            f.seek(ofs)
+            data = f.read(csize)
+            pos = 0
+            run = []  # начала полных блоков текущей серии (смещения в data)
+            while pos + 8 <= len(data):
+                usize, uflags, ctype, flags, cs = cas.parse_block_header(data[pos:pos + 8])
+                n = 8 + (usize if (ctype & 0x7F) == 0 else cs)
+                if usize == FULL:
+                    run.append(pos)
+                    pos += n
+                    continue
+                end = pos + n
+                for k in by_rem.get(usize, ()):
+                    if 0 < k <= len(run):
+                        start = run[len(run) - k]
+                        tested += 1
+                        d = hashlib.sha1(data[start:end]).hexdigest()
+                        hit = by_sha.get(d)
+                        if hit:
+                            found[hit[0]] = {"cas": key, "ofs": ofs + start, "csize": end - start,
+                                             "size": k * FULL + usize}
+                run = []
+                pos = end
+    return key, found, tested
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--jobs", type=int, default=2)
+    ap.add_argument("--pass2", action="store_true", help="второй проход (начало чанка внутри серии полных блоков)")
     a = ap.parse_args()
     regs = regions()
     by_sha, sizes = wanted()
+    if a.pass2:
+        path = os.path.join(CAT, "orphan_map.json")
+        with open(path, encoding="utf-8") as f:
+            have = json.load(f)
+        print(f"второй проход: уже найдено {len(have)}", flush=True)
+        with Pool(a.jobs, initializer=_init) as pool:
+            for key, found, ns in pool.imap_unordered(scan_cas2, sorted(regs.items())):
+                new = {k: v for k, v in found.items() if k not in have}
+                have.update(new)
+                print(f"{key}: проверок {ns}, новых {len(new)} (всего {len(have)})", flush=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(have, f)
+        print(f"итого найдено {len(have)} из {len(by_sha)}")
+        return
     print(f"чанков без места: {len(by_sha)}, orphan-участков: {sum(len(v) for v in regs.values())} в {len(regs)} CAS", flush=True)
     allfound = {}
     with Pool(a.jobs, initializer=_init) as pool:

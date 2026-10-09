@@ -109,7 +109,14 @@ def main():
     c = sub.add_parser("collars", help="одна текстура свитера Legacy на всех вариантах сетки стиля 1")
     c.add_argument("tex")
     c.add_argument("out")
+    k = sub.add_parser("kits", help="лист комплектов NHL 24 по клубам (рендер спереди)")
+    k.add_argument("extract", help="папка fb.extract с jersey_*_color (…/extract/nhl_jerseys)")
+    k.add_argument("out")
+    k.add_argument("--family", default="adidas", choices=["adidas", "rbk", "nineties"])
+    k.add_argument("--width", type=int, default=170)
     a = ap.parse_args()
+    if a.cmd == "kits":
+        return cmd_kits(a)
     if a.cmd == "sheet":
         return cmd_sheet(a)
     if a.cmd == "collars":
@@ -160,6 +167,67 @@ def cmd_collars(a):
             x += im.size[0] + pad
     sheet.save(a.out)
     print(a.out, sheet.size)
+
+
+
+# ---------------------------------------------------------------- каталог комплектов NHL 24 (лист)
+
+NHL_TEAMS = ["anaheim", "arizona", "boston", "buffalo", "calgary", "carolina", "chicago", "colorado", "columbus",
+             "dallas", "detroit", "edmonton", "florida", "losangeles", "minnesota", "montreal", "nashville",
+             "newjersey", "nyi", "nyr", "ottawa", "philadelphia", "pittsburgh", "sanjose", "seattle", "stlouis",
+             "tampabay", "toronto", "vancouver", "vegas", "washington", "winnipeg"]
+KIT_ORDER = ["home", "away", "three", "two", "four", "five", "six", "seven", "eight", "nine", "twentytwo",
+             "twentythree"]
+
+
+def kit_index(extract_dir):
+    import csv
+    import os
+    out = {}
+    with open(os.path.join(extract_dir, "_index.csv"), encoding="utf-8") as f:
+        for r in csv.DictReader(f):
+            p = r["name"].split("/")
+            team, fam, kit = p[5], p[6], p[7]
+            out.setdefault(team, {}).setdefault(fam, {})[kit] = (r["status"], os.path.join(extract_dir, r["png"]) if r.get("png") else None)
+    return out
+
+
+def cmd_kits(a):
+    import os
+    try:
+        font = ImageFont.truetype("C:/Windows/Fonts/segoeui.ttf", 18)
+        fbig = ImageFont.truetype("C:/Windows/Fonts/segoeuib.ttf", 20)
+    except OSError:
+        font = fbig = ImageFont.load_default()
+    idx = kit_index(a.extract)
+    fams = {}
+    for fam in ("adidas", "rbk", "nineties"):
+        fams[fam] = kit3d.load_nhl24(N24.format(f=fam, v="notuck_large"))
+    fam = a.family
+    kits = sorted({k for t in NHL_TEAMS for k in idx.get(t, {}).get(fam, {})},
+                  key=lambda k: (KIT_ORDER.index(k) if k in KIT_ORDER else 99, k))
+    W = a.width
+    cell_h = int(round(W * (kit3d.FRAME[3] - kit3d.FRAME[2]) / (kit3d.FRAME[1] - kit3d.FRAME[0])))
+    lw, top, pad = 150, 30, 6
+    sheet = Image.new("RGB", (lw + len(kits) * (W + pad) + pad, top + len(NHL_TEAMS) * (cell_h + pad) + pad), (30, 30, 34))
+    d = ImageDraw.Draw(sheet)
+    for j, k in enumerate(kits):
+        d.text((lw + j * (W + pad) + 4, 6), k, fill=(235, 235, 235), font=fbig)
+    for i, t in enumerate(NHL_TEAMS):
+        y = top + i * (cell_h + pad)
+        d.text((6, y + cell_h // 2 - 10), t, fill=(235, 235, 235), font=fbig)
+        for j, k in enumerate(kits):
+            x = lw + j * (W + pad)
+            st = idx.get(t, {}).get(fam, {}).get(k)
+            if not st:
+                continue
+            if st[0] != "ok" or not st[1] or not os.path.exists(st[1]):
+                d.text((x + 8, y + cell_h // 2 - 10), "нет чанка", fill=(200, 120, 120), font=font)
+                continue
+            im = kit3d.render(fams[fam], kit3d.load_tex(st[1]), "front", W, ss=2)
+            sheet.paste(im, (x, y))
+    sheet.save(a.out)
+    print(a.out, sheet.size, "комплектов:", sum(1 for t in NHL_TEAMS for _ in idx.get(t, {}).get(fam, {})))
 
 
 if __name__ == "__main__":
