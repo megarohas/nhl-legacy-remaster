@@ -18,9 +18,10 @@
 | Шрифт меню NHL 12 | `tools/fefont.py --game legacy` (помощник fe) | ✔ меню, выбор команд, составы, табло |
 | Музыка Best of NHL (16 песен, названия, обложки) | `tools/music.py --game legacy` (помощник music) | ✔ EA SPORTS Trax — все 16 песен, играет наша |
 | 3D: гетры, обмотка до носка (и у клюшек на льду), край свитера NHL 10 | `rw4mesh.py`, `sticktape.py`, `jersey10.py --game legacy` (помощник models) | ✔ файлы берутся из cache: (промахов нет); вблизи не разглядывали |
-| Логотипы, лёд, шайба, баннер, прожекторы, форма SEA/VGK (арт 100/101) | `teamart.py`, `kitpaint.py`, `czkit.py --game legacy` (помощник art) | ✔ логотипы на выборе команд и заставке, форма в 3D, центр льда VGK |
+| Логотипы, лёд, шайба, баннер, прожекторы, форма SEA/VGK (арт 100/101) | `teamart.py`, `kitpaint.py`, `czkit.py --game legacy` (помощник art); превью формы в позе EA — `fepose.py` + `czkit.py fe` (legacy-fe, 09.10) | ✔ логотипы на выборе команд и заставке, форма в 3D, центр льда VGK; превью на Select Jerseys — манекен EA, все 6 форм ([uniforms.md](uniforms.md) §13) |
 | Фон меню | варианты на выбор (у Legacy своя тёмная арена) | не ставился — решает пользователь |
 | Главное меню NHL 12: фон с игроками 2026/27, плашка и кегли 34/25 | `tools/menu12_legacy.py` (помощник menu) | ✔ арена NHL 12, игроки сменяются, кольца в цвет клуба, плашка; вход/выход PLAY, Play Now, CUSTOMIZE (полный список — [fe-menu-legacy.md](fe-menu-legacy.md) §5) |
+| Главное меню: без синей подложки на входе; пункты без онлайна, EXIT, панель описаний про офлайн | `tools/menu12_legacy.py` (подложка), `tools/menuitems_legacy.py` (legacy-fe, 09.10) | ✔ синего нет ([fe-menu-legacy.md](fe-menu-legacy.md) §7); меню и EXIT проверены, EXIT — только с exe legacy-port (§8) |
 
 Набор — `game/work/legacy-data/out/` (дерево путей как в `cache:`); ставится при закрытой игре:
 
