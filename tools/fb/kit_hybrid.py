@@ -8,7 +8,7 @@
    (плоская декаль в касательной плоскости) — локальный масштаб и поворот учтены, на швах развёртки разрывов нет.
 
   python -m fb.kit_hybrid COMPOSITE.png BASE.png OUT.png [--club SEA --kit home] [--rules fb/kit_rules.toml]
-         [--report OUT.json]
+         [--profile laces] [--report OUT.json]
 """
 import argparse
 import json
@@ -27,10 +27,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 RULES = os.path.join(HERE, "kit_rules.toml")
 
 
-def load_rules(path, club=None, kit=None):
+def load_rules(path, club=None, kit=None, profiles=()):
+    """Правила нашивок: [patch.*] ← [profile.<p>.*] (например laces — комплект со шнуровкой) ← [club.<К>.<форма>.*]."""
     with open(path, "rb") as f:
         r = tomllib.load(f)
     rules = {k: dict(v) for k, v in r.get("patch", {}).items()}
+    for prof in profiles or ():
+        for k, v in r.get("profile", {}).get(prof, {}).items():
+            rules.setdefault(k, {}).update(v)
     if club and kit:
         for k, v in r.get("club", {}).get(club, {}).get(kit, {}).items():
             rules.setdefault(k, {}).update(v)
@@ -93,11 +97,32 @@ def tri_frame(mesh, tid_map, u, v):
     return t, p, J, n
 
 
-def hybrid(comp_path, base_path, out_path, club=None, kit=None, rules_path=RULES, size=1024, ss=2, report=None):
+NHL24_TIE = "content/character/skater/player/jersey/adidas/components/player_jerseytie_adidas_lod0_mesh"
+LEGACY_TIE = "rendering/jersey/jerseytie_0_1_2.rx2"
+
+
+def merge(a, b):
+    n = len(a["pos"])
+    return {"pos": np.vstack([a["pos"], b["pos"]]), "uv": np.vstack([a["uv"], b["uv"]]),
+            "nrm": np.vstack([a["nrm"], b["nrm"]]), "tri": np.vstack([a["tri"], b["tri"] + n])}
+
+
+def meshes(with_tie=True):
+    """Свитер (+ шнуровка ворота: у обеих игр её развёртка — в углу 0,8…1 той же текстуры)."""
     src, dst = load_nhl24(), load_legacy()
+    if with_tie:
+        src = merge(src, load_nhl24(NHL24_TIE))
+        dst = merge(dst, load_legacy(LEGACY_TIE))
+    return src, dst
+
+
+def hybrid(comp_path, base_path, out_path, club=None, kit=None, rules_path=RULES, size=1024, ss=2, report=None,
+           with_tie=True, profiles=()):
+    src, dst = meshes(with_tie)
+    n_jersey_tri = len(load_legacy()["tri"])  # нашивки — только на свитер, не на шнуровку
     comp = load_tex(comp_path)
     base = load_tex(base_path)
-    defaults, rules = load_rules(rules_path, club, kit)
+    defaults, rules = load_rules(rules_path, club, kit, profiles)
     lab, patches = find_patches(comp, base, defaults)
     H = comp.shape[0]
     tid24, _ = raster_uv(src, 1024)
@@ -144,13 +169,14 @@ def hybrid(comp_path, base_path, out_path, club=None, kit=None, rules_path=RULES
                        "snap_cm": round(float(ld[0]) * 100, 2), "rule": {k: v for k, v in rule.items() if k != "note"},
                        "_frame": (cL, nL, pinv, R, sc, rad, u_c, v_c), "_lid": lid})
 
-    def post(img, msk, P, N):
+    def post(img, msk, P, N, tri):
         out = img.copy()
         flat = out[msk]
+        on_jersey = tri < n_jersey_tri
         for pl in placed:
             cL, nL, pinv, R, sc, rad, u_c, v_c = pl["_frame"]
             d = P - cL
-            sel = (np.linalg.norm(d, axis=1) < rad) & ((N @ nL) > 0.25) & (np.abs(d @ nL) < 0.06)
+            sel = (on_jersey & (np.linalg.norm(d, axis=1) < rad) & ((N @ nL) > 0.25) & (np.abs(d @ nL) < 0.06))
             if not sel.any():
                 continue
             duv = (d[sel] @ pinv.T) / sc
@@ -184,8 +210,9 @@ def main():
     ap.add_argument("--kit")
     ap.add_argument("--rules", default=RULES)
     ap.add_argument("--report")
+    ap.add_argument("--profile", action="append", default=[], help="профиль правил, например laces (шнуровка ворота)")
     a = ap.parse_args()
-    rep = hybrid(a.composite, a.base, a.out, a.club, a.kit, a.rules, report=a.report)
+    rep = hybrid(a.composite, a.base, a.out, a.club, a.kit, a.rules, report=a.report, profiles=a.profile)
     for r in rep:
         print(f"{r['name']:12s} uv={r['uv']} площадь {r['area']:6d}  NHL24 {r['nhl24_3d']} -> Legacy {r['legacy_3d']} "
               f"(посадка {r['snap_cm']} см), текселей {r.get('texels', 0)}")
