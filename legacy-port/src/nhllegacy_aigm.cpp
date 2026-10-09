@@ -26,9 +26,12 @@
 // (leaguecontractoffers, составы), поле +636 = номер команды игрока, +630/+641 не обнуляются; интерес
 // агентов к SEA/VGK (82B69D78 ← 82B73068 ← 82955F68: b5…b13 записи) — ожидается как у остальных, не 95–96.
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <mutex>
+#include <unordered_map>
 
 #include <rex/cvar.h>
 #include <rex/logging.h>
@@ -257,4 +260,107 @@ bool NhlLegacyAigmLoop32(PPCRegister& r28) {
     REXLOG_INFO("[nhllegacy] AI GM 32: offseason AI loop over 32 teams (SEA/VGK)");
   }
   return r28.s32 < 32;
+}
+
+// ── Объекты команд AI-объекта на 32 (падение 18.10.2026 во франшизе за Сиэтл, слепок памяти) ─────────────────
+// В AI-объекте подряд два массива на 30 команд: +688 — объекты команд (829552E8 создаёт по требованию: 15812 байт
+// из кучи 9; проход AI 82973050 в начале обнуляет 30 ячеек, в конце 82956AF8 освобождает все i < +668), +808 —
+// «значение команды» u32 (только геттер 829400F0 и сеттер 82940120, по умолчанию 0, конструктор 8295F820 обнуляет),
+// за ним с +928 — данные загруженной команды. При +668 = 32 (nhl_teams = 32, и без nhl_aigm32) объекты команд
+// 30/31 ложатся на значения команд 0/1 (+808/+812), а значения команд 30/31 — на +928/+932. В слепке падения
+// «объект» Вегаса = 1 (значение команды 1) → 829ACB40 → список 0x275 с числом 0x2000000 → выделение 128 МБ из кучи 9
+// (829A88E8) не прошло → отчёт EA 82E56838 → обход стека за верх стека. С nhl_aigm32 SEA/VGK проходят отбор
+// прохода 82973050 — поэтому падало теперь, а не раньше. Исправление (при nhl_teams = 32, независимо от
+// nhl_aigm32): значения команд — в своей таблице на 32 для всех команд; ячейки +808/+812 остаются объектам 30/31.
+namespace {
+
+std::mutex g_team_value_mutex;
+std::unordered_map<uint32_t, std::array<uint32_t, 32>> g_team_value;  // AI-объект → значения команд 0…31
+
+bool TeamValueIndex(uint8_t* base, uint32_t ai, int32_t team) {
+  const int32_t n = static_cast<int32_t>(Load32(base, ai + 668));
+  return team >= 0 && team < n && team < 32;
+}
+
+void LogTeamValueOnce(const char* what, int32_t team, uint32_t value) {
+  static std::atomic<int> logged{0};
+  if (team >= 30 && logged.fetch_add(1) < 4) {
+    REXLOG_INFO("[nhllegacy] AI GM: team value {} of team {}: {} (own table on 32)", what, team, value);
+  }
+}
+
+}  // namespace
+
+// Значение команды (геттер): вне 0…+668−1 — 1, как у игры.
+extern "C" void __imp__sub_829400F0(PPCContext& ctx, uint8_t* base);
+extern "C" void sub_829400F0(PPCContext& ctx, uint8_t* base) {
+  if (!NhlLegacyThirtyTwo()) {
+    __imp__sub_829400F0(ctx, base);
+    return;
+  }
+  const uint32_t ai = ctx.r3.u32;
+  const int32_t team = ctx.r4.s32;
+  if (!TeamValueIndex(base, ai, team)) {
+    ctx.r3.u64 = 1;
+    return;
+  }
+  uint32_t v = 0;
+  {
+    std::lock_guard<std::mutex> lock(g_team_value_mutex);
+    auto it = g_team_value.find(ai);
+    if (it != g_team_value.end()) {
+      v = it->second[team];
+    }
+  }
+  LogTeamValueOnce("read", team, v);
+  ctx.r3.u64 = v;
+}
+
+// Значение команды (сеттер, r5 — значение).
+extern "C" void __imp__sub_82940120(PPCContext& ctx, uint8_t* base);
+extern "C" void sub_82940120(PPCContext& ctx, uint8_t* base) {
+  if (!NhlLegacyThirtyTwo()) {
+    __imp__sub_82940120(ctx, base);
+    return;
+  }
+  const uint32_t ai = ctx.r3.u32;
+  const int32_t team = ctx.r4.s32;
+  if (!TeamValueIndex(base, ai, team)) {
+    return;
+  }
+  {
+    std::lock_guard<std::mutex> lock(g_team_value_mutex);
+    auto it = g_team_value.find(ai);
+    if (it == g_team_value.end()) {
+      it = g_team_value.emplace(ai, std::array<uint32_t, 32>{}).first;
+    }
+    it->second[team] = ctx.r5.u32;
+  }
+  LogTeamValueOnce("set", team, ctx.r5.u32);
+}
+
+// Конструктор AI-объекта (обнуляет +688 и +808) — и своя таблица значений этого объекта с нуля.
+extern "C" void __imp__sub_8295F820(PPCContext& ctx, uint8_t* base);
+extern "C" void sub_8295F820(PPCContext& ctx, uint8_t* base) {
+  const uint32_t ai = ctx.r3.u32;
+  __imp__sub_8295F820(ctx, base);
+  std::lock_guard<std::mutex> lock(g_team_value_mutex);
+  g_team_value.erase(ai);
+}
+
+// Проход AI 82973050: отобранные команды он пишет в список на своём стеке (r1+144, 30 мест), сразу за ним (r1+264)
+// лежит сохранённый r14 вызывающего — при 32 командах записи 30/31 его затирают. Список дальше читается из той же
+// памяти (поведение прохода не меняется), а r14 вызывающему возвращается свой.
+extern "C" void __imp__sub_82973050(PPCContext& ctx, uint8_t* base);
+extern "C" void sub_82973050(PPCContext& ctx, uint8_t* base) {
+  const uint64_t r14 = ctx.r14.u64;
+  __imp__sub_82973050(ctx, base);
+  if (ctx.r14.u64 != r14) {
+    static std::atomic<int> logged{0};
+    if (logged.fetch_add(1) < 4) {
+      REXLOG_INFO("[nhllegacy] AI GM: pass 82973050 listed more than 30 teams - caller r14 {:X} restored (was {:X})",
+                  r14, ctx.r14.u64);
+    }
+    ctx.r14.u64 = r14;
+  }
 }
