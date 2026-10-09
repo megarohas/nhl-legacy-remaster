@@ -1,0 +1,296 @@
+{
+ "team": "TUC",
+ "title": "Tucson Roadrunners — форма по мотивам классической (2016–2025): бордовая и белая, крой Reebok Edge (NHL Legacy, арт 105); форма 2026/27 не опубликована",
+ "container": "1_131_0",
+ "name_map": "1_23_0",
+ "colors": {
+  "maroon": "#790023",
+  "sand": "#EDDFC0",
+  "copper": "#AB724B",
+  "black": "#181210",
+  "white": "#E9E9E9"
+ },
+ "svg": {
+  "crest": {
+   "file": "../../../game/work/utah/src/TUC_dusty.svg"
+  },
+  "uta": {
+   "file": "../../../game/work/utah/src/UTA_primary.svg"
+  },
+  "nhl": {
+   "file": "../../../game/work/utah/src/NHL_light.svg",
+   "strip_paths": [
+    0
+   ]
+  }
+ },
+ "font": {
+  "glyphs": {
+   "source": "css",
+   "family": "Bahnschrift",
+   "weight": 700,
+   "stretch": 75,
+   "cap": 0.7,
+   "top": 0.17
+  },
+  "texture_kit": "1_23_0",
+  "colors": {
+   "fill": "sand",
+   "outline": [
+    "black",
+    5.0
+   ],
+   "letters_outline": false
+  }
+ },
+ "kits": {
+  "home": {
+   "kit": "1_105_0",
+   "label": "Дом (тёмная, бордовая)",
+   "jersey": {
+    "body": "maroon",
+    "hem": [
+     [
+      3.0,
+      5.0,
+      "black"
+     ],
+     [
+      5.0,
+      8.4,
+      "sand"
+     ],
+     [
+      8.4,
+      10.4,
+      "black"
+     ]
+    ],
+    "sleeve": [
+     [
+      27.0,
+      29.0,
+      "black"
+     ],
+     [
+      29.0,
+      32.6,
+      "sand"
+     ],
+     [
+      32.6,
+      34.6,
+      "black"
+     ]
+    ],
+    "collar": {
+     "trim": "black"
+    },
+    "detail": 0.6,
+    "logos": [
+     {
+      "svg": "crest",
+      "at3d": [
+       0.0,
+       1.33,
+       0.19
+      ],
+      "size_cm": [
+       40,
+       29
+      ]
+     },
+     {
+      "svg": "uta",
+      "at3d": [
+       -0.23,
+       1.625,
+       0.085
+      ],
+      "size_cm": [
+       12,
+       9
+      ]
+     },
+     {
+      "svg": "uta",
+      "at3d": [
+       0.23,
+       1.625,
+       0.085
+      ],
+      "size_cm": [
+       12,
+       9
+      ]
+     }
+    ]
+   },
+   "font": {
+    "fill": "sand",
+    "outline": [
+     "black",
+     5.0
+    ],
+    "letters_outline": false
+   },
+   "pant": {
+    "design": 0,
+    "zones": [
+     "black",
+     "black",
+     "black"
+    ],
+    "detail": 0.5,
+    "logos": [
+     {
+      "svg": "crest",
+      "center": [
+       66,
+       304
+      ],
+      "size": [
+       58,
+       42
+      ],
+      "rotate": 90
+     }
+    ]
+   },
+   "sock": {
+    "base": "maroon",
+    "bands": [
+     [
+      0.555,
+      0.58,
+      "black"
+     ],
+     [
+      0.58,
+      0.64,
+      "sand"
+     ],
+     [
+      0.64,
+      0.665,
+      "black"
+     ]
+    ]
+   }
+  },
+  "away": {
+   "kit": "1_105_1",
+   "label": "Выезд (белая)",
+   "jersey": {
+    "body": "white",
+    "hem": [
+     [
+      3.0,
+      5.0,
+      "maroon"
+     ],
+     [
+      5.0,
+      8.4,
+      "black"
+     ],
+     [
+      8.4,
+      10.4,
+      "maroon"
+     ]
+    ],
+    "sleeve": [
+     [
+      27.0,
+      29.0,
+      "maroon"
+     ],
+     [
+      29.0,
+      32.6,
+      "black"
+     ],
+     [
+      32.6,
+      34.6,
+      "maroon"
+     ]
+    ],
+    "collar": {
+     "trim": "maroon"
+    },
+    "detail": 0.6,
+    "logos": [
+     {
+      "svg": "crest",
+      "at3d": [
+       0.0,
+       1.33,
+       0.19
+      ],
+      "size_cm": [
+       40,
+       29
+      ]
+     },
+     {
+      "svg": "uta",
+      "at3d": [
+       -0.23,
+       1.625,
+       0.085
+      ],
+      "size_cm": [
+       12,
+       9
+      ]
+     },
+     {
+      "svg": "uta",
+      "at3d": [
+       0.23,
+       1.625,
+       0.085
+      ],
+      "size_cm": [
+       12,
+       9
+      ]
+     }
+    ]
+   },
+   "font": {
+    "fill": "maroon",
+    "outline": [
+     "black",
+     5.0
+    ],
+    "letters_outline": false
+   },
+   "pant": {
+    "same_as": "home"
+   },
+   "sock": {
+    "base": "white",
+    "bands": [
+     [
+      0.555,
+      0.58,
+      "maroon"
+     ],
+     [
+      0.58,
+      0.64,
+      "black"
+     ],
+     [
+      0.64,
+      0.665,
+      "maroon"
+     ]
+    ]
+   }
+  }
+ }
+}

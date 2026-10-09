@@ -1,0 +1,320 @@
+{
+ "team": "UTA",
+ "title": "Utah Mammoth — форма 2026/27 на крое Reebok Edge (NHL Legacy, арт 104)",
+ "container": "1_131_0",
+ "name_map": "1_23_0",
+ "colors": {
+  "black": "#161616",
+  "blue": "#6CACE4",
+  "white": "#E9E9E9",
+  "shield_bg": "#161616"
+ },
+ "svg": {
+  "crest": {
+   "file": "../../../game/work/utah/src/UTA_primary.svg"
+  },
+  "badge": {
+   "file": "../../../game/work/utah/src/UTA_badge.svg"
+  },
+  "utah_stairs": {
+   "file": "../../../game/work/utah/src/UTA_away_stairs.svg"
+  },
+  "u_tusk": {
+   "file": "../../../game/work/utah/src/UTA_u_tusk.svg"
+  },
+  "nhl": {
+   "file": "../../../game/work/utah/src/NHL_light.svg",
+   "strip_paths": [
+    0
+   ]
+  }
+ },
+ "font": {
+  "glyphs": {
+   "source": "block",
+   "slant": 10,
+   "weight": 1.0,
+   "round": 1.0
+  },
+  "texture_kit": "1_23_0",
+  "colors": {
+   "fill": "white",
+   "outline": [
+    "blue",
+    5.0
+   ],
+   "letters_outline": false
+  }
+ },
+ "kits": {
+  "home": {
+   "kit": "1_104_0",
+   "label": "Дом (тёмная, Rock Black) — с 2025/26",
+   "jersey": {
+    "body": "black",
+    "hem": [
+     [
+      4.8,
+      7.8,
+      "blue"
+     ],
+     [
+      9.2,
+      12.6,
+      "white"
+     ]
+    ],
+    "sleeve": [
+     [
+      27.0,
+      30.2,
+      "blue"
+     ],
+     [
+      31.3,
+      35.1,
+      "white"
+     ],
+     [
+      36.2,
+      39.4,
+      "blue"
+     ]
+    ],
+    "collar": {
+     "trim": "blue"
+    },
+    "detail": 0.6,
+    "logos": [
+     {
+      "svg": "crest",
+      "at3d": [
+       0.0,
+       1.33,
+       0.19
+      ],
+      "size_cm": [
+       36,
+       26
+      ]
+     },
+     {
+      "svg": "badge",
+      "at3d": [
+       -0.23,
+       1.625,
+       0.085
+      ],
+      "size_cm": [
+       11,
+       11
+      ]
+     },
+     {
+      "svg": "badge",
+      "at3d": [
+       0.23,
+       1.625,
+       0.085
+      ],
+      "size_cm": [
+       11,
+       11
+      ]
+     },
+     {
+      "svg": "nhl",
+      "at3d": [
+       0.0,
+       1.583,
+       0.106
+      ],
+      "size_cm": [
+       3.6,
+       4.2
+      ]
+     }
+    ]
+   },
+   "font": {
+    "fill": "white",
+    "outline": [
+     "blue",
+     5.0
+    ],
+    "letters_outline": false
+   },
+   "pant": {
+    "design": 0,
+    "zones": [
+     "black",
+     "black",
+     "black"
+    ],
+    "detail": 0.5,
+    "logos": [
+     {
+      "svg": "u_tusk",
+      "center": [
+       66,
+       304
+      ],
+      "size": [
+       54,
+       48
+      ],
+      "rotate": 90
+     }
+    ]
+   },
+   "sock": {
+    "base": "black",
+    "bands": [
+     [
+      0.555,
+      0.59,
+      "blue"
+     ],
+     [
+      0.602,
+      0.648,
+      "white"
+     ],
+     [
+      0.66,
+      0.695,
+      "blue"
+     ]
+    ]
+   }
+  },
+  "away": {
+   "kit": "1_104_1",
+   "label": "Выезд (светлая, Salt White) — с 2025/26",
+   "jersey": {
+    "body": "white",
+    "hem": [
+     [
+      4.0,
+      7.4,
+      "blue"
+     ],
+     [
+      7.4,
+      13.6,
+      "black"
+     ]
+    ],
+    "sleeve": [
+     [
+      27.0,
+      30.2,
+      "blue"
+     ],
+     [
+      30.2,
+      36.2,
+      "black"
+     ],
+     [
+      36.2,
+      39.4,
+      "blue"
+     ]
+    ],
+    "collar": {
+     "trim": "blue"
+    },
+    "detail": 0.6,
+    "logos": [
+     {
+      "svg": "utah_stairs",
+      "at3d": [
+       0.0,
+       1.32,
+       0.19
+      ],
+      "size_cm": [
+       32,
+       37
+      ]
+     },
+     {
+      "svg": "crest",
+      "at3d": [
+       -0.23,
+       1.625,
+       0.085
+      ],
+      "size_cm": [
+       13,
+       10
+      ],
+      "turn": 70
+     },
+     {
+      "svg": "crest",
+      "at3d": [
+       0.23,
+       1.625,
+       0.085
+      ],
+      "size_cm": [
+       13,
+       10
+      ],
+      "turn": -35
+     },
+     {
+      "svg": "nhl",
+      "at3d": [
+       0.0,
+       1.583,
+       0.106
+      ],
+      "size_cm": [
+       3.6,
+       4.2
+      ]
+     }
+    ]
+   },
+   "font": {
+    "fill": "black",
+    "outline": [
+     "blue",
+     5.0
+    ],
+    "letters_outline": false
+   },
+   "pant": {
+    "same_as": "home"
+   },
+   "sock": {
+    "base": "white",
+    "bands": [
+     [
+      0.555,
+      0.59,
+      "blue"
+     ],
+     [
+      0.59,
+      0.66,
+      "black"
+     ],
+     [
+      0.66,
+      0.695,
+      "blue"
+     ]
+    ]
+   }
+  }
+ },
+ "sample": {
+  "number": "9",
+  "name": "KELLER",
+  "captain": "C"
+ }
+}

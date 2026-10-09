@@ -1,0 +1,199 @@
+{
+ "team": "UTA",
+ "title": "Utah Mammoth — третья форма (КОНЦЕПТ по утечке Hometown Remix 2026/27: Mountain Blue, «U с бивнем»; официально не показана)",
+ "container": "1_131_0",
+ "name_map": "1_23_0",
+ "colors": {
+  "black": "#161616",
+  "blue": "#6CACE4",
+  "white": "#E9E9E9",
+  "shield_bg": "#161616"
+ },
+ "svg": {
+  "crest": {
+   "file": "../../../game/work/utah/src/UTA_primary.svg"
+  },
+  "badge": {
+   "file": "../../../game/work/utah/src/UTA_badge.svg"
+  },
+  "utah_stairs": {
+   "file": "../../../game/work/utah/src/UTA_away_stairs.svg"
+  },
+  "u_tusk": {
+   "file": "../../../game/work/utah/src/UTA_u_tusk.svg"
+  },
+  "nhl": {
+   "file": "../../../game/work/utah/src/NHL_light.svg",
+   "strip_paths": [
+    0
+   ]
+  }
+ },
+ "font": {
+  "glyphs": {
+   "source": "block",
+   "slant": 10,
+   "weight": 1.0,
+   "round": 1.0
+  },
+  "texture_kit": "1_23_0",
+  "colors": {
+   "fill": "white",
+   "outline": [
+    "blue",
+    5.0
+   ],
+   "letters_outline": false
+  }
+ },
+ "kits": {
+  "third": {
+   "kit": "1_104_2",
+   "label": "Третья (концепт, Mountain Blue) — НЕ официальная",
+   "jersey": {
+    "body": "blue",
+    "hem": [
+     [
+      4.8,
+      7.8,
+      "black"
+     ],
+     [
+      9.2,
+      12.6,
+      "white"
+     ]
+    ],
+    "sleeve": [
+     [
+      27.0,
+      30.2,
+      "black"
+     ],
+     [
+      31.3,
+      35.1,
+      "white"
+     ],
+     [
+      36.2,
+      39.4,
+      "black"
+     ]
+    ],
+    "collar": {
+     "trim": "black"
+    },
+    "detail": 0.6,
+    "logos": [
+     {
+      "svg": "u_tusk",
+      "at3d": [
+       0.0,
+       1.33,
+       0.19
+      ],
+      "size_cm": [
+       30,
+       27
+      ]
+     },
+     {
+      "svg": "crest",
+      "at3d": [
+       -0.23,
+       1.625,
+       0.085
+      ],
+      "size_cm": [
+       13,
+       10
+      ],
+      "turn": 70
+     },
+     {
+      "svg": "crest",
+      "at3d": [
+       0.23,
+       1.625,
+       0.085
+      ],
+      "size_cm": [
+       13,
+       10
+      ],
+      "turn": -35
+     },
+     {
+      "svg": "nhl",
+      "at3d": [
+       0.0,
+       1.583,
+       0.106
+      ],
+      "size_cm": [
+       3.6,
+       4.2
+      ]
+     }
+    ]
+   },
+   "font": {
+    "fill": "white",
+    "outline": [
+     "black",
+     5.0
+    ],
+    "letters_outline": false
+   },
+   "pant": {
+    "design": 0,
+    "zones": [
+     "black",
+     "black",
+     "black"
+    ],
+    "detail": 0.5,
+    "logos": [
+     {
+      "svg": "u_tusk",
+      "center": [
+       66,
+       304
+      ],
+      "size": [
+       54,
+       48
+      ],
+      "rotate": 90
+     }
+    ]
+   },
+   "sock": {
+    "base": "blue",
+    "bands": [
+     [
+      0.555,
+      0.59,
+      "black"
+     ],
+     [
+      0.602,
+      0.648,
+      "white"
+     ],
+     [
+      0.66,
+      0.695,
+      "black"
+     ]
+    ]
+   }
+  }
+ },
+ "sample": {
+  "number": "9",
+  "name": "KELLER",
+  "captain": "C"
+ }
+}
