@@ -4,6 +4,7 @@
   python -m fb.pilot pack  [--club CHI]     # pack/cache: формы (kitpaint pack), центр льда, наклейки на шлем
   python -m fb.pilot common                 # общие: реклама и логотипы на льду (каталог ice_hotspot), шайба, клюшки
   python -m fb.pilot manifest [--club CHI]  # pack/manifest.json в формате legacy-data (docs/legacy-data.md)
+  python -m fb.pilot sticks                 # клюшки из stick_map.toml [replace] (через 3D)
   python -m fb.pilot sheets [--club CHI]    # листы проверки в compare/
 
 Формы клуба: строки Legacy (дом/выезд/третья, если есть) + новые по реестру legacy-data
@@ -383,14 +384,14 @@ def cmd_common(a):
 
 def cmd_manifest(a):
     files, kits, clubs = [], [], []
-    for name in a.club.split(",") + ["common"]:
+    for name in a.club.split(",") + ["common", "sticks"]:
         if not os.path.exists(part_path(name)):
             continue
         with open(part_path(name), encoding="utf-8") as f:
             part = json.load(f)
         files += part["files"]
         kits += part.get("kits", [])
-        if name != "common":
+        if name not in ("common", "sticks"):
             clubs.append(name)
     for e in files:  # сверка: файл в пакете тот же, что записан
         p = os.path.join(CACHE, *e["file"].split("/"))
@@ -407,6 +408,35 @@ def cmd_manifest(a):
     for e in files:
         by[e["type"]] = by.get(e["type"], 0) + 1
     print("manifest.json:", len(files), "файлов", by, "новых форм", len(kits))
+
+
+STICKS = os.path.join(NHL24, "extract", "sticks24", "character", "skater", "player", "stick")
+STICK_MAP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "stick_map.toml")
+
+
+def cmd_sticks(a):
+    """Клюшки из stick_map.toml [replace] (номер Legacy → текстура NHL 24) — через 3D; [same] не кладутся."""
+    import tomllib
+    from .pack import legacy_has, write_rx2_rgba
+    with open(STICK_MAP, "rb") as f:
+        mp = tomllib.load(f)
+    rep = {int(k): v for k, v in mp.get("replace", {}).items()}
+    entries = []
+    if rep:
+        c = "content/character/skater/player/stick/common/components/"
+        src = kit_hybrid.merge(kit3d.load_nhl24(c + "player_stick_left_shaft_mesh"),
+                               kit3d.load_nhl24(c + "player_stick_left_blade_mesh"))
+        dst = kit3d.load_legacy("rendering/playerstick/playerstick_0_2.rx2")
+        for n, name in sorted(rep.items()):
+            rel = f"rendering/playerstick/texlib_{n}.rx2"
+            img, _m, _d, _i = kit3d.transfer(kit3d.load_tex(os.path.join(STICKS, *name.split("/")) + "_color.png"),
+                                             src, dst, (1024, 128), 2)
+            rgba = np.dstack([np.clip(img[..., :3], 0, 255).astype(np.uint8), np.full(img.shape[:2], 255, np.uint8)])
+            write_rx2_rgba(legacy_has(rel), Image.fromarray(rgba, "RGBA"), os.path.join(CACHE, *rel.split("/")))
+            entries.append(entry(rel, "stick", action="replace", note=f"клюшка NHL 24 {name.split('/')[-1]} (3D)"))
+    save_part("sticks", {"files": entries})
+    print(f"клюшки: в пакет {len(entries)} (замены из [replace]); та же модель в обеих играх — {len(mp.get('same', {}))}, "
+          f"не кладутся")
 
 
 # ---------------------------------------------------------------- листы проверки
@@ -530,9 +560,10 @@ def main():
     s = sub.add_parser("common")
     s.add_argument("--pucks", default="CHI", help="шайбы каких клубов (коды через запятую)")
     s.add_argument("--no-unfade", dest="unfade", action="store_false", help="рекламу на льду — как в NHL 24 (бледную)")
+    sub.add_parser("sticks")
     a = ap.parse_args()
     return {"build": cmd_build, "pack": cmd_pack, "common": cmd_common, "manifest": cmd_manifest,
-            "sheets": cmd_sheets}[a.cmd](a)
+            "sheets": cmd_sheets, "sticks": cmd_sticks}[a.cmd](a)
 
 
 if __name__ == "__main__":

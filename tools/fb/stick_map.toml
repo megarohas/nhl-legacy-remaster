@@ -1,0 +1,53 @@
+# Клюшки NHL Legacy (cacherender/rendering/playerstick/texlib_<N>.rx2, растр playerstick_<N>_cm 1024×128 DXT1)
+# ↔ клюшки NHL 24 (content/character/skater/player/stick/<марка>/<линейка>/textures/player_stick_*_color, 2048×512).
+# Перенос — через 3D: сетки player_stick_left_shaft + left_blade (NHL 24) → playerstick_0_2 (Legacy, та же система
+# координат; у Legacy рукоять под отдельной сеткой ленты). Правая клюшка Legacy (playerstick_1_*) берёт ту же текстуру.
+#
+# [same] — у 34 клюшек Legacy та же модель и тот же рисунок, что в NHL 24 (EA перенесла их сама в Legacy Edition):
+# сверено листом compare/_stick_pairs.png. Перенос даёт ту же картинку чуть мягче (резкость −10…25 %), поэтому в пакет
+# они не идут — таблица для справки.
+# [replace] — замена старой модели Legacy новой из NHL 24 (смена каталога: у игроков в базе — номер клюшки). Пусто, пока
+# пользователь не решит, какую на какую: python -m fb.pilot sticks — кладёт в пакет только [replace].
+
+[same]
+35 = "titan/original/textures/player_stick_titan_original_original"
+36 = "sherwood/wooden/textures/player_stick_sherwood_wooden_original"
+63 = "covert/original/textures/player_stick_covert_original_original"
+64 = "ccm/ribcor/textures/player_stick_ccm_ribcor_40k"
+68 = "reebok/ribcor/textures/player_stick_reebok_ribcor_original"
+77 = "rsstealth/original/textures/player_stick_rsstealth_original_original"
+78 = "bauer/vapor/textures/player_stick_bauer_vapor_apx2"
+79 = "t100/original/textures/player_stick_t100_original_original"
+81 = "hs9/original/textures/player_stick_hs9_original_original"
+82 = "v9e/original/textures/player_stick_v9e_original_original"
+83 = "warrior/dynasty/textures/player_stick_warrior_dynasty_ax1lt"
+84 = "warrior/covert/textures/player_stick_warrior_covert_qr1"
+85 = "easton/synergy/textures/player_stick_easton_synergy_htx"
+87 = "ccm/tacks/textures/player_stick_ccm_tacks_original"
+88 = "reebok/ribcor/textures/player_stick_reebok_ribcor_shadow"
+89 = "bauer/nexus/textures/player_stick_bauer_nexus_8000"
+90 = "bauer/supreme/textures/player_stick_bauer_supreme_totalonemx3"
+91 = "sherwood/ek15/textures/player_stick_sherwood_ek15_original"
+94 = "busch/hpc2/textures/player_stick_busch_hpc2_original"
+95 = "sherwood/t120/textures/player_stick_sherwood_t120_original"
+96 = "stx/stallion/textures/player_stick_stx_stallion_original"
+97 = "stx/surgeon/textures/player_stick_stx_surgeon_original"
+98 = "warrior/dynasty/textures/player_stick_warrior_dynasty_hd1"
+99 = "ccm/ultratacks/textures/player_stick_ccm_ultratacks_original"
+102 = "ccm/rbzspeedburner/textures/player_stick_ccm_rbzspeedburner_original"
+103 = "ccm/one/textures/player_stick_ccm_one_ribcorreckr"
+104 = "easton/stealth/textures/player_stick_easton_stealth_cx"
+105 = "bauer/vapor/textures/player_stick_bauer_vapor_1x"
+106 = "graf/g95revolt/textures/player_stick_graf_g95revolt_original"
+107 = "stx/surgeon/textures/player_stick_stx_surgeon_rx"
+108 = "bauer/nexus/textures/player_stick_bauer_nexus_1n"
+109 = "sherwood/rekkerek60/textures/player_stick_sherwood_rekkerek60_original"
+111 = "bauer/supreme/textures/player_stick_bauer_supreme_1s"
+112 = "ccm/ribcor/textures/player_stick_ccm_ribcor_40k"
+
+# Старые модели без пары в NHL 24 (кандидаты на [replace]): 18 Easton S17, 24/30 TPS Response, 25/26/50 Reebok
+# (O-Stick, 11K Sickick), 31/40 Sher-Wood (T90 и др.), 32 Bauer Vapor X:60, 33/34/48/49 Warrior Dolomite, 37 Bauer,
+# 39/53 Rebellion, 41 Easton S19, 45/47/51 CCM U+, 46 Bauer TotalOne, 52 Easton EQ50, 54 Warrior Dynasty AX1 (золото),
+# 55 Warrior, 56/70/71 Bauer Vapor APX, 60 Easton, 65/67/72–75/86 CCM RBZ, 92/93 Winnwell AMP, 100/101 Warrior Covert
+# DT1 LT (синяя), 110 STX Stallion 500.
+[replace]
