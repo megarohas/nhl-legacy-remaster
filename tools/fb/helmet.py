@@ -27,8 +27,16 @@ SRC = os.path.join(NHL24, "extract", "helmet24")
 FRAME = (176, 88)   # по замерам 152 наклеек EA в Legacy: квадратные ~89×86, широкие ~159×44, максимум 192×109
 CENTER = (127.5, 58.0)
 EXCLUDE = {"ARI": "ARI → Utah, не ставить"}
-TEMPLATES = {1: "rendering/logo/texlib_0_1_0.rx2", 2: "rendering/logo/texlib_10_1_0.rx2",
-             3: "rendering/logo/texlib_127_1_0.rx2"}
+# шаблон файла под новый номер — по длине «A_1_V» (имена растров logo_A_1_V_k переписываются на месте, длина та же):
+# 6_1_0 → texlib_0_1_0, 6_1_10 и 10_1_0 → texlib_10_1_0, 127_1_0 → texlib_127_1_0
+TEMPLATES = {5: "rendering/logo/texlib_0_1_0.rx2", 6: "rendering/logo/texlib_10_1_0.rx2",
+             7: "rendering/logo/texlib_127_1_0.rx2"}
+
+
+def template_for(art, variant):
+    """-> (свой файл Legacy или None, файл-шаблон)."""
+    have = legacy_has(f"rendering/logo/texlib_{art}_1_{variant}.rx2")
+    return have, have or legacy_has(TEMPLATES[len(f"{art}_1_{variant}")])
 
 
 def decal(club, kit):
@@ -60,18 +68,13 @@ def write_logo(tpl_path, art, variant, logo, out_path):
     import teamart as ta
     rw = ta.Rw4.load(tpl_path)
     import re
-    m = re.search(r"logo_(\d+)_1_(\d+)_0", rw.textures[0].name)
-    if m and m.group(1) != str(art):
-        rw.rename(m.group(1), art)
-    m = re.search(r"logo_(\d+)_1_(\d+)_0", rw.textures[0].name)
-    if m and m.group(2) != str(variant):
-        # вариант — второе «самостоятельное» число после номера стиля: logo_A_1_V_k
-        for i, (sp, ln) in enumerate(rw.name_slots):
-            s = rw.raw[sp:sp + ln].decode("latin1")
-            t = re.sub(r"^(logo_\d+_1_)(\d+)(_)", lambda mm: mm.group(1) + str(variant) + mm.group(3), s)
-            if len(t) != len(s):
-                raise ValueError(f"вариант {variant}: длина имени растра меняется ({s})")
-            rw.raw[sp:sp + ln] = t.encode("latin1")
+    for i, (sp, ln) in enumerate(rw.name_slots):  # logo_<A>_1_<V>_k целиком: арт и вариант могут поменять длину
+        s = rw.raw[sp:sp + ln].decode("latin1")     # по отдельности (10_1_0 → 6_1_10), общая длина — та же
+        t = re.sub(r"^logo_\d+_1_\d+_", f"logo_{art}_1_{variant}_", s)
+        if len(t) != len(s):
+            raise ValueError(f"{art}_1_{variant}: длина имени растра меняется ({s}) — нужен шаблон той же длины")
+        rw.raw[sp:sp + ln] = t.encode("latin1")
+        if i < len(rw.textures):
             rw.textures[i].name = t
     for i, t in enumerate(rw.textures):
         lv = t.layout.levels
@@ -117,8 +120,7 @@ def cmd_build(a):
                 continue
             v = tgt["variant"]
             rel = f"rendering/logo/texlib_{art}_1_{v}.rx2"
-            have = legacy_has(rel)
-            tpl = have or legacy_has(TEMPLATES[len(str(art))])
+            have, tpl = template_for(art, v)
             names = write_logo(tpl, art, v, logo, os.path.join(CACHE, rel))
             entries.append({"type": "наклейка на шлем", "club": code, "kit": label, "file": rel,
                             "action": "replace" if have else "add",
