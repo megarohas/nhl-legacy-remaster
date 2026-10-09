@@ -7,6 +7,56 @@
 запускалась: сборка проверена по логам, экспортам, флагам компиляции и строкам DLL;
 поведение в игре — на проверку.
 
+## Восстановление с нуля (09.10.2026) — ~6 минут
+
+После инцидента 09.10 ([incident-2026-10-09.md](incident-2026-10-09.md)) `ref/rexglue-sdk-custom`
+поднялся неполным: в `install` 146 файлов из 1243 (только `include`, `licenses`, `lib/pkgconfig`; нет
+`bin/rexglue.exe`, DLL, `*.lib`, `lib/cmake/rexglue`), в `src` 269 МБ из 720 (из `src/src` — 18 файлов).
+`build.cmd` порта падал на «SDK not found», собрать SDK из этих остатков нельзя. Папка оставлена как
+`ref/rexglue-sdk-custom-damaged` (не удалять без нужды: из неё сверялись уцелевшие файлы).
+
+Восстановление — тем же `sdk_build.cmd` в новую пустую `ref/rexglue-sdk-custom` (свой клон с GitHub +
+наши патчи из `port-ffx/scripts/sdk-patches/`), полный приоритет, 12 потоков:
+
+```sh
+# Git Bash; старую папку — переименовать, не удалять
+cd /s/Claude/megarohas_nhl13
+mv ref/rexglue-sdk-custom ref/rexglue-sdk-custom-damaged     # если она есть
+NHLFFX_NORMALPRIO=1 JOBS=12 cmd //c 'S:\Claude\megarohas_nhl13\port-ffx\scripts\sdk_build.cmd all' > sdk_rebuild.log 2>&1
+```
+
+| Шаг (14:12:45 →) | Время | Что в логе |
+|---|---|---|
+| клон `development` (голова ветки всё ещё `bd833a2`, checkout не понадобился) + 20 сабмодулей `--depth 1` + 16 «материализованных» симлинков | 2 мин 10 с | `[sdk] sources ready: … (v0.10.0-24-gbd833a2)` |
+| патчи 0001–0004 | 1 с | `[sdk] applied 000N-….patch` ×4 |
+| configure (Ninja Multi-Config) | 1 мин 45 с | |
+| сборка Release, 839 шагов, 0 ошибок, 859 предупреждений | 2 мин | `[838/839] Linking … rexglue.exe` |
+| установка | 7 с | `EXIT 0` (14:18:45) |
+
+Проверка, что SDK тот же, что был:
+
+- `git -C ref/rexglue-sdk-custom/src status --short` — ровно 8 файлов `M` из патчей (`CMakeLists.txt`,
+  `cmake/rexglue_fidelityfx.cmake`, `cmake/rexglue_install.cmake`, `src/system/CMakeLists.txt`,
+  `src/ui/CMakeLists.txt`, `src/ui/rex_app.cpp`, `src/graphics/pipeline/shader/spirv_translator_fetch.cpp`,
+  `include/rex/graphics/pipeline/shader/spirv_translator.h`) и `m` у `libmspack`/`o1heap` (симлинки).
+- Уцелевшие в `-damaged` файлы, которые правят патчи (`CMakeLists.txt`, `src/system/CMakeLists.txt`,
+  `src/ui/CMakeLists.txt`), побайтно совпали с новыми.
+- Объёмы как 07.10: `src` 720 МБ, `build` 433 МБ, `install` 108 МБ (1243 файла).
+- DLL против тех, что стояли в папке игры Legacy (собраны 08.10 прежним SDK): размеры те же;
+  `rexgpu-xenos.dll` — секции `.text/.rdata/.data/.pdata` побайтно равны; `rexruntime.dll` —
+  `.data/.pdata` равны, разница только в строке сборки `…-Release@20261009_1415` против `@20261007_2039`
+  (457 байт `.rdata` — сдвиг строк, 11 байт `.text` — ссылки на них). Сверка:
+  `llvm-objcopy --dump-section .text=a.bin X.dll NUL` для обеих и `cmp`.
+
+Чтобы в следующий раз было ещё быстрее: `tools\backup_data.ps1` копирует `ref\rexglue-sdk-custom\install`
+на `D:\backup\megarohas_nhl13-data\` — после него восстановление = копия обратно (минута). На 09.10
+(14:20) копии SDK на D: ещё не было. Если пропадёт и `port-ffx/`, патчи целиком есть в приложении
+ниже — каждый блок `diff` сохранить как `.patch` и положить в `sdk-patches/`.
+
+Ночная `ref/rexglue-sdk-0.10.0.24` (её берёт `port/` NHL 13 и пресет `win-amd64-relwithdebinfo`) после
+инцидента тоже неполная (129 файлов, нет `bin`/`lib`); цел её zip
+`ref/rexglue-sdk-0.10.0.24-dev.gbd833a2-win-amd64.zip` (`unzip -t` без ошибок) — распаковать его заново.
+
 ## Главное
 
 1. **Готовый exe:** `port-ffx/out/build/win-amd64-release/nhl13.exe` (Release, `-O3`), рядом

@@ -67,13 +67,33 @@ S:\Claude\megarohas_nhl13\legacy-port\build.cmd win-amd64-relwithdebinfo
 компиляция 368 файлов ~5 мин. Вручную кодоген не запускать: сборка всё равно прогонит его заново
 (отпечаток входов в `codegen.stamp` у ручного и встроенного запуска не сходится).
 
+**Новое дерево с нуля** (без `generated/default`, например `git archive HEAD legacy-port`): `generated/rexglue.cmake`
+подключает `generated/default/sources.cmake`, только если он уже есть при configure — иначе цели
+`nhllegacy_recomp` нет и код игры в первую сборку не попадает. Порядок: configure →
+`cmake --build out/build/win-amd64-release --target nhllegacy_codegen` → `build.cmd` (он сам делает configure
+заново и собирает всё). Так собрана сборка №5 (09.10, `legacy-port/out/agent/clean_build.cmd`, дерево
+`legacy-port-clean` = `main` 464c4ef, 12 потоков, обычный приоритет): кодоген 725 файлов за 12 мин 45 с, затем
+385 шагов за 3 мин 15 с, 0 ошибок. Раскладка функций по файлам у нового дерева своя (см. sdk-build.md, «Грабли»,
+п. 5), код тот же: размер exe совпал с прежним до байта.
+
 ## Запуск
 
 - **У себя:** ярлык «NHL Legacy» на рабочем столе → `legacy-port/out/build/win-amd64-release/nhllegacy.exe`
   (Release, свой SDK). Настройки — `nhllegacy.toml` рядом с exe (шаблон `nhllegacy.example.toml`;
   `build.cmd` кладёт его, если своего нет): игра — `game/other/legacy/disc`, сейвы и `cache:` —
   `legacy-port/userdata` (своя папка, не `game/userdata` NHL 13), лог — `legacy-port/out/game.log`.
-  С 09.10 (07:11) под ярлыком — сборка №3: exe c4d63a79 (код = 874359b), в `nhllegacy.toml` включены
+  **С 09.10 (14:36) под ярлыком — сборка №5:** чистая сборка с нуля `main` 464c4ef (код порта = d69ed8c, как у
+  №4) против восстановленного своего SDK ([sdk-build.md](sdk-build.md), «Восстановление с нуля»). Файлы (md5):
+  `nhllegacy.exe` e2c341b2, `nhllegacy.pdb` 922168e6, `rexruntime.dll` bc66c205, `rexgpu-xenos.dll` 8ec35aa1,
+  `nhllegacy_snap.exe` f5d86652. `nhllegacy.toml` (93020cf4) не менялся: `nhl_teams = 32`, `nhl_ahl_teams = 32`,
+  `nhl_fa32`, `nhl_aigm32`, `nhl_menu_exit`, `nhl_draftclass_age`, `nhl_menu32`, потолок 104 / 76,9 млн,
+  `resolution_scale = 1`, D3D12 ROV.
+  **Откат** (игра закрыта): из `out/build/win-amd64-release/backup-20261009-a101877f/` скопировать обратно
+  `nhllegacy.exe`, `nhllegacy.pdb`, `rexruntime.dll`, `rexgpu-xenos.dll`, `nhllegacy_snap.exe` — это сборка №4
+  (exe a101877f, 09.10 10:26, DLL 6d1d0972 / cc1ae1d0), toml тот же (копия там же). Ещё раньше:
+  `backup-20261009-c4d63a79/` — сборка №3 (exe c4d63a79, до `nhl_draftclass_age` и `nhl_menu32`: с ней эти две
+  строки в конце toml поставить `false` или вернуть toml оттуда же), `backup-20261009-120d4086/` — сборка №2.
+  Сборка №3 (09.10, 07:11): exe c4d63a79 (код = 874359b), в `nhllegacy.toml` включены
   `nhl_menu_exit`, `nhl_aigm32`, `nhl_ahl_teams = 32`, `resolution_scale = 2` (ROV); в `cache:` — база
   legacy-data `--ahl32` 34dfe267 и меню legacy-fe. Прежнее (exe 120d4086, toml, DLL, db/loc) — в
   `out/build/win-amd64-release/backup-20261009-120d4086/`. Проверено на свежей копии итогового `cache:`
@@ -84,7 +104,7 @@ S:\Claude\megarohas_nhl13\legacy-port\build.cmd win-amd64-relwithdebinfo
 - **Vulkan:** `gpu_backend = "vulkan"` + `render_target_path_vulkan = "fsi"` (проверено: меню и матч,
   имена и номера на свитерах на месте).
 - **Быстрее на D3D12:** `render_target_path_d3d12 = "rtv"` + `execute_unclipped_draw_vs_on_cpu = true`.
-- **1440p** (`resolution_scale = 2`, у пользователя с 09.10): ROV и RTV в 2x одинаково плавны (Play Now, 53–59
+- **1440p** (`resolution_scale = 2`; у пользователя стояло 09.10 утром, потом он сам вернул 1): ROV и RTV в 2x одинаково плавны (Play Now, 53–59
   кадров/с по логу fence wait у обоих), оставлен точный ROV. «Быстрые правки» NHL 13 (readback_resolve none,
   occlusion off, readback_memexport false) в Legacy не проверялись — не включены.
 - Проверка без геймпада — `tools/gameshot.ps1 -Game legacy` (`--mnk_mode=true`; `-Do seq` — шаги
