@@ -1,0 +1,211 @@
+{
+ "date": "2026-10-09",
+ "db_note": "копия CACHE пользователя (вариант --ahl32, база 34dfe267): строка 22 — Arizona Coyotes (ARZ/PHX), art 22, арена 22 «Arizona Arena», фарм-клуб — строка 55 Springfield Falcons; в out/ legacy-data (без --ahl32, 958f4b6d) строки 22 и 55 те же",
+ "team": {
+  "fullname": "Utah Mammoth",
+  "shortname": "Utah",
+  "abbr": "UTA",
+  "nickname": "Mammoth",
+  "artid": 104,
+  "spotlight": 48,
+  "tunnel": 38,
+  "audioid": 32,
+  "colors": {
+   "primary": "#6CACE4",
+   "secondary": "#010101",
+   "third": "#FFFFFF"
+  },
+  "rival": 7,
+  "rival_name": "Colorado Avalanche (строка 7): соперник по Центральному дивизиону, соперник Юты в Зимней классике 31.12.2026",
+  "arena": {
+   "name": "Delta Center",
+   "city": "Salt Lake City, UT",
+   "capacity": 14111,
+   "avg": 99,
+   "template": 181
+  },
+  "kits": [
+   {
+    "variant": 0,
+    "locstring": 0,
+    "isdefault": 1,
+    "light": 0,
+    "label": "дом, Rock Black (1_104_0)"
+   },
+   {
+    "variant": 1,
+    "locstring": 1,
+    "isdefault": 1,
+    "light": 1,
+    "label": "выезд, Salt White (1_104_1)"
+   }
+  ],
+  "kit_third_optional": {
+   "variant": 2,
+   "locstring": 2,
+   "isdefault": 0,
+   "light": 0,
+   "label": "третья — КОНЦЕПТ (Mountain Blue, по утечке Hometown Remix; официально не показана), файлы — out-third/"
+  },
+  "equip_recolor": {
+   "6B141A": "161616",
+   "821113": "0F0F0F",
+   "732227": "0F0F0F",
+   "6B1B20": "6CACE4",
+   "90181C": "6CACE4",
+   "253B73": "6CACE4",
+   "122063": "161616"
+  }
+ },
+ "facts": [
+  {
+   "what": "название и история",
+   "value": "Utah Hockey Club (2024/25, временное) → Utah Mammoth с 07.05.2025; новый клуб (франшиза 40), хоккейные активы Arizona Coyotes (франшиза 28) переданы 18.04.2024",
+   "sources": [
+    "https://www.nhl.com/news/mammoth-unveiled-as-utah-nickname",
+    "https://www.nhl.com/utah/news/utah-s-nhl-franchise-officially-named-the-utah-mammoth-release-5-7-25",
+    "https://en.wikipedia.org/wiki/Utah_Mammoth",
+    "https://api.nhle.com/stats/rest/en/franchise"
+   ]
+  },
+  {
+   "what": "город, сокращение, прозвище",
+   "value": "Salt Lake City, Utah; UTA; teamName «Utah Mammoth», placeName «Utah», teamCommonName «Mammoth» (сезон 20262027)",
+   "sources": [
+    "https://api-web.nhle.com/v1/standings/now",
+    "https://api-web.nhle.com/v1/roster/UTA/20262027"
+   ]
+  },
+  {
+   "what": "арена 2026/27",
+   "value": "Delta Center (переименований нет; реконструкция до 2027). Официальной вместимости на хоккее после перестройки нет; на домашних матчах 2026/27 — 14 111 (протоколы матчей НХЛ: 26.09 и 01.10.2026), в Википедии устаревшие 16 020. 31.12.2026 Юта — хозяин Зимней классики против «Колорадо» на Rice-Eccles Stadium",
+   "sources": [
+    "https://www.nhl.com/scores/htmlreports/20262027/GS020013.HTM",
+    "https://en.wikipedia.org/wiki/Delta_Center",
+    "https://api-web.nhle.com/v1/club-schedule-season/UTA/20262027",
+    "https://www.nhl.com/news/utah-mammoth-colorado-avalanche-2027-winter-classic-set-for-new-years-eve"
+   ]
+  },
+  {
+   "what": "конференция и дивизион 2026/27",
+   "value": "Западная, Центральный: CHI, COL, DAL, MIN, NSH, STL, UTA, WPG (в нашей базе строка 22 уже в Central — nhl32 --game legacy)",
+   "sources": [
+    "https://api-web.nhle.com/v1/standings/now"
+   ]
+  },
+  {
+   "what": "цвета",
+   "value": "Rock Black #010101, Mountain Blue #6CACE4, Salt White #FFFFFF (векторный логотип НХЛ); сайт клуба и Википедия дают голубой #7AB2E0, Mountain Blue = Pantone 292 (≈ #69B3E7) — взят #6CACE4, как в логотипе",
+   "sources": [
+    "https://assets.nhle.com/logos/nhl/svg/UTA_light.svg",
+    "https://www.nhl.com/news/utah-hockey-club-proud-of-inaugural-jersey-design",
+    "https://en.wikipedia.org/wiki/Utah_Mammoth"
+   ]
+  },
+  {
+   "what": "логотипы",
+   "value": "основной — Mountain Mammoth (векторный файл НХЛ); второстепенные — «UTAH» с бивнем, «U» с бивнем (шорты), «Utah Badge» (плечи домашней), надписи UTAH MAMMOTH; вектора второстепенных в открытом доступе нет — взяты растры с NHL.com и фр. Википедии",
+   "sources": [
+    "https://assets.nhle.com/logos/nhl/svg/UTA_light.svg",
+    "https://media.d3.nhle.com/image/private/t_q-best/prd/lvoknrhnxhtpwzes7wlb",
+    "https://fr.wikipedia.org/wiki/Fichier:Logo_secondaire_du_Mammoth_de_l%27Utah.png"
+   ]
+  },
+  {
+   "what": "форма 2026/27",
+   "value": "дом — Rock Black: на груди Mountain Mammoth, на плечах Utah Badge, рукава голубой/белый/голубой с чёрными просветами, низ белый/голубой; выезд — Salt White: «UTAH» лесенкой, на плечах Mountain Mammoth, рукава голубой/чёрный/голубой, низ чёрный/голубой; ворот — голубая кайма, щит НХЛ в мыске; номера Mammoth Sans (наклон 10°, косые перекладины A и H): дома белые с голубой обводкой, в гостях чёрные с голубой; фамилия — без обводки; шорты чёрные с «U» на бедре; шлемы чёрные/белые. Третьей формы нет: Hometown Remix (Fanatics) покажут в ноябре 2026, у Юты — по утечке голубой с «U»/бивнем",
+   "sources": [
+    "https://media.d3.nhle.com/image/private/t_q-best/prd/qgijqeqcmd2ouolnrxf2",
+    "https://media.d3.nhle.com/image/private/t_q-best/prd/q0finniuzi9ttqrk0cjs",
+    "https://www.nhl.com/utah/news/utah-opens-season-with-6-0-win-over-chicago-game-story-10-1-26",
+    "https://www.nhl.com/news/hometown-remix-uniforms-coming-to-nhl-2026-27-season",
+    "https://www.deseret.com/sports/2026/08/19/nhl-hometown-remix-jerseys/",
+    "https://en.wikipedia.org/wiki/File:WCC-Uniform-UTA.png"
+   ]
+  },
+  {
+   "what": "реклама",
+   "value": "шлем — Filevine (с 2025/26, на чёрном и белом); нашивки — SME Steel (дом), 1Password (выезд); в игру не ставились (у EA рекламы на форме нет)",
+   "sources": [
+    "https://www.nhl.com/utah/news/utah-mammoth-announce-filevine-as-official-helmet-partner-release-9-9-25",
+    "https://www.nhl.com/utah/news/utah-announces-sme-industries-inc-as-home-jersey-patch-partner-release-10-14-25",
+    "https://www.nhl.com/utah/news/utah-mammoth-unveil-1password-as-first-ever-away-jersey-patch-partner-release-10-9-25"
+   ]
+  },
+  {
+   "what": "фарм-клуб АХЛ 2026/27",
+   "value": "Tucson Roadrunners (TUC), Тусон, Аризона, Tucson Arena (Tucson Convention Center, 6 521 на хоккее), Тихоокеанский дивизион (Запад); аренда продлена до 2027/28, переезда и переименования нет; логотип 2026/27 у АХЛ — «Dusty» (мультяшный бегунок), «Качина» — основной 2025/26 (10-летие)",
+   "sources": [
+    "https://www.nhl.com/utah/news/utah-holds-practice-at-delta-center-on-friday-notebook-9-25-26",
+    "https://en.wikipedia.org/wiki/Tucson_Roadrunners",
+    "https://theahl.com/news/roadrunners-extend-lease-at-tucson-arena",
+    "https://en.wikipedia.org/wiki/Tucson_Convention_Center",
+    "https://assets.leaguestat.com/ahl/logos/412_94.png"
+   ]
+  }
+ ],
+ "decisions": [
+  "Новый номер арта 104 (как SEA 100, VGK 101, CV 102, HSK 103), а не перерисовка арта 22: файлы EA Аризоны не затираются, наборы NHL 24 для ARI (агент nhl24, «прежние номера арта клуба») с Ютой не пересекаются, откат — вернуть artid 22.",
+  "Арена — нейтральная модель «EA SPORTS Arena» (как у SEA/VGK: копия строки 181 с названием Delta Center): у модели 22 в 3D всё «койотское» (табло, толпа в форме Coyotes с плакатами «GO COYOTES», кольцо, отражения «PHOENIX COYOTES», дальний план льда).",
+  "Форма — свой рисунок по официальному фото NHL.com на крое Reebok Edge (стиль 1): NHL 24 Юты не знает (там Аризона). Без шнуровки (hastie 0), V-вставка ворота — в цвет свитера (решение пользователя по всем формам), щит НХЛ — у мыска ворота.",
+  "Шрифт номеров — свой квадратный с наклоном 10° (tools/utah/blockfont.py): Mammoth Sans фирменный, в открытом доступе его нет.",
+  "Рекламные нашивки (SME Steel, 1Password) и наклейка Filevine на шлем не ставились; наклейка на шлем — Mountain Mammoth (как у EA у всех клубов НХЛ).",
+  "Звук — номер 32 (без записей, как у SEA): с 22 комментатор называл бы «Coyotes»."
+ ],
+ "arena_alternative": "Оставить 3D-модель арены 22 (arenaartid 22, звук 22) и только переименовать (Delta Center, Salt Lake City, UT, 14 111): лёд НХЛ и «настоящая» арена, но в 3D останутся Coyotes — табло jumbotron/texlib_22, толпа crowd/team_22_*, плакаты prop_team_*_22 «GO COYOTES», кольцо effects/powerring_22_*, отражение на шлемах enviro/helmet_22 («PHOENIX COYOTES»), дальний план льда icesurface_22_bm, а диктор объявит арену/город Аризоны (arenaaudioid/cityaudioid 22). Перерисовка этих файлов — отдельная работа.",
+ "files_note": "Все файлы — новые номера (art 104 Юты, art 105 Тусона, прожектор 48): EA-файлы не заменяются. Ставить при закрытой игре установщиком legacy-data (дерево как в cache:). out-third/ — по желанию, только вместе со строкой stockteamjerseys варианта 2.",
+ "franchise_note": "Начатые франшизы хранят свою копию команд (leagueteams: artid 22, названия, арена) — там Аризона останется Аризоной; Юта — в новых франшизах. Сейвы франшиз, созданные до смены базы, перезапускать не обязательно, но Юты в них не будет.",
+ "other_agents": [
+  "nhl24: в пакете NHL 24 есть Arizona (комплекты ARI на прежнем номере арта 22) — с Ютой (art 104) не пересекается; ставить ARI-комплекты смысла нет (art 22 больше не используется). Центр льда ARI из NHL 24 — тоже не нужен.",
+  "legacy-port: число команд/строки не меняются (строка 22 остаётся клубом НХЛ в Central); новых врезок не нужно. Фарм-клуб — та же строка 55 (ahlaffiliate 56 у строки 22 не меняется).",
+  "legacy-data: пересобрать базу (nhl32/build-all) с этими правками, локализацию (locdb put) и добавить арт из game/work/utah/out (и при желании out-third); после новой базы — draft_roster.db = копия nhlng.db."
+ ],
+ "ahl": {
+  "row": 55,
+  "fullname": "Tucson Roadrunners",
+  "shortname": "Tucson",
+  "abbr": "TUC",
+  "nickname": "Roadrunners",
+  "artid": 105,
+  "colors": {
+   "primary": "#790023",
+   "secondary": "#EDDFC0"
+  },
+  "arena": {
+   "name": "Tucson Arena",
+   "city": "Tucson, AZ",
+   "capacity": 6521
+  },
+  "kits": [
+   {
+    "variant": 0,
+    "locstring": 0,
+    "isdefault": 1,
+    "light": 0,
+    "label": "дом, бордовая (1_105_0)"
+   },
+   {
+    "variant": 1,
+    "locstring": 1,
+    "isdefault": 1,
+    "light": 1,
+    "label": "выезд, белая (1_105_1)"
+   }
+  ],
+  "division_note": "В базе строка 55 — в Atlantic (10, Восток), как Springfield 2015/16; Тусон по-настоящему — Pacific (13, Запад). Дерево АХЛ задаёт код (у варианта --ahl32 — врезка legacy-port), поэтому дивизион по умолчанию не трогаем. Если переносить (только --ahl32 и вместе с деревом порта): 55 → Pacific (13), 52 San Antonio → Central (12), 36 Charlotte → Atlantic (10) — все дивизионы остаются по 8.",
+  "audioid": 57,
+  "equip_recolor": {
+   "162338": "790023",
+   "191D2E": "181210",
+   "9C1B1F": "EDDFC0"
+  }
+ },
+ "open_questions": [
+  "Третья форма 2026/27: Hometown Remix Юты покажут в ноябре — собран концепт по утечке (out-third/), ставить ли его до официального показа?",
+  "Добавить ли рекламу (нашивки SME Steel / 1Password, наклейка Filevine на шлеме)? У EA в Legacy рекламы на форме нет.",
+  "Арена: нейтральная «EA SPORTS Arena» (как SEA/VGK, по умолчанию) или модель Аризоны с её 3D-«койотами» (arena_alternative)?",
+  "Звук: 32 (без названия, как SEA) или оставить 22 (комментатор будет говорить «Coyotes»)?",
+  "Тусон в Pacific — переносить ли дивизион в варианте --ahl32 (нужна правка дерева АХЛ у legacy-port)?",
+  "Логотип Тусона: «Dusty» (как у АХЛ на 2026/27, взят) или «Качина» (основной 2025/26, есть векторный файл)?"
+ ]
+}
