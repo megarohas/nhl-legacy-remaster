@@ -109,12 +109,19 @@ void Template(uint8_t* base, uint32_t side) {
     const uint32_t v = __builtin_bswap32(154u);
     std::memcpy(blk + 632, &v, 4);
   }
-  // Счётчик +630 (i16) отсчитывает от +632 вниз (init 829555B8: +630 = +632; 829742B0: −1 в день) — больше
-  // знаменателя он бывает только от порчи (процент +641 тогда > 100).
+  // Счётчик +630 (i16) отсчитывает от +632 вниз (init 829555B8: +630 = +632, в начале каждого сезона; 829742B0: −1 в
+  // день, только пока > 0) — вне 0…+632 он бывает только от порчи: его байты — это +600[30/31], байты очереди команд
+  // 82955F80/82956028 (до 09.10 шли мимо своего буфера: перемешивание писало туда 30/31, «следующий» вычитал по 1 —
+  // в сейве за Сиэтл после 2-го сезона −2416 = 0x00−10 / 0x9A−10, процент +641 = 224). Ремонт: > 154 → 154, < 0 → 0;
+  // init нового сезона всё равно ставит 154.
   const int16_t counter = static_cast<int16_t>(Load32(base, block + 628) & 0xFFFF);
   if (counter > 154) {
     blk[630] = 0;
     blk[631] = 154;
+  } else if (counter < 0) {
+    blk[630] = 0;
+    blk[631] = 0;
+    REXLOG_INFO("[nhllegacy] AI GM 32: repaired counter +630 {} -> 0", counter);
   }
   uint32_t user = Load32(base, block + 636);
   if (static_cast<int32_t>(user) < -1 || static_cast<int32_t>(user) > 31) {
@@ -363,4 +370,97 @@ extern "C" void sub_82973050(PPCContext& ctx, uint8_t* base) {
     }
     ctx.r14.u64 = r14;
   }
+}
+
+// ── Очередь команд AI-объекта: +600[i] на 32 (порча счётчика +630, 09.10.2026) ──────────────────────────────────────
+// 82955F80 — перемешать очередь: +600[i] = i для i < +668, затем 20 обменов двух случайных (8297B8A0) мест; 82956028 —
+// следующий по очереди: у всех i < +668 байт −1, кто дошёл до 255 — тот (последний такой), если никто — перемешать и
+// снова. Обе функции ходят по +600+i напрямую (без `add p, блок, i` перед доступом — сканер врезок их не нашёл), и при
+// +668 = 32 байты команд 30/31 — это +630/+631, счётчик i16 (см. Template). С nhl_aigm32 — те же действия, но байты
+// 30/31 в своём буфере (side+40/41), как у остальных мест +600[i]. Без nhl_aigm32 — оригиналы.
+extern "C" void sub_8297B8A0(PPCContext& ctx, uint8_t* base);  // случайное 0…n−1
+extern "C" void __imp__sub_82955F80(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__sub_82956028(PPCContext& ctx, uint8_t* base);
+
+namespace {
+
+uint8_t* QueueByte(uint8_t* base, uint32_t block, int32_t i) {
+  if (i >= 30 && i < 32) {
+    return HostPtr(base, Side() + kSideTeamBytes + static_cast<uint32_t>(i - 30));
+  }
+  return HostPtr(base, block + kTeamBytes + static_cast<uint32_t>(i));
+}
+
+int32_t GuestRandom(PPCContext& ctx, uint8_t* base, int32_t n) {
+  ctx.r3.s64 = n;
+  sub_8297B8A0(ctx, base);
+  return ctx.r3.s32;
+}
+
+}  // namespace
+
+extern "C" void sub_82955F80(PPCContext& ctx, uint8_t* base) {
+  if (!On()) {
+    __imp__sub_82955F80(ctx, base);
+    return;
+  }
+  const uint32_t ai = ctx.r3.u32;
+  const int32_t n = static_cast<int32_t>(Load32(base, ai + 668));
+  if (n <= 1 || n > 32) {
+    __imp__sub_82955F80(ctx, base);  // не наш случай (оригинал при n ≤ 1 ловушка/вечный цикл — как было)
+    return;
+  }
+  for (int32_t i = 0; i < n; ++i) {
+    *QueueByte(base, Load32(base, ai + 8), i) = static_cast<uint8_t>(i);
+  }
+  for (int k = 0; k < 20;) {
+    const int32_t a = GuestRandom(ctx, base, n);
+    const int32_t b = GuestRandom(ctx, base, n);
+    if (a == b) {
+      continue;
+    }
+    ++k;
+    const uint32_t block = Load32(base, ai + 8);
+    uint8_t* pa = QueueByte(base, block, a);
+    uint8_t* pb = QueueByte(base, block, b);
+    const uint8_t t = *pa;
+    *pa = *pb;
+    *pb = t;
+  }
+  static std::atomic<int> logged{0};
+  if (logged.fetch_add(1) == 0) {
+    REXLOG_INFO("[nhllegacy] AI GM 32: team queue of 32 shuffled, bytes of teams 30/31 beside the block");
+  }
+}
+
+extern "C" void sub_82956028(PPCContext& ctx, uint8_t* base) {
+  if (!On()) {
+    __imp__sub_82956028(ctx, base);
+    return;
+  }
+  const uint32_t ai = ctx.r3.u32;
+  for (int pass = 0; pass < 64; ++pass) {
+    const int32_t n = static_cast<int32_t>(Load32(base, ai + 668));
+    if (n <= 0 || n > 32) {
+      ctx.r3.u64 = ai;
+      __imp__sub_82956028(ctx, base);
+      return;
+    }
+    const uint32_t block = Load32(base, ai + 8);
+    int32_t found = -1;
+    for (int32_t i = 0; i < n; ++i) {
+      uint8_t* p = QueueByte(base, block, i);
+      *p = static_cast<uint8_t>(*p - 1);
+      if (*p == 255) {
+        found = i;
+      }
+    }
+    if (found >= 0) {
+      ctx.r3.s64 = found;
+      return;
+    }
+    ctx.r3.u64 = ai;
+    sub_82955F80(ctx, base);
+  }
+  ctx.r3.s64 = 0;
 }
