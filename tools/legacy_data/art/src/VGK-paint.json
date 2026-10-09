@@ -1,0 +1,5 @@
+{
+  "base": "../../../../game/work/uniforms/kitsrc/VGK.json",
+  "title": "Vegas Golden Knights — перекраска шаблона «Лос-Анджелес» NHL Legacy (арт 101)",
+  "kits": {"home": {"kit": "1_101_0"}, "away": {"kit": "1_101_1"}}
+}

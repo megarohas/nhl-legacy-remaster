@@ -1,0 +1,5 @@
+{
+  "base": "../../../../game/work/uniforms/kitsrc/SEA.json",
+  "title": "Seattle Kraken — перекраска шаблона «Ванкувер» NHL Legacy (арт 100)",
+  "kits": {"home": {"kit": "1_100_0"}, "away": {"kit": "1_100_1"}}
+}

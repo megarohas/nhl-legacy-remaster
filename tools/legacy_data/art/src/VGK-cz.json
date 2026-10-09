@@ -1,0 +1,5 @@
+{
+  "base": "../../../../game/work/uniforms/kitsrc-cz/VGK.json",
+  "title": "Vegas Golden Knights — форма из элементов конструктора (NHL Legacy, арт 101)",
+  "kits": {"home": {"kit": "1_101_0"}, "away": {"kit": "1_101_1"}, "third": {"kit": "1_101_2"}}
+}

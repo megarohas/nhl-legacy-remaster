@@ -1,0 +1,5 @@
+{
+  "base": "../../../../game/work/uniforms/kitsrc-cz/SEA.json",
+  "title": "Seattle Kraken — форма из элементов конструктора (NHL Legacy, арт 100)",
+  "kits": {"home": {"kit": "1_100_0"}, "away": {"kit": "1_100_1"}, "third": {"kit": "1_100_2"}}
+}
