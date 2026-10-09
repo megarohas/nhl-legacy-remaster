@@ -620,7 +620,8 @@ python tools/kitpaint.py verify game/work/legacy-data/out 1_100_0=1_131_0 1_100_
     1_101_0=1_131_0 1_101_1=1_131_0 1_101_2=1_131_0 --game legacy
 ```
 
-SPEC Legacy (`game/work/legacy-data/art/src/`, вне git) наследуют SPEC NHL 13 и меняют только номера:
+SPEC Legacy (с 09.10.2026 — в git, `tools/legacy_data/art/src/`, `"base"` — `../../../../game/work/uniforms/…`)
+наследуют SPEC NHL 13 и меняют только номера:
 
 ```json
 {"base": "../../../uniforms/kitsrc-cz/SEA.json", "title": "Seattle Kraken — … (NHL Legacy, арт 100)",
@@ -750,7 +751,7 @@ $V tools/fepose.py fit --game legacy                       # → game/work/legac
 $V tools/fepose.py fit --game nhl13                        # → game/work/uniforms/fepose/pose.bin (набор — с диска, ~12 мин)
 $V tools/fepose.py check game/work/legacy-data/fepose/pose.bin --game legacy --sheet check.png   # EA | модель | разница
 python tools/czkit.py fe game/work/uniforms/kitsrc-cz/SEA.json game/work/uniforms/kits-cz          # NHL 13 (и VGK.json)
-python tools/czkit.py fe game/work/legacy-data/art/src/SEA-cz.json game/work/legacy-data/out --game legacy
+python tools/czkit.py fe tools/legacy_data/art/src/SEA-cz.json game/work/legacy-data/out --game legacy
 ```
 
 **Проверено в игре — Legacy** (09.10.2026, своя копия userdata, Play Now → Seattle – Vegas → Select Jerseys,

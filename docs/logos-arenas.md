@@ -371,8 +371,8 @@ python tools/newteams_art.py game/work/legacy-data/nhl32/nhlng.db --game legacy 
 
 ### Сборка
 
-SPEC Legacy — наследники SPEC NHL 13 (`teamart.load_spec`, ключ `"base"`; лежат в
-`game/work/legacy-data/art/src/`, вне git):
+SPEC Legacy — наследники SPEC NHL 13 (`teamart.load_spec`, ключ `"base"`). С 09.10.2026 они лежат в git, в
+`tools/legacy_data/art/src/`, и `"base"` указывает на `../../../../game/work/logos/…`; ниже — прежний вид:
 
 ```json
 {"base": "../../../logos/src/SEA.json", "team": "Seattle Kraken (NHL Legacy)", "artid": 100, "spotlight": 46}

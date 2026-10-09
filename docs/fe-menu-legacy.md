@@ -163,8 +163,8 @@ python tools/menu12_legacy.py check                 # сверка (ниже)
 game/work/menu12/venv/Scripts/python.exe tools/menu12_legacy.py mockup   # menu/mockup.png — примерный вид
 # вариант арены «в нашем цвете» menu12: build --from game/work/menu12/out/tint-245C99
 # после пересборки игроков в menu12 (их install-menu12.sh) — просто build ещё раз
-bash game/work/legacy-data/install-legacy-data.sh @game/work/legacy-data/menu/files.txt     # при закрытой игре
-bash game/work/legacy-data/uninstall-legacy-data.sh @game/work/legacy-data/menu/files.txt   # откат
+bash tools/legacy_data/install-legacy-data.sh @game/work/legacy-data/menu/files.txt     # при закрытой игре
+bash tools/legacy_data/uninstall-legacy-data.sh @game/work/legacy-data/menu/files.txt   # откат
 ```
 
 - **Состав.** 76 файлов, 13 086 192 байт:
@@ -223,7 +223,7 @@ bash game/work/legacy-data/uninstall-legacy-data.sh @game/work/legacy-data/menu/
 7. **Легенды** (если `IsLegendsEnabled`). Гретцки и другие с фамилиями.
 8. **4:3** (если есть). Плашка и список на своих местах.
 
-**Откат:** `uninstall-legacy-data.sh @game/work/legacy-data/menu/files.txt`. Можно снять по частям:
+**Откат:** `tools/legacy_data/uninstall-legacy-data.sh @game/work/legacy-data/menu/files.txt`. Можно снять по частям:
 только список — `fe/ion/game/components/menu.big` и `fe/ion/main.big`, только фон — `fe/ion/game/background`.
 Фон и список друг от друга не зависят.
 

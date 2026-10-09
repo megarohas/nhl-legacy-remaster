@@ -516,7 +516,7 @@ r14_crop22.png`, `r16_crop22.png` (№ 22 MTL). «До» — тот же мат�
 | новое | реквизит `rendering/prop/`: вратарская клюшка `goaliestick_{left,right}_0` + лента `goaliesticktape_{left,right}_0` (= `goaliestick_H_2`/`goaliesticktape_H_2` без костей: шаг вершины 20, те же позиции, UV, нормали; другие полосы) и клюшка на льду `droppedstick_0` (6 подсеток: у двух клюшек — древко с крюком, лента крюка = та же, что у `playersticktape_H_2`, набалдашник; левая — зеркало правой по y). `goaliestick_left_0` и его лента в том же матче грузились (тот же лог), `droppedstick_0` — нет (видимо, только когда клюшка остаётся на льду) |
 | то же в обеих | обломки `prop/stickbreak_0…2` (ленты на обломках не правились ни в одной игре) |
 
-**Как собрано** — `bash game/work/legacy-data/models/build.sh` (~5 мин; `--collect` — только раскладка в `out/`):
+**Как собрано** — `bash tools/legacy_data/models/build.sh` (~5 мин; `--collect` — только раскладка в `out/`):
 
     python tools/rw4mesh.py   --game legacy shin --no-preview          # → models/out, obj
     python tools/sticktape.py --game legacy build --round bottom2 --no-preview   # → models/tape/out-bottom2

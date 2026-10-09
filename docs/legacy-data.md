@@ -26,15 +26,24 @@
 Набор — `game/work/legacy-data/out/` (дерево путей как в `cache:`); ставится при закрытой игре:
 
 ```bash
-bash game/work/legacy-data/install-legacy-data.sh            # всё из out → cache: порта
-bash game/work/legacy-data/install-legacy-data.sh db fe/loc  # только части (начало пути)
-bash game/work/legacy-data/install-legacy-data.sh @game/work/legacy-data/models/files.txt   # по списку
-bash game/work/legacy-data/uninstall-legacy-data.sh          # снять (чужие файлы вернутся из backup/)
+bash tools/legacy_data/install-legacy-data.sh            # всё из out → cache: порта
+bash tools/legacy_data/install-legacy-data.sh --ahl32    # и накладка out-ahl32 («АХЛ на 32»)
+bash tools/legacy_data/install-legacy-data.sh db fe/loc  # только части (начало пути)
+bash tools/legacy_data/install-legacy-data.sh @game/work/legacy-data/models/files.txt   # по списку
+bash tools/legacy_data/uninstall-legacy-data.sh          # снять (чужие файлы вернутся из backup/)
 ```
 
 Папка `cache:` порта — строка «CACHE: …» в `game/work/status/legacy-port.md` (сейчас
-`legacy-port/userdata/cache/guest`) или переменная `CACHE`. Работает `install_legacy_data.py` рядом
-(2500 файлов — секунды); список поставленного — `installed.txt`, прежние чужие файлы — `backup/`.
+`legacy-port/userdata/cache/guest`) или переменная `CACHE`. Работает `tools/legacy_data/install_legacy_data.py`
+(2500 файлов — секунды). Список поставленного — `game/work/legacy-data/installed.txt`, прежние чужие файлы —
+`game/work/legacy-data/backup/`. Своя папка для них — `LEGACY_DATA_STATE`. Проверка на копии userdata ставится
+так: `CACHE=копия LEGACY_DATA_STATE=папка bash tools/legacy_data/install-legacy-data.sh`, и установку
+пользователя она не трогает. При запущенной игре установщик ставит только тогда, когда у неё другая
+`user_data_root`, например тестовая копия legacy-port.
+
+Скрипты и спеки legacy-data лежат в git, в `tools/legacy_data/`. Там установщик, обёртки, `build-all.sh`,
+`make_out_ahl32.py`, `models/*.sh`, а также `art/src` и `art/scripts` помощника art. В `game/work/legacy-data/`
+остаются только выход сборки и временное: `out/`, `out-ahl32/`, рабочие папки этапов, `installed.txt`.
 
 **`db/draft_roster.db` — старт франшизы «NHL Entry Draft» (09.10.2026).** Этот старт берёт составы не из
 `nhlng.db`, а из `db/draft_roster.db` (`cacheboot.big`, 1,9 МБ: только 8 таблиц `exhibition*` — составы на драфт
@@ -52,10 +61,29 @@ bash game/work/legacy-data/uninstall-legacy-data.sh          # снять (чу�
 - Откат: удалить `cache\guest\db\draft_roster.db` — старт драфта снова возьмёт составы 2015 с диска.
 - После каждой новой базы `draft_roster.db` должен быть её копией: md5 обоих файлов совпадает.
 
-**Сломано после инцидента 09.10 (на 16:05):** восстановленный `uninstall-legacy-data.sh` (568 байт) — чужой текст
-(кусок исходника PIL «IM Tools support for PIL»). `install-legacy-data.sh` остался на D: как SUSPECT (нулевой хвост),
-от `install_legacy_data.py` уцелел только `__pycache__/install_legacy_data.cpython-314.pyc`. `make_out_ahl32.py`
-(этап `collect --ahl32`) тоже не найден. До их восстановления ставить и снимать набор — вручную по `installed.txt`.
+**Восстановлено после инцидента 09.10** ([incident-2026-10-09.md](incident-2026-10-09.md)), 16:10–17:20.
+- **Что было сломано.** `uninstall-legacy-data.sh` оказался чужим текстом (кусок PIL). `install-legacy-data.sh`
+  остался на D: как SUSPECT. От `install_legacy_data.py` уцелел только `.pyc`, `make_out_ahl32.py` не было вовсе.
+  `art/scripts` и `art/src` помощника art тоже пропали.
+- **Чем восстановлено.** Скрипты собраны по транскриптам агента legacy-data и его помощников: исходная запись плюс
+  все правки по порядку. `install_legacy_data.py` сверен с уцелевшим `.pyc` — 0 расхождений по коду, константам,
+  именам и таблицам строк. `models/*.sh` целы, они байт в байт совпадают с транскриптом помощника.
+- **Состояние CACHE пользователя.** Он стоит в варианте `--ahl32`: 2910 путей из `installed.txt` и 2 своих
+  файла порта.
+- **Ремонт `out/` и `out-ahl32/`.** Пропавшие 25 файлов скопированы из CACHE: 2 файла музыки, 19 портретов,
+  3 шрифта, 1 текстура. Схема основной базы восстановлена (md5 c8009589). Исходники Legacy заново распакованы из
+  `game/other/legacy/disc/cacheboot.big` в `game/work/legacy-data/extract/cacheboot/` (db, fe/loc), они совпадают с
+  анкерами. `nhl32.patch_meta` по ним даёт ровно c8009589 (основная) и 8ae5e145 (как в CACHE).
+- **Проверка на копии** (`game/work/legacy-data/check-ud/`, `tmp/check_install.py`), всё сошлось:
+  - uninstall → остаются только 2 файла порта;
+  - install `--ahl32` с нуля → копия совпадает с CACHE пользователя байт в байт (2912 файлов), `installed.txt` —
+    тот же набор;
+  - install без `--ahl32` → совпадает с CACHE, кроме 4 файлов, перекрытых накладкой; там версии `out/`;
+  - `--ahl32` поверх → снова совпадает с CACHE;
+  - `uninstall db`, затем полный uninstall → снова только файлы порта.
+- **Чего нет до сих пор.** Пропали все `*.json` и `*.xml` в `game/`: `write.json`, `photos.json`, схемы в
+  `game/other/legacy/big/cacheboot/`, базовые спеки арта NHL 13 в `game/work/logos` и `game/work/uniforms`. Пока
+  их нет, этапы `base`/`roster`/`photos`/`art` в `build-all.sh` не пройдут. Набор в `out/` от этого не зависит.
 
 Вариант «АХЛ на 32» — накладка `game/work/legacy-data/out-ahl32/` (база с CV/HSK, их локализация и
 портреты): `install-legacy-data.sh --ahl32` ставит её поверх `out/`. Франшизе с ней нужен порт с врезками
@@ -65,8 +93,10 @@ bash game/work/legacy-data/uninstall-legacy-data.sh          # снять (чу�
 атрибут полевых 77,0 при 76,7 у соседей, OVR 68,5 при 67,8. Изменены только строки игроков CV/HSK. С 09.10
 это в `out-ahl32` (вместе с Liiga, ниже).
 
-Пересборка всего с нуля — `bash game/work/legacy-data/build-all.sh [этап…] [--ahl32]` (этапы base, roster,
-photos, equip, collect, fonts, music, models, art; сеть — только докачка недостающих портретов лиг).
+Пересборка всего с нуля — `bash tools/legacy_data/build-all.sh [этап…] [--ahl32]` (этапы base, roster, photos,
+equip, collect, fonts, music, models, art, menu; сеть — только докачка недостающих портретов лиг). Этап `menu`
+(`menu12_legacy.py` и `menuitems_legacy.py`) идёт после `collect`: тот кладёт в `out/` локализацию nhl32 без
+правок меню, а `menuitems_legacy.py` вносит их снова.
 
 Состав `out/` (08.10.2026, 23:00): 2907 файлов, 448 МБ — база и схема (2), локализация (1), шрифты (3), банк музыки
 (4) и обложки EA Trax (32), портреты 1264 игроков (2528), арт SEA/VGK и CV/HSK (110), 3D (74); главное меню NHL 12 — 75 файлов, 13 МБ (`menu/files.txt`).
@@ -266,7 +296,7 @@ Wikipedia), портреты у 1303, проверки OK.
 - **models** — [player-models.md](player-models.md) §11: у Legacy байт в байт как в NHL 13 все 60
   свитеров, клюшки, скелеты и детализации `_0`/`_2`; отличаются `_3` гетр, коньков и шорт (полосы
   треугольников вместо списка) — пересобраны; новое у Legacy — клюшки на льду (`prop/goaliestick*`,
-  `prop/droppedstick_0`, подсетки) — обмотка и там; пересборка — `bash game/work/legacy-data/models/build.sh`.
+  `prop/droppedstick_0`, подсетки) — обмотка и там; пересборка — `bash tools/legacy_data/models/build.sh`.
   Попутно найдено: у NHL 13 сетки `_3` — список треугольников, `rw4mesh` читал их как полосы (правки `_3`
   в NHL 13 считались по неверной поверхности; игра рисует верно) — решение за пользователем.
 - **art** — [logos-arenas.md](logos-arenas.md) §9, [uniforms.md](uniforms.md) §12: логотипы t/s/d/c/w/r
