@@ -383,6 +383,13 @@ def cmd_build(args):
         report['out-ahl32'] = rep_ahl32
     os.makedirs(INFO, exist_ok=True)
     shutil.copyfile(os.path.join(pack, 'manifest.json'), os.path.join(INFO, 'manifest.json'))
+    # список путей накладки (cache:) — для тех, кому нужно знать, что в cache: от NHL 24 (папка для друзей и т. п.)
+    paths = set()
+    for d in (DST, DST_AHL32):
+        for root, _, names in os.walk(d):
+            paths |= {os.path.relpath(os.path.join(root, n), d).replace(os.sep, '/') for n in names}
+    with open(os.path.join(INFO, 'files.txt'), 'w', encoding='utf-8', newline='\n') as f:
+        f.write(''.join(x + '\n' for x in sorted(paths)))
     with open(os.path.join(INFO, 'report.json'), 'w', encoding='utf-8', newline='\n') as f:
         json.dump(report, f, ensure_ascii=False, indent=1)
     t = ', '.join(f'{k} {v}' for k, v in report['types'].items() if v)
