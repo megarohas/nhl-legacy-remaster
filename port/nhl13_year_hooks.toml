@@ -1,5 +1,5 @@
 # Сгенерировано tools/year_hooks.py — не править руками.
-# Сдвиг года: 262 мест (season_year в nhl13.toml, код — src/nhl13_year.cpp).
+# Сдвиг года: 265 мест (season_year в nhl13.toml, код — src/nhl13_year.cpp).
 
 [[midasm_hook]]
 address = 0x8275640C
@@ -236,9 +236,27 @@ registers = ["r5"]
 after_instruction = true
 
 [[midasm_hook]]
+address = 0x82807734
+name = "Nhl13YearAdd"
+registers = ["r25"]
+after_instruction = true
+
+[[midasm_hook]]
 address = 0x8280CE0C
 name = "Nhl13YearAdd"
 registers = ["r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8281E87C
+name = "Nhl13YearAdd"
+registers = ["r29"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8281EA3C
+name = "Nhl13YearAdd"
+registers = ["r11"]
 after_instruction = true
 
 [[midasm_hook]]
