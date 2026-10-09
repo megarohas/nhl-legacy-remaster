@@ -9,6 +9,8 @@ leaguerookiedata.draftteam (6 бит, биты 58…63 при reclen 8) — но
 Повторный запуск ничего не меняет. draft_roster.db — копия nhlng.db, её build-all.sh кладёт заново после починки.
 
     python tools/legacy_data/fix_flagbit.py БАЗА… [--meta META]     # на месте; схема по умолчанию — рядом с базой
+    python tools/legacy_data/fix_flagbit.py --save СЕЙВ КОПИЯ --meta META
+                                         # сейв франшизы, начатой на старой базе (внутренний файл DYNASTY …) → копия
 """
 import os
 import struct
@@ -55,6 +57,43 @@ def fix(path, meta_path):
     return True
 
 
+def fix_save(src, dst, meta_path):
+    """Сейв франшизы, начатой на базе с полем на последнем бите: у таких таблиц запись +4 байта (поля на местах), новый
+    последний бит — флаг: 1 у строк из списка удалённых и из запаса [current, max), 0 у живых (так у всех 37 таблиц сейва
+    BE A GM10 со строками — legacy-port, 10.10.2026). Прежний последний бит не трогается: у живых это настоящий младший
+    бит draftteam. Список удалённых в заголовке остаётся как был (им движок пользуется при вставке). Пишет в dst."""
+    from tdb import SaveFile
+    if os.path.abspath(src) == os.path.abspath(dst):
+        sys.exit('сейв чинится в другой файл (копию), не на месте')
+    sf = SaveFile(open(src, 'rb').read(), load_meta(meta_path))
+    db = sf.db
+    bad = flag_users(db)
+    if not bad:
+        print(f'{src}: последний бит записи свободен у всех таблиц — чинить нечего')
+        return False
+    for name, reclen, end in bad:
+        maxr, cur, ndel, _ = db.counts(name)
+        free = set(db.deleted(name)) | set(range(cur, maxr))
+        db.widen(name, [], 0)
+        t = db.by_name[name]
+        for r in free:
+            p = t['records'] + r * t['reclen'] + t['reclen'] - 1
+            db.d[p] |= 1
+        live = db.live_rows(name)
+        print(f'{src}: {name} — reclen {reclen} → {t["reclen"]}; живых {len(live)} (флаг 0), удалённых {ndel} и запаса '
+              f'{maxr - cur} (флаг 1)')
+    if flag_users(db):
+        sys.exit(f'{src}: не вышло')
+    out = sf.bytes()
+    if SaveFile(out, load_meta(meta_path)).verify():
+        sys.exit(f'{dst}: суммы сейва не сошлись')
+    with open(dst + '.part', 'wb') as f:
+        f.write(out)
+    os.replace(dst + '.part', dst)
+    print(f'→ {dst}')
+    return True
+
+
 def main():
     sys.stdout.reconfigure(encoding='utf-8')
     sys.stderr.reconfigure(encoding='utf-8')
@@ -64,6 +103,11 @@ def main():
         i = args.index('--meta')
         meta = args[i + 1]
         del args[i:i + 2]
+    if args[:1] == ['--save']:
+        if len(args) != 3 or not meta:
+            sys.exit('--save СЕЙВ КОПИЯ --meta META')
+        fix_save(args[1], args[2], meta)
+        return
     if not args:
         sys.exit(__doc__)
     for path in args:
