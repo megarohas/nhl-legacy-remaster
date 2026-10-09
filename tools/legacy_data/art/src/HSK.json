@@ -1,5 +1,22 @@
 {
-  "base": "../../../../game/work/logos/ahl-src/HSK.json",
-  "team": "Henderson Silver Knights (NHL Legacy)",
-  "artid": 103
+ "team": "Henderson Silver Knights (NHL Legacy)",
+ "league": "ahl",
+ "artid": 103,
+ "svg": "../../../../game/work/logos/ahl-src/HSK.svg",
+ "strip_paths": [],
+ "colors": [
+  "#3A3D42",
+  "#A3ABAD"
+ ],
+ "small_focus": [
+  0.5,
+  0.4,
+  1.8
+ ],
+ "wide_focus": [
+  0.5,
+  0.42,
+  1.6
+ ],
+ "center_box": 640
 }

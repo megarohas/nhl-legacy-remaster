@@ -1,6 +1,25 @@
 {
-  "base": "../../../../game/work/logos/src/VGK.json",
-  "team": "Vegas Golden Knights (NHL Legacy)",
-  "artid": 101,
-  "spotlight": 47
+ "team": "Vegas Golden Knights (NHL Legacy)",
+ "artid": 101,
+ "spotlight": 47,
+ "svg": "../../../../game/work/logos/src/VGK_light.svg",
+ "strip_paths": [
+  0,
+  1
+ ],
+ "colors": [
+  "#2B343B",
+  "#5E6B74"
+ ],
+ "small_focus": [
+  0.5,
+  0.4,
+  1.8
+ ],
+ "wide_focus": [
+  0.5,
+  0.42,
+  1.6
+ ],
+ "center_box": 640
 }

@@ -1,5 +1,22 @@
 {
-  "base": "../../../../game/work/logos/ahl-src/CVF.json",
-  "team": "Coachella Valley Firebirds (NHL Legacy)",
-  "artid": 102
+ "team": "Coachella Valley Firebirds (NHL Legacy)",
+ "league": "ahl",
+ "artid": 102,
+ "svg": "../../../../game/work/logos/ahl-src/CVF.svg",
+ "strip_paths": [],
+ "colors": [
+  "#091725",
+  "#2C4F6E"
+ ],
+ "small_focus": [
+  0.5,
+  0.45,
+  1.7
+ ],
+ "wide_focus": [
+  0.5,
+  0.45,
+  1.6
+ ],
+ "center_box": 640
 }

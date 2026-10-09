@@ -1,5 +1,399 @@
 {
-  "base": "../../../../game/work/uniforms/kitsrc-cz/VGK.json",
-  "title": "Vegas Golden Knights — форма из элементов конструктора (NHL Legacy, арт 101)",
-  "kits": {"home": {"kit": "1_101_0"}, "away": {"kit": "1_101_1"}, "third": {"kit": "1_101_2"}}
+ "team": "VGK",
+ "title": "Vegas Golden Knights — форма из элементов конструктора (NHL Legacy, арт 101)",
+ "note": "Мотивы: доспехи — наплечники-кокетка с кантом (jersey6), набедренные пластины на шортах (pants2), наколенник-«V» на гетрах (sock0); шрифт czfont_5 с зазубренными засечками (клинок). Дом — золото (как у Vegas с 2022), выезд — белая, третья — стальная серая (первая домашняя 2017). Логотипы — свои (шлем на груди, мечи с V на плечах, бедро шорт).",
+ "container": "1_28_0",
+ "colors": {
+  "steel": "#333F48",
+  "gold": "#B9975B",
+  "red": "#C8102E",
+  "black": "#0B0B0C",
+  "white": "#E9E8E4"
+ },
+ "svg": {
+  "crest_dark": {
+   "file": "../../../../game/work/logos/src/VGK_dark.svg",
+   "strip_paths": [
+    1
+   ],
+   "cut": [
+    [
+     0,
+     "M583.062"
+    ]
+   ]
+  },
+  "crest_light": {
+   "file": "../../../../game/work/logos/src/VGK_light.svg",
+   "strip_paths": [
+    0,
+    1
+   ]
+  },
+  "patch": {
+   "file": "../../../../game/work/uniforms/kitsrc/VGK_patch.svg"
+  },
+  "nhl": {
+   "file": "../../../../game/work/logos/src/NHL_light.svg",
+   "strip_paths": [
+    0
+   ]
+  }
+ },
+ "sample": {
+  "number": "71",
+  "name": "VEGAS",
+  "captain": "A"
+ },
+ "kits": {
+  "home": {
+   "kit": "1_101_0",
+   "label": "Дом (тёмная) — «Золотые доспехи»",
+   "jersey": {
+    "design": 6,
+    "zones": [
+     "gold",
+     "steel",
+     "white",
+     "red",
+     "steel",
+     "white"
+    ],
+    "logos": [
+     {
+      "svg": "crest_dark",
+      "center": [
+       512,
+       784
+      ],
+      "size": [
+       140,
+       172
+      ]
+     },
+     {
+      "svg": "patch",
+      "center": [
+       376,
+       492
+      ],
+      "size": [
+       92,
+       86
+      ],
+      "rotate": 90
+     },
+     {
+      "svg": "patch",
+      "center": [
+       648,
+       492
+      ],
+      "size": [
+       92,
+       86
+      ],
+      "rotate": -90
+     },
+     {
+      "svg": "nhl",
+      "center": [
+       512,
+       600
+      ],
+      "size": [
+       20,
+       22
+      ]
+     }
+    ]
+   },
+   "font": {
+    "id": 5,
+    "zones": [
+     "steel",
+     "white",
+     "black"
+    ]
+   },
+   "pant": {
+    "design": 2,
+    "zones": [
+     "black",
+     "steel",
+     "gold"
+    ],
+    "logos": [
+     {
+      "svg": "crest_dark",
+      "center": [
+       66,
+       318
+      ],
+      "size": [
+       50,
+       40
+      ],
+      "rotate": 90
+     }
+    ]
+   },
+   "sock": {
+    "design": 0,
+    "zones": [
+     "gold",
+     "steel",
+     "white"
+    ],
+    "detail": 0.6
+   },
+   "fe": {
+    "yaw": 14
+   }
+  },
+  "away": {
+   "kit": "1_101_1",
+   "label": "Выезд (светлая) — «Доспехи»",
+   "jersey": {
+    "design": 6,
+    "zones": [
+     "white",
+     "steel",
+     "gold",
+     "gold",
+     "steel",
+     "steel"
+    ],
+    "logos": [
+     {
+      "svg": "crest_light",
+      "center": [
+       512,
+       784
+      ],
+      "size": [
+       140,
+       172
+      ]
+     },
+     {
+      "svg": "patch",
+      "center": [
+       376,
+       492
+      ],
+      "size": [
+       92,
+       86
+      ],
+      "rotate": 90
+     },
+     {
+      "svg": "patch",
+      "center": [
+       648,
+       492
+      ],
+      "size": [
+       92,
+       86
+      ],
+      "rotate": -90
+     },
+     {
+      "svg": "nhl",
+      "center": [
+       512,
+       600
+      ],
+      "size": [
+       20,
+       22
+      ]
+     }
+    ]
+   },
+   "font": {
+    "id": 5,
+    "zones": [
+     "steel",
+     "gold",
+     "black"
+    ]
+   },
+   "pant": {
+    "same_as": "home"
+   },
+   "sock": {
+    "design": 0,
+    "zones": [
+     "white",
+     "steel",
+     "gold"
+    ],
+    "detail": 0.6
+   },
+   "fe": {
+    "yaw": 14
+   }
+  },
+  "third": {
+   "kit": "1_101_2",
+   "label": "Третья (по желанию) — «Сталь», перевязь с кантом",
+   "jersey": {
+    "design": 7,
+    "zones": [
+     "steel",
+     "black",
+     "red",
+     "gold",
+     "black",
+     "gold"
+    ],
+    "logos": [
+     {
+      "svg": "crest_dark",
+      "center": [
+       512,
+       784
+      ],
+      "size": [
+       140,
+       172
+      ]
+     },
+     {
+      "svg": "patch",
+      "center": [
+       376,
+       492
+      ],
+      "size": [
+       92,
+       86
+      ],
+      "rotate": 90
+     },
+     {
+      "svg": "patch",
+      "center": [
+       648,
+       492
+      ],
+      "size": [
+       92,
+       86
+      ],
+      "rotate": -90
+     },
+     {
+      "svg": "nhl",
+      "center": [
+       512,
+       600
+      ],
+      "size": [
+       20,
+       22
+      ]
+     }
+    ]
+   },
+   "font": {
+    "id": 5,
+    "zones": [
+     "gold",
+     "black",
+     "white"
+    ]
+   },
+   "pant": {
+    "same_as": "home"
+   },
+   "sock": {
+    "design": 0,
+    "zones": [
+     "steel",
+     "black",
+     "gold"
+    ],
+    "detail": 0.6
+   },
+   "fe": {
+    "yaw": 14
+   }
+  }
+ },
+ "candidates": [
+  {
+   "label": "золото с перевязью: jersey7, Gold + Black/Red",
+   "jersey": {
+    "design": 7,
+    "zones": [
+     "gold",
+     "black",
+     "red",
+     "white",
+     "black",
+     "black"
+    ]
+   }
+  },
+  {
+   "label": "сталь с кокеткой: jersey6, Steel + Black/Gold",
+   "jersey": {
+    "design": 6,
+    "zones": [
+     "steel",
+     "black",
+     "gold",
+     "gold",
+     "red",
+     "gold"
+    ]
+   }
+  },
+  {
+   "label": "«Наплечники»: jersey2, Steel + Black/Gold",
+   "jersey": {
+    "design": 2,
+    "zones": [
+     "steel",
+     "black",
+     "gold",
+     "gold",
+     "black",
+     "gold"
+    ]
+   }
+  },
+  {
+   "label": "шнуровка: jersey1, Steel + Black",
+   "jersey": {
+    "design": 1,
+    "zones": [
+     "steel",
+     "gold",
+     "red",
+     "gold",
+     "black",
+     "gold"
+    ]
+   }
+  },
+  {
+   "label": "jersey5: Steel, бока Black, рукава Gold",
+   "jersey": {
+    "design": 5,
+    "zones": [
+     "steel",
+     "black",
+     "gold",
+     "gold",
+     "red",
+     "gold"
+    ]
+   }
+  }
+ ]
 }

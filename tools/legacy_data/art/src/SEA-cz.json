@@ -1,5 +1,396 @@
 {
-  "base": "../../../../game/work/uniforms/kitsrc-cz/SEA.json",
-  "title": "Seattle Kraken — форма из элементов конструктора (NHL Legacy, арт 100)",
-  "kits": {"home": {"kit": "1_100_0"}, "away": {"kit": "1_100_1"}, "third": {"kit": "1_100_2"}}
+ "team": "SEA",
+ "title": "Seattle Kraken — форма из элементов конструктора (NHL Legacy, арт 100)",
+ "note": "Мотивы: глубина (слои синего: Deep Sea → Boundless → Ice), волны/щупальца (изогнутые панели и волнистая полоса гетр), паромные полосы Пьюджет-Саунда (третья). Шрифт czfont_4 — узкий, с «хвостами»-волнами (у Kraken — узкий фирменный, Ice Blue с обводкой Shadow Blue). Логотипы — свои (S на груди, якорь со шпилем на плечах, бедро шорт).",
+ "container": "1_28_0",
+ "colors": {
+  "deep": "#001628",
+  "boundless": "#355464",
+  "shadow": "#68A2B9",
+  "ice": "#99D9D9",
+  "red": "#E9072B",
+  "white": "#E6E8EA",
+  "abyss": "#0D1218"
+ },
+ "svg": {
+  "crest": {
+   "file": "../../../../game/work/logos/src/SEA_dark.svg",
+   "strip_paths": [
+    4,
+    5
+   ]
+  },
+  "patch": {
+   "file": "../../../../game/work/uniforms/kitsrc/SEA_patch.svg"
+  },
+  "patch_away": {
+   "file": "../../../../game/work/uniforms/kitsrc/SEA_patch.svg",
+   "recolor": {
+    "#99D9D9": "#001628",
+    "#001628": "#99D9D9"
+   }
+  },
+  "nhl": {
+   "file": "../../../../game/work/logos/src/NHL_light.svg",
+   "strip_paths": [
+    0
+   ]
+  }
+ },
+ "sample": {
+  "number": "19",
+  "name": "KRAKEN",
+  "captain": "C"
+ },
+ "kits": {
+  "home": {
+   "kit": "1_100_0",
+   "label": "Дом (тёмная) — «Глубина»",
+   "jersey": {
+    "design": 8,
+    "zones": [
+     "deep",
+     "boundless",
+     "ice",
+     "ice",
+     "red",
+     "ice"
+    ],
+    "logos": [
+     {
+      "svg": "crest",
+      "center": [
+       512,
+       780
+      ],
+      "size": [
+       156,
+       176
+      ]
+     },
+     {
+      "svg": "patch",
+      "center": [
+       376,
+       494
+      ],
+      "size": [
+       100,
+       86
+      ],
+      "rotate": 90
+     },
+     {
+      "svg": "patch",
+      "center": [
+       648,
+       490
+      ],
+      "size": [
+       100,
+       86
+      ],
+      "rotate": -90
+     },
+     {
+      "svg": "nhl",
+      "center": [
+       512,
+       601
+      ],
+      "size": [
+       20,
+       22
+      ]
+     }
+    ]
+   },
+   "font": {
+    "id": 4,
+    "zones": [
+     "ice",
+     "shadow",
+     "deep"
+    ]
+   },
+   "pant": {
+    "design": 1,
+    "zones": [
+     "deep",
+     "ice",
+     "red"
+    ],
+    "logos": [
+     {
+      "svg": "crest",
+      "center": [
+       65,
+       302
+      ],
+      "size": [
+       52,
+       40
+      ],
+      "rotate": 90
+     }
+    ]
+   },
+   "sock": {
+    "design": 2,
+    "zones": [
+     "deep",
+     "ice",
+     "red"
+    ],
+    "detail": 0.6
+   },
+   "fe": {
+    "yaw": 14
+   }
+  },
+  "away": {
+   "kit": "1_100_1",
+   "label": "Выезд (светлая) — «Глубина»",
+   "jersey": {
+    "design": 8,
+    "zones": [
+     "white",
+     "deep",
+     "ice",
+     "red",
+     "deep",
+     "deep"
+    ],
+    "logos": [
+     {
+      "svg": "crest",
+      "center": [
+       512,
+       780
+      ],
+      "size": [
+       156,
+       176
+      ]
+     },
+     {
+      "svg": "patch_away",
+      "center": [
+       376,
+       494
+      ],
+      "size": [
+       100,
+       86
+      ],
+      "rotate": 90
+     },
+     {
+      "svg": "patch_away",
+      "center": [
+       648,
+       490
+      ],
+      "size": [
+       100,
+       86
+      ],
+      "rotate": -90
+     },
+     {
+      "svg": "nhl",
+      "center": [
+       512,
+       601
+      ],
+      "size": [
+       20,
+       22
+      ]
+     }
+    ]
+   },
+   "font": {
+    "id": 4,
+    "zones": [
+     "deep",
+     "shadow",
+     "white"
+    ]
+   },
+   "pant": {
+    "same_as": "home"
+   },
+   "sock": {
+    "design": 2,
+    "zones": [
+     "white",
+     "deep",
+     "red"
+    ],
+    "detail": 0.6
+   },
+   "fe": {
+    "yaw": 14
+   }
+  },
+  "third": {
+   "kit": "1_100_2",
+   "label": "Третья (по желанию) — «Паромные полосы», Boundless Blue, шнуровка",
+   "jersey": {
+    "design": 0,
+    "zones": [
+     "boundless",
+     "ice",
+     "red",
+     "ice",
+     "deep",
+     "ice"
+    ],
+    "logos": [
+     {
+      "svg": "crest",
+      "center": [
+       512,
+       780
+      ],
+      "size": [
+       156,
+       176
+      ]
+     },
+     {
+      "svg": "patch",
+      "center": [
+       376,
+       494
+      ],
+      "size": [
+       100,
+       86
+      ],
+      "rotate": 90
+     },
+     {
+      "svg": "patch",
+      "center": [
+       648,
+       490
+      ],
+      "size": [
+       100,
+       86
+      ],
+      "rotate": -90
+     },
+     {
+      "svg": "nhl",
+      "center": [
+       512,
+       672
+      ],
+      "size": [
+       20,
+       22
+      ]
+     }
+    ]
+   },
+   "font": {
+    "id": 4,
+    "zones": [
+     "ice",
+     "deep",
+     "red"
+    ]
+   },
+   "pant": {
+    "same_as": "home"
+   },
+   "sock": {
+    "design": 1,
+    "zones": [
+     "boundless",
+     "ice",
+     "red"
+    ],
+    "detail": 0.6
+   },
+   "fe": {
+    "yaw": 14
+   }
+  }
+ },
+ "candidates": [
+  {
+   "label": "третья в чёрном («Бездна»): jersey0, Abyss + Ice/Red",
+   "jersey": {
+    "design": 0,
+    "zones": [
+     "abyss",
+     "ice",
+     "red",
+     "ice",
+     "deep",
+     "ice"
+    ]
+   }
+  },
+  {
+   "label": "«Айсберг»: jersey9 (плечи Ice Blue)",
+   "jersey": {
+    "design": 9,
+    "zones": [
+     "deep",
+     "boundless",
+     "ice",
+     "ice",
+     "red",
+     "ice"
+    ]
+   }
+  },
+  {
+   "label": "«Кокетка»: jersey6, Boundless + Ice",
+   "jersey": {
+    "design": 6,
+    "zones": [
+     "deep",
+     "boundless",
+     "ice",
+     "ice",
+     "red",
+     "ice"
+    ]
+   }
+  },
+  {
+   "label": "«Реглан»: jersey3, рукава Boundless",
+   "jersey": {
+    "design": 3,
+    "zones": [
+     "deep",
+     "boundless",
+     "boundless",
+     "ice",
+     "ice",
+     "ice"
+    ]
+   }
+  },
+  {
+   "label": "«Классика»: jersey0 в Deep Sea (полосы как у EA)",
+   "jersey": {
+    "design": 0,
+    "zones": [
+     "deep",
+     "ice",
+     "red",
+     "ice",
+     "boundless",
+     "ice"
+    ]
+   }
+  }
+ ]
 }
