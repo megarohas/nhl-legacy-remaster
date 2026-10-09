@@ -15,10 +15,10 @@ FMT = {3: ("<f4", 3), 6: ("<f2", 2), 8: ("<f2", 4), 0x0D: ("u1", 4), 0x17: ("<u2
 
 
 def lod_chunk(res):
-    """GUID чанка с буферами LOD0 (если геометрия не внутри res): LOD+0x160."""
+    """GUID чанка с буферами LOD0 (если геометрия не внутри res): LOD+0x60 (проверено по TOC на шортах)."""
     import uuid
     lod = struct.unpack_from("<Q", res, 0x20)[0]
-    return str(uuid.UUID(bytes_le=bytes(res[lod + 0x160:lod + 0x170])))
+    return str(uuid.UUID(bytes_le=bytes(res[lod + 0x60:lod + 0x70])))
 
 
 def parse(res, meta, chunk_data=None):
@@ -47,6 +47,8 @@ def parse(res, meta, chunk_data=None):
     out = []
     for sec in sections:
         nv = sec["nv"]
+        if nv == 0 or sec["ntri"] == 0:
+            continue
         # потоки лежат подряд: поток i начинается после всех предыдущих (nv × шаг)
         starts, acc = [], 0
         for st in sec["strides"]:
