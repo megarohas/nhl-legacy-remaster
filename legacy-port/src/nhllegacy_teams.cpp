@@ -1088,12 +1088,47 @@ bool LeagueStateValue(PPCContext& ctx, uint8_t* base, uint32_t league, uint32_t 
   return ok;
 }
 
+// Сейв франшизы против nhl_ahl_teams (docs/legacy-port.md, «Неполная пятёрка в симе матча»): число клубов АХЛ, с
+// которым франшиза создана, лежит в состоянии лиги type 20 (key 121: в сейвах АХЛ-30 — 30, АХЛ-32 — 32; так же
+// различаются type 21 — первые номера лиг CHL, 57/58 — номера проспектов, 55/56 — сборные Матча звёзд). Порт при
+// загрузке достраивает АХЛ по nhl_ahl_teams, поэтому сейв АХЛ-30 с nhl_ahl_teams = 32 (и наоборот) ломает составы матчей:
+// пустые записи, неполные пятёрки (страховка nhl_sim_guard не даёт симу зависнуть или упасть, но состав остаётся
+// неверным). Здесь — только предупреждение в лог: подстроить nhl_ahl_teams под сейв на ходу нельзя (решается один раз
+// на процесс, меню строится до загрузки).
+void CheckAhlCountOfSave(PPCContext& ctx, uint8_t* base, uint32_t league, uint32_t list) {
+  const uint32_t n = Load32(base, list);
+  const uint32_t first = Load32(base, list + 4);
+  if (n < 30 || n > 32 || first < 32 || first > 61) {
+    return;  // не список АХЛ
+  }
+  uint32_t saved = 0;
+  if (!LeagueStateValue(ctx, base, league, 20, &saved) || (saved != 30 && saved != 32)) {
+    return;
+  }
+  const uint32_t cfg = AhlThirtyTwo() ? 32 : 30;
+  static std::atomic<int> logged{0};
+  if (saved != cfg) {
+    if (logged.fetch_add(1) < 4) {
+      REXLOG_WARN("[nhllegacy] FRANCHISE SAVE MISMATCH: the franchise was created with {} AHL teams, but nhl_ahl_teams "
+                  "= {} - set nhl_ahl_teams = {} in nhllegacy.toml to play it (otherwise game rosters break: empty "
+                  "records, incomplete lines, sim hangs/crashes)", saved, cfg, saved);
+    }
+  } else if (logged.fetch_add(1) < 2) {
+    REXLOG_INFO("[nhllegacy] franchise save: {} AHL teams, matches nhl_ahl_teams", saved);
+  }
+}
+
 }  // namespace
 
 extern "C" void sub_82B0C360(PPCContext& ctx, uint8_t* base) {
   const uint32_t league = ctx.r3.u32;
   const uint32_t list = ctx.r4.u32;
   __imp__sub_82B0C360(ctx, base);
+  if (ThirtyTwo() && league && list) {
+    const SavedArgs args(ctx);
+    CheckAhlCountOfSave(ctx, base, league, list);
+    args.Restore(ctx);
+  }
   if (!ThirtyTwo() || !league || !list || Load32(base, list) < 32 || Load32(base, list + 244 + 4 * 31) == 0) {
     return;
   }

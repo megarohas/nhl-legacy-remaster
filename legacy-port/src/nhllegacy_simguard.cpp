@@ -1,8 +1,10 @@
 // Страховка симуляции матча (сим CPU-матчей календаря; docs/legacy-port.md, «Неполная пятёрка в симе матча»).
 //
 // Объект симуляции матча (vtable 0x82038818; 8298D450 — подготовка, 82995C00 — ход матча): команда t — с +200 +
-// 8740·t (+0 — teamid, +4 — 20), в ней 20 записей состава матча по 392 байта с +900 (+0 playerindex, 0 — пустая запись; +8 тип: 0 центр,
-// 1 крайний, 2 защитник, 3 вратарь; +16 роль на льду: 0 C, 1 LW, 2 RW, 3 LD, 4 RD). На льду — указатели на записи
+// 8740·t (+0 — номер команды во франшизе, +4 — 20), в ней 20 записей состава матча по 392 байта с +900 (+0 playerindex;
+// +8 тип: 0 центр, 1 крайний, 2 защитник, 3 вратарь; +16 роль на льду: 0 C, 1 LW, 2 RW, 3 LD, 4 RD; +20 позиция
+// игрока; +24 — у полевых всегда > 0). Пустая запись — все эти поля нули: playerindex 0 сам по себе — настоящий игрок
+// (в базе legacy-data это Judd Caulfield, проспект Анахайма: в предсезонке он в составе матча ANA). На льду — указатели на записи
 // в +17964 + 24·t (6 мест), их число в +18036 + 4·t (заполняют 82984668 в начале и 8298E678 по ходу матча),
 // положенное число полевых — +18260 + 4·t.
 //
@@ -21,7 +23,9 @@
 #include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <string>
 
+#include <fmt/format.h>
 #include <rex/cvar.h>
 #include <rex/logging.h>
 #include <rex/ppc.h>
@@ -93,6 +97,12 @@ bool IsRecord(uint32_t sim, int t, uint32_t p) {
   return p >= first && p < first + kRecordStride * kRecordCount && (p - first) % kRecordStride == 0;
 }
 
+// Пустая запись состава матча: playerindex, тип, позиция и +24 — нули (у настоящего игрока с playerindex 0 тип/позиция/+24
+// заполнены: крайний — тип 1, позиция 1/2, +24 > 0; вратарь — тип 3).
+bool IsEmptyRecord(uint8_t* base, uint32_t rec) {
+  return Ld(base, rec) == 0 && Ld(base, rec + 8) == 0 && Ld(base, rec + 20) == 0 && Ld(base, rec + 24) == 0;
+}
+
 // Роли полевых при положенном числе want (5 — полная пятёрка, 4/3 — меньшинство).
 const int* RolesFor(int want, int* count) {
   static const int k5[] = {0, 1, 2, 3, 4};
@@ -121,9 +131,10 @@ int Repair(uint8_t* base, uint32_t sim, int t, uint32_t arr, int n, const char* 
   bool role_on[5] = {};
   int kept = 0;
   int dropped = 0;
+  uint32_t first_bad = 0;
   for (int j = 0; j < (n > 0 ? n : 0); ++j) {
     const uint32_t p = Ld(base, arr + 4 * j);
-    if (IsRecord(sim, t, p) && Ld(base, p) != 0) {
+    if (IsRecord(sim, t, p) && !IsEmptyRecord(base, p)) {
       St(base, arr + 4 * kept, p);
       ++kept;
       on_ice[(p - Record(sim, t, 0)) / kRecordStride] = true;
@@ -132,7 +143,9 @@ int Repair(uint8_t* base, uint32_t sim, int t, uint32_t arr, int n, const char* 
         role_on[role] = true;
       }
     } else {
-      ++dropped;
+      if (dropped++ == 0) {
+        first_bad = p;
+      }
     }
   }
   int want = static_cast<int32_t>(Ld(base, sim + kStrength + 4 * static_cast<uint32_t>(t)));
@@ -162,7 +175,7 @@ int Repair(uint8_t* base, uint32_t sim, int t, uint32_t arr, int n, const char* 
         for (int q = 0; q < 4 && pick < 0; ++q) {
           for (int i = 0; i < kRecordCount; ++i) {
             const uint32_t rec = Record(sim, t, i);
-            if (!on_ice[i] && Ld(base, rec) != 0 && static_cast<int32_t>(Ld(base, rec + 8)) == pref[q]) {
+            if (!on_ice[i] && !IsEmptyRecord(base, rec) && static_cast<int32_t>(Ld(base, rec + 8)) == pref[q]) {
               pick = i;
               break;
             }
@@ -186,13 +199,24 @@ int Repair(uint8_t* base, uint32_t sim, int t, uint32_t arr, int n, const char* 
   if (const uint32_t k = LogNumber()) {
     int empty = 0;
     for (int i = 0; i < kRecordCount; ++i) {
-      if (Ld(base, Record(sim, t, i)) == 0) {
+      if (IsEmptyRecord(base, Record(sim, t, i))) {
         ++empty;
       }
     }
+    std::string bad;
+    if (dropped > 0) {
+      if (IsRecord(sim, t, first_bad)) {
+        bad = fmt::format("; first bad: record {} (pid {} type {} pos {} +24 {})",
+                          (first_bad - Record(sim, t, 0)) / kRecordStride, Ld(base, first_bad), Ld(base, first_bad + 8),
+                          Ld(base, first_bad + 20), Ld(base, first_bad + 24));
+      } else {
+        bad = fmt::format("; first bad: pointer {:08X}", first_bad);
+      }
+    }
     REXLOG_WARN("[nhllegacy] sim guard #{} ({}): sim {:08X} side {} (teamid {}): on the ice {} (bad {}), should be "
-                "{} - added {} from the game roster ({} empty records in it)",
-                k, where, sim, t, static_cast<int32_t>(Ld(base, TeamBase(sim, t))), n0, dropped, want, placed, empty);
+                "{} - added {} from the game roster ({} empty records in it){}",
+                k, where, sim, t, static_cast<int32_t>(Ld(base, TeamBase(sim, t))), n0, dropped, want, placed, empty,
+                bad);
   }
   return kept + placed;
 }
