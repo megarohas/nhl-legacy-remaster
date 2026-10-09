@@ -62,6 +62,12 @@ uint32_t Load32(uint8_t* base, uint32_t addr) {
   return __builtin_bswap32(v);
 }
 
+uint16_t Load16(uint8_t* base, uint32_t addr) {
+  uint16_t v;
+  std::memcpy(&v, base + addr + (addr >= 0xE0000000u ? 0x1000u : 0u), 2);
+  return __builtin_bswap16(v);
+}
+
 bool On() {
   static const bool on = REXCVAR_GET(nhl_aigm32) && NhlLegacyThirtyTwo();
   return on;
@@ -141,6 +147,24 @@ void NhlLegacyAigmTeamByte(PPCRegister& p, PPCRegister& i) {
 // После `add p, i, блок` перед `stbx v, p, 0x1043C` — порядок команд +0x1043C[i].
 void NhlLegacyAigmOrderByte(PPCRegister& p, PPCRegister& i) {
   Bytes(p, i, kOrderBytes, kSideOrderBytes);
+}
+
+// 8295B788 (число команд +668, команды игрока, затем init 829555B8): после — в лог поля блока, которые при
+// 32 командах без nhl_aigm32 перекрывают записи 30/31 (+636 — номер команды игрока, +630/+632 — счётчик и
+// знаменатель процента +641). Пишет и при выключенном nhl_aigm32 — для сравнения «до/после».
+extern "C" void __imp__sub_8295B788(PPCContext& ctx, uint8_t* base);
+extern "C" void sub_8295B788(PPCContext& ctx, uint8_t* base) {
+  const uint32_t obj = ctx.r3.u32;
+  __imp__sub_8295B788(ctx, base);
+  static int logged = 0;
+  if (logged < 4) {
+    ++logged;
+    const uint32_t block = Load32(base, obj + 8);
+    REXLOG_INFO("[nhllegacy] AI GM: teams {}, user team (+636) {:08X}, counter (+630) {:04X}, denominator (+632) "
+                "{:08X}, percent (+641) {}, nhl_aigm32 {}",
+                Load32(base, obj + 668), Load32(base, block + 636), Load16(base, block + 630),
+                Load32(base, block + 632), Load32(base, block + 640) >> 16 & 0xFF, On() ? "on" : "off");
+  }
 }
 
 // 82B2166C `cmpwi cr6, r28, 30` (цикл AI межсезонья 82B214A8): true — следующая команда (→ 82B21504).
