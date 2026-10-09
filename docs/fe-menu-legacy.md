@@ -352,8 +352,18 @@ NHL 12 проявлялась (`_alpha` 0 → 100 за `m_speedZoomIn` 90 кад
 - EXIT с exe legacy-port (`--nhl_menu_exit=true`): «[nhllegacy] menu exit (ShowMarketplaceUI): closing like the
   window close button» → «Window closing, shutting down…» → «Title terminated» за 0,2 с.
 
-Панель описаний («Features», 5 страниц из exe) по-прежнему рекламирует EASHL, HUT Online Seasons и GM
-Connected (`TXT_OFFLINE_DYNAMIC_MSG_BODY_0…2`). Переписать их — правка локализации, по желанию пользователя.
+**Панель описаний** внизу справа листает 5 страниц из exe (`TXT_OFFLINE_DYNAMIC_MSG_TITLE/BODY_0…4`).
+Страницы 0–2 рекламировали онлайн (EASHL Seasons, HUT Online Seasons, GM Connected). По решению
+пользователя они переписаны на офлайн-режимы меню (`PANEL` в инструменте; `--keep-panel` — оставить).
+Длина — не больше оригиналов:
+
+| Стр. | Было | Стало |
+|---|---|---|
+| 0 | Features — EASHL Seasons | Be a GM — «Run your favorite franchise in a 32-team NHL from the 2026/27 season. Sign free agents, make trades and draft your next superstar.» |
+| 1 | Hockey Ultimate Team — HUT Online Seasons | Play Now — «Jump straight into a game with any of the 32 NHL teams, including the Seattle Kraken and Vegas Golden Knights, with 2026/27 rosters. Play against the CPU or a friend.» |
+| 2 | GM Connected | Battle for the Cup — «Battle for the Cup is one playoff series for the championship against a friend or the CPU. Pick any two teams and play for the Stanley Cup.» (первая фраза — строка EA `TXT_HEAD_TO_HEAD_MODE_NEW`) |
+
+Страницы 3 (Enforcer Engine) и 4 (Live the Life) — прежние.
 
 **Сборка, установка, откат.**
 
@@ -365,5 +375,5 @@ bash game/work/legacy-fe/install-legacy-fe.sh menu  # при закрытой и
 ```
 
 `--exit before-featured` — EXIT перед FEATURED, `--exit none` — без EXIT; `--keep ИМЯ,…` — оставить пункты
-(например `TXT_COMMUNITY`). Локализация в сборке — из `out` (база legacy-data); при пересборке локализации
+(например `TXT_COMMUNITY`); `--keep-panel` — прежние тексты панели описаний. Локализация в сборке — из `out` (база legacy-data); при пересборке локализации
 legacy-data подпись вернётся к «Xbox Live Marketplace» — тогда `menuitems_legacy.py build` ещё раз.

@@ -2,12 +2,14 @@
 
     python menuitems_legacy.py list [FILE.big]          # пункты по массивам: номер, имя, подпись, смещения
     python menuitems_legacy.py build [--exit last|before-featured|none] [--keep-custom-music] [--keep ИМЯ,…]
-                                     [--work DIR] [--no-out]
+                                     [--keep-panel] [--work DIR] [--no-out]
         # → WORK (game/work/legacy-data/menu-items/build, раскладка cache:) и game/work/legacy-data/out; список
         #   своих файлов — game/work/legacy-data/menu-items/files.txt:
         #   fe/ion/game/menus/mainmenuitems.big — без онлайн-пунктов (HIDE) и с EXIT;
-        #   fe/loc/NHL_ENG_US.db — локализация из out (база legacy-data) с подписью EXIT: ключ XboxLiveMarketPlace
-        #       («Xbox Live Marketplace») → «Exit» (locdb put: своя строка, чужие ключи с тем же текстом не меняются)
+        #   fe/loc/NHL_ENG_US.db — локализация из out (база legacy-data): подпись EXIT — ключ XboxLiveMarketPlace
+        #       («Xbox Live Marketplace») → «Exit»; панель описаний главного меню — страницы 0–2 (EASHL, HUT Online,
+        #       GM Connected) → Be a GM, Play Now, Battle for the Cup (PANEL; --keep-panel — оставить). locdb put:
+        #       своя строка, чужие ключи с тем же текстом не меняются
     python menuitems_legacy.py check [DIR]              # разбор собранного: какие пункты в массивах, отличия
                                                         # от оригинала — только правки
 
@@ -43,6 +45,20 @@ LOC_META = 'fe/loc/nhl_eng_us-meta.xml'
 ROOT = 'objMainMenu.arrRootMenu'
 PUSH, CONCAT = bytes.fromhex('a3018c'), bytes.fromhex('a3024f')      # PushWordConstant «push» #396 / «concat» #591
 EXIT_NAME, EXIT_KEY, EXIT_TEXT = 'XboxLiveMarketplace', 'XboxLiveMarketPlace', 'Exit'
+# панель описаний внизу справа главного меню («Features», 5 страниц TXT_OFFLINE_DYNAMIC_MSG_TITLE/BODY_0…4 из exe):
+# страницы 0–2 рекламировали онлайн (EASHL Seasons, HUT Online Seasons, GM Connected) — теперь офлайн-режимы
+# меню (3 — Enforcer Engine, 4 — Live the Life остаются); по длине не больше оригиналов
+PANEL = {
+    'TXT_OFFLINE_DYNAMIC_MSG_TITLE_0': 'Be a GM',
+    'TXT_OFFLINE_DYNAMIC_MSG_BODY_0': 'Run your favorite franchise in a 32-team NHL from the 2026/27 season. '
+                                      'Sign free agents, make trades and draft your next superstar.',
+    'TXT_OFFLINE_DYNAMIC_MSG_TITLE_1': 'Play Now',
+    'TXT_OFFLINE_DYNAMIC_MSG_BODY_1': 'Jump straight into a game with any of the 32 NHL teams, including the Seattle '
+                                      'Kraken and Vegas Golden Knights, with 2026/27 rosters. Play against the CPU or a friend.',
+    'TXT_OFFLINE_DYNAMIC_MSG_TITLE_2': 'Battle for the Cup',
+    'TXT_OFFLINE_DYNAMIC_MSG_BODY_2': 'Battle for the Cup is one playoff series for the championship against a friend '
+                                      'or the CPU. Pick any two teams and play for the Stanley Cup.',
+}
 
 # что не добавлять: (массив, имя пункта или «cb:колбэк» динамического пункта, почему)
 HIDE = [
@@ -369,23 +385,27 @@ def plan(src, exit_mode='last', hide=None):
     return edits, hidden
 
 
-def loc_exit(src_db, dst_db, meta):
-    """Локализация: ключ XboxLiveMarketPlace → «Exit» (своя строка в конец пула, locdb put)."""
+def loc_edits(src_db, dst_db, meta, edits):
+    """Локализация: {ключ: текст} — своя строка в конец пула (locdb put: чужие ключи с тем же текстом не
+    меняются); уже такой текст — без правки. → [(ключ, было, стало)]."""
     import locdb
     from tdb_read import load_meta
     loc = locdb.LocDb(open(src_db, 'rb').read(), load_meta(meta))
-    found = loc.find_all(EXIT_KEY)
-    if not found:
-        raise SystemExit(f'{src_db}: нет ключа {EXIT_KEY}')
-    old = loc.text(loc.text_off_at(found[0]))
-    if old != EXIT_TEXT:
-        loc.put(EXIT_KEY, EXIT_TEXT)
+    done = []
+    for key, text in edits.items():
+        found = loc.find_all(key)
+        if not found:
+            raise SystemExit(f'{src_db}: нет ключа {key}')
+        old = loc.text(loc.text_off_at(found[0]))
+        if old != text:
+            loc.put(key, text)
+        done.append((key, old, text))
     bad = loc.check()
     if bad:
         raise SystemExit('локализация: ' + '; '.join(bad[:3]))
     loc.db.fix()
     open(dst_db, 'wb').write(loc.db.d)
-    return old
+    return done
 
 
 def loc_text(db, meta, key):
@@ -442,18 +462,20 @@ def cmd_build(args):
         if arr.startswith('objMainMenu.') and any(arr == h[0] for h in hidden) or arr == ROOT:
             lines.append(f'  {arr.split(".")[-1]}: {", ".join(names)}')
     built = [MENUITEMS]
-    if exit_mode != 'none':
+    loc = ({EXIT_KEY: EXIT_TEXT} if exit_mode != 'none' else {}) | ({} if '--keep-panel' in args else PANEL)
+    if loc:
         sdb = p(P.out, LOC)
         if not os.path.exists(sdb):
             raise SystemExit(f'нет {sdb} (локализация legacy-data)')
         ddb = p(work, LOC)
         os.makedirs(os.path.dirname(ddb), exist_ok=True)
-        old = loc_exit(sdb, ddb, legacy_src(LOC_META))
-        lines.append(f'{LOC}: {EXIT_KEY} «{old}» → «{EXIT_TEXT}» (из {sdb})')
+        lines.append(f'{LOC} (из {sdb}):')
+        for key, old, new in loc_edits(sdb, ddb, legacy_src(LOC_META), loc):
+            lines.append(f'  {key}: «{old}» → «{new}»' if old != new else f'  {key}: «{new}» (уже)')
         built.append(LOC)
     open(os.path.join(work, 'build.log'), 'w', encoding='utf-8').write('\n'.join(lines) + '\n')
     json.dump({'exit': exit_mode, 'hide_spec': [list(h) for h in hide], 'hide': [list(h) for h in hidden],
-               'files': built},
+               'loc': loc, 'files': built},
               open(os.path.join(work, 'build.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
     for x in lines:
         log(x)
@@ -521,13 +543,15 @@ def cmd_check(args):
         if name in vis.get(arr, []):
             ok = False
             log(f'  ОШИБКА: {name} в {arr} всё ещё добавляется')
-    if meta['exit'] != 'none':
-        if EXIT_NAME not in vis.get(ROOT, []):
+    if meta['exit'] != 'none' and EXIT_NAME not in vis.get(ROOT, []):
+        ok = False
+        log('  ОШИБКА: EXIT нет в корне')
+    for key, text in meta.get('loc', {}).items():
+        t = loc_text(p(work, LOC), legacy_src(LOC_META), key)
+        log(f'  {LOC}: {key} = «{t}»')
+        if t != text:
             ok = False
-            log('  ОШИБКА: EXIT нет в корне')
-        t = loc_text(p(work, LOC), legacy_src(LOC_META), EXIT_KEY)
-        log(f'  {LOC}: {EXIT_KEY} = «{t}»')
-        ok = ok and t == EXIT_TEXT
+            log(f'  ОШИБКА: ждали «{text}»')
     log('ИТОГ: ' + ('всё сходится' if ok else 'ЕСТЬ ОШИБКИ'))
     if not ok:
         sys.exit(1)
