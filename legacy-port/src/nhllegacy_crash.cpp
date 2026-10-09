@@ -27,6 +27,7 @@
 #include "nhllegacy_debug.h"
 
 void NhlLegacyStartWatcher();  // nhllegacy_watch.cpp
+void NhlLegacyAsTraceDump(FILE* f);  // nhllegacy_astrace.cpp
 
 namespace {
 
@@ -203,6 +204,7 @@ LONG WINAPI CrashFilter(EXCEPTION_POINTERS* info) {
     WriteFrame(f, i, addr);
     fflush(f);
   }
+  NhlLegacyAsTraceDump(f);  // nhllegacy_astrace.cpp (nhl_astrace)
   fclose(f);
   WriteSnapshot("crash", info);
   return EXCEPTION_CONTINUE_SEARCH;
