@@ -92,7 +92,10 @@ class Profile:
 
     @property
     def work(self):
-        """Корень промежуточных файлов инструментов этой игры."""
+        """Корень промежуточных файлов инструментов этой игры. У NHL Legacy его можно перенести переменной
+        LEGACY_DATA_WORK (сухой прогон tools/legacy_data/build-all.sh в отдельную папку; out — внутри неё)."""
+        if self.name == 'legacy' and os.environ.get('LEGACY_DATA_WORK'):
+            return os.path.abspath(os.environ['LEGACY_DATA_WORK'])
         return self._g(*self.work_parts)
 
     def work_dir(self, *parts):
@@ -101,6 +104,8 @@ class Profile:
     @property
     def out(self):
         """Готовый набор файлов для cache: этой игры (дерево путей как в cache:)."""
+        if self.name == 'legacy' and os.environ.get('LEGACY_DATA_WORK'):
+            return os.path.join(self.work, 'out')
         return self._g(*self.out_parts)
 
     @property

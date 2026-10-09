@@ -66,6 +66,12 @@ def ref_meta():
     return None
 
 
+def legacy_work(game):
+    """Корень работы NHL Legacy: game/work/legacy-data или LEGACY_DATA_WORK (сухой прогон build-all)."""
+    env = os.environ.get('LEGACY_DATA_WORK')
+    return os.path.abspath(env) if env else os.path.join(game, 'work', 'legacy-data')
+
+
 class Paths:
     def __init__(self, game=None, work=None):
         """`work` — папка промежуточных файлов, отчётов и выходной базы: абсолютный путь или
@@ -74,7 +80,7 @@ class Paths:
         self.game = game or game_dir()
         # Legacy: всё своё — в game/work/legacy-data/ (кэш сети roster-cache — общий: данные не зависят от игры)
         legacy = GAME.name == 'legacy'
-        base = os.path.join(self.game, 'work', 'legacy-data') if legacy else os.path.join(self.game, 'work')
+        base = legacy_work(self.game) if legacy else os.path.join(self.game, 'work')
         self.cache = os.path.join(self.game, 'work', 'roster-cache')
         if work and not os.path.isabs(work):
             parts = [x for x in os.path.normpath(work).split(os.sep) if x not in ('', '.')]

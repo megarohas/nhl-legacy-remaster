@@ -63,12 +63,13 @@ def use_game(name):
 GAME = gameprofile.get(arg('--game') if arg('--game') in gameprofile.GAMES else None)   # --game у roster — и каталог
 ART_MAX = use_game(GAME.name)
 if GAME.name == 'legacy':
-    OUT = os.path.join(ROOT, 'game', 'work', 'legacy-data', 'photos-all')
+    OUT = GAME.work_dir('photos-all')           # game/work/legacy-data/photos-all (или LEGACY_DATA_WORK)
 
 
 def work_dir():
-    default = ('roster-lines',) if GAME.name == 'nhl13' else ('legacy-data', 'roster')
-    return arg('--work', os.path.join(ROOT, 'game', 'work', *default))
+    if GAME.name == 'legacy':
+        return arg('--work', GAME.work_dir('roster'))
+    return arg('--work', os.path.join(ROOT, 'game', 'work', 'roster-lines'))
 
 
 def load(name):

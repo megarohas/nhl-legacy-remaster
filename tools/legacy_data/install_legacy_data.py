@@ -43,7 +43,7 @@ def _repo():
 
 
 GAME = os.path.join(_repo(), 'game')
-W = os.path.join(GAME, 'work', 'legacy-data')           # выход сборки (out, out-ahl32) — вне git
+W = os.path.abspath(os.environ.get('LEGACY_DATA_WORK') or os.path.join(GAME, 'work', 'legacy-data'))   # выход — вне git
 SRC = os.path.join(W, 'out')
 SRC_AHL32 = os.path.join(W, 'out-ahl32')
 STATE = os.environ.get('LEGACY_DATA_STATE') or W        # installed.txt и backup/ (своя папка — для проверки на копии)

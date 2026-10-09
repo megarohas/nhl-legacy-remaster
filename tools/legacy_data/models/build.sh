@@ -10,8 +10,9 @@
 R="$(cd "$(dirname "$0")/../../.." && pwd)"           # tools/legacy_data/models → репозиторий
 [ -d "$R/game" ] || R="$(cd "$(git -C "$R" rev-parse --git-common-dir)/.." && pwd)"
 cd "$R" || exit 1
-M=game/work/legacy-data/models
-O=game/work/legacy-data/out
+M=${LEGACY_DATA_WORK:-game/work/legacy-data}/models
+mkdir -p "$M"
+O=${LEGACY_DATA_WORK:-game/work/legacy-data}/out
 export PYTHONIOENCODING=utf-8
 if [ "$1" != "--collect" ]; then
   python tools/rw4mesh.py --game legacy shin --no-preview > $M/build-sock.log 2>&1 || { echo "гетры: ошибка, $M/build-sock.log"; exit 1; }

@@ -1,0 +1,150 @@
+{
+ "_note": "восстановлено 09.10.2026 обратным счётом по фону out/ (spec.json menu12 пропал); только места m_backgroundPlayers → клуб (или явный цвет) — то, что берёт menu12_legacy.ring_edits",
+ "players": [
+  {
+   "slot": 0,
+   "team": "TBL",
+   "name": "место 0"
+  },
+  {
+   "slot": 2,
+   "team": "ANA",
+   "name": "место 2"
+  },
+  {
+   "slot": 3,
+   "team": "COL",
+   "name": "место 3"
+  },
+  {
+   "slot": 4,
+   "team": "CAR",
+   "name": "место 4"
+  },
+  {
+   "slot": 5,
+   "team": "CAR",
+   "name": "место 5"
+  },
+  {
+   "slot": 6,
+   "team": "COL",
+   "name": "место 6"
+  },
+  {
+   "slot": 7,
+   "team": "NYR",
+   "name": "место 7"
+  },
+  {
+   "slot": 8,
+   "team": "TBL",
+   "name": "место 8"
+  },
+  {
+   "slot": 9,
+   "team": "ANA",
+   "name": "место 9"
+  },
+  {
+   "slot": 10,
+   "team": "BOS",
+   "name": "место 10"
+  },
+  {
+   "slot": 11,
+   "team": "SJS",
+   "name": "место 11"
+  },
+  {
+   "slot": 12,
+   "team": "PIT",
+   "name": "место 12"
+  },
+  {
+   "slot": 13,
+   "team": "BOS",
+   "name": "место 13"
+  },
+  {
+   "slot": 14,
+   "team": "CAR",
+   "name": "место 14"
+  },
+  {
+   "slot": 15,
+   "team": "VGK",
+   "name": "место 15"
+  },
+  {
+   "slot": 16,
+   "team": "CAR",
+   "name": "место 16"
+  },
+  {
+   "slot": 17,
+   "team": "DAL",
+   "name": "место 17"
+  },
+  {
+   "slot": 18,
+   "team": "BOS",
+   "name": "место 18"
+  },
+  {
+   "slot": 19,
+   "team": "DAL",
+   "name": "место 19"
+  },
+  {
+   "slot": 20,
+   "team": "VGK",
+   "name": "место 20"
+  },
+  {
+   "slot": 21,
+   "team": "TBL",
+   "name": "место 21"
+  },
+  {
+   "slot": 22,
+   "team": "TBL",
+   "name": "место 22"
+  },
+  {
+   "slot": 23,
+   "team": "ANA",
+   "name": "место 23"
+  },
+  {
+   "slot": 24,
+   "team": "MTL",
+   "name": "место 24"
+  },
+  {
+   "slot": 25,
+   "team": "TBL",
+   "name": "место 25"
+  },
+  {
+   "slot": 26,
+   "team": "TBL",
+   "name": "место 26"
+  },
+  {
+   "slot": 27,
+   "team": "TBL",
+   "name": "место 27"
+  },
+  {
+   "slot": 28,
+   "team": "COL",
+   "name": "место 28"
+  },
+  {
+   "slot": 29,
+   "team": "DAL",
+   "name": "место 29"
+  }
+ ]
+}

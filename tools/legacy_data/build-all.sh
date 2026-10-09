@@ -2,6 +2,8 @@
 # Пересборка всего набора модов-данных NHL Legacy с нуля → game/work/legacy-data/out (дерево как в cache:).
 # Описание — docs/legacy-data.md. Ставится потом tools/legacy_data/install-legacy-data.sh (при закрытой игре).
 #   bash tools/legacy_data/build-all.sh [ЭТАП…] [--ahl32]
+#   LEGACY_DATA_WORK=папка bash tools/legacy_data/build-all.sh …   # сухой прогон: всё (и out) — в эту папку;
+#        входы, которые этапом не пересобираются (например, составы без сети), — положить туда заранее
 #        этапы: base roster photos equip collect fonts music models art menu (без этапов — все по порядку;
 #        --ahl32 — ещё вариант «АХЛ на 32», накладка game/work/legacy-data/out-ahl32)
 # Сеть: roster — только кэш (--offline); photos — докачка недостающих портретов лиг (пауза ≥ 1 с), остальное — без сети.
@@ -13,7 +15,9 @@ R="$(cd "$(dirname "$0")/../.." && pwd)"
 [ -d "$R/game" ] || R="$(cd "$(git -C "$R" rev-parse --git-common-dir)/.." && pwd)"   # из git worktree — основная копия
 cd "$R"
 T=tools/legacy_data
-W=game/work/legacy-data
+W=${LEGACY_DATA_WORK:-game/work/legacy-data}
+mkdir -p "$W"
+WA="$(cd "$W" && pwd)"                       # абсолютный — для шагов, которые идут из другой папки
 O=$W/out
 L=game/other/legacy/big/cacheboot
 AHL32=0
@@ -25,6 +29,7 @@ say() { echo "== $(date +%H:%M:%S) $*"; }
 
 if want base; then
   say "база: 32 команды (nhl32 --game legacy)"
+  mkdir -p $W/nhl32
   python tools/nhl32.py $L/db/nhlng.db $W/nhl32/nhlng.db $L/fe/loc/nhl_eng_us.db $W/nhl32/nhl_eng_us.db \
          --meta $L/db/nhlng-meta.xml $W/nhl32/nhlng-meta.xml --game legacy
   if [ $AHL32 = 1 ]; then
@@ -55,11 +60,11 @@ if want photos; then
 fi
 if want equip; then
   say "экипировка по фото"
-  (cd tools && python -m roster.equipment --game legacy apply ../$W/roster/nhlng-photos.db ../$W/roster/nhlng-equip.db \
-      --visor-rule --jersey-rule --report ../$W/roster/equipment-apply.json)
+  (cd tools && python -m roster.equipment --game legacy apply $WA/roster/nhlng-photos.db $WA/roster/nhlng-equip.db \
+      --visor-rule --jersey-rule --report $WA/roster/equipment-apply.json)
   [ $AHL32 = 1 ] && (cd tools && python -m roster.equipment --game legacy --work roster-ahl32 apply \
-      ../$W/roster-ahl32/nhlng-photos.db ../$W/roster-ahl32/nhlng-equip.db --visor-rule --jersey-rule \
-      --report ../$W/roster-ahl32/equipment-apply.json)
+      $WA/roster-ahl32/nhlng-photos.db $WA/roster-ahl32/nhlng-equip.db --visor-rule --jersey-rule \
+      --report $WA/roster-ahl32/equipment-apply.json)
 fi
 if want collect; then
   say "в out: база, схема, локализация, портреты"
@@ -98,6 +103,9 @@ if want art; then
   for t in SEA VGK CVF HSK; do python tools/teamart.py build $AS/src/$t.json $O --preview $AP/logos --game legacy; done
   python tools/czkit.py build $AS/src/SEA-cz.json $O --preview $AP/kits-cz --game legacy
   python tools/czkit.py build $AS/src/VGK-cz.json $O --preview $AP/kits-cz --game legacy
+  # превью формы на Select Jerseys — в позе EA по модели $W/fepose/pose.bin (её нет — прежняя отрисовка; модель —
+  # tools/fepose.py fit --game legacy питоном с numpy, docs/uniforms.md §13)
+  for t in SEA VGK; do python tools/czkit.py fe $AS/src/$t-cz.json $O --game legacy; done
   python tools/teamart.py alias 153 102 $O --game legacy      # CV  ← форма Springfield Falcons
   python tools/teamart.py alias 150 103 $O --game legacy      # HSK ← форма Providence Bruins
   python $AS/scripts/verify_out.py $O --game legacy
@@ -105,7 +113,9 @@ fi
 if want menu; then
   # после collect: menuitems_legacy.py правит локализацию out (и накладки — у неё своя) — пункт EXIT, панель описаний
   say "главное меню NHL 12 (menu12_legacy) и пункты меню (menuitems_legacy)"
-  python tools/menu12_legacy.py build
+  # места колец фона → клуб: spec.json menu12, если есть; иначе — восстановленный tools/legacy_data/menu/menu12-rings.json
+  SPEC12=game/work/menu12/players/spec.json; [ -f $SPEC12 ] || SPEC12=$T/menu/menu12-rings.json
+  python tools/menu12_legacy.py build --spec $SPEC12
   python tools/menuitems_legacy.py build
 fi
 say "готово → $O"

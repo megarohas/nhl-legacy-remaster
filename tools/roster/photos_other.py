@@ -312,8 +312,8 @@ def build(paths, log=print, jobs=6):
         raise SystemExit('нет write.json — сначала write')
     d = photo_dir(paths.game)
     manifest = read_json(os.path.join(d, '_other.json'), {}) or {}
-    base = ('work',) if common.GAME.name == 'nhl13' else ('work', 'legacy-data')
-    root = os.path.join(paths.game, *base, 'photos-other', os.path.basename(os.path.normpath(paths.work)))
+    base = os.path.join(paths.game, 'work') if common.GAME.name == 'nhl13' else common.legacy_work(paths.game)
+    root = os.path.join(base, 'photos-other', os.path.basename(os.path.normpath(paths.work)))
     work = [(o['nhl_id'], o['artid'], os.path.join(d, f"{o['nhl_id']}.png"), root, common.GAME.name) for o in wr['players']
             if str(o['nhl_id']) in manifest and o.get('artid') and os.path.exists(os.path.join(d, f"{o['nhl_id']}.png"))]
     t0 = time.time()
