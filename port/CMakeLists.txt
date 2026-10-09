@@ -27,6 +27,7 @@ set(NHL13_SOURCES
     src/nhl13_schedule.cpp
     src/nhl13_pad.cpp
     src/nhl13_fa.cpp
+    src/nhl13_draftclass.cpp
 )
 
 if(WIN32)
