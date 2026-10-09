@@ -84,13 +84,17 @@ S:\Claude\megarohas_nhl13\legacy-port\build.cmd win-amd64-relwithdebinfo
   (Release, свой SDK). Настройки — `nhllegacy.toml` рядом с exe (шаблон `nhllegacy.example.toml`;
   `build.cmd` кладёт его, если своего нет): игра — `game/other/legacy/disc`, сейвы и `cache:` —
   `legacy-port/userdata` (своя папка, не `game/userdata` NHL 13), лог — `legacy-port/out/game.log`.
-  **С 09.10 (14:36) под ярлыком — сборка №5:** чистая сборка с нуля `main` 464c4ef (код порта = d69ed8c, как у
+  **С 09.10 (15:55) под ярлыком — сборка №6:** exe 5ddd1ec9, pdb 0060569e (код = 5f02690: исправление падения сима
+  регулярки на 32 и фарм-клуб SEA/VGK на Select Team, см. ниже), DLL и `nhllegacy_snap.exe` — как у №5. `nhllegacy.toml`
+  (93020cf4) не менялся. Откат на №5 — файлы из `backup-20261009-e2c341b2/` (exe e2c341b2, pdb 922168e6, DLL, snap,
+  копия toml) скопировать обратно, игра закрыта.
+  Сборка №5 (09.10, 14:36): чистая сборка с нуля `main` 464c4ef (код порта = d69ed8c, как у
   №4) против восстановленного своего SDK ([sdk-build.md](sdk-build.md), «Восстановление с нуля»). Файлы (md5):
   `nhllegacy.exe` e2c341b2, `nhllegacy.pdb` 922168e6, `rexruntime.dll` bc66c205, `rexgpu-xenos.dll` 8ec35aa1,
   `nhllegacy_snap.exe` f5d86652. `nhllegacy.toml` (93020cf4) не менялся: `nhl_teams = 32`, `nhl_ahl_teams = 32`,
   `nhl_fa32`, `nhl_aigm32`, `nhl_menu_exit`, `nhl_draftclass_age`, `nhl_menu32`, потолок 104 / 76,9 млн,
   `resolution_scale = 1`, D3D12 ROV.
-  **Откат** (игра закрыта): из `out/build/win-amd64-release/backup-20261009-a101877f/` скопировать обратно
+  **Откат на №4** (игра закрыта): из `out/build/win-amd64-release/backup-20261009-a101877f/` скопировать обратно
   `nhllegacy.exe`, `nhllegacy.pdb`, `rexruntime.dll`, `rexgpu-xenos.dll`, `nhllegacy_snap.exe` — это сборка №4
   (exe a101877f, 09.10 10:26, DLL 6d1d0972 / cc1ae1d0), toml тот же (копия там же). Ещё раньше:
   `backup-20261009-c4d63a79/` — сборка №3 (exe c4d63a79, до `nhl_draftclass_age` и `nhl_menu32`: с ней эти две
