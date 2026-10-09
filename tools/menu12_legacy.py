@@ -1,7 +1,7 @@
 """Главное меню NHL 12 в NHL Legacy: файлы для cache: Legacy (фон с игроками, вид списка меню).
 
     python menu12_legacy.py build [--from DIR] [--db DB] [--spec SPEC] [--work DIR] [--no-out]
-                                  [--keep-fade] [--no-list] [--no-players]
+                                  [--keep-fade] [--no-list] [--no-players] [--no-underlay]
         # DIR — сборка tools/menu12.py для NHL 13 (по умолчанию game/work/menu12/out/nhl12, то, что ставит
         #   install-menu12.sh; вариант арены «в нашем цвете» — game/work/menu12/out/tint-245C99): оттуда фон
         #   NHL 12 с правками menu12 (bg_edits, проезды) и 72 картинки игроков и легенд — без пересборки.
@@ -15,7 +15,11 @@
         #       (25/34), ряды 28/45 (у NHL 12 и 13; у Legacy 23/40), сдвиг выделенного 10, без затухания пунктов
         #       по удалению от выделенного (--keep-fade — оставить);
         #   fe/ion/main.big — шрифт пунктов 34 (у Legacy 22), тень выделенного #DDDDDD, mDisabledAlpha 50;
-        #   fe/ion/artassets/backgrounds/mainmenu{players,legends}{,blur}/nhl<N>.big — игроки menu12.
+        #   fe/ion/artassets/backgrounds/mainmenu{players,legends}{,blur}/nhl<N>.big — игроки menu12;
+        #   fe/ion/game/background/nhlbluebackground.big — «цветной фон» под всеми меню (синяя подложка mcColor и
+        #       фото-арена Legacy поверх): на главном меню фото-арена больше не сжимается в «телевизор» студии
+        #       Legacy (INACTIVE_* = ACTIVE_*) и не открывает синюю подложку, пока въезжает и проявляется арена
+        #       NHL 12; сама подложка — почти чёрная (--no-underlay — не класть).
     python menu12_legacy.py check [DIR]        # разбор собранного (DIR — WORK): правки байткода, сверка с
                                                # оригиналами (вне правок байты те же), плашка
     python menu12_legacy.py mockup [DIR] [--out PNG]   # примерный вид плашки и пунктов (Pillow; не снимок игры)
@@ -64,6 +68,19 @@ FADE = {'TXT_ALPHA_START': (80, 100), 'TXT_ALPHA_DECREMENT': (10, 0)}   # зат
 # (кнопка A, метка «New», стрелка) — на ту же величину, что середина полосы: 0,5 → 7,5.
 SEL_DY = -11
 SEL_LEGACY_DY = 7
+
+# «цветной фон» (NHLBlueBackground, boot.big; у Legacy и NHL 13 побайтно один): подложка mcColor (Shape 1,
+# заливка #0A09E1) и mcBackground — фото-арена Legacy (NHLBlueBackgroundComponents, cacheboot.big). При входе в
+# грань MENU код сжимает mcBackground до INACTIVE_* (30 % в точке телевизора студии Legacy), при выходе —
+# возвращает ACTIVE_*. У фона NHL 12 телевизора нет: сжатие только открывало синюю подложку, пока арена NHL 12
+# въезжает (переход граней) и проявляется (_alpha 0 → 100 за m_speedZoomIn). Теперь INACTIVE = ACTIVE: под
+# главным меню — та же тёмная арена Legacy, что под остальными меню; подложка — почти чёрная (если что-то её
+# всё же откроет).
+UNDERLAY = 'fe/ion/game/background/nhlbluebackground.big'
+UNDERLAY_CONSTS = {'INACTIVE_X_POS': (166, 0), 'INACTIVE_Y_POS': (-73, 0),
+                   'INACTIVE_X_SCALE': (30, 100), 'INACTIVE_Y_SCALE': (30, 100)}
+UNDERLAY_SHAPE = 1                               # mcColor
+UNDERLAY_COLOR = (0xFF0A09E1, 0xFF07080A)
 
 
 def p(root, rel):
@@ -129,6 +146,11 @@ def const_edits(path, block, values):
                 if got != old or not -128 <= new <= 127:
                     raise SystemExit(f'{a.args[0]}: {got}, ждали {old} (новое {new})')
                 edits.append((v.off + 1, bytes([old & 255]), bytes([new & 255])))
+            elif v.name == 'PushShort' and not isinstance(old, float):
+                got = v.args[0] - 65536 if v.args[0] >= 32768 else v.args[0]      # PushShort — тоже со знаком
+                if got != old or not -32768 <= new <= 32767:
+                    raise SystemExit(f'{a.args[0]}: {got}, ждали {old} (новое {new})')
+                edits.append((v.off + 1, struct.pack('>h', old), struct.pack('>h', new)))
             else:
                 raise SystemExit(f'{a.args[0]}: {v.name} {v.args} — не та команда')
             seen.add(a.args[0])
@@ -176,6 +198,39 @@ def main_edits(path, old=22, new=SIZE):
     if len(edits) != 6:
         raise SystemExit(f'main.big: ожидалось 6 правок, найдено {len(edits)} — другой файл?')
     return edits
+
+
+def underlay_edits(path):
+    """nhlbluebackground.big: INACTIVE_* → значения ACTIVE_* (4 константы класса NHLBlueBackground)."""
+    return const_edits(path, '__Packages.game.background.NHLBlueBackground»', UNDERLAY_CONSTS)
+
+
+def underlay_fill(mv):
+    """(запись BIGF, смещение слова цвета в геометрии) заливки-цвета подложки mcColor."""
+    fills = [fl for mesh in mv.geometry.get(UNDERLAY_SHAPE, []) for fl in mesh if fl.type == febg.FILL_SOLID]
+    if len(fills) != 1:
+        raise SystemExit(f'{UNDERLAY}: у Shape {UNDERLAY_SHAPE} заливок-цвета {len(fills)}, ждали 1 — другой файл?')
+    return str(UNDERLAY_SHAPE + 1), fills[0]
+
+
+def build_underlay(src, dst):
+    """Правки «цветного фона»: константы INACTIVE_* (байткод той же длины) и цвет подложки (слово заливки)."""
+    tmp = dst + '.tmp'
+    feapt.patch_bytes(src, tmp, underlay_edits(src), log=lambda *a: None)
+    mv = febg.FeMovie.load(tmp)
+    key, fl = underlay_fill(mv)
+    old, new = UNDERLAY_COLOR
+    if fl.color != old:
+        raise SystemExit(f'{UNDERLAY}: цвет подложки {fl.color:08X}, ждали {old:08X}')
+    g, packed = mv.raw[key]
+    g = bytearray(g)
+    struct.pack_into('>I', g, fl.off + 0x10, new)
+    big = ph.Bigf(mv.big.raw)
+    big.put(key, febg.pack_like(bytes(g), packed))
+    out = febg.build_bigf(big)
+    febg.FeMovie(out)                                            # разбирается обратно
+    open(dst, 'wb').write(out)
+    os.remove(tmp)
 
 
 # ---------------------------------------------------------------- плашка-гибрид
@@ -409,6 +464,15 @@ def cmd_build(args):
         feapt.patch_bytes(smain, dmain, main_edits(smain), log=lambda *a: None)
         lines.append('main.big: кегль пунктов 22 → 34 (4 формата), тень выделенного #DDDDDD, mDisabledAlpha 50')
         built.append(MAIN)
+    # «цветной фон» под меню: без сжатия фото-арены на главном меню, подложка почти чёрная
+    if '--no-underlay' not in args:
+        dund = p(work, UNDERLAY)
+        os.makedirs(os.path.dirname(dund), exist_ok=True)
+        build_underlay(legacy_src(UNDERLAY), dund)
+        lines.append('nhlbluebackground.big: INACTIVE_* = ACTIVE_* (' + ', '.join(
+            f'{k} {a} → {b}' for k, (a, b) in UNDERLAY_CONSTS.items()) +
+            f'), подложка mcColor #{UNDERLAY_COLOR[0] & 0xFFFFFF:06X} → #{UNDERLAY_COLOR[1] & 0xFFFFFF:06X}')
+        built.append(UNDERLAY)
     built = sorted(set(built))
     open(os.path.join(work, 'build.log'), 'w', encoding='utf-8').write('\n'.join(lines) + '\n')
     json.dump({'from': src, 'db': db, 'spec': spec, 'keep_fade': keep_fade, 'files': built},
@@ -605,6 +669,30 @@ def cmd_check(args):
         if badd or not rt:
             fail('main.big: лишние отличия или BIGF')
         for line in show_edits(f, ed, ''):
+            log(line)
+    # «цветной фон»
+    f = p(work, UNDERLAY)
+    if os.path.exists(f):
+        mv, rt, nb = check_movie(f)
+        src = legacy_src(UNDERLAY)
+        orig = febg.FeMovie.load(src)
+        ed = underlay_edits(src)
+        diffs = apt_diff(orig.apt.data, mv.apt.data)
+        badd = covered(diffs, [(o, o + len(x)) for o, x, _ in ed]) + \
+            ([('длина',)] if len(orig.apt.data) != len(mv.apt.data) else [])
+        key, fl = underlay_fill(mv)
+        r0 = {n: x for n, x in orig.raw.items() if n not in ('0', key)}
+        r1 = {n: x for n, x in mv.raw.items() if n not in ('0', key)}
+        g0, g1 = orig.raw[key][0], mv.raw[key][0]
+        gd = apt_diff(g0, g1)
+        gbad = covered(gd, [(fl.off + 0x10, fl.off + 0x14)]) + ([('длина',)] if len(g0) != len(g1) else [])
+        log(f'{UNDERLAY}: {os.path.getsize(f)} байт, блоков кода {nb}, BIGF туда-обратно: {"да" if rt else "НЕТ"}; '
+            f'Apt Data: отличий {len(diffs)}, все — константы INACTIVE_*: {"да" if not badd else "НЕТ"}; '
+            f'геометрия подложки: цвет #{fl.color & 0xFFFFFF:06X}, прочее то же: {"да" if not gbad else "НЕТ"}; '
+            f'остальные записи те же: {"да" if r0 == r1 else "НЕТ"}')
+        if badd or gbad or not rt or r0 != r1 or fl.color != UNDERLAY_COLOR[1]:
+            fail('nhlbluebackground.big: лишние отличия, другой цвет подложки или BIGF')
+        for line in show_edits(f, ed, '__Packages.game.background.NHLBlueBackground»'):
             log(line)
     log('ИТОГ: ' + ('всё сходится' if ok else 'ЕСТЬ ОШИБКИ'))
     if not ok:

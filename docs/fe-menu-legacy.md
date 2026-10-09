@@ -166,11 +166,13 @@ bash game/work/legacy-data/install-legacy-data.sh @game/work/legacy-data/menu/fi
 bash game/work/legacy-data/uninstall-legacy-data.sh @game/work/legacy-data/menu/files.txt   # откат
 ```
 
-- **Состав.** 75 файлов, 13 082 472 байт:
+- **Состав.** 76 файлов, 13 086 192 байт:
   - `fe/ion/game/background/nhlmainmenubackground.big` (557 536 байт);
   - `fe/ion/game/components/menu.big` (123 868, у оригинала 113 884);
   - `fe/ion/main.big` (99 380);
-  - `fe/ion/artassets/backgrounds/mainmenu{players,playersblur,legends,legendsblur}/nhl<N>.big` — 29 + 29 + 7 + 7.
+  - `fe/ion/artassets/backgrounds/mainmenu{players,playersblur,legends,legendsblur}/nhl<N>.big` — 29 + 29 + 7 + 7;
+  - `fe/ion/game/background/nhlbluebackground.big` (3 720) — «цветной фон» без синей подложки на главном меню
+    (§7, с 09.10.2026; `--no-underlay` — без него).
 
   Имена строчные, как в архивах Legacy. Журнал сборки — `menu/build/build.log`.
 - **Своих файлов с такими путями в `out/` раньше не было.** В архивах Legacy есть только три ролика
@@ -236,3 +238,52 @@ bash game/work/legacy-data/uninstall-legacy-data.sh @game/work/legacy-data/menu/
   `PushShort` (`MINMUM_HIGHLIGHTED_LENGTH`), а `DIRECTION_IN = 255` — это −1. Поэтому в `dis` у Legacy
   `SelectorBG {_x: 227}` — это −29, `Glint {_x: 228, _y: 245}` — (−28, −11),
   `MenuItem.HIGHLIGHT_OFFSET = 228` — −28. `menu12_legacy.py` читает `PushByte` со знаком.
+
+## 7. Синяя подложка при входе в главное меню (09.10.2026, legacy-fe)
+
+Замечание пользователя: при загрузке главного меню сначала видна синяя подложка, на неё наезжает
+тёмная арена, и пока арена едет, сверху какое-то время ещё видно синее.
+
+**Причина.** Под всеми меню лежит «цветной фон» `game/background/NHLBlueBackground`
+(`boot:fe/ion/game/background/nhlbluebackground.big`, у Legacy и NHL 13 побайтно один,
+[fe-background.md](fe-background.md) §2, §10). В нём два слоя: подложка `mcColor` — заливка
+**#0A09E1** 1480×1281 — и над ней `mcBackground` — у Legacy фото пустой арены (`NHLBlueBackgroundComponents`,
+`cacheboot`). Слушатель `ModeTransitionStarted` (`_AnimateBlueBackground`) при входе в грань `MENU`
+сжимает `mcBackground` до `INACTIVE_*`: 30 % в точке (166, −73) от `BASE` (656, 366). Там стоит
+телевизор студии Legacy, и фото «уезжает» в него. При выходе из `MENU` фото возвращается в `ACTIVE_*`
+(0, 0, 100 %). У фона NHL 12 телевизора нет. Сжатие открывало синюю подложку на весь экран, пока арена
+NHL 12 проявлялась (`_alpha` 0 → 100 за `m_speedZoomIn` 90 кадров) и въезжала (переход граней MTM).
+Тонкая полоса сверху держится, пока лёд и крыша NHL 12 доезжают на место (600 кадров). По снимкам
+`game/work/legacy-fe/shots/before-*`: при входе после Press Start синее занимает до 62 % экрана
+(+0,3 с), при возврате из Play Now — до 27 %; полоса сверху видна ещё 5–7 с.
+
+**Правка** (`menu12_legacy.py build`, шаг «подложка», файл
+`fe/ion/game/background/nhlbluebackground.big` в `out` и `menu/files.txt`):
+
+| Что | Было → стало |
+|---|---|
+| `INACTIVE_X_POS` (`PushShort`) | 166 → 0 |
+| `INACTIVE_Y_POS` (`PushByte`, со знаком) | −73 → 0 |
+| `INACTIVE_X_SCALE`, `INACTIVE_Y_SCALE` | 30 → 100 |
+| заливка подложки `mcColor` (Shape 1, запись BIGF 2) | #0A09E1 → #07080A |
+
+`INACTIVE` = `ACTIVE`: на главном меню фото-арена Legacy остаётся на весь экран, и арена NHL 12
+проявляется поверх неё, как поверх любого другого меню. Анимации «зум» в `_ActivateBlueBackground`/
+`_DeactivateBlueBackground` идут между одинаковыми значениями и ничего не двигают. Подложка почти чёрная —
+на случай, если её что-то всё же откроет. Остальное в ролике побайтно то же: `check` сверяет Apt Data,
+геометрию и записи BIGF с оригиналом Legacy.
+
+**Проверено в игре** (09.10.2026, своя копия userdata, снимки `game/work/legacy-fe/shots/after-*`, лист
+`game/work/legacy-fe/underlay-before-after.png`). Ни на одном кадре нет синего:
+- вход в главное меню после Press Start;
+- PLAY → Play Now → Select Teams → назад (диалог «Yes») → главное меню;
+- CUSTOMIZE и назад; PLAY и назад.
+
+В переходах между подменю синего не было и раньше: там грань та же, `MENU`. Поставлено пользователю
+`game/work/legacy-fe/install-legacy-fe.sh underlay`; бэкап — `game/work/legacy-fe/backup-*`, откат —
+`uninstall-legacy-fe.sh`.
+
+Если для Legacy когда-нибудь поставят вариант фона из `game/work/legacy-data/fe/variants/` (`nhl13-*`,
+`legacy-gray`), в нём свой `nhlbluebackground.big` с прежними `INACTIVE_*`. Синее (или серое) тогда
+вернётся — те же четыре константы надо поправить и там. В NHL 13 с menu12 то же устройство: подложка
+#0A09E1 перекрашена вариантом «b» в приглушённый синий и тоже открывается на входе в главное меню.
