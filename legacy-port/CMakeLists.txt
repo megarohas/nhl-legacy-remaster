@@ -28,6 +28,7 @@ set(NHLLEGACY_SOURCES
     src/nhllegacy_fa.cpp
     src/nhllegacy_aigm.cpp
     src/nhllegacy_menu.cpp
+    src/nhllegacy_draftclass.cpp
 )
 
 if(WIN32)
