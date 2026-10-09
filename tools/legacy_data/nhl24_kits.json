@@ -1,0 +1,71 @@
+{
+ "about": "Новые формы NHL 24 в NHL Legacy (строки stockteamjerseys): номера закреплены, список только дописывается (tools/legacy_data/nhl24.py alloc).",
+ "kits": [
+  {
+   "club": "CHI",
+   "kit": "three",
+   "teamid": 6,
+   "style": 1,
+   "art": 6,
+   "variant": 6,
+   "fevariant": 6,
+   "jerseyindex": 10,
+   "locstring": 2
+  },
+  {
+   "club": "CHI",
+   "kit": "rr22",
+   "teamid": 6,
+   "style": 1,
+   "art": 6,
+   "variant": 7,
+   "fevariant": 7,
+   "jerseyindex": 11,
+   "locstring": 6
+  },
+  {
+   "club": "CHI",
+   "kit": "rr23",
+   "teamid": 6,
+   "style": 1,
+   "art": 6,
+   "variant": 8,
+   "fevariant": 8,
+   "jerseyindex": 12,
+   "locstring": 6
+  },
+  {
+   "club": "CHI",
+   "kit": "n90_three",
+   "teamid": 6,
+   "style": 1,
+   "art": 6,
+   "variant": 9,
+   "fevariant": 9,
+   "jerseyindex": 13,
+   "locstring": 6
+  },
+  {
+   "club": "CHI",
+   "kit": "n90_two",
+   "teamid": 6,
+   "style": 1,
+   "art": 6,
+   "variant": 10,
+   "fevariant": 10,
+   "jerseyindex": 14,
+   "locstring": 6
+  },
+  {
+   "club": "CHI",
+   "kit": "n90_four",
+   "teamid": 6,
+   "style": 1,
+   "art": 6,
+   "variant": 11,
+   "fevariant": 11,
+   "jerseyindex": 15,
+   "locstring": 6
+  }
+ ]
+}

@@ -4,8 +4,9 @@
 #   bash tools/legacy_data/build-all.sh [ЭТАП…] [--ahl32]
 #   LEGACY_DATA_WORK=папка bash tools/legacy_data/build-all.sh …   # сухой прогон: всё (и out) — в эту папку;
 #        входы, которые этапом не пересобираются (например, составы без сети), — положить туда заранее
-#        этапы: base roster photos equip collect fonts music models art menu (без этапов — все по порядку;
-#        --ahl32 — ещё вариант «АХЛ на 32», накладка game/work/legacy-data/out-ahl32)
+#        этапы: base roster photos equip collect fonts music models art menu nhl24 (без этапов — все по порядку;
+#        --ahl32 — ещё вариант «АХЛ на 32», накладка game/work/legacy-data/out-ahl32; nhl24 — накладка out-nhl24
+#        из пакета NHL 24, если он готов: game/work/nhl24/out/pack или NHL24_PACK=папка)
 # Сеть: roster — только кэш (--offline); photos — докачка недостающих портретов лиг (пауза ≥ 1 с), остальное — без сети.
 # Время (под нагрузкой ПК): base ~1 мин, roster ~6 мин, photos ~15 мин, models ~5 мин, art ~5 мин, music ~2 мин.
 # Скрипты и спеки — в git (tools/legacy_data/), в game/work/legacy-data — только выход и временное (с 09.10.2026,
@@ -23,7 +24,7 @@ L=game/other/legacy/big/cacheboot
 AHL32=0
 stages=()
 for a in "$@"; do [ "$a" = "--ahl32" ] && AHL32=1 || stages+=("$a"); done
-[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect fonts music models art menu)
+[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect fonts music models art menu nhl24)
 want() { for s in "${stages[@]}"; do [ "$s" = "$1" ] && return 0; done; return 1; }
 say() { echo "== $(date +%H:%M:%S) $*"; }
 
@@ -117,5 +118,18 @@ if want menu; then
   SPEC12=game/work/menu12/players/spec.json; [ -f $SPEC12 ] || SPEC12=$T/menu/menu12-rings.json
   python tools/menu12_legacy.py build --spec $SPEC12
   python tools/menuitems_legacy.py build
+fi
+if want nhl24; then
+  # после collect (берёт out/db и out-ahl32/db): пакет агента nhl24 — формы, шрифты номеров, центры и реклама льда,
+  # наклейки на шлемах, шорты и гетры, клюшки, шайба — сверка по manifest.json → накладка out-nhl24 (+ out-nhl24-ahl32):
+  # файлы пакета и база с hastie 0 у клубов пакета и новыми строками формы (номера — tools/legacy_data/nhl24_kits.json).
+  # Ставится install-legacy-data.sh [--ahl32] --nhl24, снимается uninstall-legacy-data.sh --nhl24.
+  P=${NHL24_PACK:-game/work/nhl24/out/pack}
+  if [ -f "$P/manifest.json" ]; then
+    say "пакет NHL 24 → накладка out-nhl24"
+    python $T/nhl24.py build "$P"
+  else
+    say "пакет NHL 24: нет $P/manifest.json — этап пропущен"
+  fi
 fi
 say "готово → $O"

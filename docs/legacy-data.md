@@ -334,6 +334,102 @@ Liiga, 34dfe267) обновлена, в CACHE её не ставили. Уста
 гетры 86, визор по правилу 118, исключения визора −426. Вариант `--ahl32`: 1325 игроков (+51 CV/HSK из
 Wikipedia), портреты у 1303, проверки OK.
 
+## Пакет NHL 24: формы, лёд, шлемы, шайба, клюшки (накладка `out-nhl24`, 09.10.2026)
+
+Пакет готовит агент nhl24 (`tools/fb/pack.py`, [nhl24-uniforms.md](nhl24-uniforms.md) §8). legacy-data сверяет
+пакет, собирает базу и ставит его в `cache:` отдельной накладкой поверх `out`. Первым идёт пилот: Чикаго (CHI) и
+общие ресурсы (реклама и логотипы на льду, шайба, клюшки). Остальные клубы — после пилота.
+
+**Решения пользователя (09.10).**
+- Шнуровки нет ни у одной формы: `hastie` = 0. В пилоте — у строк CHI.
+- Третьи формы 8 клубов, у которых в Legacy нет строки третьей (ANA, ARI, BUF, CHI, DAL, MTL, NJD, WPG), Reverse
+  Retro 2022/2023 и формы 90-х — новыми строками `stockteamjerseys`.
+- Центры льда — всем 32 клубам, шрифты номеров — все.
+
+**Номера новых форм — вариант «А».** Стиль 1 (Edge), арт клуба (номер EA 0…29, SEA 100, VGK 101), новый вариант.
+- Реестр — `tools/legacy_data/nhl24_kits.json` (в git). Номера выдаёт `nhl24.py alloc КЛУБ ФОРМА… --write`.
+  Реестр только дописывается, чтобы форма не меняла номер от сборки к сборке.
+- `variant` — наименьший, у которого у этого арта стиля 1 нет ни строки, ни файла комплекта (в архивах Legacy и в
+  `out`: свитер, номер и фамилия, шорты, гетры, превью, наклейка на шлем). `fevariant` = `variant`.
+- `jerseyindex` — следующий за последним у клуба. `locstring` — 2 у третьей (`three`), 6 у остальных.
+- Пилот CHI: three `1_6_6`, rr22 `1_6_7`, rr23 `1_6_8`, n90_three `1_6_9`, n90_two `1_6_10`, n90_four `1_6_11`;
+  `jerseyindex` 10–15.
+- Двузначный вариант удлиняет имена растров внутри файлов (`1_6_10` на символ длиннее `1_6_0`). Такой файл
+  собирается в контейнере EA с номером той же длины: kitpaint `--container`, например `1_10_0`; у наклейки на
+  шлем — `texlib_10_1_0`.
+- Предел формата — 32 формы на клуб (`jerseyindex`, `variant`, `fevariant` — по 5 бит). В данных EA больше 13 нет;
+  25 у DAL проверяет legacy-port (тест DAL25).
+
+**Формат пакета (format 1).** `ПАКЕТ/manifest.json` и `ПАКЕТ/cache/<путь в cache:>` — готовые файлы (RW4 `.rx2`,
+BIGF `.big`), ставятся как есть. Пакет по умолчанию — `game/work/nhl24/out/pack` (или `NHL24_PACK=папка`).
+
+```json
+{"format": 1,
+ "clubs": ["CHI"],
+ "files": [{"file": "rendering/jersey/texlib_1_6_6.rx2", "type": "jersey", "md5": "…", "size": 2797568,
+            "club": "CHI", "kit": "three", "action": "add"}],
+ "kits": [{"club": "CHI", "kit": "three", "variant": 6, "islightcolor": 0}]}
+```
+
+- `clubs` — клубы пакета: у всех их строк `stockteamjerseys` будет `hastie` = 0; `"all"` — у всех строк базы.
+- `files` — все файлы пакета. `file` — путь в `cache:` (через `/`, без `..`), `md5` и `size` обязательны; `club`,
+  `kit`, `action` (add/replace), `note` — для людей. Тип и путь:
+
+  | type | путь в `cache:` | что |
+  |---|---|---|
+  | jersey | `rendering/jersey/texlib_1_A_V.rx2` | свитер и шрифт номеров |
+  | name | `rendering/jersey/name_1_A_V_cm.rx2` | карта номера и фамилии |
+  | pant | `rendering/pant/texlib_1_A_V.rx2` | шорты |
+  | sock | `rendering/sock/sock_1_A_V_cm.rx2` | гетры |
+  | fe | `fe/ion/artassets/jerseys/jersey_1_A_F.big` | превью формы в меню |
+  | helmet | `rendering/logo/texlib_A_1_V.rx2` | наклейка на шлем (логотип или спонсор) |
+  | center | `rendering/icesurface/centerlogo_A_cm.rx2` | центр льда |
+  | ice | `rendering/icesurface/*.rx2` | логотипы и реклама на льду |
+  | puck | `rendering/puck/*.rx2` | шайба |
+  | stick | `rendering/playerstick/*.rx2` | клюшки |
+  | other | `rendering/…` или `fe/…` (`.rx2`, `.big`) | прочее, с полем `note` |
+
+  Файлы вне `rendering/` и `fe/` (например, `db/`) не принимаются: базу собирает legacy-data.
+- `kits` — новые формы, то есть новые строки базы. `club` и `kit` — как в реестре (`variant`, если указан, должен
+  совпасть), `islightcolor` — 0 или 1. У каждой новой формы в `files` должны быть jersey, name, pant, sock и fe её
+  номера. Наклейка на шлем (helmet) — по желанию: есть файл — `helmetlogo` 1, нет — 0.
+- Остальные поля новой строки ставит legacy-data: `teamid` клуба, `teamartid` = арт, `style` 1, `isdefault` 0,
+  `islockable` 0, `hastie` 0, `helmetnumbers` 1.
+
+**Сборка и установка.**
+
+```bash
+python tools/legacy_data/nhl24.py alloc CHI three rr22 rr23 --write  # номера новых форм — до упаковки пакета
+bash tools/legacy_data/build-all.sh nhl24                           # сверка пакета → out-nhl24 (+ out-nhl24-ahl32)
+bash tools/legacy_data/install-legacy-data.sh --ahl32 --nhl24       # поставить (у пользователя вариант --ahl32)
+bash tools/legacy_data/uninstall-legacy-data.sh --nhl24             # снять только накладку: cache: — как до неё
+python tools/legacy_data/nhl24.py verify ПАПКА_CACHE                 # cache: — как в манифесте и накладке
+```
+
+- Этап `nhl24` идёт после `collect`. Каждый файл пакета сверяется по типу, пути, md5 и размеру, при ошибке накладка
+  не собирается. Базы накладки — из `out/db` (и `out-ahl32/db` → `out-nhl24-ahl32`): `hastie` 0 у клубов пакета,
+  новые строки — в конец таблицы. Номера прежних строк не сдвигаются. Та же база — `db/draft_roster.db`.
+  Отчёт и манифест, по которому собрана накладка, — `game/work/legacy-data/nhl24/`.
+- Установщик с `--nhl24` сначала проверяет, что базы `out` не пересобраны после накладки. Иначе нужен
+  `build-all.sh nhl24`.
+- Флаги последней полной установки лежат в `install-flags.txt` рядом с `installed.txt`. Полная установка без
+  `--nhl24` при стоящей накладке отказывается: снять её — `uninstall --nhl24` или `--no-nhl24`. Так же с `--ahl32`
+  (`--no-ahl32`). До `install-flags.txt` вариант `--ahl32` узнаётся по базе в `cache:`.
+
+**Сейвы.** В сейвах франшизы (DYNASTY, 49 таблиц) таблицы `stockteamjerseys` нет, поэтому новые формы появятся и в
+уже начатых франшизах. В сейве составов она есть (`savegroups` allloaded, rosters, rosterupdate).
+
+**Проверено на пробном пакете** (09.10, 20:15–20:25). Пакет собран из файлов EA, без NHL 24: 37 файлов всех типов
+пилота, 6 новых форм CHI. Проверка шла на копии `cache:` и `installed.txt` пользователя (вариант `--ahl32`).
+- Сборка: в базах накладки отличается только `stockteamjerseys`: `hastie` 1 → 0 у трёх строк CHI и 6 новых строк
+  (709 → 715, у `--ahl32` 714 → 720).
+- `install --nhl24` без `--ahl32` отказывается. `install --ahl32 --nhl24` обновил 39 файлов (37 файлов пакета и
+  2 базы), `nhl24.py verify` — всё совпало.
+- Полная установка без `--nhl24` отказывается. `uninstall --nhl24` вернул `cache:` байт в байт, как у пользователя.
+  В `installed.txt` тот же набор путей, только пересортированный.
+- Ошибки пакета останавливают сборку, и прежняя накладка не трогается. Проверены: чужой md5, тип не по пути, у
+  новой формы нет гетр, формы нет в реестре, путь `db/`, `variant` не как в реестре, неизвестный клуб.
+
 ## Что сделали помощники (подробно — в своих документах)
 
 - **fe** — [fe-fonts.md](fe-fonts.md) «NHL Legacy», [fe-background.md](fe-background.md) §10: шрифт «1:1»

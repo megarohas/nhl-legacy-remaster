@@ -2,11 +2,16 @@
 порта Legacy. Только при закрытой игре (или игре с другой папкой userdata). Вызывается из
 tools/legacy_data/install-legacy-data.sh / uninstall-legacy-data.sh (docs/legacy-data.md).
 
-    python tools/legacy_data/install_legacy_data.py install [--ahl32] [ЧАСТЬ… | @СПИСОК…]
-    python tools/legacy_data/install_legacy_data.py uninstall [ЧАСТЬ…]
+    python tools/legacy_data/install_legacy_data.py install [--ahl32] [--nhl24] [ЧАСТЬ… | @СПИСОК…]
+    python tools/legacy_data/install_legacy_data.py uninstall [ЧАСТЬ… | --nhl24]
 
 --ahl32 — поверх out ещё накладка out-ahl32 (база и локализация «АХЛ на 32»: CV/HSK, nhl32 --ahl32;
 франшизе нужен порт с врезками АХЛ на 32).
+--nhl24 — и накладка out-nhl24 (пакет NHL 24: формы, лёд, шлемы, шайба, клюшки и база с новыми строками формы;
+с --ahl32 база — из out-nhl24-ahl32; собирает этап build-all.sh nhl24, docs/legacy-data.md, «Пакет NHL 24»).
+uninstall --nhl24 снимает только её: полная установка с прежними флагами без --nhl24 (cache: — как до накладки).
+Флаги последней полной установки — в install-flags.txt рядом с installed.txt. Чтобы полной установкой случайно не
+снять стоящую накладку, без её флага установка отказывается: --no-ahl32 / --no-nhl24 — снять сознательно.
 
 ЧАСТЬ — начало пути (db, fe/loc, fe/ion/fonts, audio, rendering…), @СПИСОК — файл со списком путей
 (files.txt помощников); без частей — всё из out (и тогда файлы прошлой установки, которых в out больше
@@ -46,9 +51,13 @@ GAME = os.path.join(_repo(), 'game')
 W = os.path.abspath(os.environ.get('LEGACY_DATA_WORK') or os.path.join(GAME, 'work', 'legacy-data'))   # выход — вне git
 SRC = os.path.join(W, 'out')
 SRC_AHL32 = os.path.join(W, 'out-ahl32')
+SRC_NHL24 = os.path.join(W, 'out-nhl24')                # накладка пакета NHL 24 (nhl24.py build)
+SRC_NHL24_AHL32 = os.path.join(W, 'out-nhl24-ahl32')    # её база для варианта --ahl32
+NHL24_REPORT = os.path.join(W, 'nhl24', 'report.json')  # из каких баз out собрана накладка
 STATE = os.environ.get('LEGACY_DATA_STATE') or W        # installed.txt и backup/ (своя папка — для проверки на копии)
 LIST = os.path.join(STATE, 'installed.txt')
 BACKUP = os.path.join(STATE, 'backup')
+FLAGS = os.path.join(STATE, 'install-flags.txt')        # флаги последней полной установки (--ahl32, --nhl24)
 
 
 def cache_dir():
@@ -132,17 +141,60 @@ def selected(rel, parts):
     return not parts or any(rel == p or rel.startswith(p + '/') for p in parts)
 
 
+def _md5(path):
+    import hashlib
+    h = hashlib.md5()
+    with open(path, 'rb') as f:
+        for b in iter(lambda: f.read(1 << 20), b''):
+            h.update(b)
+    return h.hexdigest()
+
+
+def installed_flags(cache):
+    """Флаги стоящей установки: из install-flags.txt; до него (установки 08–09.10) --ahl32 узнаётся по базе."""
+    if os.path.exists(FLAGS):
+        return set(read_list(FLAGS))
+    db = os.path.join(cache, 'db', 'nhlng.db')
+    ref = os.path.join(SRC_AHL32, 'db', 'nhlng.db')
+    if read_list(LIST) and os.path.exists(db) and os.path.exists(ref) and _md5(db) == _md5(ref):
+        return {'--ahl32'}
+    return set()
+
+
+def check_nhl24(ahl32):
+    """Накладка NHL 24 собрана и база её — из нынешних out (out-ahl32): иначе новая база out затёрлась бы старой."""
+    import json
+    if not os.path.isdir(SRC_NHL24) or not os.path.exists(NHL24_REPORT):
+        sys.exit(f'нет накладки {SRC_NHL24} (bash tools/legacy_data/build-all.sh nhl24)')
+    rep = json.load(open(NHL24_REPORT, encoding='utf-8'))
+    for key, base, dst in [('out', SRC, SRC_NHL24)] + ([('out-ahl32', SRC_AHL32, SRC_NHL24_AHL32)] if ahl32 else []):
+        if key not in rep or not os.path.exists(os.path.join(dst, 'db', 'nhlng.db')):
+            sys.exit(f'у накладки NHL 24 нет базы для {key} (build-all.sh nhl24 после collect{" --ahl32" if ahl32 else ""})')
+        if rep[key]['base_md5'] != _md5(os.path.join(base, 'db', 'nhlng.db')):
+            sys.exit(f'база {key} пересобрана после накладки NHL 24 — сначала bash tools/legacy_data/build-all.sh nhl24')
+
+
 def install(args, cwd):
     cache = cache_dir()
     if not os.path.isdir(SRC):
         sys.exit(f'нет сборки {SRC}')
-    ahl32 = '--ahl32' in args
-    args = [x for x in args if x != '--ahl32']
+    flags = {x for x in args if x in ('--ahl32', '--nhl24', '--no-ahl32', '--no-nhl24')}
+    ahl32, nhl24 = '--ahl32' in flags, '--nhl24' in flags
+    args = [x for x in args if x not in flags]
     if ahl32 and not os.path.isdir(SRC_AHL32):
         sys.exit(f'нет накладки {SRC_AHL32} (build-all.sh --ahl32)')
+    if nhl24:
+        check_nhl24(ahl32)
     parts = parse_parts(args, cwd)
+    if not parts:
+        had = installed_flags(cache)
+        for f in ('--ahl32', '--nhl24'):
+            if f in had and f not in flags and '--no-' + f[2:] not in flags:
+                sys.exit(f'сейчас стоит накладка {f[2:]}: добавьте {f} (оставить) или --no-{f[2:]} (снять); '
+                         f'накладку NHL 24 снимает uninstall-legacy-data.sh --nhl24')
     srcs = {}                                        # путь в cache: → файл-источник (накладка — главнее)
-    for base in [SRC] + ([SRC_AHL32] if ahl32 else []):
+    for base in [SRC] + ([SRC_AHL32] if ahl32 else []) + ([SRC_NHL24] if nhl24 else []) + \
+            ([SRC_NHL24_AHL32] if nhl24 and ahl32 else []):
         for root, _, names in os.walk(base):
             for n in names:
                 if n.endswith('.part'):
@@ -177,7 +229,10 @@ def install(args, cwd):
             print(f'убран {rel}')
         installed = sorted(now)
     write_list(LIST, installed)
-    print(f'NHL Legacy, моды-данные{" (+ АХЛ на 32)" if ahl32 else ""}: обновлено {changed} из {len(files)} файлов → {cache}; '
+    if not parts:
+        write_list(FLAGS, [f for f in ('--ahl32', '--nhl24') if f in flags])
+    extra = (' (+ АХЛ на 32)' if ahl32 else '') + (' (+ пакет NHL 24)' if nhl24 else '')
+    print(f'NHL Legacy, моды-данные{extra}: обновлено {changed} из {len(files)} файлов → {cache}; '
           f'всего поставлено {len(installed)}')
 
 
@@ -193,6 +248,13 @@ def restore(cache, rel):
 
 def uninstall(args, cwd):
     cache = cache_dir()
+    if '--nhl24' in args:                            # только накладка NHL 24: полная установка без неё
+        had = installed_flags(cache)
+        if '--nhl24' not in had or len(args) > 1:
+            sys.exit('накладка NHL 24 не стоит' if '--nhl24' not in had else 'uninstall --nhl24 — без частей')
+        install(sorted(had - {'--nhl24'}) + ['--no-nhl24'], cwd)
+        print('накладка NHL 24 снята: cache: — как до неё')
+        return
     parts = parse_parts(args, cwd)
     items = read_list(LIST)
     if not items:
@@ -209,11 +271,14 @@ def uninstall(args, cwd):
         write_list(LIST, keep)
     else:
         os.remove(LIST)
+        if os.path.exists(FLAGS):
+            os.remove(FLAGS)
     print(f'NHL Legacy, моды-данные: снято {n} файлов из {cache}')
 
 
 def main():
     sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')         # сообщения sys.exit
     if len(sys.argv) < 2 or sys.argv[1] not in ('install', 'uninstall'):
         sys.exit(__doc__)
     if game_running():
