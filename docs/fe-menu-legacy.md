@@ -419,3 +419,31 @@ bash game/work/legacy-fe/uninstall-legacy-fe.sh menufade   # откат: пре�
 ```
 
 Поставлено 09.10.2026 в 09:04, бэкап `game/work/legacy-fe/backup-20261009-090440-menufade`.
+
+## 10. Экраны франшизы Be a GM: где 30, где 32 (09.10.2026, legacy-fe)
+
+**Ролики.** Разобраны все 36 роликов экранов Be a GM (`cache:fe/ion/game/screens/dynasty/*`, разбор в
+`game/work/legacy-fe/franchise/dis/`). Жёстких 30, 29 или 31 нет. Списки команд дают родные функции exe:
+`ION_Team.GetIDs(лига, FILTER_…)`, `ION_NHLStats.GetStatTeamIDsByDivisionID`,
+`ION_NHLSeries.GetTeamIDsForDivisionId`, `GetActiveLeaguesForScreen`. Если где-то 30, правка в коде
+(legacy-port), не в Apt.
+
+**В игре.** Копия userdata пользователя (`game/work/legacy-fe/userdata-gm`, BE A GM1 за Anaheim), рабочий exe.
+Сим 26.09 → 12.10.2026 прошёл без падений. Снимки — `game/work/legacy-fe/shots/gm3/`, сводный лист —
+`game/work/legacy-fe/franchise-sea-vgk.png`.
+
+| Экран | Список команд | SEA/VGK |
+|---|---|---|
+| Select Team (создание франшизы) | 30 | нет: Vancouver → Toronto, St. Louis → San Jose (меню 829CCA18 legacy-port) |
+| Team Standings | вся лига 32, 4 дивизиона по 8; АХЛ 32 | есть |
+| Player Stats — Season (LT/RT) | дивизионы, конференции, 32 команды | есть |
+| Team Reports (Coaching) | 32 | есть, данные заполнены |
+| Contract Status (LB/RB) | 32 | есть |
+| Trade Players, Injury Report (LT) | 32 | есть |
+| Roster Moves, Edit Lines | свой клуб и фарм | — |
+| Free Agents, Scouting Report, Offer Sheets | без списка команд | — |
+
+**Предсезонка без SEA и VGK** (код, передано legacy-port). К 03.10, концу предсезонки, у остальных клубов
+6–7 игр, у Seattle и Vegas 0. В Player Stats у них «No Stats Available». В регулярке их игры идут и
+учитываются: на 12.10 Seattle 3-0-0, Vegas 1-1-0, у игроков есть GP, в Team Reports заполнены голы и
+спецбригады.
