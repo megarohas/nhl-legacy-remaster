@@ -234,6 +234,22 @@ name = "Nhl13CmpS_32"
 registers = ["r11", "cr6"]
 after_instruction = true
 
+# NHL_TEAMS 828BD8D8: фильтр таблиц статистики игроков: команда < 30 — клуб НХЛ (без правки игроки SEA/VGK выпадают из лидеров НХЛ; найдено legacy-port по Legacy 82B26C40)
+# li r11, 30 → 32
+[[midasm_hook]]
+address = 0x828BDA50
+name = "Nhl13Li_32"
+registers = ["r11"]
+after_instruction = true
+
+# NHL_TEAMS 828BD8D8: то же во второй ветке 828BD8D8 (Legacy 82B27050)
+# li r11, 30 → 32
+[[midasm_hook]]
+address = 0x828BDE60
+name = "Nhl13Li_32"
+registers = ["r11"]
+after_instruction = true
+
 # AHL_TEAMS 828CEBF0: 828CEBF0 (конец создания франшизы): цикл по клубам АХЛ 0…31 — сведения о команде (номер = i + 32, 828CF224) и освобождение объекта +772[i]
 # cmps r30, 30 → 32 (ahl32)
 [[midasm_hook]]
