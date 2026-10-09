@@ -121,7 +121,36 @@ S:\Claude\megarohas_nhl13\legacy-port\build.cmd win-amd64-relwithdebinfo
   occlusion off, readback_memexport false) в Legacy не проверялись — не включены.
 - Проверка без геймпада — `tools/gameshot.ps1 -Game legacy` (`--mnk_mode=true`; `-Do seq` — шаги
   «wait/shot/key»), замок `game/work/status/game.lock` общий с NHL 13. Закрывать игру — из того же
-  PowerShell, из которого запущена (`taskkill` из Git Bash не закрывал).
+  PowerShell, из которого запущена (`taskkill` из Git Bash не закрывал). Правила с 09.10 (19:59) и ввод без
+  фокуса — раздел «Проверки в игре без фокуса» ниже.
+
+### Проверки в игре без фокуса (09.10.2026)
+
+Пользователь пожаловался: тестовая игра шла на весь экран и при каждой его попытке переключиться на своё окно
+забирала фокус обратно (`gameshot.ps1` перед каждой клавишей выводил окно игры вперёд: `AttachThreadInput`, F24,
+`BringWindowToTop`, `SetForegroundWindow`). С 19:59 тесты были на паузе, переделано:
+
+- `tools/gameshot.ps1` окно игры **не выводит вперёд никогда** — вызовов `SetForegroundWindow`/`BringWindowToTop`/
+  `AttachThreadInput`/`ShowWindow` в нём больше нет. Клавиши уходят, только если окно игры **уже активно**; нет —
+  ответ `WAIT_FOCUS`, клавиша не отправляется (`-FocusWaitSec N` — подождать, не забирая фокус); активность
+  проверяется перед каждой клавишей и сразу после неё.
+- Игра запускается **в окне 960×540** логических (`--fullscreen=false --window_width/--window_height`, у SDK по
+  умолчанию `fullscreen = true`), **без активации**: `SDL_WINDOW_ACTIVATE_WHEN_SHOWN=0` и
+  `SDL_WINDOW_ACTIVATE_WHEN_RAISED=0` в окружении дочернего процесса (SDL показывает окно `SW_SHOWNA`). `-Fullscreen` —
+  прежнее поведение, только по прямой просьбе пользователя.
+- Снимки — `PrintWindow` (фокус не нужен, окно может лежать под другими); `-Fit 1280x720` приводит снимок к одному
+  размеру при любом окне. Свёрнутое окно не снимается (`MINIMIZED`) и не разворачивается.
+- **Ввод без клавиатуры вообще** — виртуальный геймпад порта, перенесён из NHL 13 (`port/src/nhl13_pad.cpp`,
+  bfcd833): `src/nhllegacy_pad.cpp`, cvar `nhl_virtual_pad` (по умолчанию выкл.), врезки в
+  `src/nhllegacy_input_lock.cpp` (после `XamInputGetState`, перед `XamInputGetKeystrokeEx`). Порт читает
+  `nhllegacy_pad.txt` рядом с exe — строки «номер кнопки удержание_мс пауза_мс» (`A B X Y LB RB LT RT START BACK UP
+  DOWN LEFT RIGHT LS RS`, сочетания через `+`) — и «жмёт» их пользователю 0 своего процесса; журнал
+  `nhllegacy_pad.log`. В отличие от NHL 13 добавлены **стики до упора**: `LSL LSR LSU LSD` (левый) и `RSL RSR RSU RSD`
+  (правый) — X_INPUT_STATE +8…+14 и события `VK_PAD_LTHUMB_*`/`RTHUMB_*`: без них не выбрать сторону и форму в «Играть
+  сейчас». Обёртка агента — `legacy-port/out/agent/p2pad.ps1` (`-Do start` убирает старый pad-файл в `.old`, иначе
+  команды прошлого запуска проиграются заново; `-Do seq -Steps "pad:A;wait:2;shot:x.png"`).
+- Самотест (09.10, 20:05–20:07): окно открылось неактивным, активным всё время оставалось окно пользователя; игра в
+  фоне прошла заставку и PRESS START от виртуального геймпада; снимки в фоне — без потерь.
 
 ## Для друзей
 

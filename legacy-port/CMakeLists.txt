@@ -18,6 +18,7 @@ set(NHLLEGACY_SOURCES
     src/nhllegacy_crash.cpp
     src/nhllegacy_watch.cpp
     src/nhllegacy_input_lock.cpp
+    src/nhllegacy_pad.cpp
     src/nhllegacy_fencewait.cpp
     src/nhllegacy_composite.cpp
     src/nhllegacy_dbtrace.cpp

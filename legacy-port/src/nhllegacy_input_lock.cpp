@@ -65,9 +65,27 @@ void CallLocked(const char* name, GuestFn& cached, PPCContext& ctx, uint8_t* bas
     CallLocked(#name, original, ctx, base);              \
   }
 
-NHLLEGACY_LOCKED_IMPORT(__imp__XamInputGetState)
+// Тесты: виртуальный геймпад из nhllegacy_pad.txt (src/nhllegacy_pad.cpp, cvar nhl_virtual_pad, по умолчанию выкл.)
+void NhlLegacyPadAfterGetState(PPCContext& ctx, uint8_t* base, uint32_t user, uint32_t state);
+bool NhlLegacyPadKeystroke(PPCContext& ctx, uint8_t* base);
+
+extern "C" void __imp__XamInputGetState(PPCContext& ctx, uint8_t* base) {
+  static GuestFn original = nullptr;
+  const uint32_t user = ctx.r3.u32;
+  const uint32_t state = ctx.r5.u32;
+  CallLocked("__imp__XamInputGetState", original, ctx, base);
+  NhlLegacyPadAfterGetState(ctx, base, user, state);
+}
+
+extern "C" void __imp__XamInputGetKeystrokeEx(PPCContext& ctx, uint8_t* base) {
+  static GuestFn original = nullptr;
+  if (NhlLegacyPadKeystroke(ctx, base)) {
+    return;
+  }
+  CallLocked("__imp__XamInputGetKeystrokeEx", original, ctx, base);
+}
+
 NHLLEGACY_LOCKED_IMPORT(__imp__XamInputGetCapabilities)
-NHLLEGACY_LOCKED_IMPORT(__imp__XamInputGetKeystrokeEx)
 NHLLEGACY_LOCKED_IMPORT(__imp__XamInputSetState)
 
 #endif
