@@ -205,15 +205,17 @@ switch ($Do) {
         if (-not ($r -contains $true)) { exit 1 }
     }
     'stop' {
-        $p = Get-Process -Name $Proc -ErrorAction SilentlyContinue
+        # только процесс своего exe (-Exe): игра пользователя с тем же именем, но из другой папки, не трогается
+        $mine = { Get-Process -Name $Proc -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $Exe } }
+        $p = & $mine
         if (-not $p) { Write-Output 'NOT_RUNNING'; exit 0 }
-        & taskkill /IM "$Proc.exe" | Out-Null
+        foreach ($q in $p) { & taskkill /PID $q.Id | Out-Null }
         for ($i = 0; $i -lt 30; $i++) {
             Start-Sleep -Seconds 1
-            if (-not (Get-Process -Name $Proc -ErrorAction SilentlyContinue)) { Write-Output "CLOSED after $($i+1)s"; exit 0 }
+            if (-not (& $mine)) { Write-Output "CLOSED after $($i+1)s"; exit 0 }
         }
-        & taskkill /F /IM "$Proc.exe" | Out-Null
+        foreach ($q in (& $mine)) { & taskkill /F /PID $q.Id | Out-Null }
         Start-Sleep -Seconds 2
-        Write-Output "KILLED (/F): $(if (Get-Process -Name $Proc -ErrorAction SilentlyContinue) {'still running!'} else {'gone'})"
+        Write-Output "KILLED (/F): $(if (& $mine) {'still running!'} else {'gone'})"
     }
 }
