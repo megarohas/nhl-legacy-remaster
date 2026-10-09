@@ -102,6 +102,57 @@ def fe_preview(jersey_mesh, tex, size=256):
     return Image.fromarray(rgba, "RGBA").resize((size, size), Image.LANCZOS)
 
 
+NAME_CONTRAST = 3.0  # фамилия должна читаться: контраст букв со свитером там, где она стоит (по WCAG), не ниже
+
+
+def _lum(c):
+    c = np.asarray(c, dtype=np.float64) / 255
+    c = np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+
+
+def _contrast(a, b):
+    la, lb = _lum(a), _lum(b)
+    return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+
+
+def name_zone(kit):
+    """Место фамилии на развёртке свитера: зона 0 карты номеров (name_*_cm, синий канал) комплекта-шаблона, 256²."""
+    a = np.asarray(Image.open(os.path.join(unpack(kit), "name_cm.png")).convert("RGBA")).astype(int)
+    return (a[..., 0] > 128) & (a[..., 1] > 128) & (a[..., 2] == 0)
+
+
+def name_contrast(cm, jersey_png, zone, min_ratio=NAME_CONTRAST):
+    """Буквы фамилии (верхние строки атласа шрифта) того же цвета, что свитер под ними (у NHL 24 n90_three CHI —
+    чёрные на чёрной кокетке: в NHL 24 фамилия, видимо, на светлой полосе, в Legacy место — по карте номеров шаблона):
+    тогда буквы — цветом заливки цифр (или белым/чёрным, что контрастнее). -> (атлас, пометка или None)."""
+    from scipy import ndimage as ndi
+    j = np.asarray(Image.open(jersey_png).convert("RGB").resize(zone.shape[::-1], Image.BOX)).astype(np.float64)
+    jc = np.median(j[zone], 0)
+    H, W = cm.shape[:2]
+    lab, n = ndi.label(cm[..., 3] > 40)
+    if n == 0:
+        return cm, None
+    cy = ndi.center_of_mass(np.ones_like(lab), lab, range(1, n + 1))
+    letters = np.isin(lab, [i + 1 for i, (y, _x) in enumerate(cy) if y < 0.19 * H])
+    solid = cm[..., 3] > 200
+    if not (letters & solid).any():
+        return cm, None
+    lc = np.median(cm[..., :3][letters & solid], 0)
+    r = _contrast(lc, jc)
+    if r >= min_ratio:
+        return cm, None
+    num = np.zeros_like(solid)
+    num[int(0.21 * H):int(0.70 * H), :int(0.80 * W)] = True
+    nc = np.median(cm[..., :3][num & solid], 0)
+    cands = [nc, np.array([235.0, 235, 235]), np.array([20.0, 20, 20])]
+    target = max(cands, key=lambda c: _contrast(c, jc) + (0.5 if c is nc else 0))
+    out = cm.copy()
+    out[letters, :3] = np.round(target).astype(np.uint8)
+    return out, (f"фамилия: буквы {lc.astype(int).tolist()} → {target.astype(int).tolist()} (контраст со свитером "
+                 f"{r:.1f} → {_contrast(target, jc):.1f})")
+
+
 def lightness(tex):
     a = np.asarray(Image.open(tex).convert("RGB").resize((64, 64))).astype(np.float64) / 255
     return float((0.2126 * a[..., 0] + 0.7152 * a[..., 1] + 0.0722 * a[..., 2]).mean())
@@ -172,6 +223,10 @@ def cmd_build(a):
         fc, fn = p + f"font_{family}_{club}_{kit}_color", p + f"font_{family}_{club}_{kit}_normal"
         if fc in ok:
             cm = resize_premult(np.asarray(Image.open(png(folder, fc)).convert("RGBA")), 512)
+            tpl_kit = f"1_{art}_{variant}" if not new else f"1_{art}_{legacy_target(art, 0)['variant']}"
+            cm, fix = name_contrast(cm, os.path.join(od, "jersey_cm.png"), name_zone(tpl_kit))
+            if fix:
+                rec["font_fix"] = fix
             nm = normal_map(png(folder, fn), 512) if fn in ok else np.dstack(
                 [np.full((512, 512), v, np.uint8) for v in (128, 128, 255, 255)])
             sm = np.zeros((512, 512, 4), np.uint8)
