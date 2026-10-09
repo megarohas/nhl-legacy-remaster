@@ -86,7 +86,11 @@ S:\Claude\megarohas_nhl13\legacy-port\build.cmd win-amd64-relwithdebinfo
   (Release, свой SDK). Настройки — `nhllegacy.toml` рядом с exe (шаблон `nhllegacy.example.toml`;
   `build.cmd` кладёт его, если своего нет): игра — `game/other/legacy/disc`, сейвы и `cache:` —
   `legacy-port/userdata` (своя папка, не `game/userdata` NHL 13), лог — `legacy-port/out/game.log`.
-  **С 09.10 (15:55) под ярлыком — сборка №6:** exe 5ddd1ec9, pdb 0060569e (код = 5f02690: исправление падения сима
+  **С 09.10 (18:24) под ярлыком — сборка №7:** exe cc0e2fd3, pdb f20b6cb1 (код = 317c516: + франшиза за Вегас после
+  загрузки снова за Вегас), DLL и snap — как у №5/№6. `nhllegacy.toml` (93020cf4) не менялся. Откат на №6 — файлы из
+  `backup-20261009-5ddd1ec9/` скопировать обратно (игра закрыта). В `cache:` с 16:05 — ещё `db/draft_roster.db` (старт
+  «NHL Entry Draft» на наших составах; откат — удалить файл, [legacy-data.md](legacy-data.md)).
+  Сборка №6 (09.10, 15:55): exe 5ddd1ec9, pdb 0060569e (код = 5f02690: исправление падения сима
   регулярки на 32 и фарм-клуб SEA/VGK на Select Team, см. ниже), DLL и `nhllegacy_snap.exe` — как у №5. `nhllegacy.toml`
   (93020cf4) не менялся. Откат на №5 — файлы из `backup-20261009-e2c341b2/` (exe e2c341b2, pdb 922168e6, DLL, snap,
   копия toml) скопировать обратно, игра закрыта.
