@@ -358,6 +358,8 @@ void CompareInto(PPCCRRegister& cr, int32_t v, int32_t n) {
 
 // --- Условия мест из списка (nhllegacy_team_sites.cpp, tools/team_hooks.py) ---
 
+void NhlLegacyAigmFranchiseLoaded();  // nhllegacy_aigm.cpp
+
 bool NhlLegacyThirtyTwo() {
   return ThirtyTwo();
 }
@@ -422,6 +424,7 @@ extern "C" void sub_82A1E910(PPCContext& ctx, uint8_t* base) {
   if (logged++ < 3) {
     REXLOG_INFO("[nhllegacy] NHL structure: 32 teams, divisions 8/8/8/8");
   }
+  NhlLegacyAigmFranchiseLoaded();  // nhllegacy_aigm.cpp: записи AI-GM 30/31 — заново по образцу
   if (list) {
     const uint64_t saved_r3 = ctx.r3.u64;
     for (uint32_t team : {30u, 31u}) {

@@ -1,0 +1,185 @@
+# AI-объект GM на 32 команды (src/nhllegacy_aigm.cpp, cvar nhl_aigm32, по умолчанию выкл.; docs/legacy-port.md,
+# «AI-GM на 32: вариант (а)»). ВЕТКА legacy-aigm32 — НЕ СОБИРАЛОСЬ (09.10: пользователь играл). Места найдены
+# сканером по образу (lwz r, 8(AI-объект) + mulli r, 20 + add; циклы с шагом 20; +600[i]; +0x1043C[i]) в
+# 82930000…82990000 и сверены по сгенерированному коду. После кодогена проверить, что вызов врезки «до
+# инструкции» стоит ПОСЛЕ метки loc_ (в начале тела цикла), иначе переход по циклу врезку обойдёт.
+
+# --- Записи команд: после `add rec = блок + команда·20` (16 мест) --------------------------------------------
+# NhlLegacyAigmRecOff(rec, off) — жив регистр смещения; NhlLegacyAigmRecBlock(rec, блок) — жив регистр блока.
+
+[[midasm_hook]]
+address = 0x82955210   # 829551E8 (оценка команды): add r9, r10, r11
+name = "NhlLegacyAigmRecOff"
+registers = ["r9", "r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82955228   # 829551E8: add r11, r9, r11
+name = "NhlLegacyAigmRecBlock"
+registers = ["r11", "r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82955248   # 82955240 (команда игрока): add r10, r10, r11 (старая)
+name = "NhlLegacyAigmRecBlock"
+registers = ["r10", "r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8295525C   # 82955240: add r11, r11, r10 (новая)
+name = "NhlLegacyAigmRecBlock"
+registers = ["r11", "r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829552C8   # 82955278 (команда игрока?): add r11, r11, r10
+name = "NhlLegacyAigmRecBlock"
+registers = ["r11", "r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82955530   # 82955528 (запись → 829401F8): add r4, r10, r11
+name = "NhlLegacyAigmRecOff"
+registers = ["r4", "r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82955540   # 82955538 (запись → 82940258): add r4, r10, r11
+name = "NhlLegacyAigmRecOff"
+registers = ["r4", "r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82955550   # 82955548 (сброс цели h16/b18): add r11, r10, r11
+name = "NhlLegacyAigmRecOff"
+registers = ["r11", "r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82955F70   # 82955F68 (нужда по позиции b5+x): add r11, r10, r11
+name = "NhlLegacyAigmRecOff"
+registers = ["r11", "r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x829566E0   # 829566D8 (b1): add r11, r10, r11
+name = "NhlLegacyAigmRecOff"
+registers = ["r11", "r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82956DFC   # 82956D18: add r11, r10, r11
+name = "NhlLegacyAigmRecOff"
+registers = ["r11", "r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8295B800   # 8295B788 (число команд, команды игрока): add r11, r29, r11
+name = "NhlLegacyAigmRecOff"
+registers = ["r11", "r29"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8295B87C   # 8295B848 (загрузка команды в +928): add r11, r11, r30
+name = "NhlLegacyAigmRecBlock"
+registers = ["r11", "r30"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8295FC80   # 8295FC38 (предложения AI): add r20, r11, r10
+name = "NhlLegacyAigmRecOff"
+registers = ["r20", "r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82960554   # 82960428: add r11, r11, r25
+name = "NhlLegacyAigmRecBlock"
+registers = ["r11", "r25"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82974040   # 82973FB0 (места): add r11, r11, r9
+name = "NhlLegacyAigmRecBlock"
+registers = ["r11", "r9"]
+after_instruction = true
+
+# --- Циклы «i < +668» с шагом 20 по записям: в начале тела, указатель = блок + 20·i + bias ------------------
+
+[[midasm_hook]]
+address = 0x8295559C   # 82955580: stb r9, 22(r11) / sthu r9, 20(r11); r11 = блок − 4 + 20·i
+name = "NhlLegacyAigmStrideM4"
+registers = ["r11", "r3"]
+
+[[midasm_hook]]
+address = 0x8295561C   # 829555B8 (init): cmplwi cr6, r21, 0; r29 = блок + 18 + 20·i (r27 = r29 − 13 — позже)
+name = "NhlLegacyAigmStride18"
+registers = ["r29", "r31"]
+
+[[midasm_hook]]
+address = 0x82973FF0   # 82973FB0: li r11, −1 / stbu r11, 20(r9); r9 = блок − 6 + 20·i
+name = "NhlLegacyAigmStrideM6"
+registers = ["r9", "r3"]
+
+[[midasm_hook]]
+address = 0x82974078   # 82973FB0: lbz r9, 0(r11); r11 = блок + 14 + 20·i
+name = "NhlLegacyAigmStride14"
+registers = ["r11", "r3"]
+
+[[midasm_hook]]
+address = 0x82974350   # 829742B0: lbz r9, 0(r11); r11 = блок + 18 + 20·i
+name = "NhlLegacyAigmStride18"
+registers = ["r11", "r31"]
+
+# --- Байты +600[i]: после `add p = блок + i`, перед доступом 600(p) -----------------------------------------
+
+[[midasm_hook]]
+address = 0x82955234   # 829551E8: add r11, r11, r4 → stb r10, 600(r11)
+name = "NhlLegacyAigmTeamByte"
+registers = ["r11", "r4"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x8295564C   # 829555B8: add r11, r30, r11 → stb r24, 600(r11)
+name = "NhlLegacyAigmTeamByte"
+registers = ["r11", "r30"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82974404   # 829742B0: add r10, r10, r11 → stb r25, 600(r10)
+name = "NhlLegacyAigmTeamByte"
+registers = ["r10", "r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82974454   # 829742B0: add r10, r10, r11 → stb r25, 600(r10)
+name = "NhlLegacyAigmTeamByte"
+registers = ["r10", "r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82974564   # 829742B0: add r11, r11, r30 → lbz r11, 600(r11)
+name = "NhlLegacyAigmTeamByte"
+registers = ["r11", "r30"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82974580   # 829742B0: add r11, r11, r30 → stb r25, 600(r11)
+name = "NhlLegacyAigmTeamByte"
+registers = ["r11", "r30"]
+after_instruction = true
+
+# --- Порядок команд +0x1043C[i] (82973FB0) --------------------------------------------------------------------
+
+[[midasm_hook]]
+address = 0x82974028   # add r9, r10, r9 → stbx r6, r9, r7 (r7 = 0x1043C)
+name = "NhlLegacyAigmOrderByte"
+registers = ["r9", "r10"]
+after_instruction = true
+
+# --- Цикл AI межсезонья 82B214A8: «< 30» → «< 32» ----------------------------------------------------------
+
+[[midasm_hook]]
+address = 0x82B2166C   # cmpwi cr6, r28, 30 (r28 — команда; тело цикла с 82B21504)
+name = "NhlLegacyAigmLoop32"
+registers = ["r28"]
+jump_address_on_true = 0x82B21504
