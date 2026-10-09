@@ -52,8 +52,17 @@ def load_nhl24(name=NHL24_JERSEY):
             raise SystemExit(f"{name}: чанк геометрии не найден")
         cd, _ = cas.read_entry(cas_file(c["cas"]), c["ofs"], (c["lo"] or 0) + c["ls"])
     s = meshset.parse(d, meta, cd)[0]
-    return {"pos": s["pos"].astype(np.float64), "uv": s["uv"][:, :2].astype(np.float64),
-            "tri": s["tri"], "nrm": s["nrm"][:, :3].astype(np.float64)}
+    pos = s["pos"].astype(np.float64)
+    if s["nrm"] is not None:
+        nrm = s["nrm"][:, :3].astype(np.float64)
+    else:  # у части сеток (гетры) нормалей в вершинах нет — по треугольникам
+        T = s["tri"]
+        fn = np.cross(pos[T[:, 1]] - pos[T[:, 0]], pos[T[:, 2]] - pos[T[:, 0]])
+        nrm = np.zeros_like(pos)
+        for k in range(3):
+            np.add.at(nrm, T[:, k], fn)
+        nrm = _unit(nrm)
+    return {"pos": pos, "uv": s["uv"][:, :2].astype(np.float64), "tri": s["tri"], "nrm": nrm}
 
 
 def load_legacy(rel=LEGACY_JERSEY):
@@ -72,17 +81,22 @@ def _unit(v):
 
 # ---------------------------------------------------------------- растеризация в UV
 
+def _wh(size):
+    return (size, size) if np.isscalar(size) else (int(size[0]), int(size[1]))
+
+
 def raster_uv(mesh, size):
-    """-> (tri_id[size,size] (-1 — пусто), bary[size,size,3]) по центрам текселей."""
-    uv = mesh["uv"] * size - 0.5
-    tid = np.full((size, size), -1, dtype=np.int64)
-    bar = np.zeros((size, size, 3), dtype=np.float64)
+    """size — сторона или (ширина, высота). -> (tri_id[h,w] (-1 — пусто), bary[h,w,3]) по центрам текселей."""
+    W, H = _wh(size)
+    uv = mesh["uv"] * np.array([W, H]) - 0.5
+    tid = np.full((H, W), -1, dtype=np.int64)
+    bar = np.zeros((H, W, 3), dtype=np.float64)
     for t, (a, b, c) in enumerate(mesh["tri"]):
         pa, pb, pc = uv[a], uv[b], uv[c]
         x0 = max(int(np.floor(min(pa[0], pb[0], pc[0]))), 0)
-        x1 = min(int(np.ceil(max(pa[0], pb[0], pc[0]))), size - 1)
+        x1 = min(int(np.ceil(max(pa[0], pb[0], pc[0]))), W - 1)
         y0 = max(int(np.floor(min(pa[1], pb[1], pc[1]))), 0)
-        y1 = min(int(np.ceil(max(pa[1], pb[1], pc[1]))), size - 1)
+        y1 = min(int(np.ceil(max(pa[1], pb[1], pc[1]))), H - 1)
         if x1 < x0 or y1 < y0:
             continue
         den = (pb[1] - pc[1]) * (pa[0] - pc[0]) + (pc[0] - pb[0]) * (pa[1] - pc[1])
@@ -230,13 +244,14 @@ def transfer(src_tex, src_mesh, dst_mesh, size=1024, ss=2, seam=0.04, post=None)
     (кусочно-линейно, без «дрожания» краёв полос). Треугольник, вершины которого попали в разные острова UV src
     (разброс UV > seam), считается по текселям.
     """
-    S = size * ss
+    W, H = _wh(size)
+    S = (W * ss, H * ss)
     T = dst_mesh["tri"]
 
     def interp(attr, tri, bb):
         return bb[:, :1] * attr[tri[:, 0]] + bb[:, 1:2] * attr[tri[:, 1]] + bb[:, 2:] * attr[tri[:, 2]]
 
-    key = (id(src_mesh), id(dst_mesh), size, ss, seam)
+    key = (id(src_mesh), id(dst_mesh), (W, H), ss, seam)
     cached = _MAPCACHE.get(key)
     if cached is None:  # соответствие зависит только от сеток — считаем один раз на все комплекты
         tid, bar = raster_uv(dst_mesh, S)
@@ -260,17 +275,17 @@ def transfer(src_tex, src_mesh, dst_mesh, size=1024, ss=2, seam=0.04, post=None)
         _MAPCACHE[key] = cached
     mask, t, b, UV, dist_v, bad_tri = cached
     col = sample_bilinear(src_tex, UV[:, 0], UV[:, 1])
-    img = np.zeros((S, S, src_tex.shape[2]))
+    img = np.zeros((S[1], S[0], src_tex.shape[2]))
     img[mask] = col
-    dist = np.full((S, S), np.nan)
+    dist = np.full((S[1], S[0]), np.nan)
     dist[mask] = dist_v
     if post is not None:  # слои поверх основы, на сверхвыборке: post(img, mask, P, N, tri, uv_src) по текселям mask
         Pm = interp(dst_mesh["pos"], T[t], b)
         Nm = _unit(interp(dst_mesh["nrm"], T[t], b))
         img = post(img, mask, Pm, Nm, t, UV)
     if ss > 1:
-        mk = mask.reshape(size, ss, size, ss).astype(np.float64)
-        num = (img.reshape(size, ss, size, ss, -1) * mk[..., None]).sum((1, 3))
+        mk = mask.reshape(H, ss, W, ss).astype(np.float64)
+        num = (img.reshape(H, ss, W, ss, -1) * mk[..., None]).sum((1, 3))
         cnt = mk.sum((1, 3))
         img = np.where(cnt[..., None] > 0, num / np.maximum(cnt, 1)[..., None], 0)
         mask = cnt > 0
@@ -278,7 +293,7 @@ def transfer(src_tex, src_mesh, dst_mesh, size=1024, ss=2, seam=0.04, post=None)
             import warnings
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                dist = np.nanmax(dist.reshape(size, ss, size, ss), axis=(1, 3))
+                dist = np.nanmax(dist.reshape(H, ss, W, ss), axis=(1, 3))
     info = {"seam_tris": int(bad_tri.sum()), "tris": int(len(T))}
     return push_pull(fill_holes(img, mask, 8), mask), mask, dist, info
 
@@ -366,9 +381,13 @@ def cmd_sheet(a):
     for spec in a.rows:
         kind, tex, label = spec.split(":", 2) if spec.count(":") >= 2 else (spec.split(":")[0], spec.split(":")[1], "")
         if len(kind) == 1:  # буква диска Windows в пути — склеим обратно
-            raise SystemExit("формат: nhl24|legacy:путь:подпись")
+            raise SystemExit("формат: nhl24|legacy|legacyv:путь:подпись")
         if kind not in meshes:
-            meshes[kind] = load_nhl24() if kind == "nhl24" else load_legacy()
+            if kind == "legacyv":  # свитер Legacy + «рубашка» V-выреза (видна V-вставка)
+                from .kit_hybrid import legacy_with_shirt
+                meshes[kind] = legacy_with_shirt()[0]
+            else:
+                meshes[kind] = load_nhl24() if kind == "nhl24" else load_legacy()
         t = load_tex(tex)
         row = [render(meshes[kind], t, "front", W, frame=FRAME, ss=2),
                render(meshes[kind], t, "back", W, frame=FRAME, ss=2),
@@ -483,7 +502,6 @@ def render_lit(mesh, tex, view="front", width=600, frame=FRAME, nmap=None, smap=
         return big.resize((width, big.size[1] // ss), Image.LANCZOS)
     x0, x1, y0, y1 = frame
     height = int(round(width * (y1 - y0) / (x1 - x0)))
-    P = _rot(mesh["pos"], view)
     N = _rot(_unit(mesh["nrm"]), view)
     if "_tan" not in mesh:
         mesh["_tan"], mesh["_bit"] = vertex_tangents(mesh)
@@ -492,14 +510,53 @@ def render_lit(mesh, tex, view="front", width=600, frame=FRAME, nmap=None, smap=
     L = _unit(np.array(light, dtype=np.float64))
     V = np.array([0.0, 0.0, 1.0])
     Hh = _unit(L + V)
+    out = np.zeros((height, width, 3))
+    out[:] = bg
+    UV = mesh["uv"]
+    tid, bw = _view_raster(mesh, view, width, height, frame)
+    py, px = np.nonzero(tid >= 0)
+    if len(py) == 0:
+        return Image.fromarray(out.astype(np.uint8))
+    tr = mesh["tri"][tid[py, px]]
+    a, b, c = tr[:, 0], tr[:, 1], tr[:, 2]
+    w0, w1, w2 = bw[py, px, 0:1], bw[py, px, 1:2], bw[py, px, 2:3]
+    u = (w0 * UV[a, 0:1] + w1 * UV[b, 0:1] + w2 * UV[c, 0:1])[:, 0]
+    v = (w0 * UV[a, 1:2] + w1 * UV[b, 1:2] + w2 * UV[c, 1:2])[:, 0]
+    col = sample_bilinear(tex, u, v)[:, :3]
+    n = _unit(w0 * N[a] + w1 * N[b] + w2 * N[c])
+    inner = n[:, 2] < -0.05
+    if nmap is not None:
+        t = _unit(w0 * TG[a] + w1 * TG[b] + w2 * TG[c])
+        bb = _unit(w0 * BT[a] + w1 * BT[b] + w2 * BT[c])
+        nt = sample_bilinear(nmap, u, v)[:, :3] / 127.5 - 1.0
+        gy = -nt[:, 1:2] if flip_green else nt[:, 1:2]  # DirectX: зелёный — «вверх» в текстуре = к −v
+        nw = _unit(t * nt[:, 0:1] + bb * gy + n * np.clip(nt[:, 2:3], 0.05, 1))
+        n = np.where(inner[:, None], n, nw)
+    lam = np.clip((n * L).sum(-1), 0, 1)
+    sp = np.clip((n * Hh).sum(-1), 0, 1) ** power
+    sk = (sample_bilinear(smap, u, v)[:, 0] / 255.0) if smap is not None else np.full(len(u), 0.12)
+    shade = np.where(inner, 0.3, ambient + diffuse * lam)
+    out[py, px] = col * shade[:, None] + (spec * sk * sp * 255.0)[:, None] * (~inner)[:, None]
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))
+
+
+_VRCACHE = {}
+
+
+def _view_raster(mesh, view, width, height, frame):
+    """Растеризация вида (z-буфер): треугольник и барицентры на пиксель; кешируется — от текстур не зависит."""
+    key = (id(mesh), len(mesh["tri"]), view, width, height, tuple(frame))
+    if key in _VRCACHE:
+        return _VRCACHE[key]
+    x0, x1, y0, y1 = frame
+    P = _rot(mesh["pos"], view)
     sx = (P[:, 0] - x0) / (x1 - x0) * width
     sy = (y1 - P[:, 1]) / (y1 - y0) * height
     z = P[:, 2]
     zbuf = np.full((height, width), -np.inf)
-    out = np.zeros((height, width, 3))
-    out[:] = bg
-    UV = mesh["uv"]
-    for a, b, c in mesh["tri"]:
+    tid = np.full((height, width), -1, dtype=np.int64)
+    bw = np.zeros((height, width, 3))
+    for ti, (a, b, c) in enumerate(mesh["tri"]):
         xa, xb, xc = sx[a], sx[b], sx[c]
         ya, yb, yc = sy[a], sy[b], sy[c]
         ix0 = max(int(np.floor(min(xa, xb, xc))), 0)
@@ -525,26 +582,11 @@ def render_lit(mesh, tex, view="front", width=600, frame=FRAME, nmap=None, smap=
         if not closer.any():
             continue
         py, px = py[closer], px[closer]
-        w0, w1, w2 = l0[m][closer][:, None], l1[m][closer][:, None], l2[m][closer][:, None]
         zbuf[py, px] = zz[closer]
-        u = (w0 * UV[a, 0:1] + w1 * UV[b, 0:1] + w2 * UV[c, 0:1])[:, 0]
-        v = (w0 * UV[a, 1:2] + w1 * UV[b, 1:2] + w2 * UV[c, 1:2])[:, 0]
-        col = sample_bilinear(tex, u, v)[:, :3]
-        n = _unit(w0 * N[a] + w1 * N[b] + w2 * N[c])
-        inner = n[:, 2] < -0.05
-        if nmap is not None:
-            t = _unit(w0 * TG[a] + w1 * TG[b] + w2 * TG[c])
-            bb = _unit(w0 * BT[a] + w1 * BT[b] + w2 * BT[c])
-            nt = sample_bilinear(nmap, u, v)[:, :3] / 127.5 - 1.0
-            gy = -nt[:, 1:2] if flip_green else nt[:, 1:2]  # DirectX: зелёный — «вверх» в текстуре = к −v
-            nw = _unit(t * nt[:, 0:1] + bb * gy + n * np.clip(nt[:, 2:3], 0.05, 1))
-            n = np.where(inner[:, None], n, nw)
-        lam = np.clip((n * L).sum(-1), 0, 1)
-        sp = np.clip((n * Hh).sum(-1), 0, 1) ** power
-        sk = (sample_bilinear(smap, u, v)[:, 0] / 255.0) if smap is not None else np.full(len(u), 0.12)
-        shade = np.where(inner, 0.3, ambient + diffuse * lam)
-        out[py, px] = col * shade[:, None] + (spec * sk * sp * 255.0)[:, None] * (~inner)[:, None]
-    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))
+        tid[py, px] = ti
+        bw[py, px] = np.stack([l0[m][closer], l1[m][closer], l2[m][closer]], -1)
+    _VRCACHE[key] = (tid, bw)
+    return tid, bw
 
 
 def transfer_normals(src_nmap, src_mesh, dst_mesh, size=1024, ss=2, flip_green=True):
@@ -552,7 +594,7 @@ def transfer_normals(src_nmap, src_mesh, dst_mesh, size=1024, ss=2, flip_green=T
     n_мир = T·x + B·y + N·z на src, затем проекция на T, B, N dst. -> RGB (R = X, G = Y, B = Z), size²."""
     S = size * ss
     transfer(np.zeros((4, 4, 3)), src_mesh, dst_mesh, size, ss)  # заполнить кеш соответствия
-    mask, t, b, UV, dist_v, bad_tri = _MAPCACHE[(id(src_mesh), id(dst_mesh), size, ss, 0.04)]
+    mask, t, b, UV, dist_v, bad_tri = _MAPCACHE[(id(src_mesh), id(dst_mesh), _wh(size), ss, 0.04)]
     T = dst_mesh["tri"]
 
     def interp(attr, tri, bb):
@@ -603,3 +645,25 @@ def transfer_normals(src_nmap, src_mesh, dst_mesh, size=1024, ss=2, flip_green=T
     if ss > 1:
         out = out.reshape(size, ss, size, ss, 3).mean((1, 3))
     return np.clip(out, 0, 255)
+
+
+def aligned(mesh, src_box, dst_box):
+    """Копия сетки, переведённая аффинно по осям: рамка dst_box (x0,x1,y0,y1,z0,z1) → src_box. Нужна, когда сетки одной
+    вещи разной высоты/ширины (шорты, гетры Legacy и NHL 24): соответствие по ближайшей точке ищется после выравнивания."""
+    a = np.array(dst_box, dtype=np.float64).reshape(3, 2)
+    b = np.array(src_box, dtype=np.float64).reshape(3, 2)
+    sc = (b[:, 1] - b[:, 0]) / np.maximum(a[:, 1] - a[:, 0], 1e-9)
+    off = b[:, 0] - a[:, 0] * sc
+    m = dict(mesh)
+    m["pos"] = mesh["pos"] * sc + off
+    n = mesh["nrm"] / np.where(sc == 0, 1, sc)  # нормали — обратным масштабом
+    m["nrm"] = _unit(n)
+    for k in ("_tan", "_bit"):
+        m.pop(k, None)
+    return m
+
+
+def bbox(mesh):
+    P = mesh["pos"]
+    return [P[:, 0].min(), P[:, 0].max(), P[:, 1].min(), P[:, 1].max(), P[:, 2].min(), P[:, 2].max()]
+
