@@ -85,6 +85,9 @@ extern "C" void __imp__sub_82B0A178(PPCContext& ctx, uint8_t* base);  // ном�
 extern "C" void __imp__sub_82AFBED0(PPCContext& ctx, uint8_t* base);  // фарм-клубы из leagueteams
 extern "C" void __imp__sub_82B0C1F0(PPCContext& ctx, uint8_t* base);  // фарм-клубы из базы
 extern "C" void __imp__sub_829CA650(PPCContext& ctx, uint8_t* base);  // фарм-клуб команды вне франшизы
+extern "C" void __imp__sub_82B0C360(PPCContext& ctx, uint8_t* base);  // загрузка: флаги «команда пользователя»
+extern "C" void sub_82A22190(PPCContext& ctx, uint8_t* base);         // состояние лиги: чтение
+extern "C" void sub_82AEB218(PPCContext& ctx, uint8_t* base);         // список команд: флаг «под AI»
 extern "C" void __imp__sub_829CCA18(PPCContext& ctx, uint8_t* base);  // меню франшизы: списки
 extern "C" void __imp__sub_82B07C08(PPCContext& ctx, uint8_t* base);  // teamid → номер франшизы
 extern "C" void __imp__sub_82B63708(PPCContext& ctx, uint8_t* base);  // конструктор кэша сводок
@@ -1054,6 +1057,63 @@ void NhlLegacyAffiliateByte(PPCRegister& r) {
   if (AhlThirtyTwo()) {
     r.s64 = UnsignedTeamByte(r.s32);
   }
+}
+
+// Команда пользователя с порядковым 31 (Вегас в НХЛ, Henderson в АХЛ) терялась при сохранении франшизы: после
+// загрузки хаб открывался за Анахайм (GetActiveUserTeam = 0). Какие команды лиги ведёт пользователь, хранит флаг списка
+// команд лиги (list+244+4·i: 1 — AI, 0 — пользователь; 82AEB218 / 82AEB250). В сейв идёт маска (состояние лиги type 3,
+// бит i — команда i: 82AFC778 → 82A22028), при загрузке 82B0C360 раскладывает её обратно по флагам. Но поле
+// leaguestates.value — 31 бит (0…2147483647): бит 31 (0x80000000) не сохраняется — в сейве за Вегас маска 0, у Сиэтла
+// 0x40000000. Других читателей маски нет. Исправление: после 82B0C360, если у порядкового 31 флаг остался «AI», а
+// команда пользователя этой лиги (состояние type 4 той же лиги: teamid, у VGK 31, у HSK 63) — это он, флаг → 0.
+// Ограничение: при двух пользователях во франшизе type 4 хранит одного — второй с порядковым 31 не восстановится.
+namespace {
+
+// Состояние лиги: 82A22190(*(0x83BD7914), type, &out, [league+4], [league+8], 0) — как в 82B0C360.
+bool LeagueStateValue(PPCContext& ctx, uint8_t* base, uint32_t league, uint32_t type, uint32_t* out) {
+  const uint64_t saved_r1 = ctx.r1.u64;
+  const uint32_t scratch = (ctx.r1.u32 - 0x100) & ~0xFu;
+  Store32(base, scratch, 0);
+  ctx.r1.u64 = scratch - 0x100;
+  ctx.r3.u64 = Load32(base, 0x83BD7914);
+  ctx.r4.u64 = type;
+  ctx.r5.u64 = scratch;
+  ctx.r6.u64 = Load32(base, league + 4);
+  ctx.r7.u64 = Load32(base, league + 8);
+  ctx.r8.u64 = 0;
+  sub_82A22190(ctx, base);
+  const bool ok = (ctx.r3.u32 & 0xFF) != 0;
+  *out = Load32(base, scratch);
+  ctx.r1.u64 = saved_r1;
+  return ok;
+}
+
+}  // namespace
+
+extern "C" void sub_82B0C360(PPCContext& ctx, uint8_t* base) {
+  const uint32_t league = ctx.r3.u32;
+  const uint32_t list = ctx.r4.u32;
+  __imp__sub_82B0C360(ctx, base);
+  if (!ThirtyTwo() || !league || !list || Load32(base, list) < 32 || Load32(base, list + 244 + 4 * 31) == 0) {
+    return;
+  }
+  const SavedArgs args(ctx);
+  uint32_t mask = 0;
+  uint32_t teamid = 0;
+  LeagueStateValue(ctx, base, league, 3, &mask);
+  const bool has_user = LeagueStateValue(ctx, base, league, 4, &teamid);
+  if (has_user && (mask & 0x80000000u) == 0 && Load32(base, list + 4 + 4 * 31) == teamid) {
+    ctx.r3.u64 = list;
+    ctx.r4.u64 = 31;
+    ctx.r5.u64 = 0;
+    sub_82AEB218(ctx, base);
+    static std::atomic<int> logged{0};
+    if (logged.fetch_add(1) < 8) {
+      REXLOG_INFO("[nhllegacy] league {:08X}: user team at ordinal 31 (teamid {}) restored - mask {:08X} lost bit 31 "
+                  "(leaguestates.value is 31-bit)", league, teamid, mask);
+    }
+  }
+  args.Restore(ctx);
 }
 
 // Фарм-клуб команды НХЛ вне франшизы (829CA650: r4 = teamid, r5 = куда, r3 = 1 — найден) — его берёт экран
