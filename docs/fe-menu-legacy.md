@@ -280,8 +280,8 @@ NHL 12 проявлялась (`_alpha` 0 → 100 за `m_speedZoomIn` 90 кад
 - CUSTOMIZE и назад; PLAY и назад.
 
 В переходах между подменю синего не было и раньше: там грань та же, `MENU`. Поставлено пользователю
-`game/work/legacy-fe/install-legacy-fe.sh underlay`; бэкап — `game/work/legacy-fe/backup-*`, откат —
-`uninstall-legacy-fe.sh`.
+`game/work/legacy-fe/install-legacy-fe.sh underlay`; бэкап — `game/work/legacy-fe/backup-*-underlay`, откат —
+`uninstall-legacy-fe.sh underlay`.
 
 Если для Legacy когда-нибудь поставят вариант фона из `game/work/legacy-data/fe/variants/` (`nhl13-*`,
 `legacy-gray`), в нём свой `nhlbluebackground.big` с прежними `INACTIVE_*`. Синее (или серое) тогда
@@ -376,7 +376,7 @@ NHL 12 проявлялась (`_alpha` 0 → 100 за `m_speedZoomIn` 90 кад
 python tools/menuitems_legacy.py build      # → game/work/legacy-data/menu-items/build и out; список — menu-items/files.txt
 python tools/menuitems_legacy.py check      # разбор: ролик целиком, отличия от оригинала — только правки, что в массивах
 python tools/menuitems_legacy.py list [FILE.big]   # все пункты: номер, имя, подпись, смещение push
-bash game/work/legacy-fe/install-legacy-fe.sh menu  # при закрытой игре, с бэкапом; откат — uninstall-legacy-fe.sh
+bash game/work/legacy-fe/install-legacy-fe.sh menu  # при закрытой игре, с бэкапом, ТОЛЬКО вместе с exe legacy-port; откат — uninstall-legacy-fe.sh menu
 ```
 
 `--exit before-featured` — EXIT перед FEATURED, `--exit none` — без EXIT; `--keep ИМЯ,…` — оставить пункты
