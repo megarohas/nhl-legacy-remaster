@@ -34,6 +34,7 @@
 | [docs/legacy-port-feasibility.md](docs/legacy-port-feasibility.md) | Перенос наработок в NHL Legacy (2015): что находится автоматически, сколько работы по каждой, как друзьям играть в Legacy на ПК, план |
 | [docs/legacy-port.md](docs/legacy-port.md) | Свой порт NHL Legacy (`legacy-port/`): что работает, сборка, запуск, папка для друзей, год и 32 команды |
 | [docs/legacy-data.md](docs/legacy-data.md) | Моды-данные NHL 13 в NHL Legacy через cache: — 32 команды и АХЛ на 32, составы 2026/27, портреты, экипировка, шрифт NHL 12, музыка, 3D, арт SEA/VGK: профиль игры, сейвы ZlibV4, сборка, установка, проверка в игре |
+| [docs/draft-pool.md](docs/draft-pool.md) | Пул драфта франшизы (NHL 13 и Legacy): как игра собирает класс, почему в нём составы CHL 2012 года и ветераны, пенсия, варианты (опция конвейера `--retire-veterans`, отсев по возрасту, свежие составы CHL) |
 | `port/` | Проект порта ReXGlue (сгенерированный код — не в git) |
 | `legacy-port/` | Проект порта NHL Legacy (сгенерированный код, сборка, сейвы и разведка — не в git) |
 | [tools/svod.py](tools/svod.py) | Проверка и распаковка контейнеров SVOD (установка с диска, GoD) |
