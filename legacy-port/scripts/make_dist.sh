@@ -27,6 +27,10 @@ if [ "${1:-}" = "--mods" ]; then
   # база на 32 команды в модах → франшиза на 32 по умолчанию
   if [ -f "$D/userdata/cache/guest/db/nhlng.db" ]; then
     sed -i 's/^nhl_teams = 30$/nhl_teams = 32/' "$D/nhllegacy.toml"
+    # старт «NHL Entry Draft» берёт составы из db/draft_roster.db (на диске — драфт 2015): та же база под этим именем
+    # (docs/legacy-data.md, «draft_roster.db»); если в cache: её нет — кладём копию сами
+    [ -f "$D/userdata/cache/guest/db/draft_roster.db" ] ||
+      cp "$D/userdata/cache/guest/db/nhlng.db" "$D/userdata/cache/guest/db/draft_roster.db"
   fi
   # база «АХЛ на 32» (legacy-data --ahl32: в лиге АХЛ 32 клуба — Coachella Valley и Henderson) → АХЛ на 32
   if [ "${AHL32:-}" = "1" ]; then

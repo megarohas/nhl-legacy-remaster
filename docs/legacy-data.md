@@ -36,6 +36,27 @@ bash game/work/legacy-data/uninstall-legacy-data.sh          # снять (чу�
 `legacy-port/userdata/cache/guest`) или переменная `CACHE`. Работает `install_legacy_data.py` рядом
 (2500 файлов — секунды); список поставленного — `installed.txt`, прежние чужие файлы — `backup/`.
 
+**`db/draft_roster.db` — старт франшизы «NHL Entry Draft» (09.10.2026).** Этот старт берёт составы не из
+`nhlng.db`, а из `db/draft_roster.db` (`cacheboot.big`, 1,9 МБ: только 8 таблиц `exhibition*` — составы на драфт
+2015; строка `db/draft_roster.db` в образе exe). Пока его не было в `cache:`, франшиза со старта драфта шла на
+составах 2015 (у Анахайма средний возраст 39). Решение — наша же база под этим именем, целиком (игра читает из неё
+нужные таблицы). Проверено (копия `legacy-port/userdata-p2ed`, 15:56–16:00): франшиза «NHL Entry Draft» за Анахайм —
+июнь 2026, средний возраст 24,7, в составе Terry и Vatrano; в логе `draft class 2026: real players 66 of 1289`
+(было `0 of 1492`).
+- Где: `build-all.sh` (этап `collect`) копирует `out/db/nhlng.db` → `out/db/draft_roster.db`, с `--ahl32` —
+  то же в `out-ahl32/db/`. Значит, его ставит общая установка из `out/` (и накладка `--ahl32`). В `installed.txt`
+  строка `db/draft_roster.db`, поэтому снимает его и `uninstall-legacy-data.sh`. Папка для друзей
+  (`legacy-port/scripts/make_dist.sh --mods`) берёт его из `cache:`; если его нет, кладёт копию `nhlng.db` сама.
+- У пользователя поставлен 09.10 в 16:05 вручную: копия его `cache\guest\db\nhlng.db` (34dfe267, база
+  `--ahl32`) → `cache\guest\db\draft_roster.db`. Прежнего файла не было, бэкап не понадобился.
+- Откат: удалить `cache\guest\db\draft_roster.db` — старт драфта снова возьмёт составы 2015 с диска.
+- После каждой новой базы `draft_roster.db` должен быть её копией: md5 обоих файлов совпадает.
+
+**Сломано после инцидента 09.10 (на 16:05):** восстановленный `uninstall-legacy-data.sh` (568 байт) — чужой текст
+(кусок исходника PIL «IM Tools support for PIL»). `install-legacy-data.sh` остался на D: как SUSPECT (нулевой хвост),
+от `install_legacy_data.py` уцелел только `__pycache__/install_legacy_data.cpython-314.pyc`. `make_out_ahl32.py`
+(этап `collect --ahl32`) тоже не найден. До их восстановления ставить и снимать набор — вручную по `installed.txt`.
+
 Вариант «АХЛ на 32» — накладка `game/work/legacy-data/out-ahl32/` (база с CV/HSK, их локализация и
 портреты): `install-legacy-data.sh --ahl32` ставит её поверх `out/`. Франшизе с ней нужен порт с врезками
 АХЛ на 32 (legacy-port их готовит); «Играть сейчас» и без них. У CV/HSK с 09.10.2026 сила как у соседей по
