@@ -4,7 +4,7 @@
 #   bash tools/legacy_data/build-all.sh [ЭТАП…] [--ahl32]
 #   LEGACY_DATA_WORK=папка bash tools/legacy_data/build-all.sh …   # сухой прогон: всё (и out) — в эту папку;
 #        входы, которые этапом не пересобираются (например, составы без сети), — положить туда заранее
-#        этапы: base roster photos equip collect fonts music models art menu nhl24 (без этапов — все по порядку;
+#        этапы: base roster photos equip collect fixdb fonts music models art menu nhl24 (без этапов — все по порядку;
 #        --ahl32 — ещё вариант «АХЛ на 32», накладка game/work/legacy-data/out-ahl32; nhl24 — накладка out-nhl24
 #        из пакета NHL 24, если он готов: game/work/nhl24/out/pack или NHL24_PACK=папка)
 # Сеть: roster — только кэш (--offline); photos — докачка недостающих портретов лиг (пауза ≥ 1 с), остальное — без сети.
@@ -24,7 +24,7 @@ L=game/other/legacy/big/cacheboot
 AHL32=0
 stages=()
 for a in "$@"; do [ "$a" = "--ahl32" ] && AHL32=1 || stages+=("$a"); done
-[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect fonts music models art menu nhl24)
+[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect fixdb fonts music models art menu nhl24)
 want() { for s in "${stages[@]}"; do [ "$s" = "$1" ] && return 0; done; return 1; }
 say() { echo "== $(date +%H:%M:%S) $*"; }
 
@@ -81,6 +81,18 @@ if want collect; then
   [ $AHL32 = 1 ] && python $T/make_out_ahl32.py
   [ $AHL32 = 1 ] && [ -f $W/out-ahl32/db/nhlng.db ] && cp $W/out-ahl32/db/nhlng.db $W/out-ahl32/db/draft_roster.db
   echo "   локализация из nhl32 — без правок меню: потом этап menu (menuitems_legacy.py)"
+fi
+if want fixdb; then
+  # последний бит записи — флаг движка «запись свободна»: поле на нём (leaguerookiedata.draftteam 58…63 при reclen 8 —
+  # до исправления tdb.widen 10.10.2026) прячет строки от игры; у таких таблиц запись +4 байта, поля на местах.
+  # Повторный запуск ничего не меняет; draft_roster.db — снова копия починенной nhlng.db
+  say "база: последний бит записи свободен (fix_flagbit)"
+  for d in $O/db $W/out-ahl32/db; do
+    if [ -f $d/nhlng.db ]; then
+      python $T/fix_flagbit.py $d/nhlng.db
+      cp $d/nhlng.db $d/draft_roster.db
+    fi
+  done
 fi
 if want fonts; then
   say "шрифт меню NHL 12 (fefont --keep, скелет Legacy)"
