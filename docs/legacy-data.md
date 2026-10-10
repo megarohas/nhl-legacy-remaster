@@ -381,6 +381,32 @@ Wikipedia), портреты у 1303, проверки OK.
 - **Проверка в игре.** Копия `game/work/legacy-data/ud-rookie` — userdata пользователя без сейвов франшиз, с базой
   59b03a68. legacy-port проверит на ней франшизу с двумя драфтами.
 
+## У пользователя (10.10.2026, 05:17)
+
+Поставлено по решению координатора: исправленная база (флаговый бит) и `draft_roster.db` из 10 таблиц, без накладки
+NHL 24.
+- Команда: `CACHE=legacy-port/userdata/cache/guest bash tools/legacy_data/install-legacy-data.sh --ahl32`. Игра
+  пользователя была закрыта: шла одна `nhllegacy.exe` — тест legacy-port под замком `game.lock` с другой
+  `user_data_root` (`ud-ab-plain`). Обновлено 2 файла из 2910.
+- Стоит в `cache:` пользователя (`legacy-port/userdata/cache/guest`):
+
+  | файл | md5 | было |
+  |---|---|---|
+  | `db/nhlng.db` | 59b03a68 (out-ahl32 после fixdb) | 34dfe267 |
+  | `db/draft_roster.db` | 838ca6a0 (10 таблиц) | 34dfe267 (полная копия базы) |
+  | `db/nhlng-meta.xml` | 8ae5e145 (без изменений) | — |
+  | `fe/loc/NHL_ENG_US.db` | 0973bb47 (без изменений) | — |
+
+- Проверка: тот же шаг заранее на копии `cache:` (`tmp/check_user_install.py` → `check-user-db`) — изменились только
+  эти 2 файла. После установки весь `cache:` пользователя байт в байт совпал с этой пробой. В `installed.txt` тот же
+  набор путей (2910, пересортирован). Появился `install-flags.txt` (`--ahl32`).
+- **Бэкап прежних файлов:** `game/work/legacy-data/backup-cache/user-20261010-051711/db/` (`nhlng.db`,
+  `draft_roster.db`, оба 34dfe267; `md5.txt`).
+- **Откат** — при закрытой игре скопировать оба файла из бэкапа обратно в `legacy-port/userdata/cache/guest/db/`.
+  Установщик для этого не нужен: оба файла и так в `installed.txt`.
+- Сейвы франшиз в userdata пользователя — агентские, их не чинили. Ремонт сейвов, если понадобится, —
+  `fix_flagbit.py --save` (раздел выше).
+
 ## Пакет NHL 24: формы, лёд, шлемы, шайба, клюшки (накладка `out-nhl24`, 09.10.2026)
 
 Пакет готовит агент nhl24 (`tools/fb/pack.py`, [nhl24-uniforms.md](nhl24-uniforms.md) §8). legacy-data сверяет
