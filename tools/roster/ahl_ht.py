@@ -255,6 +255,41 @@ def seasonstats_rel(htid):
     return f'ahl/ht/player/{htid}-seasonstats.json'
 
 
+def affiliates(h):
+    """team_id HockeyTech → клуб НХЛ, чей фарм-клуб в 2026/27 (slots.json этапа legacy-data ahl2026_slots.py)."""
+    p = os.path.join(os.path.dirname(h.cache), 'legacy-data', 'ahl-2026', 'slots.json')
+    slots = (read_json(p) or {}).get('slots') or []
+    return {str(s['ht_team_id']): s['affiliate_of'] for s in slots}
+
+
+def active_org_ids(players, ids, active, parent):
+    """Игроки без ID НХЛ → ID из списка активных search.d3 (в нём нет даты рождения): та же фамилия, имя того же
+    начала или его форма (build.same_first), вратарь/полевой, клуб НХЛ игрока — аффилиат его клуба АХЛ; только
+    единственный кандидат, чей ID ещё свободен. → {HT player_id: nhl_id} (карточку потом сверяет players_stage)."""
+    import collections
+    from .build import same_first
+    from .common import norm
+    by_last = collections.defaultdict(list)
+    for a in active:
+        name = a.get('name') or ''
+        if ' ' in name:
+            by_last[norm(name.split(' ', 1)[1])].append(a)
+    taken = {v[0] for v in ids.values()}
+    out = {}
+    for pid, p in players.items():
+        if pid in ids or not parent.get(str(p['_team'])):
+            continue
+        first = p.get('first_name') or ''
+        hits = {int(a['playerId']) for a in by_last.get(norm(p.get('last_name') or ''), [])
+                if a.get('teamAbbrev') == parent[str(p['_team'])]
+                and _is_g(a.get('positionCode')) == _is_g(p.get('position'))
+                and (same_first(a['name'].split(' ', 1)[0], first) or norm(a['name'])[:1] == norm(first)[:1])} - taken
+        if len(hits) == 1:
+            out[pid] = hits.pop()
+            taken.add(out[pid])
+    return out
+
+
 def club_season_ids(h, players, ids, club_name):
     """Игроки без ID НХЛ → ID по карточке landing из кэша (кандидаты поиска, свободные агенты и прочие скачанные): та
     же фамилия, то же имя или его форма (build.same_first) либо та же дата рождения (Mike — Michael Sgarbossa),
@@ -349,6 +384,18 @@ def players_stage(h, log=print):
         ids[pid] = (nid, None)
     if by_club:
         log(f'по клубу 2026/27 (дата рождения в HockeyTech другая): {len(by_club)}')
+    # с контрактом клуба НХЛ, но поиск по имени не нашёл (Zach — Zachary Aston-Reese, Danny — Danil Zhilkin): список
+    # активных search.d3 — та же фамилия, вратарь/полевой, клуб НХЛ = аффилиат клуба АХЛ; карточка — докачка
+    org = active_org_ids(players, ids, active, affiliates(h))
+    if org:
+        errs += run_lanes({'api-web': [(lambda i=i: landing(h, i)) for i in sorted(set(org.values()))]}, log)
+        org = {pid: nid for pid, nid in org.items() if h.cached(landing_rel(nid))
+               and _is_g((landing(h, nid) or {}).get('position')) == _is_g(players[pid].get('position'))}
+        for pid, nid in org.items():
+            ids[pid] = (nid, None)
+        log(f'по списку активных и клубу НХЛ: {len(org)}')
+    how = {**{pid: 'club' for pid in by_club}, **{pid: 'active+org' for pid in org}}
+    by_club = {**by_club, **org}
     no_id = [pid for pid in players if pid not in ids]
     fa_ok = [i for i in sorted(fa_cand) if fa.check_api(landing(h, i) if h.cached(landing_rel(i)) else None,
                                                      fa_cand[i]['gp']) is None]
@@ -380,7 +427,7 @@ def players_stage(h, log=print):
     for pid, nid in by_club.items():
         land = landing(h, nid) or {}
         out[pid]['by_club'] = {'nhl_name': f"{_nm(land, 'firstName')} {_nm(land, 'lastName')}",
-                               'nhl_birth': land.get('birthDate')}
+                               'nhl_birth': land.get('birthDate'), 'how': how[pid]}
     dst = os.path.join(os.path.dirname(h.cache), 'legacy-data', 'ahl-2026', 'ids.json')   # game/work/legacy-data/…
     write_json(dst, {'players': out, 'fa_candidates': len(fa_cand), 'fa_api_ok': fa_ok, 'errors': errs})
     log(f'игроков АХЛ {len(players)}: с ID НХЛ {len(ids)}, без {len(no_id)}; свободных агентов после проверки '
