@@ -47,8 +47,19 @@ def club_info(code):
     raise SystemExit(f"нет клуба {code}")
 
 
-def kits_for(code):
-    """[(label, family, kit, variant, new?)] — строки Legacy и реестр новых форм."""
+# Правило пользователя (10.10): из NHL 24 ставим только основные комплекты — дом, выезд и третью (если есть).
+# RR22/RR23, 90-е и прочие спецформы собраны (out/pilot), но в пакет не идут, пока не решат иначе (--all-kits).
+MAIN_KITS = ("home", "away", "three")
+ALL_KITS = False
+
+
+def kits_for(code, main_only=None):
+    """[(label, family, kit, variant, new?)] — строки Legacy и реестр новых форм (по умолчанию — только основные)."""
+    main_only = (not ALL_KITS) if main_only is None else main_only
+    return [k for k in _kits_for(code) if not main_only or k[0] in MAIN_KITS]
+
+
+def _kits_for(code):
     club, art = club_info(code)
     out = []
     for label, kit, loc in (("home", "home", 0), ("away", "away", 1), ("three", "three", 2)):
@@ -269,7 +280,7 @@ def cmd_build(a):
     if only and os.path.exists(rp):  # частичная пересборка — остальные записи отчёта прежние
         with open(rp, encoding="utf-8") as f:
             old = [r for r in json.load(f) if r["kit"] not in only]
-        order = [k[0] for k in kits_for(code)]
+        order = [k[0] for k in kits_for(code, main_only=False)]
         report = sorted(old + report, key=lambda r: order.index(r["kit"]) if r["kit"] in order else 99)
     with open(rp, "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=1)
@@ -616,7 +627,11 @@ def main():
     s.add_argument("--pucks", default="CHI", help="шайбы каких клубов (коды через запятую)")
     s.add_argument("--no-unfade", dest="unfade", action="store_false", help="рекламу на льду — как в NHL 24 (бледную)")
     sub.add_parser("sticks")
+    for p in sub.choices.values():
+        p.add_argument("--all-kits", action="store_true", help="и спецформы (RR22/RR23, 90-е) — не только дом/выезд/третья")
     a = ap.parse_args()
+    global ALL_KITS
+    ALL_KITS = a.all_kits
     return {"build": cmd_build, "pack": cmd_pack, "common": cmd_common, "manifest": cmd_manifest,
             "sheets": cmd_sheets, "sticks": cmd_sticks}[a.cmd](a)
 
