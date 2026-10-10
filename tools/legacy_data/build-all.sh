@@ -4,7 +4,8 @@
 #   bash tools/legacy_data/build-all.sh [ЭТАП…] [--ahl32]
 #   LEGACY_DATA_WORK=папка bash tools/legacy_data/build-all.sh …   # сухой прогон: всё (и out) — в эту папку;
 #        входы, которые этапом не пересобираются (например, составы без сети), — положить туда заранее
-#        этапы: base roster photos equip collect fixdb utah fonts music models art menu nhl24 (без этапов — все по порядку;
+#        этапы: base roster photos equip collect retire fixdb utah fonts music models art menu nhl24 (без этапов — все
+#        по порядку;
 #        --ahl32 — ещё вариант «АХЛ на 32», накладка game/work/legacy-data/out-ahl32; nhl24 — накладка out-nhl24
 #        из пакета NHL 24, если он готов: game/work/nhl24/out/pack или NHL24_PACK=папка)
 # Сеть: roster — только кэш (--offline); photos — докачка недостающих портретов лиг (пауза ≥ 1 с), остальное — без сети.
@@ -24,7 +25,7 @@ L=game/other/legacy/big/cacheboot
 AHL32=0
 stages=()
 for a in "$@"; do [ "$a" = "--ahl32" ] && AHL32=1 || stages+=("$a"); done
-[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect fixdb utah fonts music models art menu nhl24)
+[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah fonts music models art menu nhl24)
 want() { for s in "${stages[@]}"; do [ "$s" = "$1" ] && return 0; done; return 1; }
 say() { echo "== $(date +%H:%M:%S) $*"; }
 
@@ -43,7 +44,10 @@ fi
 # потолке 2026/27 в 104 млн (потолок ставит врезка legacy-port; иначе со 2-го сезона игра поднимает его до самой
 # дорогой ведомости, а клуб сверх потолка дальше не пускает)
 # --fa-only: в пуле свободных агентов — только настоящие (--fa), без 35 свободных агентов Legacy 2015 года
-FLAGS="--offline --game legacy --stats-ratings --fa --fa-only --skin --league liiga --payroll-max 100"
+# --retire-veterans 2010: ушедшие из НХЛ игроки базы 2015 года (все: база старше на 11 лет) не занимают мест в клубах
+# АХЛ/Европы/CHL — остаются без клуба и во франшизу не попадают (10.10.2026; до этого 94 таких было в клубах, Toews,
+# Price, Galchenyuk…). Пока составы не пересобраны с сетью, то же по готовой базе делает этап retire
+FLAGS="--offline --game legacy --stats-ratings --fa --fa-only --skin --league liiga --payroll-max 100 --retire-veterans 2010"
 if want roster; then
   say "составы 2026/27"
   python tools/roster all $FLAGS
@@ -82,6 +86,19 @@ if want collect; then
   [ $AHL32 = 1 ] && python $T/make_out_ahl32.py
   [ $AHL32 = 1 ] && [ -f $W/out-ahl32/db/nhlng.db ] && python $T/draft_roster.py $W/out-ahl32/db/nhlng.db $W/out-ahl32/db/draft_roster.db
   echo "   локализация из nhl32 — без правок меню: потом этап menu (menuitems_legacy.py)"
+fi
+if want retire; then
+  # ушедшие из НХЛ игроки базы 2015 года — без клуба по готовой базе (retire_veterans.py: правила write.free_vacancy,
+  # docs/legacy-data.md, «Ветераны НХЛ 2015»); составы, собранные с --retire-veterans, не меняются
+  say "ветераны НХЛ 2015 — без клуба (retire_veterans.py)"
+  python $T/retire_veterans.py $W/nhl32/nhlng.db $O/db/nhlng.db --report $W/roster/retire-veterans.json
+  if [ -f $W/out-ahl32/db/nhlng.db ]; then
+    python $T/retire_veterans.py $W/nhl32-ahl32/nhlng.db $W/out-ahl32/db/nhlng.db \
+           --report $W/roster-ahl32/retire-veterans.json
+  fi
+  for d in $O/db $W/out-ahl32/db; do
+    if [ -f $d/nhlng.db ]; then python $T/draft_roster.py $d/nhlng.db $d/draft_roster.db; fi
+  done
 fi
 if want fixdb; then
   # последний бит записи — флаг движка «запись свободна»: поле на нём (leaguerookiedata.draftteam 58…63 при reclen 8 —
