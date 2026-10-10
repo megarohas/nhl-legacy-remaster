@@ -115,3 +115,7 @@ CBJ = "two"    # «пушка» (своей three в NHL 24 нет)
 WSH = "twentythree"  # чёрная с орлом Screaming Eagle (решение 09:05; three — Stadium Series 2023)
 TOR = "seven"  # чёрная (решение 09:05; three — Heritage Classic 2022)
 # PIT — своя adidas/three (чёрная с жёлтыми рукавами), по решению 09:05 оставлена
+
+# PHI третья (NHL 24 adidas/two): спонсор «Independence IBX» шире окна поиска — снимается весь прямоугольник
+[club.PHI.three.chest_patch]
+box = [0.403, 0.594, 0.470, 0.637]
