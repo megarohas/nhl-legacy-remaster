@@ -410,36 +410,135 @@ def set_defaults(db, rows, new, n_before):
     return out, labels
 
 
+EQ = 'stockteamequipmenttable'
+EQ_HELMET = 7                                   # equipment шлема (в базе — 8, см. eq_low)
+EQ_KEY = ('era', 'variant', 'equipment', 'brand')
+EQ_ZONES = tuple(f'zone{i}_{c}' for i in range(1, 10) for c in 'rgb')
+
+
+def eq_low(db):
+    """rangelow полей ключа экипировки из meta. У EA у team, era, variant, equipment и brand он −1: значение = сырое − 1
+    (team 7 — CHI, era 0/1/2 — −1/0/1, variant 1 — 0, equipment 8 — шлем 7, brand 0 — −1, «любой»)."""
+    for name, fields in db.meta.values():
+        if name == EQ:
+            low = {f: lo for f, lo, _ in fields.values()}
+            return {f: low[f] for f in ('team',) + EQ_KEY}
+    sys.exit(f'нет {EQ} в meta')
+
+
+def _eq_dec(c, b, k):
+    return c == k or (c == -1 and b != k)
+
+
+def eq_better(key, c, b):
+    """Компаратор sub_82AEDB98: запись c лучше лучшей b для ключа (era, variant, equipment, brand)? Сначала equipment,
+    затем у типов 0–3 brand, era, variant, у остальных era, variant, brand: первое различающееся поле решает — лучше то,
+    что равно ключу, или −1 («любое»), если у b оно не равно ключу."""
+    if c[2] != b[2]:
+        return _eq_dec(c[2], b[2], key[2])
+    for i in ((3, 0, 1) if key[2] in (0, 1, 2, 3) else (0, 1, 3)):
+        if c[i] != b[i]:
+            return _eq_dec(c[i], b[i], key[i])
+    return False
+
+
+def eq_lookup(recs, key):
+    """sub_82AEED60: от первой записи — к лучшей по компаратору, точное совпадение всех четырёх полей — сразу."""
+    best = recs[0]
+    for c in recs[1:]:
+        if best[:4] == key:
+            break
+        if eq_better(key, c, best):
+            best = c
+    return best
+
+
+def club_equipment(db, low, team, extra=()):
+    """Записи экипировки клуба в том порядке, в каком их грузит игра (sub_82AF7610: team = клуб, ORDER BY equipment;
+    внутри одного equipment — от последней строки базы к первой: только так сходятся все 15 кадров CHI — 10 форм EA в
+    пилоте и 3 новые формы ТЕСТ CHI3; прямой порядок даёт 5 промахов). extra — записи, которые будут дописаны в конец
+    базы. Запись: (era, variant, equipment, brand, строка базы, цвета зон)."""
+    recs = [tuple(db.get(EQ, f, r) + low[f] for f in EQ_KEY) + (r, tuple(db.get(EQ, z, r) for z in EQ_ZONES))
+            for r in db.live_rows(EQ) if db.get(EQ, 'team', r) + low['team'] == team]
+    recs = (recs + list(extra))[::-1]
+    recs.sort(key=lambda x: x[2])                   # сортировка устойчивая: внутри equipment — с конца базы
+    return recs
+
+
+def _shade(colors):
+    r, g, b = colors[:3]                            # зона 1 — каска (красный канал маски helmet_*_tm)
+    return 'тёмный' if (r * 3 + g * 6 + b) / 10 < 128 else 'светлый'
+
+
 def add_helmets(db, rows, new):
-    """Цвет шлема новых форм. stockteamequipmenttable: team = строка клуба + 1, era 1 — формы стиля 1, variant — вариант
-    формы, equipment 8 — шлем (зона 1 — цвет каски). Сверено по CHI: era 1 / variant 0 — чёрный (в игре у домашней 1_6_0
-    чёрные шлемы), 3 и 4 — чёрный (тёмные спецформы), 5 — белый (светлая 1_6_5); строки нет — шлем белый (выездная
-    1_6_1 и новые формы в ТЕСТ CHI, 09.10). Новой форме — копия строки шлема домашней формы клуба (тёмной новой) или
-    выездной (светлой; у выездной строки обычно нет — тогда ничего, белый); manifest kits[].helmet = home | away —
-    явно. → [описание добавленного]."""
-    E = 'stockteamequipmenttable'
-    erows = [(r, db.get(E, 'team', r), db.get(E, 'era', r), db.get(E, 'variant', r), db.get(E, 'equipment', r))
-             for r in db.live_rows(E)]
-    copies, done = [], []
-    for k in new:
-        team = CLUBS[k['club']][0]
-        like = k.get('helmet') or ('away' if k['islightcolor'] else 'home')
-        src = next((r['variant'] for r in rows if r['teamid'] == team and r['style'] == 1 and
-                    r['locstring'] == (0 if like == 'home' else 1)), None)
-        if any(t == team + 1 and era == 1 and v == k['variant'] for _, t, era, v, _ in erows):
-            sys.exit(f"{k['club']} {k['kit']}: у варианта {k['variant']} уже есть строки экипировки — не тот номер?")
-        found = [r for r, t, era, v, e in erows if t == team + 1 and era == 1 and v == src and e == 8]
-        copies += [(r, k['variant']) for r in found]
-        done.append(f"{k['club']} {k['kit']}: шлем как у {'домашней' if like == 'home' else 'выездной'} "
-                    f"(1_{k['art']}_{src}) — " + (f'строка {found[0]}' if found else 'строки нет, белый по умолчанию'))
-    if copies:
-        n = db.by_name[E]['rows']
-        raws = [db.record(E, r) for r, _ in copies]
-        db.resize(E, n + len(copies))
-        for i, (raw, (_, v)) in enumerate(zip(raws, copies)):
-            db.put_record(E, n + i, raw)
-            db.set(E, 'variant', n + i, v)
-            db.set(E, 'index', n + i, n + i)
+    """Цвет шлема новых форм — строками stockteamequipmenttable (только новыми). Как выбирает игра (sub_829F1600 →
+    sub_829EF868 → sub_82AEED60, ключ — из записи формы sub_829756C0): era = style формы, variant = variant формы,
+    equipment 7 (шлем), brand — бренд шлема игрока. Значения в базе — со сдвигом (eq_low). У EA строки шлема форм стиля
+    1 — era −1 («любая», в базе 0) с variant формы, у форм стиля 0 — era 0 (в базе 1). Формы без своей строки берут
+    первую подходящую в порядке загрузки (club_equipment) — у CHI это 241 (светлая): поэтому в ТЕСТ CHI3 все новые формы
+    были в белых шлемах (строки 6040/6041 были с era 0 — для ретро-форм — и variant на 1 меньше).
+    Новой форме — строка (era как у шлемов форм стиля 1 этого клуба, variant формы) с цветами шлема, который игра сейчас
+    даёт домашней (тёмной новой) или выездной (светлой) форме клуба; manifest kits[].helmet = home | away — явно.
+    Новые строки встают в порядке загрузки первыми и могут перехватить формы клуба без своей строки шлема — таким
+    формам дописывается строка с их нынешним цветом («закреплён»). Сверка на модели: у прежних форм клуба шлем не
+    меняется, у новых — как у образца. → [описание добавленного]."""
+    low = eq_low(db)
+    done, adds = [], []
+    for code in sorted({k['club'] for k in new}, key=lambda c: CLUBS[c][0]):
+        team, art = CLUBS[code]
+        recs = club_equipment(db, low, team)
+        helm = [x for x in recs if x[2] == EQ_HELMET]
+        if not helm:
+            sys.exit(f'{code}: у клуба нет строк шлема ({EQ}, equipment {EQ_HELMET}) — цвет новых форм не задать')
+        if any(x[3] != -1 for x in helm):
+            sys.exit(f'{code}: строки шлема с брендом {sorted({x[3] for x in helm})} — модель выбора их не учитывает')
+        mine = [r for r in rows if r['teamid'] == team]
+        kits = sorted({(r['style'], r['variant']) for r in mine})
+
+        def key(style, variant):
+            return style, variant, EQ_HELMET, 0
+
+        pre = {kv: eq_lookup(recs, key(*kv)) for kv in kits}
+        era1 = 1 if any(x[0] == 1 for x in helm) else -1          # какие строки шлема берут формы стиля 1
+        club = []                                                  # (запись-образец, era, variant, описание)
+        for k in [k for k in new if k['club'] == code]:
+            like = k.get('helmet') or ('away' if k['islightcolor'] else 'home')
+            sk = next((r for r in mine if r['style'] == 1 and r['locstring'] == (0 if like == 'home' else 1)), None)
+            if sk is None:
+                sys.exit(f"{code} {k['kit']}: у клуба нет {'домашней' if like == 'home' else 'выездной'} формы стиля 1 "
+                         f'(locstring {0 if like == "home" else 1}) — не с чего взять цвет шлема')
+            if any(x[0] == era1 and x[1] == k['variant'] for x in helm):
+                sys.exit(f"{code} {k['kit']}: у варианта {k['variant']} уже есть строка шлема — не тот номер?")
+            src = pre[(1, sk['variant'])]
+            club.append((src, era1, k['variant'],
+                         f"{code} {k['kit']} 1_{art}_{k['variant']}: шлем как у {'домашней' if like == 'home' else 'выездной'}"
+                         f" 1_{art}_{sk['variant']} — {_shade(src[5])} (строка {src[4]})"))
+        for _ in range(len(kits) + 1):
+            extra = [(era, v, EQ_HELMET, -1, None, src[5]) for src, era, v, _ in club]
+            post_recs = club_equipment(db, low, team, extra)
+            moved = [kv for kv in kits if eq_lookup(post_recs, key(*kv))[5] != pre[kv][5]]
+            if not moved:
+                break
+            for s, v in moved:
+                club.append((pre[(s, v)], era1 if s == 1 else 0, v,
+                             f'{code} {s}_{art}_{v}: шлем как был — {_shade(pre[(s, v)][5])} (строка {pre[(s, v)][4]}), '
+                             f'закреплён'))
+        else:
+            sys.exit(f'{code}: шлемы прежних форм не удаётся сохранить — модель не сошлась')
+        for src, era, v, _ in club[:len([k for k in new if k['club'] == code])]:
+            got = eq_lookup(post_recs, key(1, v))
+            if got[5] != src[5]:
+                sys.exit(f'{code} 1_{art}_{v}: по модели шлем не тот (строка {got[4]})')
+        adds += club
+        done += [d for *_, d in club]
+    if adds:
+        n = db.by_name[EQ]['rows']
+        db.resize(EQ, n + len(adds))
+        for i, (src, era, v, _) in enumerate(adds):
+            db.put_record(EQ, n + i, db.record(EQ, src[4]))     # team, equipment, brand (−1), цвета — как у образца
+            db.set(EQ, 'era', n + i, era - low['era'])
+            db.set(EQ, 'variant', n + i, v - low['variant'])
+            db.set(EQ, 'index', n + i, n + i)
     return done
 
 
