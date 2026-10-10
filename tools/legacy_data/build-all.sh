@@ -4,8 +4,8 @@
 #   bash tools/legacy_data/build-all.sh [ЭТАП…] [--ahl32]
 #   LEGACY_DATA_WORK=папка bash tools/legacy_data/build-all.sh …   # сухой прогон: всё (и out) — в эту папку;
 #        входы, которые этапом не пересобираются (например, составы без сети), — положить туда заранее
-#        этапы: base roster photos equip collect retire fixdb utah ahl fonts music models art menu nhl24 (без этапов — все
-#        по порядку;
+#        этапы: base roster photos equip collect retire fixdb utah ahl fonts music models art logos menu nhl24
+#        (без этапов — все по порядку;
 #        --ahl32 — ещё вариант «АХЛ на 32», накладка game/work/legacy-data/out-ahl32; nhl24 — накладка out-nhl24
 #        из пакета NHL 24, если он готов: game/work/nhl24/out/pack или NHL24_PACK=папка)
 # Сеть: roster — только кэш (--offline); photos — докачка недостающих портретов лиг (пауза ≥ 1 с), остальное — без сети.
@@ -25,7 +25,7 @@ L=game/other/legacy/big/cacheboot
 AHL32=0
 stages=()
 for a in "$@"; do [ "$a" = "--ahl32" ] && AHL32=1 || stages+=("$a"); done
-[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah ahl fonts music models art menu nhl24)
+[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah ahl fonts music models art logos menu nhl24)
 want() { for s in "${stages[@]}"; do [ "$s" = "$1" ] && return 0; done; return 1; }
 say() { echo "== $(date +%H:%M:%S) $*"; }
 
@@ -168,6 +168,16 @@ if want art; then
   python tools/teamart.py alias 153 102 $O --game legacy      # CV  ← форма Springfield Falcons
   python tools/teamart.py alias 150 103 $O --game legacy      # HSK ← форма Providence Bruins
   python $AS/scripts/verify_out.py $O --game legacy
+fi
+if want logos; then
+  # логотипы клубов 2026/27 агента logos (docs/logos-2026.md): готовые файлы по манифесту, со сверкой md5
+  # (tools/logos/outcopy.py: в out — только пути манифеста, ничего не пересобирается). Только в out: у накладок
+  # out-ahl32 и out-nhl24 своего арта клубов нет. После art: у HSK (арт 103) art пишет прежний щит, logos заменяет его
+  # нынешним (так задумано); CV 102 и TUC 105 не трогаются. Этап art без logos вернёт прежний щит HSK
+  for LO in game/work/logos/out-nhl game/work/logos/out-ahl; do
+    if [ -f "$LO/manifest.json" ]; then say "логотипы 2026/27: $LO"; python tools/logos/outcopy.py copy "$LO" $O
+    else say "логотипы: нет $LO/manifest.json — пропуск"; fi
+  done
 fi
 if want menu; then
   # после collect: menuitems_legacy.py правит локализацию out (и накладки — у неё своя) — пункт EXIT, панель описаний
