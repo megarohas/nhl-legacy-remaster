@@ -421,8 +421,6 @@ def main():
             render(mesh, tex, v).save(f"{a.out}_{v}.png")
 
 
-if __name__ == "__main__":
-    sys.exit(main())
 
 
 # ---------------------------------------------------------------- рендер с рельефом (карта нормалей + блик)
@@ -637,3 +635,6 @@ def bbox(mesh):
     P = mesh["pos"]
     return [P[:, 0].min(), P[:, 0].max(), P[:, 1].min(), P[:, 1].max(), P[:, 2].min(), P[:, 2].max()]
 
+
+if __name__ == "__main__":
+    sys.exit(main())

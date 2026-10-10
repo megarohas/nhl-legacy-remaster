@@ -90,10 +90,7 @@ patches = ["chest_patch", "chest_patch_r"]
 [relief]
 t = 4
 
-# CHI третья (Winter Classic, полосы вокруг ворота): щит NHL на развёртке NHL 24 ниже обычного (0,599 вместо 0,577),
-# в стандартное окно не попадал — щит оставался на старом месте, без −4 см
-[club.CHI.three.neck_shield]
-uv = [0.5007, 0.5986]
+# (CHI three — с 10.10 обычная альтернативная из папки two; правило щита для Winter Classic 2019 снято)
 
 # MIN дом/выезд: спонсор Tria зашит прямо в base-слой NHL 24 (нашивка с фоном и надписью) — снимается весь прямоугольник
 [club.MIN.home.chest_patch]
@@ -101,3 +98,20 @@ box = [0.401, 0.598, 0.460, 0.661]
 
 [club.MIN.away.chest_patch]
 box = [0.401, 0.598, 0.460, 0.661]
+
+# Решение пользователя (10.10, 09:00): в слот «третья» — обычная альтернативная форма клуба, а не форма разового
+# матча (Winter Classic, Stadium Series) и не копия домашней. Папка комплекта NHL 24 (adidas/<папка>) для третьей;
+# у остальных клубов — adidas/three.
+[third_source]
+VGK = "two"    # золотая (three — копия домашней)
+CHI = "two"    # чёрная (three — Winter Classic 2019)
+CAR = "two"    # чёрная «флаг» (three — Stadium Series 2023)
+TBL = "two"    # чёрная (three — Stadium Series 2022)
+NYR = "two"    # тёмно-синяя винтажная (three — Stadium Series 2024)
+STL = "two"    # голубая (three — Winter Classic 2022)
+BUF = "seven"  # чёрная Goathead (three — белая, почти как выездная)
+PHI = "two"    # чёрная, спонсор IBX снимается (three — оранжевая, почти как домашняя)
+CBJ = "two"    # «пушка» (своей three в NHL 24 нет)
+WSH = "twentythree"  # чёрная с орлом Screaming Eagle (решение 09:05; three — Stadium Series 2023)
+TOR = "seven"  # чёрная (решение 09:05; three — Heritage Classic 2022)
+# PIT — своя adidas/three (чёрная с жёлтыми рукавами), по решению 09:05 оставлена

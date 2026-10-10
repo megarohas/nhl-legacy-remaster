@@ -87,9 +87,11 @@ def _kits_for(code):
     with open(REGISTRY, encoding="utf-8") as f:
         reg = [r for r in json.load(f)["kits"] if r["club"] == code]
     out = []
+    src = third_source()
     for label in MAIN_KITS:
         r = next((k for k in reg if k["kit"] == label), None)
-        out.append((label, "adidas", label, r["variant"] if r else None, True))
+        kit = src.get(code, "three") if label == "three" else label
+        out.append((label, "adidas", kit, r["variant"] if r else None, True))
     for r in reg:
         lab = r["kit"]
         if lab in MAIN_KITS:
@@ -98,6 +100,13 @@ def _kits_for(code):
                                                                                      "rr23": "twentythree"}[lab])
         out.append((lab, fam, kit, r["variant"], True))
     return out
+
+
+def third_source():
+    """Папка комплекта NHL 24 для третьей (kit_rules.toml [third_source]; по умолчанию adidas/three)."""
+    import tomllib
+    with open(kit_hybrid.RULES, "rb") as f:
+        return tomllib.load(f).get("third_source", {})
 
 
 def home_template(art):
@@ -136,7 +145,7 @@ def extract_club(club, force=False):
     if not force and os.path.exists(os.path.join(folder, "_index.csv")):  # уже выгружено — не повторяем
         with open(os.path.join(folder, "_index.csv"), encoding="utf-8") as f:
             return folder, {r["name"] for r in csv.DictReader(f) if r["status"] == "ok"}
-    rx = (f"^content/character/skater/league/nhl/{club}/(adidas/(home|away|three|twentytwo|twentythree)|nineties/[a-z]+)/"
+    rx = (f"^content/character/skater/league/nhl/{club}/(adidas/[a-z]+|nineties/[a-z]+)/"
           f"(jersey|font|pant|sock|helmetlogo)_(adidas|nineties)_{club}_[a-z]+_(base_)?(color|normal|[0-9]_color)$")
     subprocess.run([sys.executable, "-m", "fb.extract", rx, "--out", f"club_{club}"], check=True, cwd=TOOLS)
     folder = os.path.join(NHL24, "extract", f"club_{club}")
