@@ -97,14 +97,17 @@ def club_svg_name(c):
 def png_svg(path, margin=2, blank=(), fill=()):
     """Растровый логотип (PNG с прозрачностью) → SVG-обёртка <image> по рамке непрозрачного (так его рисуют teamart и
     ui_extra в Chrome; как tools/utah/rasterlogo.py svg_wrap). Знаки ® / ™ (tools/logos/pngmarks.py): blank — рамки
-    (x0, y0, x1, y1) или круги (cx, cy, r[, r2]) в пикселях PNG, которые делаются прозрачными (знак отдельно от рисунка); fill — рамки, которые
-    заливаются самым частым цветом своей каймы в 1 пиксель (знак поверх ровной заливки рисунка)."""
+    [x0, y0, x1, y1] или круги [cx, cy, r] / {"circle": [cx, cy, r, r2]} в пикселях PNG, которые делаются прозрачными
+    (знак отдельно от рисунка); fill — рамки, которые заливаются самым частым цветом своей каймы в 1 пиксель (знак поверх
+    ровной заливки рисунка). Четыре числа — всегда рамка (10.10: круг с r2 тоже был из четырёх чисел, и рамка ™ HSK
+    стиралась как круг радиуса 340 — от логотипа оставался верх)."""
     import base64
     import io
     from collections import Counter
     im = Image.open(path).convert('RGBA')
     for bx in blank:
-        if len(bx) in (3, 4):                          # круг (cx, cy, r[, r2]): знак с белой каймой у обводки; в
+        if isinstance(bx, dict) or len(bx) == 3:       # круг (cx, cy, r[, r2]): знак с белой каймой у обводки; в
+            bx = bx['circle'] if isinstance(bx, dict) else bx
             cx, cy, r = bx[:3]                         # кольце r…r2 — только полупрозрачное (край каймы)
             r2 = bx[3] if len(bx) == 4 else r
             a = np.asarray(im).copy()
