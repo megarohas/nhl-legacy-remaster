@@ -4,7 +4,7 @@
 #   bash tools/legacy_data/build-all.sh [ЭТАП…] [--ahl32]
 #   LEGACY_DATA_WORK=папка bash tools/legacy_data/build-all.sh …   # сухой прогон: всё (и out) — в эту папку;
 #        входы, которые этапом не пересобираются (например, составы без сети), — положить туда заранее
-#        этапы: base roster photos equip collect retire fixdb utah fonts music models art menu nhl24 (без этапов — все
+#        этапы: base roster photos equip collect retire fixdb utah ahl fonts music models art menu nhl24 (без этапов — все
 #        по порядку;
 #        --ahl32 — ещё вариант «АХЛ на 32», накладка game/work/legacy-data/out-ahl32; nhl24 — накладка out-nhl24
 #        из пакета NHL 24, если он готов: game/work/nhl24/out/pack или NHL24_PACK=папка)
@@ -25,7 +25,7 @@ L=game/other/legacy/big/cacheboot
 AHL32=0
 stages=()
 for a in "$@"; do [ "$a" = "--ahl32" ] && AHL32=1 || stages+=("$a"); done
-[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah fonts music models art menu nhl24)
+[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah ahl fonts music models art menu nhl24)
 want() { for s in "${stages[@]}"; do [ "$s" = "$1" ] && return 0; done; return 1; }
 say() { echo "== $(date +%H:%M:%S) $*"; }
 
@@ -125,6 +125,19 @@ if want utah; then
     done
   else
     say "Юта: нет $S — этап пропущен"
+  fi
+fi
+if want ahl; then
+  # составы АХЛ 2026/27 (HockeyTech) и свободные агенты на сегодня — на готовой базе, составы НХЛ не меняются
+  # (решение пользователя 10.10; docs/legacy-data.md, «АХЛ 2026/27»). Кэш скачивает `python -m roster.ahl_ht
+  # teams|ids|players` (сеть — только для АХЛ и свободных агентов); здесь — без сети. Клубы: 8 слотов переименованы,
+  # аффилиаты 2026/27, арены; портреты, экипировка по правилам; draft_roster.db — заново
+  if [ -f game/work/roster-cache/ahl/ht/teams-94.json ]; then
+    say "АХЛ 2026/27 и свободные агенты (ahl2026.py)"
+    python $T/ahl2026_slots.py $W/out-ahl32/db/nhlng.db
+    python $T/ahl2026.py
+  else
+    say "АХЛ 2026/27: нет кэша HockeyTech — этап пропущен (python -m roster.ahl_ht teams; ids; players)"
   fi
 fi
 if want fonts; then
