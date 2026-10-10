@@ -3,6 +3,7 @@
 `install-legacy-data.sh [--ahl32] --nhl24`, снимается `uninstall-legacy-data.sh --nhl24` (docs/legacy-data.md, «NHL 24»).
 
     python tools/legacy_data/nhl24.py alloc КЛУБ ФОРМА… [--write]   # номера новых форм клуба → nhl24_kits.json
+    python tools/legacy_data/nhl24.py order КЛУБ ФОРМА… [--write]   # порядок новых форм клуба в меню (jerseyindex)
     python tools/legacy_data/nhl24.py build [ПАКЕТ]                  # этап build-all nhl24 → out-nhl24 (+ out-nhl24-ahl32)
     python tools/legacy_data/nhl24.py verify CACHE                   # cache: после установки — как в манифесте и out-nhl24
     python tools/legacy_data/nhl24.py show                           # что в реестре новых форм
@@ -14,15 +15,22 @@ game/work/nhl24/out/pack (или переменная NHL24_PACK). Формат 
 Номера выдаёт `alloc` и закрепляет в nhl24_kits.json (рядом, в git); список только дописывается, чтобы формы не
 меняли номер между сборками. Вариант — наименьший, у которого у этого арта стиля 1 нет ни строки stockteamjerseys,
 ни файла комплекта в архивах Legacy и в out (texlib/name/pant/sock/превью/наклейка на шлем); fevariant = variant;
-jerseyindex — следующий за последним у клуба; locstring 2 у третьей (three), 6 у остальных (RR, ретро 90-х).
+jerseyindex — следующий за последним у клуба; locstring 6 у всех новых (своя подпись в меню, ниже).
+Правила пользователя 10.10.2026:
+- 05:50 — формы NHL 24 только дополнительными строками, оригиналы не перезаписываются. У каждого клуба (кроме ARI/UTA) —
+  новые дом, выезд и третья подряд после форм EA (`order КЛУБ home away three`). Файл существующего комплекта (есть в
+  архивах Legacy или в out) в пакете — ошибка сборки.
+- 05:53 — по умолчанию (в матчах и во франшизе) — формы NHL 24: новые дом (тёмная) и выезд (светлая) получают
+  isdefault 1, прежние строки по умолчанию того же цвета (EA; у SEA/VGK — наши 1_100_0/1, 1_101_0/1) — isdefault 0.
+  Больше в прежних строках ничего не меняется (файлы, hastie, locstring, jerseyindex). Нет нового дома (выезда) — у
+  клуба по умолчанию остаётся прежний дом (выезд).
 
 Этап build (после collect): сверяет каждый файл пакета с манифестом (путь по типу, md5, размер), копирует их в
-out-nhl24 и собирает базу накладки из out/db/nhlng.db (и out-ahl32/db/nhlng.db → out-nhl24-ahl32): hastie = 0 у строк,
-чей свитер (texlib_1_<арт>_<вариант>.rx2) есть в пакете, — формы EA, которые пакет не меняет, остаются со своим hastie;
-новые строки stockteamjerseys (hastie 0) в конец таблицы (номера прежних строк не сдвигаются) — только для форм, все
-файлы которых есть в пакете. db/draft_roster.db накладка не кладёт: в нём только 10 таблиц exhibition* и
+out-nhl24 и собирает базу накладки из out/db/nhlng.db (и out-ahl32/db/nhlng.db → out-nhl24-ahl32): новые строки
+stockteamjerseys (hastie 0) в конец таблицы (номера прежних строк не сдвигаются) — только для форм, все файлы которых
+есть в пакете; у прежних строк меняется только isdefault (правило 05:53). db/draft_roster.db накладка не кладёт: в нём только 10 таблиц exhibition* и
 stockteamsalaryextras, их накладка не меняет — остаётся draft_roster.db из out (out-ahl32). Подписи
-новых форм с locstring 6 (RR, ретро) — ключи Vintage_1_<арт>_<вариант> в fe/loc/NHL_ENG_US.db накладки. Отчёт и копия
+новых форм (locstring 6) — ключи Vintage_1_<арт>_<вариант> в fe/loc/NHL_ENG_US.db накладки. Отчёт и копия
 манифеста — game/work/legacy-data/nhl24/ (не в out-nhl24: всё, что лежит в накладке, ставится в cache:).
 """
 import hashlib
@@ -83,9 +91,13 @@ TYPES = {
 
 # подпись формы в меню (Select Jerseys): у строки с locstring 6 игра берёт текст ключа Vintage_<style>_<art>_<variant>
 # (так у 50 винтажных форм EA: Vintage_0_9_3 «1968-69 Away», Vintage_1_2_3 «2009-10 Classic»); нет ключа — подписи
-# нет (тест DAL25). У третьей (locstring 2) — своя «Alternate». «label» в манифесте главнее этих:
-LABELS = {'rr22': 'Reverse Retro 2022', 'rr23': 'Reverse Retro 2023', 'n90_home': '1990s Home',
+# нет (тест DAL25). Новые формы NHL 24 — все с locstring 6 и своей подписью, чтобы в меню отличались от EA (правило
+# 10.10). «label» в манифесте главнее этих:
+LABELS = {'home': 'Home (NHL 24)', 'away': 'Away (NHL 24)', 'three': 'Third (NHL 24)',
+          'rr22': 'Reverse Retro 2022', 'rr23': 'Reverse Retro 2023', 'n90_home': '1990s Home',
           'n90_away': '1990s Away', 'n90_three': '1990s Alternate'}
+KIT_TYPES = ('jersey', 'name', 'pant', 'sock', 'fe', 'helmet')   # файлы комплекта: только новых номеров (правило 05:50)
+DEFAULT_KITS = {'home': 0, 'away': 1}          # новые формы по умолчанию (правило 05:53): форма → islightcolor
 
 
 def label_of(kit, man_label=None):
@@ -167,18 +179,53 @@ def cmd_alloc(args):
         if v is None or ji > 31:
             sys.exit(f'{code} {kit}: нет свободного варианта (0…31) или jerseyindex > 31')
         k = dict(club=code, kit=kit, teamid=team, style=1, art=art, variant=v, fevariant=v, jerseyindex=ji,
-                 locstring=2 if kit == 'three' else 6)
+                 locstring=6)
         reg['kits'].append(k)
         added.append(k)
         ji += 1
         print(f'{code} {kit}: 1_{art}_{v} (fevariant {v}), jerseyindex {k["jerseyindex"]}, locstring {k["locstring"]}')
     if write and added:
-        with open(REGISTRY + '.part', 'w', encoding='utf-8', newline='\n') as f:
-            json.dump(reg, f, ensure_ascii=False, indent=1)
-            f.write('\n')
-        os.replace(REGISTRY + '.part', REGISTRY)
+        save_registry(reg)
         print(f'записано в {REGISTRY}: +{len(added)}')
     elif added:
+        print('(проба: --write — записать в реестр)')
+
+
+def save_registry(reg):
+    with open(REGISTRY + '.part', 'w', encoding='utf-8', newline='\n') as f:
+        json.dump(reg, f, ensure_ascii=False, indent=1)
+        f.write('\n')
+    os.replace(REGISTRY + '.part', REGISTRY)
+
+
+def cmd_order(args):
+    """order КЛУБ ФОРМА… — jerseyindex форм клуба в реестре: подряд после форм базы, сначала перечисленные (дом, выезд,
+    третья — правило 10.10), за ними остальные формы клуба в прежнем порядке; locstring у всех — 6. Номера вариантов не
+    меняются. Пока накладка у пользователя не стоит, так можно (потом порядок закреплён)."""
+    write = '--write' in args
+    args = [a for a in args if a != '--write']
+    if len(args) < 2:
+        sys.exit(__doc__)
+    code, first = args[0].upper(), args[1:]
+    _, db = open_db(OUT)
+    team, _ = check_club(db, code)
+    reg = load_registry()
+    mine = [k for k in reg['kits'] if k['club'] == code]
+    missing = [x for x in first if x not in {k['kit'] for k in mine}]
+    if missing:
+        sys.exit(f'{code}: в реестре нет {missing} (сначала alloc)')
+    order = [next(k for k in mine if k['kit'] == x) for x in first] + [k for k in mine if k['kit'] not in first]
+    ji = max(r['jerseyindex'] for r in rows_of(db) if r['teamid'] == team) + 1
+    changed = 0
+    for i, k in enumerate(order):
+        if (k['jerseyindex'], k['locstring']) != (ji + i, 6):
+            changed += 1
+        k['jerseyindex'], k['locstring'] = ji + i, 6
+        print(f"{code} {k['kit']}: 1_{k['art']}_{k['variant']}, jerseyindex {k['jerseyindex']}, locstring 6")
+    if write and changed:
+        save_registry(reg)
+        print(f'записано в {REGISTRY}: изменено {changed}')
+    elif changed:
         print('(проба: --write — записать в реестр)')
 
 
@@ -215,6 +262,9 @@ def check_manifest(pack, man, reg):
             continue
         if typ == 'other' and not e.get('note'):
             bad.append(f'{rel}: у типа other нужно поле note')
+        if typ in KIT_TYPES and file_taken(rel):
+            bad.append(f'{rel}: это файл существующего комплекта (есть в архивах Legacy или в out) — формы NHL 24 '
+                       f'только новыми строками с новыми номерами (правило 10.10)')
         if rel in files:
             bad.append(f'{rel}: два раза')
             continue
@@ -243,6 +293,9 @@ def check_manifest(pack, man, reg):
             bad.append(f'новая форма {key}: label {lab!r} — строка до 32 символов')
         if k.get('helmet') not in (None, 'home', 'away'):
             bad.append(f'новая форма {key}: helmet {k.get("helmet")!r} — home, away или без поля')
+        if k.get('kit') in DEFAULT_KITS and k.get('islightcolor') != DEFAULT_KITS[k['kit']]:
+            bad.append(f'новая форма {key}: islightcolor {k.get("islightcolor")!r} — дом должен быть тёмным (0), '
+                       f'выезд светлым (1): они становятся формами по умолчанию (правило 10.10)')
         for kind, pat in KIT_FILES.items():
             rel = pat.format(a=r['art'], v=r['variant'], f=r['fevariant'])
             if rel not in files:
@@ -255,18 +308,13 @@ def build_db(base, man, reg, files):
     на диск ничего не пишет (пишет cmd_build, когда обе базы собрались)."""
     db_path, db = open_db(base)
     rows = rows_of(db)
-    # шнуровку снимаем только там, где свитер — из NHL 24 (решение 09.10): у строк, чья текстура свитера
-    # (texlib_1_<арт>_<вариант>.rx2, тип jersey) есть в пакете, и у новых строк; формы EA, которые пакет не меняет
-    # (у CHI спецформы 1_6_3/4/5), остаются со своим hastie
-    replaced = {(1, int(m.group(1)), int(m.group(2))) for rel, e in files.items() if e['type'] == 'jersey'
-                for m in [re.fullmatch(r'rendering/jersey/texlib_1_(\d+)_(\d+)\.rx2', rel)] if m}
-    tie = [r['row'] for r in rows if (r['style'], r['teamartid'], r['variant']) in replaced and r['hastie']]
-    for r in tie:
-        db.set(T, 'hastie', r, 0)
+    # правило 10.10 (05:50): прежние строки не меняются (hastie, locstring, jerseyindex — как были), пакет с файлами
+    # существующих комплектов не проходит check_manifest; исключение — isdefault (правило 05:53, ниже)
+    tie = []
     regmap = {(k['club'], k['kit']): k for k in reg['kits']}
     new = [regmap[(k['club'], k['kit'])] | {'islightcolor': k['islightcolor'], 'label': k.get('label'),
                                              'helmet': k.get('helmet')} for k in man.get('kits', [])]
-    new.sort(key=lambda k: reg['kits'].index(regmap[(k['club'], k['kit'])]))
+    new.sort(key=lambda k: (CLUBS[k['club']][0], k['jerseyindex']))     # строки — по клубу и порядку в меню
     # jerseyindex у клуба — подряд 0…N−1, как у всех 224 команд EA (с дырой игра не проверялась): форма из реестра
     # может не попасть в пакет, только если за ней в реестре нет форм этого клуба, которые в пакет попали
     for code in sorted({k['club'] for k in new}):
@@ -277,6 +325,7 @@ def build_db(base, man, reg, files):
             sys.exit(f'{code}: jerseyindex {idx} — не подряд (в пакете нет формы из середины реестра); '
                      f'добавьте её в пакет или уберите из пакета формы после неё')
     added = []
+    n_before = db.by_name[T]['rows']
     if new:
         n = db.by_name[T]['rows']
         db.resize(T, n + len(new))
@@ -298,6 +347,7 @@ def build_db(base, man, reg, files):
             added.append(f"{k['club']} {k['kit']} 1_{art}_{k['variant']} ji{k['jerseyindex']} "
                          f"loc{k['locstring']} light{k['islightcolor']} helmetlogo{int(helmet)} (строка {n + i})")
     helmets = add_helmets(db, rows, new)
+    defaults = set_defaults(db, rows, new, n_before)
     import draft_roster                               # накладка не должна менять таблицы draft_roster.db (он — из out)
     base_db = open_db(base)[1]
     for name in draft_roster.KEEP:
@@ -308,12 +358,34 @@ def build_db(base, man, reg, files):
         sys.exit(f'{db_path}: CRC не сошлись после правки')
     out = bytes(db.d)
     rep = {'base': db_path, 'base_md5': md5(db_path), 'md5': hashlib.md5(out).hexdigest(),
-           'hastie_zeroed': len(tie), 'rows_added': added, 'helmets': helmets}
+           'hastie_zeroed': len(tie), 'rows_added': added, 'helmets': helmets, 'defaults': defaults}
     loc, labels = build_loc(base, new)
     if loc is not None:
         rep.update(loc_base_md5=md5(os.path.join(base, *LOC.split('/'))), loc_md5=hashlib.md5(loc).hexdigest(),
                    labels=labels)
     return (out, loc), rep
+
+
+def set_defaults(db, rows, new, n_before):
+    """Правило 10.10 (05:53): по умолчанию — формы NHL 24. Новый дом (тёмный) и выезд (светлый) — isdefault 1, прежняя
+    строка по умолчанию того же цвета у клуба (EA; у SEA/VGK — наши 1_100_0/1, 1_101_0/1) — isdefault 0. Нового дома
+    (выезда) нет — у клуба остаётся прежний. Новые строки — в [n_before, конец). → [описание]."""
+    out = []
+    added = {(k['club'], k['kit']): n_before + i for i, k in enumerate(new)}
+    for (code, kit), r_new in sorted(added.items(), key=lambda kv: kv[1]):
+        if kit not in DEFAULT_KITS:
+            continue
+        team = CLUBS[code][0]
+        light = DEFAULT_KITS[kit]
+        old = [r for r in rows if r['teamid'] == team and r['isdefault'] and r['islightcolor'] == light]
+        if len(old) != 1:
+            sys.exit(f'{code}: прежних форм по умолчанию с islightcolor {light} — {len(old)}, ждал одну')
+        o = old[0]
+        db.set(T, 'isdefault', o['row'], 0)
+        db.set(T, 'isdefault', r_new, 1)
+        out.append(f"{code} {kit}: по умолчанию 1_{db.get(T, 'teamartid', r_new)}_{db.get(T, 'variant', r_new)} "
+                   f"(строка {r_new}) вместо {o['style']}_{o['teamartid']}_{o['variant']} (строка {o['row']}, isdefault 0)")
+    return out
 
 
 def add_helmets(db, rows, new):
@@ -460,6 +532,8 @@ def cmd_build(args):
         print(f'   подпись {key}: {text}')
     for line in report['out'].get('helmets', []):
         print('   шлем', line)
+    for line in report['out'].get('defaults', []):
+        print('   по умолчанию', line)
 
 
 def stamp():
@@ -504,7 +578,7 @@ def cmd_verify(args):
 def main():
     sys.stdout.reconfigure(encoding='utf-8')
     sys.stderr.reconfigure(encoding='utf-8')         # сообщения sys.exit
-    cmds = {'alloc': cmd_alloc, 'build': cmd_build, 'verify': cmd_verify, 'show': cmd_show}
+    cmds = {'alloc': cmd_alloc, 'order': cmd_order, 'build': cmd_build, 'verify': cmd_verify, 'show': cmd_show}
     if len(sys.argv) < 2 or sys.argv[1] not in cmds:
         sys.exit(__doc__)
     cmds[sys.argv[1]](sys.argv[2:])
