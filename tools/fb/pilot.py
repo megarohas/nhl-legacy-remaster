@@ -149,6 +149,21 @@ def png(folder, name):
     return os.path.join(folder, *name[len("content/"):].split("/")) + ".png"
 
 
+POSE = os.path.join(REPO, "game", "work", "legacy-data", "fepose", "pose.bin")  # модель позы EA (tools/fepose.py fit)
+_POSE = []
+
+
+def fe_preview_ea(jersey_png):
+    """Превью меню как у EA (манекен, руки опущены, свет и кадр EA): модель позы tools/fepose.py по развёртке свитера."""
+    if TOOLS not in sys.path:
+        sys.path.insert(0, TOOLS)
+    import fepose
+    if not _POSE:
+        _POSE.append(fepose.load_model(POSE))
+    tex = np.asarray(Image.open(jersey_png).convert("RGB"))
+    return Image.fromarray(fepose.render(_POSE[0], tex), "RGBA")
+
+
 def fe_preview(jersey_mesh, tex, size=256):
     """Превью меню 256² (RGBA, прозрачный фон): свитер Legacy спереди, свой рендер (модель позы EA пропала 09.10)."""
     im = kit3d.render(jersey_mesh, tex, "front", 512, bg=(0, 0, 0), frame=(-0.62, 0.62, 0.62, 1.86), ss=2)
@@ -337,7 +352,7 @@ def cmd_build(a):
             rec["sock"] = "ok (3D)"
         else:
             rec["sock"] = "нет текстуры гетр"
-        fe_preview(dst, kit3d.load_tex(os.path.join(od, "jersey_cm.png"))).save(os.path.join(od, "fe.png"))
+        fe_preview_ea(os.path.join(od, "jersey_cm.png")).save(os.path.join(od, "fe.png"))
         finish_kit(rec, od, tpl_kit, art, variant, label, mode,
                    [{k: v for k, v in pl.items() if not k.startswith("_")} for pl in placed], t0)
         report.append(rec)
@@ -584,6 +599,64 @@ def cmd_sticks(a):
           f"не кладутся")
 
 
+def cmd_fe(a):
+    """Только превью меню (fe.png) по готовым развёрткам — в позе EA; остальное не трогается."""
+    codes = [c for _cl, _a, c in CLUBS if c not in EXCLUDE] if a.club == "all" else a.club.split(",")
+    n = 0
+    for code in codes:
+        for label, *_rest in kits_for(code):
+            od = os.path.join(OUTP, f"{code}_{label}")
+            if os.path.exists(os.path.join(od, "jersey_cm.png")) and os.path.exists(os.path.join(od, "info.json")):
+                fe_preview_ea(os.path.join(od, "jersey_cm.png")).save(os.path.join(od, "fe.png"))
+                n += 1
+    print(f"превью в позе EA: {n}")
+
+
+def cmd_fe_sheet(a):
+    """Лист «EA | новое»: превью меню форм EA клуба и новых форм NHL 24 (как в игре — на тёмном фоне)."""
+    from PIL import ImageDraw, ImageFont
+    sys.path.insert(0, TOOLS)
+    import kitpaint as kp
+    import teamart as ta
+    import gameprofile
+    gameprofile.use("legacy") if hasattr(gameprofile, "use") else None
+    f16 = ImageFont.truetype("C:/Windows/Fonts/segoeui.ttf", 16)
+    f20 = ImageFont.truetype("C:/Windows/Fonts/segoeuib.ttf", 20)
+    code = a.club
+    club, art = club_info(code)
+    with open(os.path.join(NHL24, "catalog", "legacy_kits.json"), encoding="utf-8") as f:
+        rows = [r for r in json.load(f).get(str(art), []) if r[4] == art]
+    ea = []
+    from .pack import legacy_has
+    for loc, v, *_ in rows:
+        rel = f"fe/ion/artassets/jerseys/jersey_1_{art}_{v}.big"
+        path = legacy_has(rel)
+        if not path:
+            continue
+        w, h, rgba = ta.UiLogo(kp._unchunk(open(path, "rb").read()) if hasattr(kp, "_unchunk") else open(path, "rb").read(),
+                               rel).decode()
+        ea.append((f"EA 1_{art}_{v}", Image.frombytes("RGBA", (w, h), bytes(rgba))))
+    new = []
+    for label, _f, _k, variant, _n in kits_for(code):
+        fe = os.path.join(OUTP, f"{code}_{label}", "fe.png")
+        if os.path.exists(fe):
+            new.append((f"NHL 24 {label} 1_{art}_{variant}", Image.open(fe).convert("RGBA")))
+    cols = max(len(ea), len(new))
+    S = Image.new("RGB", (20 + cols * 276, 60 + 2 * 300), (24, 24, 28))
+    d = ImageDraw.Draw(S)
+    d.text((12, 12), f"{code}: превью меню — сверху формы EA, снизу новые NHL 24 (модель позы EA)", fill=(240, 240, 240),
+           font=f20)
+    for r, items in enumerate((ea, new)):
+        for i, (lbl, im) in enumerate(items):
+            x, y = 12 + i * 276, 50 + r * 300
+            bg = Image.new("RGBA", im.size, (40, 40, 46, 255))
+            S.paste(Image.alpha_composite(bg, im).convert("RGB"), (x, y + 22))
+            d.text((x, y), lbl, fill=(220, 220, 220), font=f16)
+    out = os.path.join(NHL24, "compare", f"{code.lower()}_fe_ea_vs_new.png")
+    S.save(out)
+    print(out, S.size)
+
+
 def cmd_all(a):
     """Пакет на все клубы (кроме ARI): формы (только дом/выезд/третья) — сборка и упаковка; --group i/n — доля клубов
     для параллельного запуска. Общее, манифест и сводный лист — отдельно: common --pucks all, manifest --club all, summary."""
@@ -777,6 +850,10 @@ def main():
     s.add_argument("--kits", default="")
     s.add_argument("--reuse", action="store_true", help="готовые рендеры не перерисовывать (номер сменился)")
     sub.add_parser("summary")
+    s = sub.add_parser("fe")
+    s.add_argument("--club", default="CHI", help="код клуба, коды через запятую или all")
+    s = sub.add_parser("fe-sheet")
+    s.add_argument("--club", default="CHI")
     s = sub.add_parser("common")
     s.add_argument("--pucks", default="CHI", help="шайбы каких клубов (коды через запятую или all)")
     s.add_argument("--no-unfade", dest="unfade", action="store_false", help="рекламу на льду — как в NHL 24 (бледную)")
@@ -791,7 +868,8 @@ def main():
     if a.everything or a.cmd in ("all", "summary"):
         set_roots(ALL_OUT, ALL_PACK)
     return {"build": cmd_build, "pack": cmd_pack, "common": cmd_common, "manifest": cmd_manifest,
-            "sheets": cmd_sheets, "sticks": cmd_sticks, "all": cmd_all, "summary": cmd_summary}[a.cmd](a)
+            "sheets": cmd_sheets, "sticks": cmd_sticks, "all": cmd_all, "summary": cmd_summary, "fe": cmd_fe,
+            "fe-sheet": cmd_fe_sheet}[a.cmd](a)
 
 
 if __name__ == "__main__":
