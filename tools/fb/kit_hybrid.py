@@ -159,6 +159,19 @@ def standard_patches(comp, rules, defaults, names=None, win=0.022):
         cx, cy = int(r["uv"][0] * H), int(r["uv"][1] * H)
         w = int(r.get("win", win) * H)
         y0, y1, x0, x1 = max(cy - w, 0), min(cy + w, H), max(cx - w, 0), min(cx + w, H)
+        if "box" in r:  # нашивка задана прямоугольником uv (u0, v0, u1, v1) — весь он, с фоном нашивки и надписью
+            u0, v0, u1, v1 = r["box"]
+            bx0, by0, bx1, by1 = int(u0 * H), int(v0 * H), int(np.ceil(u1 * H)), int(np.ceil(v1 * H))
+            y0, y1, x0, x1 = max(by0 - 4, 0), min(by1 + 4, H), max(bx0 - 4, 0), min(bx1 + 4, H)
+            mk = np.zeros((y1 - y0, x1 - x0), bool)
+            mk[by0 - y0:by1 - y0, bx0 - x0:bx1 - x0] = True
+            lab[y0:y1, x0:x1][mk] = i
+            hole[y0:y1, x0:x1] |= mk
+            patches.append((i, (slice(by0, by1), slice(bx0, bx1)), int(mk.sum())))
+            a = base[y0:y1, x0:x1, 3].copy()
+            base[y0:y1, x0:x1] = fill_rows(base[y0:y1, x0:x1], hole[y0:y1, x0:x1])
+            base[y0:y1, x0:x1, 3] = a
+            continue
         box = comp[y0:y1, x0:x1, :3]
         border = np.concatenate([box[0], box[-1], box[:, 0], box[:, -1]])
         bg = np.median(border, axis=0)

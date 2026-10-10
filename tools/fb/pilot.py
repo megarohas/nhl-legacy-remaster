@@ -387,6 +387,11 @@ def cmd_build(a):
         else:
             base, lab, patches = kit_hybrid.standard_patches(comp, rules, defaults)
             mode = "без base: щит NHL и логотип сзади — декалями"
+        if mode == "base":  # спонсор зашит в сам base (у MIN — Tria): тоже снимается — закраской по строкам
+            sp = tuple(k for k, r in rules.items() if r.get("sponsor"))
+            base, _lab_sp, sp_found = kit_hybrid.standard_patches(base, rules, defaults, names=sp)
+            if sp_found:
+                rec["sponsor_in_base"] = len(sp_found)
         placed, soft = kit_hybrid.plan_decals(comp, lab, patches, rules, defaults, src, dst, tid24)
         missing_std = [nm for nm in ("neck_shield", "back_neck") if nm not in [pl["name"] for pl in placed]]
         if missing_std and mode == "base":
