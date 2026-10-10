@@ -256,13 +256,21 @@ def plan_decals(comp, lab, patches, rules, defaults, src, dst, tid24):
 
 
 def collar_color(src_tex, rule):
-    """Основной цвет свитера под воротом: медиана окна на развёртке NHL 24 (по правилу [collar.v_insert])."""
+    """Основной цвет свитера под воротом (по правилу [collar.v_insert]) на развёртке NHL 24: method "mode" — самый
+    частый цвет окна (цвета квантуются по 16 уровней; шнуровка, щит и кант у ворота — меньшинство и не подмешиваются),
+    "median" — медиана окна."""
     H = src_tex.shape[0]
     u, v = rule.get("sample_uv", [0.5, 0.605])
     b = max(int(rule.get("sample_box", 0.008) * H), 2)
     x, y = int(u * H), int(v * H)
     win = src_tex[max(y - b, 0):y + b, max(x - b, 0):x + b, :]
-    return np.median(win.reshape(-1, win.shape[-1]), axis=0)
+    px = win.reshape(-1, win.shape[-1])
+    if rule.get("method", "median") == "mode":
+        q = (px[:, :3] // 16).astype(int)
+        key = q[:, 0] * 256 + q[:, 1] * 16 + q[:, 2]
+        vals, cnt = np.unique(key, return_counts=True)
+        return np.median(px[key == vals[np.argmax(cnt)]], axis=0)
+    return np.median(px, axis=0)
 
 
 LEGACY_SHIRT = "rendering/jersey/shirt_1_1_2.rx2"  # «рубашка» в вырезе ворота Edge (V-вставка): её развёртка —
