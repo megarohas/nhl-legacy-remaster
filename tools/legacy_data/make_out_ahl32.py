@@ -1,7 +1,7 @@
 """Накладка «АХЛ на 32» для NHL Legacy: game/work/legacy-data/out-ahl32 — ставится поверх out
 (bash tools/legacy_data/install-legacy-data.sh --ahl32). Берёт базу roster-ahl32 (с портретами и экипировкой), схему и
 локализацию nhl32-ahl32 и портреты игроков, которых нет в основной базе (CV/HSK). Вызывается из build-all.sh (collect
---ahl32); draft_roster.db накладки build-all.sh кладёт потом сам (копия nhlng.db).
+--ahl32); draft_roster.db накладки build-all.sh кладёт потом сам (10 таблиц nhlng.db — draft_roster.py).
 
 Прежняя накладка не удаляется, а уезжает в game/work/legacy-data/_stale/out-ahl32-<время> (CLAUDE.md: удаление — только в
 Корзину или в _stale). Восстановлен 09.10.2026 по транскрипту агента legacy-data (docs/incident-2026-10-09.md).

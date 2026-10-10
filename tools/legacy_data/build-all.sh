@@ -71,26 +71,27 @@ if want collect; then
   say "в out: база, схема, локализация, портреты"
   mkdir -p $O/db $O/fe/loc
   cp $W/roster/nhlng-equip.db $O/db/nhlng.db
-  # старт франшизы «NHL Entry Draft» читает составы не из nhlng.db, а из db/draft_roster.db (cacheboot.big: только
-  # таблицы exhibition*, составы драфта 2015) — та же база под этим именем (docs/legacy-data.md, «draft_roster.db»)
-  cp $O/db/nhlng.db $O/db/draft_roster.db
+  # старт франшизы «NHL Entry Draft» читает составы не из nhlng.db, а из db/draft_roster.db (cacheboot.big: 10 таблиц,
+  # exhibition* и stockteamsalaryextras, составы драфта 2015) — те же 10 таблиц из нашей базы (draft_roster.py; полная
+  # копия nhlng.db давала франшизе 2 лишние таблицы и сейв больше буфера — docs/legacy-data.md, «draft_roster.db»)
+  python $T/draft_roster.py $O/db/nhlng.db $O/db/draft_roster.db
   cp $W/roster/nhlng-meta.xml $O/db/nhlng-meta.xml
   cp $W/nhl32/nhl_eng_us.db $O/fe/loc/NHL_ENG_US.db
   cp -r $W/photos-all/fe $O/
   # накладка «АХЛ на 32»: база, схема, локализация и портреты CV/HSK (install-legacy-data.sh --ahl32)
   [ $AHL32 = 1 ] && python $T/make_out_ahl32.py
-  [ $AHL32 = 1 ] && [ -f $W/out-ahl32/db/nhlng.db ] && cp $W/out-ahl32/db/nhlng.db $W/out-ahl32/db/draft_roster.db
+  [ $AHL32 = 1 ] && [ -f $W/out-ahl32/db/nhlng.db ] && python $T/draft_roster.py $W/out-ahl32/db/nhlng.db $W/out-ahl32/db/draft_roster.db
   echo "   локализация из nhl32 — без правок меню: потом этап menu (menuitems_legacy.py)"
 fi
 if want fixdb; then
   # последний бит записи — флаг движка «запись свободна»: поле на нём (leaguerookiedata.draftteam 58…63 при reclen 8 —
   # до исправления tdb.widen 10.10.2026) прячет строки от игры; у таких таблиц запись +4 байта, поля на местах.
-  # Повторный запуск ничего не меняет; draft_roster.db — снова копия починенной nhlng.db
+  # Повторный запуск ничего не меняет; draft_roster.db — снова 10 таблиц починенной nhlng.db (draft_roster.py)
   say "база: последний бит записи свободен (fix_flagbit)"
   for d in $O/db $W/out-ahl32/db; do
     if [ -f $d/nhlng.db ]; then
       python $T/fix_flagbit.py $d/nhlng.db
-      cp $d/nhlng.db $d/draft_roster.db
+      python $T/draft_roster.py $d/nhlng.db $d/draft_roster.db
     fi
   done
 fi

@@ -45,21 +45,29 @@ bash tools/legacy_data/uninstall-legacy-data.sh          # снять (чужи�
 `make_out_ahl32.py`, `models/*.sh`, а также `art/src` и `art/scripts` помощника art. В `game/work/legacy-data/`
 остаются только выход сборки и временное: `out/`, `out-ahl32/`, рабочие папки этапов, `installed.txt`.
 
-**`db/draft_roster.db` — старт франшизы «NHL Entry Draft» (09.10.2026).** Этот старт берёт составы не из
-`nhlng.db`, а из `db/draft_roster.db` (`cacheboot.big`, 1,9 МБ: только 8 таблиц `exhibition*` — составы на драфт
-2015; строка `db/draft_roster.db` в образе exe). Пока его не было в `cache:`, франшиза со старта драфта шла на
-составах 2015 (у Анахайма средний возраст 39). Решение — наша же база под этим именем, целиком (игра читает из неё
-нужные таблицы). Проверено (копия `legacy-port/userdata-p2ed`, 15:56–16:00): франшиза «NHL Entry Draft» за Анахайм —
-июнь 2026, средний возраст 24,7, в составе Terry и Vatrano; в логе `draft class 2026: real players 66 of 1289`
-(было `0 of 1492`).
-- Где: `build-all.sh` (этап `collect`) копирует `out/db/nhlng.db` → `out/db/draft_roster.db`, с `--ahl32` —
-  то же в `out-ahl32/db/`. Значит, его ставит общая установка из `out/` (и накладка `--ahl32`). В `installed.txt`
-  строка `db/draft_roster.db`, поэтому снимает его и `uninstall-legacy-data.sh`. Папка для друзей
-  (`legacy-port/scripts/make_dist.sh --mods`) берёт его из `cache:`; если его нет, кладёт копию `nhlng.db` сама.
-- У пользователя поставлен 09.10 в 16:05 вручную: копия его `cache\guest\db\nhlng.db` (34dfe267, база
-  `--ahl32`) → `cache\guest\db\draft_roster.db`. Прежнего файла не было, бэкап не понадобился.
-- Откат: удалить `cache\guest\db\draft_roster.db` — старт драфта снова возьмёт составы 2015 с диска.
-- После каждой новой базы `draft_roster.db` должен быть её копией: md5 обоих файлов совпадает.
+**`db/draft_roster.db` — старт франшизы «NHL Entry Draft» (09.10.2026, с 10.10 — 10 таблиц).** Этот старт берёт
+составы не из `nhlng.db`, а из `db/draft_roster.db`. У EA этот файл лежит в `cacheboot.big` (1,9 МБ): 10 таблиц,
+`exhibition*` и `stockteamsalaryextras`, составы на драфт 2015, строка `db/draft_roster.db` есть в образе exe. Пока
+файла не было в `cache:`, франшиза со старта драфта шла на составах 2015 (у Анахайма средний возраст 39).
+- **09.10 — полная копия нашей базы.** Проверено на копии `legacy-port/userdata-p2ed`, 15:56–16:00: франшиза
+  «NHL Entry Draft» за Анахайм — июнь 2026, средний возраст 24,7, в составе Terry и Vatrano. В логе
+  `draft class 2026: real players 66 of 1289`, было `0 of 1492`.
+- **10.10 — только 10 таблиц EA-оригинала, с нашими данными** (`tools/legacy_data/draft_roster.py`). С полной копией
+  франшиза со старта драфта получала 2 лишние таблицы: `stockintltourneyplayerstats` и `stockintltourneygoaliestats`.
+  Сейв при создании выходил больше буфера сохранения — 51 таблица при буфере на 49, порча кучи. Разбор —
+  [legacy-port.md](legacy-port.md), «Старт «NHL Entry Draft»: две лишние таблицы…». В файле — те же 10 таблиц, что
+  у EA, из нашей базы: блоки в прежнем порядке, каталог и `db_size` заново, CRC пересчитаны.
+  - Для `--ahl32` получается 838ca6a0 — байт в байт тот же файл, что legacy-port проверил в игре
+    (`draft_roster_min10.db`). Select Team как с полной копией, класс драфта тот же, сейв при создании — 49 таблиц,
+    auto draft 2026 цел. Без `--ahl32` — 2c28ecaa.
+- **Где собирается.** `build-all.sh`: этапы `collect` (и `--ahl32`) и `fixdb` пишут `draft_roster.db` рядом с
+  `nhlng.db`. Ставит его общая установка из `out/` (и накладка `--ahl32`), снимает `uninstall-legacy-data.sh`.
+  Накладка NHL 24 своего `draft_roster.db` не кладёт: её правки этих 10 таблиц не касаются, этап `nhl24` это
+  проверяет.
+- **Папка для друзей.** `legacy-port/scripts/make_dist.sh --mods` берёт `draft_roster.db` из `cache:`. Если его там
+  нет, скрипт кладёт копию `nhlng.db` — это прежний вариант с двумя лишними таблицами.
+- **Откат.** Удалить `cache\guest\db\draft_roster.db` — старт драфта снова возьмёт составы 2015 с диска. Или вернуть
+  прежние файлы из бэкапа установки (ниже, «У пользователя»).
 
 **Восстановлено после инцидента 09.10** ([incident-2026-10-09.md](incident-2026-10-09.md)), 16:10–17:20.
 - **Что было сломано.** `uninstall-legacy-data.sh` оказался чужим текстом (кусок PIL). `install-legacy-data.sh`

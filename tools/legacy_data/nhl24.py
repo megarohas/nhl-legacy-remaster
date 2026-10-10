@@ -20,7 +20,8 @@ jerseyindex — следующий за последним у клуба; locstr
 out-nhl24 и собирает базу накладки из out/db/nhlng.db (и out-ahl32/db/nhlng.db → out-nhl24-ahl32): hastie = 0 у строк,
 чей свитер (texlib_1_<арт>_<вариант>.rx2) есть в пакете, — формы EA, которые пакет не меняет, остаются со своим hastie;
 новые строки stockteamjerseys (hastie 0) в конец таблицы (номера прежних строк не сдвигаются) — только для форм, все
-файлы которых есть в пакете. Та же база — db/draft_roster.db. Подписи
+файлы которых есть в пакете. db/draft_roster.db накладка не кладёт: в нём только 10 таблиц exhibition* и
+stockteamsalaryextras, их накладка не меняет — остаётся draft_roster.db из out (out-ahl32). Подписи
 новых форм с locstring 6 (RR, ретро) — ключи Vintage_1_<арт>_<вариант> в fe/loc/NHL_ENG_US.db накладки. Отчёт и копия
 манифеста — game/work/legacy-data/nhl24/ (не в out-nhl24: всё, что лежит в накладке, ставится в cache:).
 """
@@ -297,6 +298,11 @@ def build_db(base, man, reg, files):
             added.append(f"{k['club']} {k['kit']} 1_{art}_{k['variant']} ji{k['jerseyindex']} "
                          f"loc{k['locstring']} light{k['islightcolor']} helmetlogo{int(helmet)} (строка {n + i})")
     helmets = add_helmets(db, rows, new)
+    import draft_roster                               # накладка не должна менять таблицы draft_roster.db (он — из out)
+    base_db = open_db(base)[1]
+    for name in draft_roster.KEEP:
+        if table_bytes(base_db, name) != table_bytes(db, name):
+            sys.exit(f'накладка меняет {name} — тогда ей нужен свой draft_roster.db')
     db.fix()
     if db.verify():
         sys.exit(f'{db_path}: CRC не сошлись после правки')
@@ -365,12 +371,18 @@ def build_loc(base, new):
     return bytes(loc.db.d), want
 
 
+def table_bytes(db, name):
+    """Раскладка и записи таблицы (для сравнения двух баз; CRC заголовка не входит)."""
+    t = db.by_name[name]
+    return t['reclen'], t['rows'], sorted(t['fields'].items()), \
+        bytes(db.d[t['records']:t['records'] + t['reclen'] * t['rows']])
+
+
 def write_db(dst, data):
     db, loc = data
     os.makedirs(os.path.join(dst, 'db'), exist_ok=True)
-    for name in ('nhlng.db', 'draft_roster.db'):           # draft_roster.db — та же база (docs/legacy-data.md)
-        with open(os.path.join(dst, 'db', name), 'wb') as f:
-            f.write(db)
+    with open(os.path.join(dst, 'db', 'nhlng.db'), 'wb') as f:   # draft_roster.db — из out: его 10 таблиц не меняются
+        f.write(db)
     if loc is not None:
         p = os.path.join(dst, *LOC.split('/'))
         os.makedirs(os.path.dirname(p), exist_ok=True)
@@ -475,9 +487,11 @@ def cmd_verify(args):
     key = want.get(dbmd5)
     print(f'файлов пакета: {len(man["files"])}, не совпало {bad}; база cache: {dbmd5[:8]} — '
           + ({'out': 'out-nhl24', 'out-ahl32': 'out-nhl24-ahl32'}.get(key) or 'НЕ база накладки'))
-    if md5(os.path.join(cache, 'db', 'draft_roster.db')) != dbmd5:
-        print('  draft_roster.db не та же, что nhlng.db')
-        bad += 1
+    if key:                                            # draft_roster.db — тот, что ставит out (накладка его не меняет)
+        ref = os.path.join(OUT if key == 'out' else OUT_AHL32, 'db', 'draft_roster.db')
+        if not os.path.isfile(ref) or md5(os.path.join(cache, 'db', 'draft_roster.db')) != md5(ref):
+            print(f'  draft_roster.db не тот, что в {key}')
+            bad += 1
     if key and 'loc_md5' in rep[key]:                  # подписи новых форм
         loc = os.path.join(cache, *LOC.split('/'))
         ok = os.path.isfile(loc) and md5(loc) == rep[key]['loc_md5']
