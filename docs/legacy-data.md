@@ -429,10 +429,27 @@ Wikipedia), портреты у 1303, проверки OK.
 - Отчёты — `game/work/legacy-data/roster/retire-veterans.json` и `roster-ahl32/retire-veterans.json`.
 - Копия для legacy-port — `game/work/legacy-data/ud-vet` (с Ютой). Пользователю — после теста и слова координатора.
 
-**Найдено попутно: `collect --ahl32` с нуля сейчас не проходит.** `make_out_ahl32.py` ищет `roster/write.json` и
-`roster-ahl32/write.json` (игроки сверх основной базы — для портретов CV/HSK), а они пропали в инциденте 09.10. При
-сборке 06:08 этап остановился, прежняя `out-ahl32` вернулась из `_stale/` байт в байт, дальше этапы шли по ней.
-Вылечить можно так: брать «игроков сверх основной базы» из самих баз `roster` и `roster-ahl32`, а не из `write.json`.
+**`collect --ahl32` с нуля — починен (10.10, 06:15).** `make_out_ahl32.py` брал игроков сверх основной базы (для
+портретов CV/HSK) из `roster/write.json`, `roster-ahl32/write.json` и `photos-all/photos.json`, а они пропали в
+инциденте 09.10. При сборке 06:08 этап остановился, прежняя `out-ahl32` вернулась из `_stale/` байт в байт.
+- Теперь список берётся из самой базы `roster-ahl32`: игроки в составах фарм-клубов CV/HSK (224/225) — 51, их портреты —
+  файлы `photos-all/…/p<artid>.big` (39 игроков, 78 файлов), как было.
+- Проверка: `collect` → `retire` → `fixdb` → `utah` → `menu` с нуля в отдельную папку (`LEGACY_DATA_WORK=dry-collect`)
+  дали `out` (2976 файлов) байт в байт как нынешний. В `out-ahl32` (82 файла) совпало всё, кроме
+  `fe/loc/NHL_ENG_US.db`: содержимое то же, другой порядок строк в пуле — прежняя `out-ahl32` получила правки меню раньше
+  Юты. После пересборки 06:18 на месте `out-ahl32` — каноническая (локализация 97fb5826, база 88237e2b), и сборка с нуля
+  с ней совпадает байт в байт.
+- Где ещё `build-all` зависит от пропавших файлов — только этапы до `collect`, которые и так требуют сети:
+  - `roster` (fetch/build/match/write) — сетевой кэш `roster-cache/nhl`, `ea`, `nhlratings` и свои `players.json`,
+    `match.json`, `write.json`;
+  - `photos`: `tools/roster photos` (`players.json`, `_other.json`), `photos.py build` (`players.json`, `write.json` →
+    `photos.json`), `photos.py db` (`photos.json`, `write.json`);
+  - `equip`: `roster.equipment apply` (`write.json`, `roster-cache/nhl/landing/*.json`,
+    `roster-cache/equipment/equipment.json`, `commons.json`).
+
+  Без сети их вход не восстановить, поэтому без изменений в выходе их не починить. Остальные этапы (`base`, `collect`,
+  `retire`, `fixdb`, `utah`, `fonts`, `music`, `models`, `art`, `menu`, `nhl24`) пропавших `.json` не читают: свои
+  `build.json` пишут сами, `menu12/players/spec.json` заменён `tools/legacy_data/menu/menu12-rings.json`.
 
 ## Юта вместо Аризоны, Тусон вместо Springfield (этап `utah`, 10.10.2026)
 
