@@ -31,6 +31,9 @@ from .pack import CACHE, PACK, TMP, TOOLS, md5
 
 NHL24 = os.path.join(REPO, "game", "work", "nhl24")
 OUTP = os.path.join(NHL24, "out", "pilot")
+ALL_OUT = os.path.join(NHL24, "out", "all")          # собранные формы пакета на все клубы
+ALL_PACK = os.path.join(NHL24, "out", "pack-all")    # пакет на все клубы (отдельно от pack/ пилота)
+EXCLUDE = {"ARI": "ARI → Utah, не ставить"}
 LEG = os.path.join(NHL24, "out", "_legacy_kits")
 REGISTRY = os.path.join(REPO, "tools", "legacy_data", "nhl24_kits.json")
 PANT_N24 = "content/character/skater/player/pant/common/components/player_pant_common_tightlong_lod0_mesh"
@@ -38,6 +41,24 @@ SOCK_N24 = "content/character/skater/player/sock/common/components/player_sock_c
 PANT_L = "rendering/pant/pant_1_0_0_2.rx2"
 SOCK_L = "rendering/sock/playersock_1_2.rx2"
 PANT_WAIST = 1.17  # у NHL 24 шорты с высоким поясом до груди; видимая часть — до ремня ~1,17 м
+
+
+def set_roots(out_root=None, pack_root=None):
+    """Куда собирать формы и пакет (по умолчанию — пилот: out/pilot, out/pack)."""
+    global OUTP, PACK, CACHE, TMP
+    if out_root:
+        OUTP = out_root
+    if pack_root:
+        PACK, CACHE, TMP = pack_root, os.path.join(pack_root, "cache"), os.path.join(pack_root, "_build")
+
+
+def proposals():
+    """Номера новых форм, ещё не записанные в реестр: проба nhl24.py alloc (PACK/alloc_request.json)."""
+    p = os.path.join(PACK, "alloc_request.json")
+    if not os.path.exists(p):
+        return {}
+    with open(p, encoding="utf-8") as f:
+        return {(r["club"], r["kit"]): r for r in json.load(f)["request"]}
 
 
 def club_info(code):
@@ -75,6 +96,9 @@ def _kits_for(code):
         fam, kit = ("nineties", lab[4:]) if lab.startswith("n90_") else ("adidas", {"three": "three", "rr22": "twentytwo",
                                                                                      "rr23": "twentythree"}[lab])
         out.append((lab, fam, kit, r["variant"], True))
+    if not any(k[0] == "three" for k in out):  # третья есть в NHL 24, строки нет ни в Legacy, ни в реестре
+        pr = proposals().get((code, "three"))
+        out.append(("three", "adidas", "three", pr["variant"] if pr else None, True))
     return out
 
 
@@ -340,7 +364,7 @@ def stage_kit(od):
 
 def cmd_pack(a):
     from .helmet import fit, template_for, write_logo
-    from .pack import centerlogo_template, legacy_has, write_rx2_rgba
+    from .pack import OURS, centerlogo_template, legacy_has, write_rx2_rgba
     code = a.club
     club, art = club_info(code)
     entries, kits = [], []
@@ -349,6 +373,9 @@ def cmd_pack(a):
         info = json.load(open(os.path.join(od, "info.json"), encoding="utf-8"))
         if info.get("status") != "ok":
             print(code, label, "не собрана — пропуск", flush=True)
+            continue
+        if variant is None:
+            print(code, label, "нет номера в реестре — не упакована", flush=True)
             continue
         newkit = f"1_{art}_{variant}"
         tpl = json.load(open(os.path.join(od, "kit.json"), encoding="utf-8"))["template"]
@@ -366,6 +393,8 @@ def cmd_pack(a):
             built = os.path.join(odir, *rel.split("/"))
             if not new:
                 orig = legacy_has(rel)
+                if kind == "name" and art in (100, 101) and os.path.exists(os.path.join(OURS, *rel.split("/"))):
+                    continue  # SEA/VGK: карта номеров — наша (czkit, legacy-data), не из контейнера 1_131_0
                 if orig and open(orig, "rb").read() == open(built, "rb").read():
                     continue  # слой не менялся (карта номера и фамилии у дом/выезд) — файл EA остаётся
             dst = os.path.join(CACHE, *rel.split("/"))
@@ -430,7 +459,8 @@ def cmd_common(a):
         write_rx2_rgba(p, img, os.path.join(CACHE, *rel.split("/")))
         entries.append(entry(rel, "ice", action="replace", note=f"NHL 24 ice_hotspot_{m.group(1)}_{m.group(2)}"
                              + (" (осветление NHL 24 снято)" if a.unfade else "")))
-    for code in a.pucks.split(","):
+    codes = [c for _cl, _a, c in CLUBS if c not in EXCLUDE] if a.pucks == "all" else a.pucks.split(",")
+    for code in codes:
         club, art = club_info(code)
         rel = f"rendering/puck/puck_{art}_cm.rx2"
         src = os.path.join(PUCK, f"puck_{club}_color.png")
@@ -450,7 +480,8 @@ def cmd_common(a):
 
 def cmd_manifest(a):
     files, kits, clubs = [], [], []
-    for name in a.club.split(",") + ["common", "sticks"]:
+    names = [c for _cl, _a, c in CLUBS if c not in EXCLUDE] if a.club == "all" else a.club.split(",")
+    for name in names + ["common", "sticks"]:
         if not os.path.exists(part_path(name)):
             continue
         with open(part_path(name), encoding="utf-8") as f:
@@ -464,7 +495,8 @@ def cmd_manifest(a):
         if md5(p) != e["md5"] or os.path.getsize(p) != e["size"]:
             raise SystemExit(f"{e['file']}: md5/размер изменились после упаковки — пересоберите часть")
     man = {"format": 1, "clubs": clubs, "files": files, "kits": kits,
-           "note": "NHL 24 → NHL Legacy, пилот: " + ", ".join(clubs) + " и общее (реклама на льду, шайба). Ассеты NHL 24 — "
+           "note": ("NHL 24 → NHL Legacy, все клубы (" + str(len(clubs)) + ")" if a.club == "all" else
+                    "NHL 24 → NHL Legacy, пилот: " + ", ".join(clubs)) + " и общее (реклама на льду, шайба). Ассеты NHL 24 — "
                    "только для личного использования. Решения: шнуровки нет (hastie 0), щит NHL −4 см, V-вставка в цвет "
                    "свитера, спонсорские нашивки на груди сняты, рельеф свитера — чистая карта Legacy T=4.",
            "excluded": EXCLUDED}
@@ -503,6 +535,74 @@ def cmd_sticks(a):
     save_part("sticks", {"files": entries})
     print(f"клюшки: в пакет {len(entries)} (замены из [replace]); та же модель в обеих играх — {len(mp.get('same', {}))}, "
           f"не кладутся")
+
+
+def cmd_all(a):
+    """Пакет на все клубы (кроме ARI): формы (только дом/выезд/третья) — сборка и упаковка; --group i/n — доля клубов
+    для параллельного запуска. Общее, манифест и сводный лист — отдельно: common --pucks all, manifest --club all, summary."""
+    codes = [c for _cl, _art, c in CLUBS if c not in EXCLUDE]
+    if a.group:
+        i, n = (int(x) for x in a.group.split("/"))
+        codes = codes[i - 1::n]
+    for code in codes:
+        t0 = time.time()
+        a.club = code
+        if not a.skip_build:
+            cmd_build(a)
+        cmd_pack(a)
+        print(f"== {code}: {time.time() - t0:.0f} с", flush=True)
+
+
+def cmd_summary(a):
+    """Сводный лист пакета на все клубы: дом / выезд / третья спереди и сзади."""
+    from PIL import ImageDraw, ImageFont
+    f20 = ImageFont.truetype("C:/Windows/Fonts/segoeuib.ttf", 20)
+    f14 = ImageFont.truetype("C:/Windows/Fonts/segoeui.ttf", 14)
+    dst, _ = kit_hybrid.legacy_with_shirt()
+    W = 170
+    rows = []
+    for _cl, art, code in CLUBS:
+        if code in EXCLUDE:
+            continue
+        cells = []
+        for label in MAIN_KITS:
+            od = os.path.join(OUTP, f"{code}_{label}")
+            info = os.path.join(od, "info.json")
+            if not os.path.exists(info):
+                cells.append((label, None, None))
+                continue
+            rec = json.load(open(info, encoding="utf-8"))
+            t = kit3d.load_tex(os.path.join(od, "jersey_cm.png"))
+            ims = [kit3d.render(dst, t, v, W, frame=kit3d.FRAME, ss=2) for v in ("front", "back")]
+            cells.append((label, ims, rec))
+        rows.append((code, art, cells))
+        print(code, flush=True)
+    th = int(round(W * (kit3d.FRAME[3] - kit3d.FRAME[2]) / (kit3d.FRAME[1] - kit3d.FRAME[0])))
+    cw = 2 * W + 6
+    S = Image.new("RGB", (90 + 3 * (cw + 16), 70 + len(rows) * (th + 26)), (30, 30, 34))
+    d = ImageDraw.Draw(S)
+    d.text((12, 12), "NHL 24 → Legacy, все клубы (без ARI): дом / выезд / третья — спереди и сзади",
+           fill=(240, 240, 240), font=f20)
+    for j, lbl in enumerate(("дом", "выезд", "третья")):
+        d.text((90 + j * (cw + 16), 44), lbl, fill=(220, 220, 220), font=f14)
+    y = 66
+    for code, art, cells in rows:
+        d.text((12, y + th // 2 - 8), code, fill=(240, 240, 240), font=f20)
+        for j, (label, ims, rec) in enumerate(cells):
+            x = 90 + j * (cw + 16)
+            if ims is None:
+                d.text((x + 10, y + th // 2 - 8), "— нет в NHL 24 —" if label == "three" else "нет", fill=(150, 150, 150),
+                       font=f14)
+                continue
+            S.paste(ims[0], (x, y))
+            S.paste(ims[1], (x + W + 6, y))
+            v = rec.get("variant")
+            cap = (f"1_{art}_{v}" + (" новая" if rec.get("new") else "")) if v is not None else "номер ждёт реестр"
+            d.text((x, y + th + 2), cap, fill=(190, 190, 190), font=f14)
+        y += th + 26
+    out = os.path.join(NHL24, "compare", "all_kits_summary.png")
+    S.save(out)
+    print(out, S.size)
 
 
 # ---------------------------------------------------------------- листы проверки
@@ -623,17 +723,26 @@ def main():
         s.add_argument("--club", default="CHI")
         if c == "build":
             s.add_argument("--kits", default="", help="только эти формы (метки через запятую)")
+    s = sub.add_parser("all")
+    s.add_argument("--group", default="", help="i/n — каждый n-й клуб, начиная с i (параллельный запуск)")
+    s.add_argument("--skip-build", action="store_true", help="только упаковка уже собранного")
+    s.add_argument("--kits", default="")
+    sub.add_parser("summary")
     s = sub.add_parser("common")
-    s.add_argument("--pucks", default="CHI", help="шайбы каких клубов (коды через запятую)")
+    s.add_argument("--pucks", default="CHI", help="шайбы каких клубов (коды через запятую или all)")
     s.add_argument("--no-unfade", dest="unfade", action="store_false", help="рекламу на льду — как в NHL 24 (бледную)")
     sub.add_parser("sticks")
     for p in sub.choices.values():
         p.add_argument("--all-kits", action="store_true", help="и спецформы (RR22/RR23, 90-е) — не только дом/выезд/третья")
+        p.add_argument("--everything", action="store_true",
+                       help="пакет на все клубы: формы в out/all, пакет в out/pack-all (иначе — пилот: out/pilot, out/pack)")
     a = ap.parse_args()
     global ALL_KITS
     ALL_KITS = a.all_kits
+    if a.everything or a.cmd in ("all", "summary"):
+        set_roots(ALL_OUT, ALL_PACK)
     return {"build": cmd_build, "pack": cmd_pack, "common": cmd_common, "manifest": cmd_manifest,
-            "sheets": cmd_sheets, "sticks": cmd_sticks}[a.cmd](a)
+            "sheets": cmd_sheets, "sticks": cmd_sticks, "all": cmd_all, "summary": cmd_summary}[a.cmd](a)
 
 
 if __name__ == "__main__":
