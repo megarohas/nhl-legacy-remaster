@@ -4,7 +4,7 @@
 #   bash tools/legacy_data/build-all.sh [ЭТАП…] [--ahl32]
 #   LEGACY_DATA_WORK=папка bash tools/legacy_data/build-all.sh …   # сухой прогон: всё (и out) — в эту папку;
 #        входы, которые этапом не пересобираются (например, составы без сети), — положить туда заранее
-#        этапы: base roster photos equip collect fixdb fonts music models art menu nhl24 (без этапов — все по порядку;
+#        этапы: base roster photos equip collect fixdb utah fonts music models art menu nhl24 (без этапов — все по порядку;
 #        --ahl32 — ещё вариант «АХЛ на 32», накладка game/work/legacy-data/out-ahl32; nhl24 — накладка out-nhl24
 #        из пакета NHL 24, если он готов: game/work/nhl24/out/pack или NHL24_PACK=папка)
 # Сеть: roster — только кэш (--offline); photos — докачка недостающих портретов лиг (пауза ≥ 1 с), остальное — без сети.
@@ -24,7 +24,7 @@ L=game/other/legacy/big/cacheboot
 AHL32=0
 stages=()
 for a in "$@"; do [ "$a" = "--ahl32" ] && AHL32=1 || stages+=("$a"); done
-[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect fixdb fonts music models art menu nhl24)
+[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect fixdb utah fonts music models art menu nhl24)
 want() { for s in "${stages[@]}"; do [ "$s" = "$1" ] && return 0; done; return 1; }
 say() { echo "== $(date +%H:%M:%S) $*"; }
 
@@ -94,6 +94,21 @@ if want fixdb; then
       python $T/draft_roster.py $d/nhlng.db $d/draft_roster.db
     fi
   done
+fi
+if want utah; then
+  # Юта вместо Аризоны (строка 22) и Тусон вместо Springfield (строка 55): спецификация и арт агента utah (docs/utah.md,
+  # game/work/utah/utah_spec.json и out/) → база и локализация out (и out-ahl32), арт — в out; без третьей формы
+  # (решение 10.10). Повторный запуск ничего не меняет; draft_roster.db — заново (10 таблиц)
+  S=${UTAH_SPEC:-game/work/utah/utah_spec.json}
+  if [ -f "$S" ]; then
+    say "Юта вместо Аризоны, Тусон вместо Springfield (utah.py)"
+    python $T/utah.py "$S"
+    for d in $O/db $W/out-ahl32/db; do
+      if [ -f $d/nhlng.db ]; then python $T/draft_roster.py $d/nhlng.db $d/draft_roster.db; fi
+    done
+  else
+    say "Юта: нет $S — этап пропущен"
+  fi
 fi
 if want fonts; then
   say "шрифт меню NHL 12 (fefont --keep, скелет Legacy)"
