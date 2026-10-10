@@ -11,8 +11,9 @@ t/s/d/c/w/r, баннер под сводом, прожектор, фон кар
            EA того же клуба, eafocus.register) и цвета «таблетки» s по картинке EA → WORK/reg/<КЛУБ>.json, листы
            проверки WORK/reg/<КЛУБ>_<набор>.png;
   spec   — SPEC teamart (SVG, рамка, цвета, кадры) → WORK/spec/<КЛУБ>.json;
-  ui     — t, s, d, w, r — teamart.build (размеры и растушёвка по замерам EA, docs/logos-arenas.md §9); c — тот же
-           рендер, что у teamart, но кадр — по EA клуба; баннер и прожектор — в контейнере EA того же номера;
+  ui     — t, s, d, w, r — teamart.build (растушёвка по замерам EA; размеры t/d/r — как у EA этого клуба, если рисунок
+           тот же (ea_size), иначе — медианы EA, docs/logos-arenas.md §9); c — тот же рендер, что у teamart, но кадр —
+           по EA клуба; баннер и прожектор — в контейнере EA того же номера;
   extra  — pb и значок ленты (рисунок — как tools/utah/ui_extra.py);
   verify — каждый файл против шаблона EA (всё, кроме пикселей; разбор → сборка байт в байт).
 Выход — OUT (по умолчанию game/work/logos/out-nhl), рабочее — WORK (game/work/logos/work-nhl). Временные файлы
@@ -319,6 +320,19 @@ def frame_for(c, reg, kind):
     return (PB_DEFAULT if kind == 'pb' else DEFAULT_FRAME[kind]), 'по умолчанию'
 
 
+def ea_size_target(art, margin=1.05):
+    """Цели размеров t/d по логотипу EA этого клуба (тот же рисунок): площадь непрозрачной части (альфа > 128, как в
+    teamart.alpha_stats) его t/d и рамка с запасом margin — новый логотип того же рисунка ляжет того же размера, что у
+    EA (у круглых логотипов EA крупнее медианы, у широких — мельче)."""
+    out = {}
+    for k in ('t', 'd'):
+        u = ta.UiLogo.load(ta.extracted(f'fe/ion/artassets/{UI[k]}/{k}{art}.big'))
+        w, h, px = u.decode()
+        bw, bh, area = ta.alpha_stats(px, w, h)
+        out[k] = dict(area=area, max_w=int(math.ceil(bw * margin)), max_h=int(math.ceil(bh * margin)))
+    return out
+
+
 def stage_spec(c, work):
     rp = os.path.join(work, 'reg', f"{c['abbr']}.json")
     reg = json.load(open(rp, encoding='utf-8'))
@@ -350,6 +364,12 @@ def stage_spec(c, work):
     }
     if c.get('spotlight') is not None:
         spec['spotlight'] = c['spotlight']
+    ea_art = c.get('ea_art', c['artid'] if c['artid'] < 30 else None)
+    if ea_art is not None and c.get('ea_frame') is not False and c.get('ea_size', bool(c.get('ea_sets'))):
+        spec['size_target'] = ea_size_target(ea_art)        # t/d (и r — масштабом t): как у EA этого клуба
+        notes['size'] = f"EA: площадь t {spec['size_target']['t']['area']}, d {spec['size_target']['d']['area']}"
+    else:
+        notes['size'] = 'медианы EA'
     if 'pb' in fr:
         spec['ui_extra'].update(pb_tint=PB_TINT, pb_alpha=PB_ALPHA, pb_box=fr['pb'][0])
     p = os.path.join(spec_dir, f"{c['abbr']}.json")
@@ -430,7 +450,13 @@ def stage_ui(c, work, out, sets):
     tsets = [k for k in ('t', 's', 'd', 'w', 'r') if k in sets]
     if tsets:
         log(f"{c['abbr']}: teamart build {','.join(tsets)}")
-        ta.build(p, out, only=tsets, preview=prev, ea_fit=True)
+        saved = ta.SIZE_TARGET_LEGACY                  # цели размеров t/d: у клуба с тем же рисунком — как у EA
+        if spec.get('size_target'):                    # (stage_spec, ea_size_target), иначе — медианы EA
+            ta.SIZE_TARGET_LEGACY = dict(saved, **spec['size_target'])
+        try:
+            ta.build(p, out, only=tsets, preview=prev, ea_fit=True)
+        finally:
+            ta.SIZE_TARGET_LEGACY = saved
     if 'c' in sets:
         data = calendar_big(spec)
         fn = write(out, f'fe/ion/artassets/teamlogoscalendar/c{art}.big', data)
@@ -541,6 +567,8 @@ def verify(out):
                           and obj.head.big.tag == tpl.head.big.tag and obj.stage == tpl.stage
                           and obj.fetch.words == tpl.fetch.words)
                     _, rt = ta.roundtrip(path, deep=True)
+                    if obj.fetch.fmt != ta.FMT_8888:       # pb — DXT5: повторное сжатие разобранных пикселей не обязано
+                        rt.pop('8888', None)               # совпасть с блоками байт в байт (сжатие с потерями)
                     ok = ok and all(v for k, v in rt.items() if not k.endswith(':mips_psnr'))
                     w, h, rgba = obj.decode()
                     cover = sum(1 for a in rgba[3::4] if a) / (w * h)

@@ -1,5 +1,5 @@
 {
- "_doc": "Клубы НХЛ 2026/27 в базе NHL Legacy: строка exhibitionteams (slot), наш abbrname, сокращение assets.nhle.com, artid, spotlight. variant — light/dark (SVG НХЛ), tm_boxes — рамки знака ™ в единицах viewBox (svgclean), keep — логотипы клуба уже нынешние (extra — что собрать всё же), ea_frame false — кадр EA не переносить (другой рисунок), frame — кадры вручную {s|w|c|tw: [zx, zy, zk], pb: [cx, cy, w, h]}, pill — цвета «таблетки» [низ, верх], ea_art — номер арта EA-образца, если не равен artid.",
+ "_doc": "Клубы НХЛ 2026/27 в базе NHL Legacy: строка exhibitionteams (slot), наш abbrname, сокращение assets.nhle.com, artid, spotlight. variant — light/dark (SVG НХЛ), tm_boxes — рамки знака ™ в единицах viewBox (svgclean), keep — логотипы клуба уже нынешние (extra — что собрать всё же), ea_frame false — кадр EA не переносить (другой рисунок), frame — кадры вручную {s|w|c|tw: [zx, zy, zk], pb: [cx, cy, w, h]}, pill — цвета «таблетки» [низ, верх], ea_art — номер арта EA-образца, если не равен artid, ea_size — размеры t/d/r по EA этого клуба (по умолчанию — при непустом ea_sets: тот же рисунок; false — рисунок заметно другой, размер по медианам EA).",
  "nhl": [
   {
    "slot": 0,
@@ -394,7 +394,9 @@
     "w",
     "tw",
     "pb"
-   ]
+   ],
+   "variant": "dark",
+   "note": "тёмный вариант: белый обод вокруг оранжевого кольца, как у EA t18 (у light внешнее кольцо тёмно-синее — пропадает на тёмном меню)"
   },
   {
    "slot": 19,
@@ -615,7 +617,9 @@
     "s",
     "c",
     "pb"
-   ]
+   ],
+   "ea_size": false,
+   "note": "у EA t28 — косатка с надписью VANCOUVER, у нового логотипа (2019) надписи нет: размер t/d — по медианам EA"
   },
   {
    "slot": 29,
