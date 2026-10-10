@@ -88,6 +88,72 @@
    "fevariant": 13,
    "jerseyindex": 17,
    "locstring": 6
+  },
+  {
+   "club": "ANA",
+   "kit": "three",
+   "teamid": 0,
+   "style": 1,
+   "art": 0,
+   "variant": 5,
+   "fevariant": 5,
+   "jerseyindex": 9,
+   "locstring": 2
+  },
+  {
+   "club": "WPG",
+   "kit": "three",
+   "teamid": 1,
+   "style": 1,
+   "art": 1,
+   "variant": 5,
+   "fevariant": 5,
+   "jerseyindex": 4,
+   "locstring": 2
+  },
+  {
+   "club": "BUF",
+   "kit": "three",
+   "teamid": 3,
+   "style": 1,
+   "art": 3,
+   "variant": 7,
+   "fevariant": 7,
+   "jerseyindex": 7,
+   "locstring": 2
+  },
+  {
+   "club": "DAL",
+   "kit": "three",
+   "teamid": 9,
+   "style": 1,
+   "art": 9,
+   "variant": 5,
+   "fevariant": 5,
+   "jerseyindex": 13,
+   "locstring": 2
+  },
+  {
+   "club": "MTL",
+   "kit": "three",
+   "teamid": 15,
+   "style": 1,
+   "art": 15,
+   "variant": 2,
+   "fevariant": 2,
+   "jerseyindex": 6,
+   "locstring": 2
+  },
+  {
+   "club": "NJD",
+   "kit": "three",
+   "teamid": 17,
+   "style": 1,
+   "art": 17,
+   "variant": 4,
+   "fevariant": 4,
+   "jerseyindex": 10,
+   "locstring": 2
   }
  ]
 }
