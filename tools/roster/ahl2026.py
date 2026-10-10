@@ -24,6 +24,7 @@ game/work/legacy-data/ahl-2026/slots.json (tools/legacy_data/ahl2026_slots.py). 
 """
 import argparse
 import os
+import statistics
 import sys
 from collections import Counter, defaultdict
 
@@ -248,6 +249,101 @@ def stats_ratings(players, cache, ht_seasons_of, depth, log=print):
     return dict(counts)
 
 
+AHL_BASE_ROWS = range(32, 62)        # клубы АХЛ базы — составы 2015 года (CV/HSK 224/225 — свои, 08.10)
+JUNK_OVR = 40                        # OVR 36 (атрибуты 0) — 15 пустышек в клубах АХЛ базы, в шкалу не идут
+G_SV = 3.0                           # вратари в квантилях: OVR на пункт переносимой разницы % отражённых с лигой
+G_CAP, G_SEASON_K = 3.0, 15.0        # … разница сезона — не больше ±3 пункта, сжата по играм сезона
+
+
+def base_ahl_ovr(v):
+    """OVR игроков клубов АХЛ базы 2015 года по классам C/W/D/G (как ratings.Model.calibrate: по `team` био)."""
+    from .ratings import cls
+    teams = {t + 1 for t in AHL_BASE_ROWS}
+    out = defaultdict(list)
+    for r in range(v.nbio):
+        if v.g('team', r) in teams and v.ai(r) and not v.created_slot(r):
+            o = v.overall(r)
+            if o > JUNK_OVR:
+                out[cls({0: 'C', 1: 'L', 2: 'R', 3: 'D', 4: 'G'}[v.g('position', r)])].append(o)
+    return {c: sorted(x) for c, x in out.items()}
+
+
+def quantile_ratings(players, v, cache, ht_seasons_of, log=print):
+    """Решение координатора 10.10 (11:45): OVR игроков клубов АХЛ 2026/27 — квантили по статистике под распределение
+    АХЛ 2015 года в Legacy, по амплуа (C/W/D/G), медиана та же. Оценка по статистике (statsrating: NHLe три сезона, опыт
+    в НХЛ; у вратарей — % отражённых) тянется к медиане класса по уверенности (малая выборка — к медиане); по ней —
+    место в классе, OVR — того же квантиля у игроков клубов АХЛ базы (без пустышек OVR 36). Свободные агенты и игроки
+    с рейтингом 2026 года не из этапа АХЛ (kept_2026 вне CV/HSK, например Joey Anderson) — как были; у CV/HSK
+    рейтинги 08.10 тоже были по статистике — они в общей шкале. Считается по всем 32 клубам: у игрока одна оценка в
+    out и out-ahl32. → сводка для players.json."""
+    import math
+    import zlib
+    from .ratings import cls
+
+    def landing_of(p):
+        if p.get('ht_only'):
+            return {'seasonTotals': ht_seasons_of.get(p['nhl_id']) or []}
+        return sources.nhl_landing(cache, p['nhl_id'])
+    base = base_ahl_ovr(v)
+    pop = [p for p in players if p.get('ahl') and (p['rating']['source'] in ('stats', 'none') or
+                                                   p['rating'].get('kept_2026') and p.get('slot') in (224, 225))]
+    model = FixedStats(pop, landing_of)
+    by = defaultdict(list)
+    for p in pop:
+        by[cls(p['pos'])].append(p)
+    def goalie_est(p):
+        """Вратарь: у модели statsrating почти весь вес — на играх в НХЛ (коэффициент % отражённых ≈ 0), и вратари
+        без НХЛ шли бы в случайном порядке. Здесь — опыт в НХЛ (тот же коэффициент) и % отражённых: 3 OVR на пункт
+        разницы с лигой с переносимостью лиги (statsrating.GOALIE), сжатой к 0 на 40 игр. Разница сезона — не больше
+        ±3 пункта и сжата по играм сезона (gp / (gp + 15)): 2 игры в НХЛ с .810 не перевешивают 43 игры АХЛ с .915."""
+        land = landing_of(p)
+        if not land:
+            return None
+        num = den = 0.0
+        nhl_gp = 0
+        for s in SR._regular(land):
+            lg, gp = SR.league(s.get('leagueAbbrev')), s.get('gamesPlayed') or 0
+            if lg == 'NHL':
+                nhl_gp += gp
+            if lg not in SR.GOALIE or not gp or not s.get('savePctg'):
+                continue
+            avg, r = SR.GOALIE[lg]
+            diff = max(-G_CAP, min(G_CAP, (s['savePctg'] - avg) * 100)) * r * gp / (gp + G_SEASON_K)
+            w = SR.SEASON_W[s['season']] * gp
+            num += w * diff
+            den += w
+        sv = num / (den + SR.K_SV)
+        e = min(1.0, nhl_gp / SR.EST_GP_G)
+        return {'ovr': COEF['G'][0] + COEF['G'][1] * e + G_SV * sv, 'conf': round(den / (den + SR.K_CONF_G), 2)}
+    out = {}
+    for c, ps in sorted(by.items()):
+        est = {p['nhl_id']: (goalie_est(p) if c == 'G' else model.estimate(p)) for p in ps}
+        known = [e['ovr'] for e in est.values() if e]
+        med = statistics.median(known) if known else 0.0
+        score = {}
+        for p in ps:
+            e = est[p['nhl_id']]
+            score[p['nhl_id']] = med if e is None else e['conf'] * e['ovr'] + (1 - e['conf']) * med
+        order = sorted(ps, key=lambda p: (score[p['nhl_id']], zlib.crc32(str(p['nhl_id']).encode())))
+        b, n = base[c], len(order)
+        for i, p in enumerate(order):
+            pos = min(len(b) - 1.0, max(0.0, (i + 0.5) / n * len(b) - 0.5))
+            lo = int(math.floor(pos))
+            hi = min(len(b) - 1, lo + 1)
+            ovr = int(round(b[lo] + (b[hi] - b[lo]) * (pos - lo)))
+            e = est[p['nhl_id']]
+            p['rating_stats'] = {k: p['rating'].get(k) for k in ('source', 'ovr', 'kept_2026') if k in p['rating']}
+            p.setdefault('rating_before', {'source': p['rating']['source'], 'ovr': p['rating'].get('ovr')})   # write.notes
+            p['rating'] = {'source': 'stats', 'ovr': ovr, 'attrs': {}, 'scale': 'ahl-quantile',
+                           'score': round(score[p['nhl_id']], 2), 'quantile': round((i + 0.5) / n, 3),
+                           'conf': e['conf'] if e else 0.0}
+        out[c] = {'n': n, 'base_n': len(b), 'median_est': round(med, 1),
+                  'ovr': [b[0], statistics.median(b), b[-1]]}
+    log(f"квантили АХЛ 2015: {sum(v_['n'] for v_ in out.values())} игроков; "
+        + ', '.join(f"{c}: {v_['n']} → шкала {v_['base_n']} (медиана {v_['ovr'][1]})" for c, v_ in out.items()))
+    return out
+
+
 def db_depth(v):
     """25-й перцентиль OVR игроков составов НХЛ базы по амплуа (как ratings.depth_of по игрокам NHL 27)."""
     from .dbview import NHL
@@ -355,19 +451,21 @@ def cmd_build(a, paths, log=print):
                              'where': 'FA' if p.get('fa') else p['team'],
                              'nhl': [t for t in v.teams_of[row] if t in NHL]})
             continue
-        if not a.ahl32 and p.get('slot') in (224, 225):
-            continue                                        # без --ahl32 в базе нет CV/HSK
         keep.append(p)
     kept_2026 = sum(keep_2026_ratings(v, orig_v, p, found[p['nhl_id']][0]) for p in keep)
     stats = stats_ratings(keep, paths.cache, ht_seasons_of, db_depth(v), log)
     trimmed = trim_rosters(keep, log)
     keep = [p for p in keep if p['nhl_id'] not in {t['nhl_id'] for t in trimmed}]
+    quant = quantile_ratings(keep, v, paths.cache, ht_seasons_of, log)       # по всем 32 клубам — и для out
+    if not a.ahl32:
+        keep = [p for p in keep if p.get('slot') not in (224, 225)]          # без --ahl32 в базе нет CV/HSK
     keep.sort(key=lambda p: (999 if p['slot'] is None else p['slot'],
                              {'C': 0, 'L': 1, 'R': 2, 'D': 3, 'G': 4}[p['pos']], p['last'], p['first']))
     os.makedirs(paths.work, exist_ok=True)
     write_json(paths.players, {'meta': {'season': SEASON, 'source': 'HockeyTech АХЛ 2026/27 + fa.py', 'db': a.db,
                                         'nhl_wins': nhl_wins, 'fa_dropped': fa_dropped, 'moved': moved, 'trimmed': trimmed,
-                                        'kept_2026_ratings': kept_2026, 'stats': stats}, 'players': keep})
+                                        'kept_2026_ratings': kept_2026, 'stats': stats, 'quantiles': quant},
+                               'players': keep})
     out = {}
     for p in keep:
         row, how = found[p['nhl_id']]

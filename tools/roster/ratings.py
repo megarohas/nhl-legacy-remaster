@@ -198,6 +198,8 @@ class Model:
 
     def target_ovr(self, p):
         rt = p['rating']
+        if rt.get('scale') and rt['ovr']:
+            return rt['ovr']          # OVR уже в шкале группы (ahl2026: квантили АХЛ 2015) — без сдвига calibrate
         shift = self.group(p)[0].get(cls(p['pos'])) if rt['source'] not in ('ea', 'nhlratings') else None
         if rt['ovr']:
             return rt['ovr'] if shift is None else round(rt['ovr'] + shift, 1)
