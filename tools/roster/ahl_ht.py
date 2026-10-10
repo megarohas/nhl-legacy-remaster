@@ -255,6 +255,47 @@ def seasonstats_rel(htid):
     return f'ahl/ht/player/{htid}-seasonstats.json'
 
 
+def club_season_ids(h, players, ids, club_name):
+    """Игроки без ID НХЛ → ID по карточке landing из кэша (кандидаты поиска, свободные агенты и прочие скачанные): та
+    же фамилия, то же имя или его форма (build.same_first) либо та же дата рождения (Mike — Michael Sgarbossa),
+    вратарь/полевой как в HockeyTech и в сезоне 2026/27 — АХЛ за этот же клуб. Дата рождения при этом может не
+    совпасть: в HockeyTech она бывает неверной
+    (у Basha «2011-08-05» при 2005-11-08 в НХЛ, у Kerins день, месяц и год переставлены). Берётся только единственный
+    кандидат, чей ID ещё ни у кого. → {HT player_id: nhl_id}"""
+    import collections
+    from .build import same_first
+    from .common import SEASON, norm
+    d = os.path.join(h.cache, *landing_rel(0).split('/')[:-1])
+    by_last = collections.defaultdict(list)
+    for f in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+        if not f.endswith('.json'):
+            continue
+        land = read_json(os.path.join(d, f))
+        if isinstance(land, dict) and land.get('playerId'):
+            by_last[norm(_nm(land, 'lastName') or '')].append(land)
+    taken = {v[0] for v in ids.values()}
+    out = {}
+    for pid, p in players.items():
+        if pid in ids:
+            continue
+        club = norm(club_name.get(p['_team']) or '')
+        hits = set()
+        for land in by_last.get(norm(p.get('last_name') or ''), []):
+            if not same_first(_nm(land, 'firstName') or '', p.get('first_name') or '') and \
+                    land.get('birthDate') != p.get('rawbirthdate'):         # Mike / Michael Sgarbossa — та же дата
+                continue
+            if _is_g(land.get('position')) != _is_g(p.get('position')):
+                continue
+            if any(s.get('season') == SEASON and s.get('leagueAbbrev') == 'AHL'
+                   and norm(_nm(s, 'teamName') or '') == club for s in land.get('seasonTotals') or []):
+                hits.add(int(land['playerId']))
+        hits -= taken
+        if len(hits) == 1:
+            out[pid] = hits.pop()
+            taken.add(out[pid])
+    return out
+
+
 def players_stage(h, log=print):
     """Этап 3. → сводка {HT player_id: {...}} в game/work/legacy-data/ahl-2026/ids.json."""
     import collections
@@ -303,6 +344,11 @@ def players_stage(h, log=print):
         ok = [i for i in dict.fromkeys(lst) if landing_birth(h, i) == players[pid].get('rawbirthdate')]
         if len(ok) == 1:
             ids[pid] = (ok[0], None)
+    by_club = club_season_ids(h, players, ids, {c['id']: c['name'] for c in clubs})
+    for pid, nid in by_club.items():
+        ids[pid] = (nid, None)
+    if by_club:
+        log(f'по клубу 2026/27 (дата рождения в HockeyTech другая): {len(by_club)}')
     no_id = [pid for pid in players if pid not in ids]
     fa_ok = [i for i in sorted(fa_cand) if fa.check_api(landing(h, i) if h.cached(landing_rel(i)) else None,
                                                      fa_cand[i]['gp']) is None]
@@ -331,6 +377,10 @@ def players_stage(h, log=print):
     out = {pid: {'ht': pid, 'team': p['_team'], 'name': f"{p['first_name']} {p['last_name']}",
                  'birth': p.get('rawbirthdate'), 'status': p.get('status'), 'nhl_id': ids.get(pid, (None,))[0],
                  'nhl_org': ids.get(pid, (None, None))[1]} for pid, p in players.items()}
+    for pid, nid in by_club.items():
+        land = landing(h, nid) or {}
+        out[pid]['by_club'] = {'nhl_name': f"{_nm(land, 'firstName')} {_nm(land, 'lastName')}",
+                               'nhl_birth': land.get('birthDate')}
     dst = os.path.join(os.path.dirname(h.cache), 'legacy-data', 'ahl-2026', 'ids.json')   # game/work/legacy-data/…
     write_json(dst, {'players': out, 'fa_candidates': len(fa_cand), 'fa_api_ok': fa_ok, 'errors': errs})
     log(f'игроков АХЛ {len(players)}: с ID НХЛ {len(ids)}, без {len(no_id)}; свободных агентов после проверки '

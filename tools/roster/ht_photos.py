@@ -1,6 +1,7 @@
-"""Портреты игроков АХЛ без ID НХЛ: фото leaguestat (assets.leaguestat.com/ahl/240x240/<id>.jpg, однотонный серый
-фон, кэш photos/ahl/<id>.jpg — скачивает `python -m roster.ahl_ht players`) → прозрачный фон → кадр портретов НХЛ
-(photos_other.to_nhl_frame) → photos/20262027/<nhl_id>.png, как у прочих портретов; дальше — tools/photos.py build.
+"""Портреты игроков АХЛ без ID НХЛ (и с ID, у кого портрета НХЛ нет, а фото leaguestat в кэше есть): фото leaguestat
+(assets.leaguestat.com/ahl/240x240/<id>.jpg, однотонный серый фон, кэш photos/ahl/<id>.jpg — скачивает
+`python -m roster.ahl_ht players`) → прозрачный фон → кадр портретов НХЛ (photos_other.to_nhl_frame) →
+photos/20262027/<nhl_id>.png, как у прочих портретов; дальше — tools/photos.py build.
 
 JPG → PNG — средствами Windows (PowerShell, System.Drawing), фон — заливка от верхнего края и боков (верхние 2/3
 кадра) по близости к цвету фона, край — полупрозрачный. Сеть не нужна. Фото принадлежат лиге: только для личного
@@ -92,7 +93,17 @@ def run(players_json, log=print):
     manifest = read_json(manifest_fn, {}) or {}
     ref = po.nhl_reference(game)
     cache = os.path.join(game, 'work', 'roster-cache')
-    todo = [p for p in data['players'] if p.get('ht_only') and p.get('ht_photo')]
+
+    def nhl_photo(pid):
+        """Портрет НХЛ есть: сезона (не наш из leaguestat), «последний» или найденный вручную — их берёт photos_other."""
+        own = str((manifest.get(str(pid)) or {}).get('source', '')).startswith('leaguestat')
+        if os.path.exists(os.path.join(d, f'{pid}.png')) and not own:
+            return True
+        return any(os.path.exists(os.path.join(cache, 'photos', sub, f'{pid}.png')) for sub in ('nhl-latest', 'nhl-other'))
+    # без ID НХЛ — всегда фото leaguestat; с ID НХЛ — только если портрета НХЛ нет, а фото leaguestat в кэше есть
+    # (ID нашёлся по карточке, когда дата рождения в HockeyTech неверная: ahl_ht.club_season_ids)
+    todo = [p for p in data['players'] if p.get('ht_photo') and (
+        p.get('ht_only') or not nhl_photo(p['nhl_id']) and os.path.exists(os.path.join(cache, *p['ht_photo'].split('/'))))]
     pairs = [(os.path.join(cache, *p['ht_photo'].split('/')),
               os.path.join(cache, 'photos', 'ahl-png', os.path.basename(p['ht_photo'])[:-4] + '.png')) for p in todo]
     conv = to_png(pairs)
