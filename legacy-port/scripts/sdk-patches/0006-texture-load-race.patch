@@ -1,0 +1,136 @@
+diff --git a/include/rex/graphics/shared_memory.h b/include/rex/graphics/shared_memory.h
+index 4d85a2b..1d89ac4 100644
+--- a/include/rex/graphics/shared_memory.h
++++ b/include/rex/graphics/shared_memory.h
+@@ -79,6 +79,12 @@ class SharedMemory {
+   bool RequestRanges(const std::pair<uint32_t, uint32_t>* ranges, size_t count);
+   bool RequestRange(uint32_t start, uint32_t length);
+ 
++  // megarohas (legacy-port, 10.10.2026): whether every page of the range is
++  // currently valid - uploaded and not invalidated by a CPU write since then.
++  // Used by the texture cache to detect CPU writes that happened between
++  // uploading the data of a texture and starting to watch its memory.
++  bool AreRangePagesValid(uint32_t start, uint32_t length);
++
+   // Marks the range and, if not exact_range, potentially its surroundings
+   // (to up to the first GPU-written page, as an access violation exception
+   // count optimization) as modified by the CPU, also invalidating GPU-written
+diff --git a/src/graphics/pipeline/texture/cache.cpp b/src/graphics/pipeline/texture/cache.cpp
+index 76f5600..2941854 100644
+--- a/src/graphics/pipeline/texture/cache.cpp
++++ b/src/graphics/pipeline/texture/cache.cpp
+@@ -80,6 +80,19 @@ REXCVAR_DEFINE_INT32(resolution_scale, 1, "GPU",
+ REXCVAR_DEFINE_BOOL(pre_mask_resolve_l2_block, true, "GPU",
+                     "Pre-mask scaled resolve L2 blocks to the write range before iterating");
+ 
++// megarohas (legacy-port, 10.10.2026): a CPU write to the memory of a texture between uploading its data
++// (SharedMemory::RequestRanges) and Texture::MakeUpToDateAndWatch fires the invalidation while no watch is
++// registered for the texture yet - the texture is then marked as up to date with the old data, and its pages
++// are left unprotected, so further CPU writes are not noticed either. Detected via the page validity bits,
++// which the invalidation clears.
++REXCVAR_DEFINE_BOOL(gpu_texture_load_race_fix, false, "GPU",
++                    "Keep a texture outdated (reload it on the next use) if its memory was written by the CPU "
++                    "while it was being loaded")
++    .lifecycle(rex::cvar::Lifecycle::kHotReload);
++REXCVAR_DEFINE_BOOL(gpu_texture_load_race_trace, false, "GPU",
++                    "Diagnostics: log textures whose memory was written by the CPU while they were being loaded")
++    .lifecycle(rex::cvar::Lifecycle::kHotReload);
++
+ // DEFINE_int32(
+ //     draw_resolution_scale_x, 1,
+ //     "Integer pixel width scale used for scaling the rendering resolution "
+@@ -689,19 +702,50 @@ TextureCache::Texture::~Texture() {
+ void TextureCache::Texture::MakeUpToDateAndWatch(
+     const std::unique_lock<std::recursive_mutex>& global_lock) {
+   SharedMemory& shared_memory = texture_cache().shared_memory();
++  // megarohas (legacy-port, 10.10.2026): see gpu_texture_load_race_fix. Called within the global critical
++  // region, so a CPU write after this check is caught by the watch registered below.
++  const bool race_fix = REXCVAR_GET(gpu_texture_load_race_fix);
++  const bool race_trace = REXCVAR_GET(gpu_texture_load_race_trace);
++  auto loaded_while_written = [&](uint32_t start, uint32_t size, bool is_mip) {
++    if ((!race_fix && !race_trace) || shared_memory.AreRangePagesValid(start, size)) {
++      return false;
++    }
++    if (race_trace) {
++      static std::atomic<uint32_t> race_count{0};
++      const uint32_t n = race_count.fetch_add(1, std::memory_order_relaxed) + 1;
++      if (n <= 400 || n % 1000 == 0) {
++        REXGPU_WARN(
++            "Texture load race #{}: {} of {} {}x{}x{} {} {} texture at 0x{:08X} (size 0x{:X}) written by the "
++            "CPU while loading{}",
++            n, is_mip ? "mips" : "base", key_.tiled ? "tiled" : "linear", key_.GetWidth(),
++            key_.GetHeight(), key_.GetDepthOrArraySize(), key_.GetLogDimensionName(),
++            FormatInfo::Get(key_.format)->name, start, size,
++            race_fix ? " - kept outdated, reloading on the next use" : "");
++      }
++    }
++    return race_fix;
++  };
+   if (base_outdated_) {
+     assert_not_zero(GetGuestBaseSize());
+-    base_outdated_ = false;
+-    base_watch_handle_ = shared_memory.WatchMemoryRange(
+-        key().base_page << 12, GetGuestBaseSize(), TextureCache::WatchCallback, this, nullptr, 0);
+-    outdated_mask_.fetch_and(~kOutdatedBitBase, std::memory_order_release);
++    if (loaded_while_written(key().base_page << 12, GetGuestBaseSize(), false)) {
++      texture_cache_.texture_became_outdated_.store(true, std::memory_order_release);
++    } else {
++      base_outdated_ = false;
++      base_watch_handle_ = shared_memory.WatchMemoryRange(
++          key().base_page << 12, GetGuestBaseSize(), TextureCache::WatchCallback, this, nullptr, 0);
++      outdated_mask_.fetch_and(~kOutdatedBitBase, std::memory_order_release);
++    }
+   }
+   if (mips_outdated_) {
+     assert_not_zero(GetGuestMipsSize());
+-    mips_outdated_ = false;
+-    mips_watch_handle_ = shared_memory.WatchMemoryRange(
+-        key().mip_page << 12, GetGuestMipsSize(), TextureCache::WatchCallback, this, nullptr, 1);
+-    outdated_mask_.fetch_and(~kOutdatedBitMips, std::memory_order_release);
++    if (loaded_while_written(key().mip_page << 12, GetGuestMipsSize(), true)) {
++      texture_cache_.texture_became_outdated_.store(true, std::memory_order_release);
++    } else {
++      mips_outdated_ = false;
++      mips_watch_handle_ = shared_memory.WatchMemoryRange(
++          key().mip_page << 12, GetGuestMipsSize(), TextureCache::WatchCallback, this, nullptr, 1);
++      outdated_mask_.fetch_and(~kOutdatedBitMips, std::memory_order_release);
++    }
+   }
+ }
+ 
+diff --git a/src/graphics/shared_memory.cpp b/src/graphics/shared_memory.cpp
+index ec0df7c..a43ecf7 100644
+--- a/src/graphics/shared_memory.cpp
++++ b/src/graphics/shared_memory.cpp
+@@ -473,6 +473,31 @@ bool SharedMemory::RequestRange(uint32_t start, uint32_t length) {
+   return RequestRanges(&range, 1);
+ }
+ 
++bool SharedMemory::AreRangePagesValid(uint32_t start, uint32_t length) {
++  if (length == 0 || start >= kBufferSize) {
++    return true;
++  }
++  length = std::min(length, kBufferSize - start);
++  uint32_t page_first = start >> page_size_log2_;
++  uint32_t page_last = (start + length - 1) >> page_size_log2_;
++  uint32_t block_first = page_first >> 6;
++  uint32_t block_last = page_last >> 6;
++  auto global_lock = global_critical_region_.Acquire();
++  for (uint32_t i = block_first; i <= block_last; ++i) {
++    uint64_t needed_bits = UINT64_MAX;
++    if (i == block_first) {
++      needed_bits &= ~((uint64_t(1) << (page_first & 63)) - 1);
++    }
++    if (i == block_last && (page_last & 63) != 63) {
++      needed_bits &= (uint64_t(1) << ((page_last & 63) + 1)) - 1;
++    }
++    if ((system_page_flags_valid_[i] & needed_bits) != needed_bits) {
++      return false;
++    }
++  }
++  return true;
++}
++
+ std::pair<uint32_t, uint32_t> SharedMemory::MemoryInvalidationCallbackThunk(
+     void* context_ptr, uint32_t physical_address_start, uint32_t length, bool exact_range) {
+   return reinterpret_cast<SharedMemory*>(context_ptr)

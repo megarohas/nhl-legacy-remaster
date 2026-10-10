@@ -228,6 +228,63 @@ S:\Claude\megarohas_nhl13\legacy-port\build.cmd win-amd64-relwithdebinfo
   признаки нестабильного разгона памяти, порт это пока не исключает и не подтверждает. Прогон на стоке (Profile 1)
   пользователь пока отложил (10.10). Накладку NHL 24 пользователю не ставим до выяснения.
 
+## Порча текстур в первом матче сессии (10.10.2026)
+
+**Симптом.** Примерно 2 из 14 первых матчей новой сессии (DAL–CHI, копия userdata пользователя
+`legacy-port/userdata-ucheck`). У судьи свитер в красную полоску и красные брюки в мелком узоре, у полевых шорты в
+оранжевом или бордовом узоре, перчатки оранжевые. Ещё бывают чужой узор на гетрах, визор с отливом, розовые коньки —
+это заглушка самой игры для отсутствующей текстуры. Порча зависит от ракурса: в одном матче с одних точек камеры
+судья и шорты красные, с других — чистые. Бывает и без накладки NHL 24. Все прогоны — на памяти GPU 8301 МГц
+(разгон пользователя, настройки GPU не трогаем). Кадры: `legacy-port/out/agent/ab3/ct04_sync/`, `ct11_pf/`,
+увеличенные — `ab3/zoom/`.
+
+Серия — `legacy-port/out/agent/ab3.ps1`: первый матч новой сессии DAL–CHI (`chi_form.ps1 -Form 6 -Steps 0 -Quick`),
+снимки повтора у стартового вбрасывания, журнал `ab3/batch.log`, папка прогона `ab3/ctNN_метка/`. Тестовые
+exe и DLL — в `legacy-port-clean/out/build/win-amd64-release/`.
+
+**Исключено** (ct01…ct17):
+- дочитка композиций (`nhl_composite_readback`): в испорченном ct04 все 50 композиций верные — журнал и дампы
+  `nhl_composite_trace` / `nhl_composite_dump` (`src/nhllegacy_composite.cpp`, по умолчанию выкл.);
+- асинхронная сборка конвейеров (`--async_shader_compilation=false`, один поток сборки);
+- нехватка видеопамяти игры: печать игры `nhl_game_printf` (`src/nhllegacy_printf.cpp`, по умолчанию выкл.) —
+  сообщений XenonVideoAllocator нет;
+- рисования с memexport: журнал `d3d12_memexport_trace` (патч SDK 0005) — в ct13…ct16 таких рисований нет;
+- 53 изменённые модели формы и гамаш legacy-data: там только геометрия, общих ресурсов нет.
+
+**Версия — окно гонки в кэше текстур SDK.** Загрузка текстуры (`TextureCache::RequestTextures`): сначала выгрузка
+памяти всех текстур рисования в общую память GPU (`SharedMemory::RequestRanges` → `UploadRanges`: страницы
+помечаются верными и берутся под защиту от записи, потом копируются), затем по очереди загрузка каждой
+(`CommitPreparedTextureLoad`) и только в конце — постановка слежения (`Texture::MakeUpToDateAndWatch`). Запись CPU в
+это окно снимает защиту и пометку страниц и зовёт слежения — а слежения этой текстуры ещё нет. Текстура
+помечается свежей со старыми данными, страницы остаются без защиты: следующие записи CPU в неё тоже не замечаются,
+пока страницы кто-то не запросит заново. Окно шире, чем кажется: запись CPU снимает защиту не только со своей
+страницы, а со всего блока 256 КБ вокруг (до страниц, записанных GPU).
+
+**Разведка и исправление** — патч SDK `legacy-port/scripts/sdk-patches/0006-texture-load-race.patch`
+(`SharedMemory::AreRangePagesValid`, проверка в `MakeUpToDateAndWatch` под общей блокировкой), оба cvar по
+умолчанию выкл.:
+- `gpu_texture_load_race_trace` — WARN `Texture load race #N: base|mips of … texture at 0x… written by the CPU while
+  loading` (сводка — `legacy-port/out/agent/races.py`);
+- `gpu_texture_load_race_fix` — такая текстура остаётся устаревшей (слежение не ставится) и грузится заново при
+  следующем использовании.
+
+Тестовая DLL с ним — `rexgpu-xenos.dll` EEDB3812 (копия — `legacy-port/out/agent/sdkdll/race/`; обычная — 8ec35aa1,
+`sdkdll/orig/`). ct21 (`--gpu_texture_load_race_trace=true`, исправление выкл.): матч чистый, гонки — у видеокадров
+меню (`k_8` 1280x720, linear) и у потоковых таблиц `k_32_32_32_32_FLOAT` 384x160 / 384x64 (linear) в матче; журнал
+упёрся в предел 400 строк.
+
+**Патчи SDK в репозитории** — `legacy-port/scripts/sdk-patches/`, поверх 0001…0004 (`port-ffx/scripts/sdk-patches/`,
+[sdk-build.md](sdk-build.md)):
+
+| Патч | Файлы | Что |
+|---|---|---|
+| `0005-d3d12-memexport-trace` | `src/graphics/d3d12/command_processor.cpp` | cvar `d3d12_memexport_trace` (по умолчанию выкл.): журнал рисований с memexport |
+| `0006-texture-load-race` | `include/rex/graphics/shared_memory.h`, `src/graphics/shared_memory.cpp`, `src/graphics/pipeline/texture/cache.cpp` | журнал и исправление гонки загрузки текстур (выше) |
+
+Наложить: `git -C ref/rexglue-sdk-custom/src apply S:/Claude/megarohas_nhl13/legacy-port/scripts/sdk-patches/0005-….patch`
+(и 0006). Пересобрать только GPU-плагин — `legacy-port/scripts/sdk_gpu_build.cmd` (≈2 мин; DLL —
+`ref/rexglue-sdk-custom/src/out/win-amd64/Release/rexgpu-xenos.dll`, установка SDK не меняется).
+
 ## Для друзей
 
 `bash legacy-port/scripts/make_dist.sh [--mods]` собирает папку `legacy-port/dist/NHL Legacy`
