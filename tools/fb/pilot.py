@@ -81,24 +81,45 @@ def kits_for(code, main_only=None):
 
 
 def _kits_for(code):
+    """Правило пользователя (10.10, 05:50): формы NHL 24 — только новыми строками, прежние (EA и наши SEA/VGK) не
+    перезаписываются. Номера всех — из реестра legacy-data (дом, выезд, третья — подряд после форм EA)."""
     club, art = club_info(code)
-    out = []
-    for label, kit, loc in (("home", "home", 0), ("away", "away", 1), ("three", "three", 2)):
-        t = legacy_target(art, loc)
-        if t:
-            out.append((label, "adidas", kit, t["variant"], False))
     with open(REGISTRY, encoding="utf-8") as f:
-        reg = json.load(f)["kits"]
+        reg = [r for r in json.load(f)["kits"] if r["club"] == code]
+    out = []
+    for label in MAIN_KITS:
+        r = next((k for k in reg if k["kit"] == label), None)
+        out.append((label, "adidas", label, r["variant"] if r else None, True))
     for r in reg:
-        if r["club"] != code:
-            continue
         lab = r["kit"]
-        fam, kit = ("nineties", lab[4:]) if lab.startswith("n90_") else ("adidas", {"three": "three", "rr22": "twentytwo",
+        if lab in MAIN_KITS:
+            continue
+        fam, kit = ("nineties", lab[4:]) if lab.startswith("n90_") else ("adidas", {"rr22": "twentytwo",
                                                                                      "rr23": "twentythree"}[lab])
         out.append((lab, fam, kit, r["variant"], True))
-    if not any(k[0] == "three" for k in out):  # третья есть в NHL 24, строки нет ни в Legacy, ни в реестре
-        pr = proposals().get((code, "three"))
-        out.append(("three", "adidas", "three", pr["variant"] if pr else None, True))
+    return out
+
+
+def home_template(art):
+    """Шаблон kitpaint для новой формы: домашняя форма клуба в Legacy; у наших SEA/VGK (100/101) — контейнер
+    3-значного арта 1_131_0 (карта номеров — наша, из legacy-data out)."""
+    if art in (100, 101):
+        return "1_131_0"
+    return f"1_{art}_{legacy_target(art, 0)['variant']}"
+
+
+def ours_name(art, od):
+    """SEA/VGK: карта номеров и фамилии нашей домашней формы (legacy-data out) → od/name_cm.png. -> путь или None."""
+    from .pack import OURS
+    p = os.path.join(OURS, "rendering", "jersey", f"name_1_{art}_0_cm.rx2")
+    if art not in (100, 101) or not os.path.exists(p):
+        return None
+    sys.path.insert(0, TOOLS)
+    import teamart as ta
+    rw = ta.Rw4.load(p)
+    w, h, rgba = rw.decode(rw.textures[0])
+    out = os.path.join(od, "name_cm.png")
+    Image.frombytes("RGBA", (w, h), bytes(rgba)).save(out)
     return out
 
 
@@ -151,9 +172,9 @@ def _contrast(a, b):
     return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
 
 
-def name_zone(kit):
+def name_zone(kit, own=None):
     """Место фамилии на развёртке свитера: зона 0 карты номеров (name_*_cm, синий канал) комплекта-шаблона, 256²."""
-    a = np.asarray(Image.open(os.path.join(unpack(kit), "name_cm.png")).convert("RGBA")).astype(int)
+    a = np.asarray(Image.open(own or os.path.join(unpack(kit), "name_cm.png")).convert("RGBA")).astype(int)
     return (a[..., 0] > 128) & (a[..., 1] > 128) & (a[..., 2] == 0)
 
 
@@ -193,6 +214,42 @@ def lightness(tex):
     return float((0.2126 * a[..., 0] + 0.7152 * a[..., 1] + 0.0722 * a[..., 2]).mean())
 
 
+def build_font(rec, folder, ok, p, family, club, kit, od, tpl_kit, own_name):
+    from .fonts import normal_map, resize_premult
+    fc, fn = p + f"font_{family}_{club}_{kit}_color", p + f"font_{family}_{club}_{kit}_normal"
+    if fc not in ok:
+        rec["font"] = "нет текстуры шрифта — останется шаблона"
+        return
+    cm = resize_premult(np.asarray(Image.open(png(folder, fc)).convert("RGBA")), 512)
+    cm, fix = name_contrast(cm, os.path.join(od, "jersey_cm.png"), name_zone(tpl_kit, own_name))
+    if fix:
+        rec["font_fix"] = fix
+    nm = normal_map(png(folder, fn), 512) if fn in ok else np.dstack(
+        [np.full((512, 512), v, np.uint8) for v in (128, 128, 255, 255)])
+    sm = np.zeros((512, 512, 4), np.uint8)
+    sm[..., :3] = 21
+    sm[..., 3] = np.where(cm[..., 3] > 128, 255, 0)
+    Image.fromarray(cm).save(os.path.join(od, "font_cm.png"))
+    Image.fromarray(nm).save(os.path.join(od, "font_nm.png"))
+    Image.fromarray(sm).save(os.path.join(od, "font_sm.png"))
+    rec["font"] = "ok"
+
+
+def finish_kit(rec, od, tpl_kit, art, variant, label, mode, patches, t0, pant=None, sock=None):
+    """kit.json шаблона и info.json. Светлота: дом — тёмная (0), выезд — светлая (1), как требует сборка legacy-data
+    (по умолчанию в матчах — новые дом и выезд); третья — по яркости свитера."""
+    shutil.copyfile(os.path.join(unpack(tpl_kit), "kit.json"), os.path.join(od, "kit.json"))
+    light = {"home": 0, "away": 1}.get(label, int(lightness(os.path.join(od, "jersey_cm.png")) > 0.5))
+    rec.update(status="ok", mode=mode, template=tpl_kit, legacy_kit=f"1_{art}_{variant}", islightcolor=light,
+               measured_light=round(lightness(os.path.join(od, "jersey_cm.png")), 3), patches=patches,
+               sec=round(time.time() - t0, 1))
+    if pant is not None:
+        rec.setdefault("pant", pant)
+        rec.setdefault("sock", sock)
+    with open(os.path.join(od, "info.json"), "w", encoding="utf-8") as f:
+        json.dump(rec, f, ensure_ascii=False, indent=1)
+
+
 def cmd_build(a):
     code = a.club
     club, art = club_info(code)
@@ -222,6 +279,18 @@ def cmd_build(a):
             continue
         od = os.path.join(OUTP, f"{code}_{label}")
         os.makedirs(od, exist_ok=True)
+        tpl_kit = home_template(art)
+        own_name = ours_name(art, od)
+        done = all(os.path.exists(os.path.join(od, n)) for n in ("jersey_cm.png", "pant_cm.png", "sock_cm.png", "fe.png"))
+        if getattr(a, "reuse", False) and done and os.path.exists(os.path.join(od, "info.json")):
+            # рендер от номера варианта не зависит — меняются шаблон, номер, светлота; шрифт — заново (дёшево)
+            old = json.load(open(os.path.join(od, "info.json"), encoding="utf-8"))
+            build_font(rec, folder, ok, p, family, club, kit, od, tpl_kit, own_name)
+            finish_kit(rec, od, tpl_kit, art, variant, label, old.get("mode", ""), old.get("patches", []), t0,
+                       pant=old.get("pant", ""), sock=old.get("sock", ""))
+            report.append(rec)
+            print(code, label, f"1_{art}_{variant}", "рендер прежний, шрифт и данные обновлены", flush=True)
+            continue
         if family not in srcs:
             srcs[family] = kit3d.load_nhl24(MESH[family])
             tids[family], _ = kit3d.raster_uv(srcs[family], 1024)
@@ -253,26 +322,7 @@ def cmd_build(a):
         Image.open(os.path.join(CLEAN, f"{CLEAN_T}_3-12-21-30-39-48-57-66-75_sm.png")).resize((1024, 1024), Image.LANCZOS) \
             .save(os.path.join(od, "jersey_sm.png"))
         shutil.copyfile(os.path.join(CLEAN, f"{CLEAN_T}_3-12-21-30-39-48-57-66-75_nm.png"), os.path.join(od, "jersey_nm.png"))
-        # шрифт
-        from .fonts import normal_map, resize_premult
-        fc, fn = p + f"font_{family}_{club}_{kit}_color", p + f"font_{family}_{club}_{kit}_normal"
-        if fc in ok:
-            cm = resize_premult(np.asarray(Image.open(png(folder, fc)).convert("RGBA")), 512)
-            tpl_kit = f"1_{art}_{variant}" if not new else f"1_{art}_{legacy_target(art, 0)['variant']}"
-            cm, fix = name_contrast(cm, os.path.join(od, "jersey_cm.png"), name_zone(tpl_kit))
-            if fix:
-                rec["font_fix"] = fix
-            nm = normal_map(png(folder, fn), 512) if fn in ok else np.dstack(
-                [np.full((512, 512), v, np.uint8) for v in (128, 128, 255, 255)])
-            sm = np.zeros((512, 512, 4), np.uint8)
-            sm[..., :3] = 21
-            sm[..., 3] = np.where(cm[..., 3] > 128, 255, 0)
-            Image.fromarray(cm).save(os.path.join(od, "font_cm.png"))
-            Image.fromarray(nm).save(os.path.join(od, "font_nm.png"))
-            Image.fromarray(sm).save(os.path.join(od, "font_sm.png"))
-            rec["font"] = "ok"
-        else:
-            rec["font"] = "нет текстуры шрифта — останется шаблона"
+        build_font(rec, folder, ok, p, family, club, kit, od, tpl_kit, own_name)
         # шорты и гетры: точно через 3D (сетки по .toc), выравнивание по рамкам
         pc, sc = p + f"pant_{family}_{club}_{kit}_color", p + f"sock_{family}_{club}_{kit}_color"
         if pc in ok:
@@ -288,15 +338,8 @@ def cmd_build(a):
         else:
             rec["sock"] = "нет текстуры гетр"
         fe_preview(dst, kit3d.load_tex(os.path.join(od, "jersey_cm.png"))).save(os.path.join(od, "fe.png"))
-        # шаблон для kitpaint: своя строка Legacy (дом/выезд) или домашняя форма клуба (новые)
-        tpl_kit = f"1_{art}_{variant}" if not new else f"1_{art}_{legacy_target(art, 0)['variant']}"
-        shutil.copyfile(os.path.join(unpack(tpl_kit), "kit.json"), os.path.join(od, "kit.json"))
-        rec.update(status="ok", mode=mode, template=tpl_kit, legacy_kit=f"1_{art}_{variant}",
-                   islightcolor=int(lightness(os.path.join(od, "jersey_cm.png")) > 0.5),
-                   patches=[{k: v for k, v in pl.items() if not k.startswith("_")} for pl in placed],
-                   sec=round(time.time() - t0, 1))
-        with open(os.path.join(od, "info.json"), "w", encoding="utf-8") as f:
-            json.dump(rec, f, ensure_ascii=False, indent=1)
+        finish_kit(rec, od, tpl_kit, art, variant, label, mode,
+                   [{k: v for k, v in pl.items() if not k.startswith("_")} for pl in placed], t0)
         report.append(rec)
         print(code, label, f"1_{art}_{variant}", mode[:6], "шрифт", rec["font"][:2], "шорты", rec["pant"][:2], "гетры",
               rec["sock"][:2], f"{rec['sec']} с", flush=True)
@@ -315,7 +358,8 @@ def cmd_build(a):
 KIT_PATHS = {"jersey": "rendering/jersey/texlib_1_{a}_{v}.rx2", "name": "rendering/jersey/name_1_{a}_{v}_cm.rx2",
              "pant": "rendering/pant/texlib_1_{a}_{v}.rx2", "sock": "rendering/sock/sock_1_{a}_{v}_cm.rx2",
              "fe": "fe/ion/artassets/jerseys/jersey_1_{a}_{v}.big"}
-STAGE_LAYERS = ("jersey_cm", "jersey_sm", "jersey_nm", "font_cm", "font_nm", "font_sm", "pant_cm", "sock_cm", "fe")
+STAGE_LAYERS = ("jersey_cm", "jersey_sm", "jersey_nm", "font_cm", "font_nm", "font_sm", "name_cm", "pant_cm", "sock_cm",
+                "fe")
 CONTAINER = {6: "1_10_0"}  # длина «1_A_V» → комплект EA той же длины (имена растров 1_6_10… на символ длиннее 1_6_0)
 LABELS = {"n90_two": "1990s Retro Black", "n90_four": "1990s Retro White"}  # прочие подписи — по умолчанию legacy-data
 HOTSPOT = os.path.join(NHL24, "extract", "hotspot", "worlds", "rink", "textures", "hotspot")
@@ -370,6 +414,9 @@ def cmd_pack(a):
     entries, kits = [], []
     for label, family, kit, variant, new in kits_for(code):
         od = os.path.join(OUTP, f"{code}_{label}")
+        if not os.path.exists(os.path.join(od, "info.json")):
+            print(code, label, "не собрана (нет в NHL 24) — пропуск", flush=True)
+            continue
         info = json.load(open(os.path.join(od, "info.json"), encoding="utf-8"))
         if info.get("status") != "ok":
             print(code, label, "не собрана — пропуск", flush=True)
@@ -391,12 +438,9 @@ def cmd_pack(a):
         for kind, pat in KIT_PATHS.items():
             rel = pat.format(a=art, v=variant)
             built = os.path.join(odir, *rel.split("/"))
-            if not new:
-                orig = legacy_has(rel)
-                if kind == "name" and art in (100, 101) and os.path.exists(os.path.join(OURS, *rel.split("/"))):
-                    continue  # SEA/VGK: карта номеров — наша (czkit, legacy-data), не из контейнера 1_131_0
-                if orig and open(orig, "rb").read() == open(built, "rb").read():
-                    continue  # слой не менялся (карта номера и фамилии у дом/выезд) — файл EA остаётся
+            if legacy_has(rel) or os.path.exists(os.path.join(OURS, *rel.split("/"))):
+                raise SystemExit(f"{code} {label}: {rel} — файл уже существующего комплекта, в пакет нельзя "
+                                 f"(формы NHL 24 только новыми номерами)")
             dst = os.path.join(CACHE, *rel.split("/"))
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             shutil.copyfile(built, dst)
@@ -405,11 +449,10 @@ def cmd_pack(a):
                     "sock": "гетры (3D из NHL 24)", "fe": "превью меню (свой рендер)"}[kind]
             entries.append(entry(rel, kind, club=code, kit=label, action="add" if new else "replace",
                                  note=f"{note}; NHL 24 {family}/{kit}"))
-        if new:
-            k = {"club": code, "kit": label, "variant": variant, "islightcolor": int(info["islightcolor"])}
-            if label in LABELS:
-                k["label"] = LABELS[label]
-            kits.append(k)
+        k = {"club": code, "kit": label, "variant": variant, "islightcolor": int(info["islightcolor"])}
+        if label in LABELS:
+            k["label"] = LABELS[label]
+        kits.append(k)
         print(code, label, newkit, "— файлов", sum(1 for e in entries if e.get("kit") == label), flush=True)
     # центр льда
     src = os.path.join(NHL24, "out", "ice", f"centerlogo_{code}.png")
@@ -421,15 +464,17 @@ def cmd_pack(a):
     folder, ok = extract_club(club)
     for label, family, kit, variant, new in kits_for(code):
         name = prefix(club, family, kit) + f"helmetlogo_{family}_{club}_{kit}_0_color"
-        if name not in ok:
+        if name not in ok or variant is None or not os.path.exists(os.path.join(OUTP, f"{code}_{label}", "info.json")):
             continue
         logo = fit(Image.open(png(folder, name)).convert("RGBA"))
         if logo is None:
             continue
         rel = f"rendering/logo/texlib_{art}_1_{variant}.rx2"
         have, tpl = template_for(art, variant)
+        if have or os.path.exists(os.path.join(OURS, *rel.split("/"))):
+            raise SystemExit(f"{code} {label}: {rel} — наклейка уже существующего комплекта, в пакет нельзя")
         write_logo(tpl, art, variant, logo, os.path.join(CACHE, *rel.split("/")))
-        entries.append(entry(rel, "helmet", club=code, kit=label, action="replace" if have else "add",
+        entries.append(entry(rel, "helmet", club=code, kit=label, action="add",
                              note=f"наклейка на шлем NHL 24 {family}/{kit} (шаблон {os.path.basename(tpl)})"))
     save_part(code, {"files": entries, "kits": kits})
     print(f"{code}: файлов {len(entries)}, новых форм {len(kits)}")
@@ -439,7 +484,7 @@ def cmd_common(a):
     """Общее для всех: реклама и логотипы на льду (каталог ice_hotspot — те же номера в обеих играх), шайба."""
     import glob
     import re
-    from .pack import LEGACY_BIG, legacy_has, write_rx2_rgba
+    from .pack import LEGACY_BIG, OURS, legacy_has, write_rx2_rgba
     entries, skipped = [], []
     for p in sorted(glob.glob(os.path.join(LEGACY_BIG, "*", "rendering", "icesurface", "ice_hotspot_*_cm.rx2"))):
         m = re.match(r"ice_hotspot_(\d+)_(\d+)_cm\.rx2$", os.path.basename(p))
@@ -464,7 +509,8 @@ def cmd_common(a):
         club, art = club_info(code)
         rel = f"rendering/puck/puck_{art}_cm.rx2"
         src = os.path.join(PUCK, f"puck_{club}_color.png")
-        tpl = legacy_has(rel)
+        ours = os.path.join(OURS, *rel.split("/"))
+        tpl = legacy_has(rel) or (ours if os.path.exists(ours) else None)  # SEA/VGK — наши файлы legacy-data
         if not os.path.exists(src) or not tpl:
             skipped.append(f"{rel}: нет {'текстуры NHL 24' if not os.path.exists(src) else 'файла Legacy'}")
             continue
@@ -497,8 +543,9 @@ def cmd_manifest(a):
     man = {"format": 1, "clubs": clubs, "files": files, "kits": kits,
            "note": ("NHL 24 → NHL Legacy, все клубы (" + str(len(clubs)) + ")" if a.club == "all" else
                     "NHL 24 → NHL Legacy, пилот: " + ", ".join(clubs)) + " и общее (реклама на льду, шайба). Ассеты NHL 24 — "
-                   "только для личного использования. Решения: шнуровки нет (hastie 0), щит NHL −4 см, V-вставка в цвет "
-                   "свитера, спонсорские нашивки на груди сняты, рельеф свитера — чистая карта Legacy T=4.",
+                   "только для личного использования. Формы NHL 24 — только новыми строками (дом, выезд, третья; прежние "
+                   "формы EA и наши SEA/VGK не меняются). Решения: шнуровки нет (hastie 0), щит NHL −4 см, V-вставка в "
+                   "цвет свитера, спонсорские нашивки на груди сняты, рельеф свитера — чистая карта Legacy T=4.",
            "excluded": EXCLUDED}
     with open(os.path.join(PACK, "manifest.json"), "w", encoding="utf-8") as f:
         json.dump(man, f, ensure_ascii=False, indent=1)
@@ -723,10 +770,12 @@ def main():
         s.add_argument("--club", default="CHI")
         if c == "build":
             s.add_argument("--kits", default="", help="только эти формы (метки через запятую)")
+            s.add_argument("--reuse", action="store_true", help="готовые рендеры не перерисовывать (номер сменился)")
     s = sub.add_parser("all")
     s.add_argument("--group", default="", help="i/n — каждый n-й клуб, начиная с i (параллельный запуск)")
     s.add_argument("--skip-build", action="store_true", help="только упаковка уже собранного")
     s.add_argument("--kits", default="")
+    s.add_argument("--reuse", action="store_true", help="готовые рендеры не перерисовывать (номер сменился)")
     sub.add_parser("summary")
     s = sub.add_parser("common")
     s.add_argument("--pucks", default="CHI", help="шайбы каких клубов (коды через запятую или all)")
