@@ -108,6 +108,10 @@ def main():
             'affiliate_of': parent, 'renamed': not same, 'why': why,
             'logo_url': logos[tid], 'logo_file': f'game/work/roster-cache/ahl/ht/logos/{tid}{ext}',
         })
+    post = [s['slot'] for s in out if s['renamed'] and s['old']['fullname'] == s['name']]
+    if post:          # база уже после этапа ahl: «прежние» названия и аффилиаты были бы новыми — файл не трогаем
+        print(f'{dbp}: этап ahl к базе уже применён (слоты {post} — с новыми названиями), {OUT} не переписан')
+        return
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT + '.part', 'w', encoding='utf-8', newline='\n') as f:
         json.dump({'season': '2026/27', 'ht_season_id': SEASON_ID, 'db': os.path.relpath(dbp, REPO).replace(os.sep, '/'),
