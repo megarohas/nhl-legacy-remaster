@@ -1,0 +1,682 @@
+{
+ "_doc": "Клубы НХЛ 2026/27 в базе NHL Legacy: строка exhibitionteams (slot), наш abbrname, сокращение assets.nhle.com, artid, spotlight. variant — light/dark (SVG НХЛ), tm_boxes — рамки знака ™ в единицах viewBox (svgclean), keep — логотипы клуба уже нынешние (extra — что собрать всё же), ea_frame false — кадр EA не переносить (другой рисунок), frame — кадры вручную {s|w|c|tw: [zx, zy, zk], pb: [cx, cy, w, h]}, pill — цвета «таблетки» [низ, верх], ea_art — номер арта EA-образца, если не равен artid.",
+ "nhl": [
+  {
+   "slot": 0,
+   "abbr": "ANA",
+   "nhle": "ANA",
+   "artid": 0,
+   "spotlight": 0,
+   "name": "Anaheim Ducks",
+   "pill": [
+    "#A83300",
+    "#FC4C02"
+   ],
+   "ea_sets": []
+  },
+  {
+   "slot": 1,
+   "abbr": "WPG",
+   "nhle": "WPG",
+   "artid": 1,
+   "spotlight": 1,
+   "name": "Winnipeg Jets",
+   "pill": [
+    "#041E42",
+    "#004C97"
+   ],
+   "ea_sets": [
+    "s",
+    "c",
+    "w",
+    "tw",
+    "pb"
+   ]
+  },
+  {
+   "slot": 2,
+   "abbr": "BOS",
+   "nhle": "BOS",
+   "artid": 2,
+   "spotlight": 2,
+   "name": "Boston Bruins",
+   "pill": [
+    "#B07A00",
+    "#FFB81C"
+   ],
+   "ea_sets": [
+    "s",
+    "c",
+    "tw",
+    "pb"
+   ]
+  },
+  {
+   "slot": 3,
+   "abbr": "BUF",
+   "nhle": "BUF",
+   "artid": 3,
+   "spotlight": 3,
+   "name": "Buffalo Sabres",
+   "pill": [
+    "#001E55",
+    "#003087"
+   ],
+   "ea_sets": [
+    "s",
+    "c",
+    "w",
+    "tw",
+    "pb"
+   ]
+  },
+  {
+   "slot": 4,
+   "abbr": "CGY",
+   "nhle": "CGY",
+   "artid": 4,
+   "spotlight": 4,
+   "name": "Calgary Flames",
+   "pill": [
+    "#8B0010",
+    "#D2001C"
+   ],
+   "ea_sets": [
+    "s",
+    "c",
+    "w",
+    "tw",
+    "pb"
+   ]
+  },
+  {
+   "slot": 5,
+   "abbr": "CAR",
+   "nhle": "CAR",
+   "artid": 5,
+   "spotlight": 5,
+   "name": "Carolina Hurricanes",
+   "pill": [
+    "#8A0B19",
+    "#CE1126"
+   ],
+   "ea_sets": [
+    "s",
+    "c",
+    "w",
+    "tw",
+    "pb"
+   ]
+  },
+  {
+   "slot": 6,
+   "abbr": "CHI",
+   "nhle": "CHI",
+   "artid": 6,
+   "spotlight": 6,
+   "name": "Chicago Blackhawks",
+   "pill": [
+    "#8A0A1F",
+    "#CF0A2C"
+   ],
+   "ea_sets": [
+    "s",
+    "c",
+    "w",
+    "tw",
+    "pb"
+   ]
+  },
+  {
+   "slot": 7,
+   "abbr": "COL",
+   "nhle": "COL",
+   "artid": 7,
+   "spotlight": 7,
+   "name": "Colorado Avalanche",
+   "pill": [
+    "#45152A",
+    "#6F263D"
+   ],
+   "ea_sets": [
+    "s",
+    "c",
+    "w",
+    "tw",
+    "pb"
+   ]
+  },
+  {
+   "slot": 8,
+   "abbr": "CBJ",
+   "nhle": "CBJ",
+   "artid": 8,
+   "spotlight": 8,
+   "name": "Columbus Blue Jackets",
+   "pill": [
+    "#001433",
+    "#002654"
+   ],
+   "ea_sets": [
+    "s",
+    "c",
+    "w",
+    "tw",
+    "pb"
+   ]
+  },
+  {
+   "slot": 9,
+   "abbr": "DAL",
+   "nhle": "DAL",
+   "artid": 9,
+   "spotlight": 9,
+   "name": "Dallas Stars",
+   "pill": [
+    "#003D2A",
+    "#006847"
+   ],
+   "ea_sets": [
+    "s",
+    "c",
+    "w",
+    "tw",
+    "pb"
+   ]
+  },
+  {
+   "slot": 10,
+   "abbr": "DET",
+   "nhle": "DET",
+   "artid": 10,
+   "spotlight": 10,
+   "name": "Detroit Red Wings",
+   "pill": [
+    "#8F0B1C",
+    "#CE1126"
+   ],
+   "ea_sets": [
+    "s",
+    "c",
+    "w",
+    "tw",
+    "pb"
+   ]
+  },
+  {
+   "slot": 11,
+   "abbr": "EDM",
+   "nhle": "EDM",
+   "artid": 11,
+   "spotlight": 11,
+   "name": "Edmonton Oilers",
+   "pill": [
+    "#041E42",
+    "#0B3D7A"
+   ],
+   "ea_sets": [
+    "s",
+    "c",
+    "w",
+    "tw",
+    "pb"
+   ]
+  },
+  {
+   "slot": 12,
+   "abbr": "FLA",
+   "nhle": "FLA",
+   "artid": 12,
+   "spotlight": 12,
+   "name": "Florida Panthers",
+   "pill": [
+    "#7C0B1D",
+    "#C8102E"
+   ],
+   "ea_sets": [],
+   "frame": {
+    "s": [
+     0.45,
+     0.47,
+     1.8
+    ],
+    "c": [
+     0.47,
+     0.5,
+     1.15
+    ],
+    "w": [
+     0.42,
+     0.48,
+     2.0
+    ],
+    "tw": [
+     0.42,
+     0.45,
+     1.15
+    ]
+   }
+  },
+  {
+   "slot": 13,
+   "abbr": "LA",
+   "nhle": "LAK",
+   "artid": 13,
+   "spotlight": 13,
+   "name": "Los Angeles Kings",
+   "variant": "dark",
+   "tm_boxes": [
+    [
+     585,
+     495,
+     40,
+     28
+    ]
+   ],
+   "note": "тёмный вариант: белая кайма у чёрного щита (на тёмном меню, как у EA t13)",
+   "pill": [
+    "#26292C",
+    "#A2AAAD"
+   ],
+   "ea_sets": [],
+   "frame": {
+    "s": [
+     0.5,
+     0.4,
+     1.9
+    ],
+    "c": [
+     0.5,
+     0.45,
+     1.1
+    ],
+    "w": [
+     0.5,
+     0.42,
+     1.7
+    ],
+    "tw": [
+     0.45,
+     0.42,
+     1.25
+    ]
+   }
+  },
+  {
+   "slot": 14,
+   "abbr": "MIN",
+   "nhle": "MIN",
+   "artid": 14,
+   "spotlight": 14,
+   "name": "Minnesota Wild",
+   "pill": [
+    "#0C2E22",
+    "#154734"
+   ],
+   "ea_sets": [
+    "s",
+    "c",
+    "w",
+    "pb"
+   ]
+  },
+  {
+   "slot": 15,
+   "abbr": "MTL",
+   "nhle": "MTL",
+   "artid": 15,
+   "spotlight": 15,
+   "name": "Montreal Canadiens",
+   "pill": [
+    "#7A1420",
+    "#AF1E2D"
+   ],
+   "ea_sets": [
+    "s",
+    "c",
+    "w",
+    "tw",
+    "pb"
+   ]
+  },
+  {
+   "slot": 16,
+   "abbr": "NSH",
+   "nhle": "NSH",
+   "artid": 16,
+   "spotlight": 16,
+   "name": "Nashville Predators",
+   "pill": [
+    "#041E42",
+    "#144A8A"
+   ],
+   "ea_sets": [
+    "s",
+    "c",
+    "w",
+    "tw",
+    "pb"
+   ]
+  },
+  {
+   "slot": 17,
+   "abbr": "NJ",
+   "nhle": "NJD",
+   "artid": 17,
+   "spotlight": 17,
+   "name": "New Jersey Devils",
+   "pill": [
+    "#8A0B19",
+    "#CE1126"
+   ],
+   "ea_sets": [
+    "s",
+    "c",
+    "w",
+    "tw",
+    "pb"
+   ]
+  },
+  {
+   "slot": 18,
+   "abbr": "NYI",
+   "nhle": "NYI",
+   "artid": 18,
+   "spotlight": 18,
+   "name": "New York Islanders",
+   "pill": [
+    "#003366",
+    "#00539B"
+   ],
+   "ea_sets": [
+    "s",
+    "c",
+    "w",
+    "tw",
+    "pb"
+   ]
+  },
+  {
+   "slot": 19,
+   "abbr": "NYR",
+   "nhle": "NYR",
+   "artid": 19,
+   "spotlight": 19,
+   "name": "New York Rangers",
+   "pill": [
+    "#002066",
+    "#0038A8"
+   ],
+   "ea_sets": [
+    "s",
+    "c",
+    "w",
+    "tw",
+    "pb"
+   ]
+  },
+  {
+   "slot": 20,
+   "abbr": "OTT",
+   "nhle": "OTT",
+   "artid": 20,
+   "spotlight": 20,
+   "name": "Ottawa Senators",
+   "pill": [
+    "#8A1420",
+    "#C52032"
+   ],
+   "ea_sets": [],
+   "frame": {
+    "s": [
+     0.74,
+     0.5,
+     1.5
+    ],
+    "c": [
+     0.72,
+     0.52,
+     1.1
+    ],
+    "w": [
+     0.75,
+     0.48,
+     1.8
+    ],
+    "tw": [
+     0.72,
+     0.5,
+     1.15
+    ]
+   }
+  },
+  {
+   "slot": 21,
+   "abbr": "PHI",
+   "nhle": "PHI",
+   "artid": 21,
+   "spotlight": 21,
+   "name": "Philadelphia Flyers",
+   "pill": [
+    "#A33000",
+    "#F74902"
+   ],
+   "ea_sets": [
+    "s",
+    "c",
+    "w",
+    "tw",
+    "pb"
+   ]
+  },
+  {
+   "slot": 22,
+   "abbr": "UTA",
+   "nhle": "UTA",
+   "artid": 104,
+   "spotlight": 48,
+   "name": "Utah Mammoth",
+   "keep": true,
+   "tm_boxes": [
+    [
+     680,
+     510,
+     26,
+     18
+    ]
+   ],
+   "note": "логотипы уже нынешние (агент utah, арт 104): SVG = UTA_light без ™, пиксели те же"
+  },
+  {
+   "slot": 23,
+   "abbr": "PIT",
+   "nhle": "PIT",
+   "artid": 23,
+   "spotlight": 23,
+   "name": "Pittsburgh Penguins",
+   "pill": [
+    "#A87800",
+    "#FCB514"
+   ],
+   "ea_sets": [
+    "s",
+    "c",
+    "w",
+    "tw",
+    "pb"
+   ]
+  },
+  {
+   "slot": 24,
+   "abbr": "STL",
+   "nhle": "STL",
+   "artid": 24,
+   "spotlight": 24,
+   "name": "St. Louis Blues",
+   "pill": [
+    "#041E42",
+    "#002F87"
+   ],
+   "ea_sets": [
+    "s",
+    "c",
+    "w",
+    "tw",
+    "pb"
+   ]
+  },
+  {
+   "slot": 25,
+   "abbr": "SJ",
+   "nhle": "SJS",
+   "artid": 25,
+   "spotlight": 25,
+   "name": "San Jose Sharks",
+   "pill": [
+    "#004450",
+    "#006D75"
+   ],
+   "ea_sets": [
+    "s",
+    "c",
+    "w",
+    "tw",
+    "pb"
+   ]
+  },
+  {
+   "slot": 26,
+   "abbr": "TB",
+   "nhle": "TBL",
+   "artid": 26,
+   "spotlight": 26,
+   "name": "Tampa Bay Lightning",
+   "variant": "dark",
+   "note": "тёмный вариант: белая молния, как у EA t26",
+   "pill": [
+    "#00205B",
+    "#0A4FA0"
+   ],
+   "ea_sets": [
+    "s",
+    "c",
+    "w",
+    "tw",
+    "pb"
+   ]
+  },
+  {
+   "slot": 27,
+   "abbr": "TOR",
+   "nhle": "TOR",
+   "artid": 27,
+   "spotlight": 27,
+   "name": "Toronto Maple Leafs",
+   "pill": [
+    "#00205B",
+    "#1C56B0"
+   ],
+   "ea_sets": [],
+   "frame": {
+    "s": [
+     0.5,
+     0.64,
+     2.3
+    ],
+    "c": [
+     0.5,
+     0.6,
+     1.25
+    ],
+    "w": [
+     0.5,
+     0.62,
+     2.0
+    ],
+    "tw": [
+     0.45,
+     0.6,
+     1.4
+    ]
+   }
+  },
+  {
+   "slot": 28,
+   "abbr": "VAN",
+   "nhle": "VAN",
+   "artid": 28,
+   "spotlight": 28,
+   "name": "Vancouver Canucks",
+   "pill": [
+    "#00502A",
+    "#00843D"
+   ],
+   "ea_sets": [
+    "s",
+    "c",
+    "pb"
+   ]
+  },
+  {
+   "slot": 29,
+   "abbr": "WSH",
+   "nhle": "WSH",
+   "artid": 29,
+   "spotlight": 29,
+   "name": "Washington Capitals",
+   "pill": [
+    "#7C0B1D",
+    "#C8102E"
+   ],
+   "ea_sets": [
+    "c",
+    "tw",
+    "pb"
+   ],
+   "frame": {
+    "s": [
+     0.5,
+     0.52,
+     1.75
+    ]
+   },
+   "note": "у EA в s — орёл (другой логотип); у нас — надпись Capitals"
+  },
+  {
+   "slot": 30,
+   "abbr": "SEA",
+   "nhle": "SEA",
+   "artid": 100,
+   "spotlight": 46,
+   "name": "Seattle Kraken",
+   "keep": true,
+   "extra": [
+    "pb",
+    "tw"
+   ],
+   "note": "логотипы уже нынешние (арт 100, SEA_light.svg тот же); у клуба нет pb и значка ленты",
+   "pill": [
+    "#355464",
+    "#99D9D9"
+   ]
+  },
+  {
+   "slot": 31,
+   "abbr": "VGK",
+   "nhle": "VGK",
+   "artid": 101,
+   "spotlight": 47,
+   "name": "Vegas Golden Knights",
+   "keep": true,
+   "extra": [
+    "pb",
+    "tw"
+   ],
+   "note": "логотипы уже нынешние (арт 101, VGK_light.svg тот же); у клуба нет pb и значка ленты",
+   "pill": [
+    "#2B343B",
+    "#5E6B74"
+   ]
+  }
+ ]
+}
