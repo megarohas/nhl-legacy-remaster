@@ -153,15 +153,82 @@ POSE = os.path.join(REPO, "game", "work", "legacy-data", "fepose", "pose.bin")  
 _POSE = []
 
 
-def fe_preview_ea(jersey_png):
-    """Превью меню как у EA (манекен, руки опущены, свет и кадр EA): модель позы tools/fepose.py по развёртке свитера."""
-    if TOOLS not in sys.path:
-        sys.path.insert(0, TOOLS)
-    import fepose
+def _pose():
     if not _POSE:
-        _POSE.append(fepose.load_model(POSE))
-    tex = np.asarray(Image.open(jersey_png).convert("RGB"))
-    return Image.fromarray(fepose.render(_POSE[0], tex), "RGBA")
+        if TOOLS not in sys.path:
+            sys.path.insert(0, TOOLS)
+        import fepose
+        m = fepose.load_model(POSE)
+        U = np.full((m["h"], m["w"]), np.nan)
+        V = np.full((m["h"], m["w"]), np.nan)
+        U[m["ys"], m["xs"]], V[m["ys"], m["xs"]] = m["u"], m["v"]
+        # выбросы карты UV (одиночные пиксели, не похожие ни на одного соседа: подгонка по корреляции там ошиблась —
+        # на новых рисунках дают крапины у ворота, плеч и боков) → медиана соседей; 2 прохода
+        for _ in range(2):
+            nb = [(np.roll(np.roll(U, dy, 0), dx, 1), np.roll(np.roll(V, dy, 0), dx, 1))
+                  for dy in (-1, 0, 1) for dx in (-1, 0, 1) if dy or dx]
+            su, sv = np.stack([a for a, _b in nb]), np.stack([b for _a, b in nb])
+            close = (np.abs(su - U[None]) + np.abs(sv - V[None]) < 0.012) & np.isfinite(su)
+            iso = np.isfinite(U) & (close.sum(0) < 2) & (np.isfinite(su).sum(0) >= 3)
+            with np.errstate(all="ignore"):
+                import warnings
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", RuntimeWarning)
+                    mu, mv = np.nanmedian(su, 0), np.nanmedian(sv, 0)
+            U, V = np.where(iso, mu, U), np.where(iso, mv, V)
+        m["U"], m["V"] = U, V
+        m["u"], m["v"] = U[m["ys"], m["xs"]], V[m["ys"], m["xs"]]
+        _POSE.append(m)
+    return _POSE[0]
+
+
+def _uv_at(m, y, x, jump=0.04, home=None):
+    """UV в дробной точке превью: билинейно по соседним пикселям свитера той же «островной» области развёртки
+    (сосед с прыжком UV > jump — другой остров, не смешивается); нет соседей — UV центра пикселя."""
+    U, V = m["U"], m["V"]
+    H, W = U.shape
+    yi, xi = np.round(y).astype(int), np.round(x).astype(int)
+    uc, vc = U[np.clip(yi, 0, H - 1), np.clip(xi, 0, W - 1)], V[np.clip(yi, 0, H - 1), np.clip(xi, 0, W - 1)]
+    if home is not None:  # ближайший пиксель — не свитер: опора — UV самого пикселя превью
+        bad = ~np.isfinite(uc) | (np.abs(uc - home[0]) >= jump) | (np.abs(vc - home[1]) >= jump)
+        uc, vc = np.where(bad, home[0], uc), np.where(bad, home[1], vc)
+    y0, x0 = np.floor(y).astype(int), np.floor(x).astype(int)
+    fy, fx = y - y0, x - x0
+    su = np.zeros_like(y)
+    sv = np.zeros_like(y)
+    sw = np.zeros_like(y)
+    for dy, wy in ((0, 1 - fy), (1, fy)):
+        for dx, wx in ((0, 1 - fx), (1, fx)):
+            yy, xx = np.clip(y0 + dy, 0, H - 1), np.clip(x0 + dx, 0, W - 1)
+            u, v = U[yy, xx], V[yy, xx]
+            ok = np.isfinite(u) & (np.abs(u - uc) < jump) & (np.abs(v - vc) < jump)
+            w = wy * wx * ok
+            su += np.where(ok, u, 0) * w
+            sv += np.where(ok, v, 0) * w
+            sw += w
+    good = sw > 1e-6
+    return np.where(good, su / np.maximum(sw, 1e-9), uc), np.where(good, sv / np.maximum(sw, 1e-9), vc)
+
+
+def fe_preview_ea(jersey_png, ss=4, foot=1.25):
+    """Превью меню как у EA (манекен, руки опущены, свет и кадр EA): модель позы tools/fepose.py по развёртке свитера.
+    Сглаживание: на пиксель превью ss×ss точек (UV между пикселями — билинейно в пределах острова развёртки), цвет —
+    среднее по развёртке 1024², затем gain·цвет + bias модели (как у EA: края полос и нашивок мягкие, без лесенки)."""
+    m = _pose()
+    tex = np.asarray(Image.open(jersey_png).convert("RGB")).astype(np.float64)
+    ys, xs = m["ys"].astype(np.float64), m["xs"].astype(np.float64)
+    acc = np.zeros((len(ys), 3))
+    offs = ((np.arange(ss) + 0.5) / ss - 0.5) * foot  # foot > 1 — шире пикселя (мягче, как у EA)
+    for oy in offs:
+        for ox in offs:
+            u, v = _uv_at(m, ys + oy, xs + ox, home=(m["u"], m["v"]))
+            acc += kit3d.sample_bilinear(tex, u, v)[:, :3]
+    c = acc / (ss * ss)
+    col = np.clip(m["gain"] * c + m["bias"], 0, 255)
+    out = m["base"].copy()
+    out[m["ys"], m["xs"], :3] = np.round(col).astype(np.uint8)
+    out[m["ys"], m["xs"], 3] = m["alpha"]
+    return Image.fromarray(out, "RGBA")
 
 
 def fe_preview(jersey_mesh, tex, size=256):
@@ -641,16 +708,18 @@ def cmd_fe_sheet(a):
         fe = os.path.join(OUTP, f"{code}_{label}", "fe.png")
         if os.path.exists(fe):
             new.append((f"NHL 24 {label} 1_{art}_{variant}", Image.open(fe).convert("RGBA")))
+    z = a.zoom
     cols = max(len(ea), len(new))
-    S = Image.new("RGB", (20 + cols * 276, 60 + 2 * 300), (24, 24, 28))
+    cw, chh = 256 * z + 20, 256 * z + 44
+    S = Image.new("RGB", (20 + cols * cw, 60 + 2 * chh), (24, 24, 28))
     d = ImageDraw.Draw(S)
-    d.text((12, 12), f"{code}: превью меню — сверху формы EA, снизу новые NHL 24 (модель позы EA)", fill=(240, 240, 240),
-           font=f20)
+    d.text((12, 12), f"{code}: превью меню ×{z} — сверху формы EA, снизу новые NHL 24 (поза EA, сглаживание 4×4)",
+           fill=(240, 240, 240), font=f20)
     for r, items in enumerate((ea, new)):
         for i, (lbl, im) in enumerate(items):
-            x, y = 12 + i * 276, 50 + r * 300
+            x, y = 12 + i * cw, 50 + r * chh
             bg = Image.new("RGBA", im.size, (40, 40, 46, 255))
-            S.paste(Image.alpha_composite(bg, im).convert("RGB"), (x, y + 22))
+            S.paste(Image.alpha_composite(bg, im).convert("RGB").resize((256 * z, 256 * z), Image.NEAREST), (x, y + 22))
             d.text((x, y), lbl, fill=(220, 220, 220), font=f16)
     out = os.path.join(NHL24, "compare", f"{code.lower()}_fe_ea_vs_new.png")
     S.save(out)
@@ -854,6 +923,7 @@ def main():
     s.add_argument("--club", default="CHI", help="код клуба, коды через запятую или all")
     s = sub.add_parser("fe-sheet")
     s.add_argument("--club", default="CHI")
+    s.add_argument("--zoom", type=int, default=2, help="увеличение превью на листе")
     s = sub.add_parser("common")
     s.add_argument("--pucks", default="CHI", help="шайбы каких клубов (коды через запятую или all)")
     s.add_argument("--no-unfade", dest="unfade", action="store_false", help="рекламу на льду — как в NHL 24 (бледную)")
