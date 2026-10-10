@@ -307,63 +307,33 @@ NECK = (-0.21, 0.21, 1.42, 1.76)              # кадр «горловина к
 
 
 def render(mesh, tex, view="front", width=520, bg=(46, 46, 52), frame=FRAME, ss=1):
+    """Плоский рендер (свет от камеры + заполняющий), растеризация вида кешируется (_view_raster)."""
     if ss > 1:
         big = render(mesh, tex, view, width * ss, bg, frame, 1)
         return big.resize((width, big.size[1] // ss), Image.LANCZOS)
     x0, x1, y0, y1 = frame
     height = int(round(width * (y1 - y0) / (x1 - x0)))
-    P = mesh["pos"].copy()
-    N = mesh["nrm"].copy()
-    if view == "back":  # поворот на 180° вокруг Y
-        P[:, 0] *= -1
-        P[:, 2] *= -1
-        N[:, 0] *= -1
-        N[:, 2] *= -1
-    sx = (P[:, 0] - x0) / (x1 - x0) * width
-    sy = (y1 - P[:, 1]) / (y1 - y0) * height
-    z = P[:, 2]
-    zbuf = np.full((height, width), -np.inf)
     out = np.zeros((height, width, 3))
     out[:] = bg
+    tid, bw = _view_raster(mesh, view, width, height, frame)
+    py, px = np.nonzero(tid >= 0)
+    if len(py) == 0:
+        return Image.fromarray(out.astype(np.uint8))
+    N = _rot(mesh["nrm"], view)
     UV = mesh["uv"]
-    for a, b, c in mesh["tri"]:
-        xa, xb, xc = sx[a], sx[b], sx[c]
-        ya, yb, yc = sy[a], sy[b], sy[c]
-        ix0 = max(int(np.floor(min(xa, xb, xc))), 0)
-        ix1 = min(int(np.ceil(max(xa, xb, xc))), width - 1)
-        iy0 = max(int(np.floor(min(ya, yb, yc))), 0)
-        iy1 = min(int(np.ceil(max(ya, yb, yc))), height - 1)
-        if ix1 < ix0 or iy1 < iy0:
-            continue
-        den = (yb - yc) * (xa - xc) + (xc - xb) * (ya - yc)
-        if abs(den) < 1e-12:
-            continue
-        xs, ys = np.meshgrid(np.arange(ix0, ix1 + 1) + 0.5, np.arange(iy0, iy1 + 1) + 0.5)
-        l0 = ((yb - yc) * (xs - xc) + (xc - xb) * (ys - yc)) / den
-        l1 = ((yc - ya) * (xs - xc) + (xa - xc) * (ys - yc)) / den
-        l2 = 1 - l0 - l1
-        m = (l0 >= 0) & (l1 >= 0) & (l2 >= 0)
-        if not m.any():
-            continue
-        zz = (l0 * z[a] + l1 * z[b] + l2 * z[c])[m]
-        py = (ys[m] - 0.5).astype(int)
-        px = (xs[m] - 0.5).astype(int)
-        closer = zz > zbuf[py, px]
-        if not closer.any():
-            continue
-        py, px = py[closer], px[closer]
-        w0, w1, w2 = l0[m][closer], l1[m][closer], l2[m][closer]
-        zbuf[py, px] = zz[closer]
-        u = w0 * UV[a, 0] + w1 * UV[b, 0] + w2 * UV[c, 0]
-        v = w0 * UV[a, 1] + w1 * UV[b, 1] + w2 * UV[c, 1]
-        col = sample_bilinear(tex, u, v)[:, :3]
-        n = _unit(w0[:, None] * N[a] + w1[:, None] * N[b] + w2[:, None] * N[c])
-        lam = np.clip((n * LIGHT).sum(-1), 0, 1)
-        fill = np.clip((n * FILL).sum(-1), 0, 1)
-        rim = np.clip(1 - np.abs(n[:, 2]), 0, 1) ** 3
-        inner = n[:, 2] < -0.05  # изнанка (видна в горловине)
-        shade = np.where(inner, 0.32, 0.30 + 0.70 * lam + 0.22 * fill + 0.10 * rim)
-        out[py, px] = col * shade[:, None]
+    tr = mesh["tri"][tid[py, px]]
+    a, b, c = tr[:, 0], tr[:, 1], tr[:, 2]
+    w0, w1, w2 = bw[py, px, 0], bw[py, px, 1], bw[py, px, 2]
+    u = w0 * UV[a, 0] + w1 * UV[b, 0] + w2 * UV[c, 0]
+    v = w0 * UV[a, 1] + w1 * UV[b, 1] + w2 * UV[c, 1]
+    col = sample_bilinear(tex, u, v)[:, :3]
+    n = _unit(w0[:, None] * N[a] + w1[:, None] * N[b] + w2[:, None] * N[c])
+    lam = np.clip((n * LIGHT).sum(-1), 0, 1)
+    fill = np.clip((n * FILL).sum(-1), 0, 1)
+    rim = np.clip(1 - np.abs(n[:, 2]), 0, 1) ** 3
+    inner = n[:, 2] < -0.05  # изнанка (видна в горловине)
+    shade = np.where(inner, 0.32, 0.30 + 0.70 * lam + 0.22 * fill + 0.10 * rim)
+    out[py, px] = col * shade[:, None]
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))
 
 
