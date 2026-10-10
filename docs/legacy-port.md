@@ -89,7 +89,22 @@ S:\Claude\megarohas_nhl13\legacy-port\build.cmd win-amd64-relwithdebinfo
   (Release, свой SDK). Настройки — `nhllegacy.toml` рядом с exe (шаблон `nhllegacy.example.toml`;
   `build.cmd` кладёт его, если своего нет): игра — `game/other/legacy/disc`, сейвы и `cache:` —
   `legacy-port/userdata` (своя папка, не `game/userdata` NHL 13), лог — `legacy-port/out/game.log`.
-  **С 09.10 (18:24) под ярлыком — сборка №7:** exe cc0e2fd3, pdb f20b6cb1 (код = 317c516: + франшиза за Вегас после
+  **С 10.10 (05:55) под ярлыком — сборка №8:** exe 5f740c87, pdb 9ab1a78b. Код = 253729a:
+  - очередь команд AI на 32 (4513934);
+  - страховка сима матча `nhl_sim_guard` (по умолчанию вкл.), без ложного срабатывания на игроке с индексом 0;
+  - предупреждение при загрузке франшизы с другим числом клубов АХЛ;
+  - разведка драфта `nhl_drafttrace` (по умолчанию выкл.).
+
+  DLL и snap — как у №5–№7, `nhllegacy.toml` (93020cf4) не менялся. Перед установкой проверено на копии его
+  userdata (`legacy-port/userdata-ucheck`, база 59b03a68 и `draft_roster.db` 838ca6a0):
+  - новая франшиза за Сиэтл со старта «NHL Entry Draft», сейв при создании — 49 таблиц;
+  - драфт 2026 — 224 выбора, 32 клуба;
+  - неделя сима 23 → 30.06, сейв verify ok;
+  - память GPU 8301 МГц, падений и артефактов нет.
+
+  Откат на №7 — файлы из `backup-20261010-cc0e2fd3/` скопировать обратно (игра закрыта). В `cache:` с 10.10 (05:17)
+  база legacy-data 59b03a68 и `draft_roster.db` из 10 таблиц (838ca6a0, раздел «Старт «NHL Entry Draft»…»).
+  Сборка №7 (09.10, 18:24): exe cc0e2fd3, pdb f20b6cb1 (код = 317c516: + франшиза за Вегас после
   загрузки снова за Вегас), DLL и snap — как у №5/№6. `nhllegacy.toml` (93020cf4) не менялся. Откат на №6 — файлы из
   `backup-20261009-5ddd1ec9/` скопировать обратно (игра закрыта). В `cache:` с 16:05 — ещё `db/draft_roster.db` (старт
   «NHL Entry Draft» на наших составах; откат — удалить файл, [legacy-data.md](legacy-data.md)).
