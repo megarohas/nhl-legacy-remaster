@@ -106,6 +106,8 @@ DEFAULT_KITS = {'home': 0, 'away': 1}          # новые формы по ум
 # «Home (EA)» / «Away (EA)» (окончательное правило пользователя 10.10; ТЕСТ CHI3B)
 DEFAULT_LOC = {'home': 0, 'away': 1}
 OLD_DEFAULT_LABELS = {0: 'Home (EA)', 1: 'Away (EA)'}   # прежняя форма по умолчанию: islightcolor → подпись
+# прежняя форма по умолчанию не из архивов EA (наши SEA/VGK czkit: 1_100_0/1, 1_101_0/1) — «(old)» (координатор 10.10)
+OLD_OURS_LABELS = {0: 'Home (old)', 1: 'Away (old)'}
 
 
 def label_of(kit, man_label=None):
@@ -399,7 +401,9 @@ def set_defaults(db, rows, new, n_before):
         db.set(T, 'locstring', o['row'], 6)
         db.set(T, 'isdefault', r_new, 1)
         key = f"Vintage_{o['style']}_{o['teamartid']}_{o['variant']}"
-        labels[key] = OLD_DEFAULT_LABELS[light]
+        jersey = f"rendering/jersey/texlib_{o['style']}_{o['teamartid']}_{o['variant']}.rx2"
+        ea = os.path.exists(os.path.join(REF, 'nocacherender', *jersey.split('/')))   # свитер в архивах EA — форма EA
+        labels[key] = (OLD_DEFAULT_LABELS if ea else OLD_OURS_LABELS)[light]
         out.append(f"{code} {kit}: по умолчанию 1_{db.get(T, 'teamartid', r_new)}_{db.get(T, 'variant', r_new)} "
                    f"(строка {r_new}, locstring {db.get(T, 'locstring', r_new)}) вместо {o['style']}_{o['teamartid']}_"
                    f"{o['variant']} (строка {o['row']}: isdefault 0, locstring {o['locstring']} → 6, «{labels[key]}»)")
