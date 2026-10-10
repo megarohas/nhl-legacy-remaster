@@ -524,6 +524,57 @@ NHL 24.
 - Сейвы франшиз в userdata пользователя — агентские, их не чинили. Ремонт сейвов, если понадобится, —
   `fix_flagbit.py --save` (раздел выше).
 
+## У пользователя (10.10.2026, 07:00): пилот CHI из пакета NHL 24
+
+Поставлено по слову координатора (06:56): пользователь проверит пилот сам. Ставился только пилот CHI: три формы CHI,
+центр льда CHI, лёд и реклама, шайба. Юта, ветераны и другие клубы не ставились.
+- **Пакет.** `game/work/nhl24/out/pack`, manifest a2972bab, 171 файл. В нём превью форм в позе EA со сглаживанием
+  (CHI3c).
+- **Сборка.** Накладка собрана на базе пользователя в `game/work/legacy-data/w-user` (out-ahl32 59b03a68, без Юты;
+  `tmp/make_w_user.py`): `LEGACY_DATA_WORK=…/w-user python tools/legacy_data/nhl24.py build`. База и локализация
+  накладки — те же, что в копии `ud-chi3b`.
+- **Формы CHI.**
+  - home `1_6_14` (#11) и away `1_6_15` (#12): по умолчанию, `locstring` 0 и 1, `isdefault` 1;
+  - three `1_6_6` (#13): «Third (NHL 24)»;
+  - EA `1_6_0` и `1_6_1`: «Home (EA)» и «Away (EA)», `locstring` 6, `isdefault` 0.
+- **Установка.** Через `tmp/user_nhl24_install.py` (backup → install → check). Внутри — такая команда:
+  `CACHE=legacy-port/userdata/cache/guest LEGACY_DATA_WORK=…/w-user LEGACY_DATA_STATE=…/game/work/legacy-data
+  bash tools/legacy_data/install-legacy-data.sh --ahl32 --nhl24`.
+  `LEGACY_DATA_STATE` здесь обязателен: без него состояние установщика (installed.txt, флаги) легло бы в w-user, а не
+  к прежней установке пользователя.
+- **Игра.** Игра пользователя была закрыта. Шёл только тест legacy-port с `user_data_root` = `ud-chi3b`.
+  `nhllegacy.toml` и exe не трогались.
+- **Что изменилось в `cache:` пользователя.** Заменены 2 файла, добавлен 171 файл пакета, остальное не тронуто:
+
+  | файл | md5 | было |
+  |---|---|---|
+  | `db/nhlng.db` | 9ad0695c (out-nhl24-ahl32) | 59b03a68 |
+  | `fe/loc/NHL_ENG_US.db` | c7bcfd41 (подписи CHI) | 0973bb47 |
+  | `db/draft_roster.db` | 838ca6a0 (без изменений) | — |
+  | `db/nhlng-meta.xml` | 8ae5e145 (без изменений) | — |
+
+  `installed.txt` — 3081 путь (было 2910), `install-flags.txt` — `--ahl32 --nhl24`.
+- **Проверка.**
+  - До установки — на копии (`tmp/check_nhl24.py` → `check-nhl24`): install → 171 новый файл и 2 замены;
+    `nhl24.py verify` — 0 расхождений; uninstall `--nhl24` — `cache:` байт в байт как у пользователя, installed.txt —
+    тот же набор.
+  - После установки у пользователя: изменились ровно база и локализация, новые файлы — ровно файлы пакета.
+    `nhl24.py verify` на его `cache:` — 171 файл, расхождений 0, база 9ad0695c.
+- **Бэкап:** `game/work/legacy-data/backup-cache/user-20261010-070028/`. В нём:
+  - `db/nhlng.db` (59b03a68) и `fe/loc/NHL_ENG_US.db` (0973bb47);
+  - `state/installed.txt` и `state/install-flags.txt`;
+  - `md5.txt`, `snapshot.json` (размеры и время всех файлов `cache:` до установки) и `added.txt` (171 добавленный
+    файл).
+- **Откат** (при закрытой игре) — той же командой, что проверена на копии:
+  `CACHE=legacy-port/userdata/cache/guest LEGACY_DATA_WORK=…/w-user LEGACY_DATA_STATE=…/game/work/legacy-data
+  bash tools/legacy_data/uninstall-legacy-data.sh --nhl24`.
+  - `LEGACY_DATA_WORK=w-user` обязателен. Снятие накладки — это полная переустановка без неё, и без этой переменной
+    она возьмёт `game/work/legacy-data/out`, где уже Юта и ветераны.
+  - Ручной путь: вернуть 2 файла и `state/` из бэкапа, а файлы из `added.txt` убрать в Корзину.
+- **Шлемы новых форм — без исправления, как в `ud-chi3b`.** Строки экипировки новых вариантов в базе есть, но игра по
+  ним не выбирает. Поэтому у #11 и #13 шлем белый, а должен быть чёрный; у #12 белый — так и задумано. Исправление
+  пойдёт следующей установкой, сначала его проверят на копии (`ud-chi3c`).
+
 ## Пакет NHL 24: формы, лёд, шлемы, шайба, клюшки (накладка `out-nhl24`, 09.10.2026)
 
 Пакет готовит агент nhl24 (`tools/fb/pack.py`, [nhl24-uniforms.md](nhl24-uniforms.md) §8). legacy-data сверяет
