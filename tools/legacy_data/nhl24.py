@@ -98,6 +98,13 @@ LABELS = {'home': 'Home (NHL 24)', 'away': 'Away (NHL 24)', 'three': 'Third (NHL
           'n90_away': '1990s Away', 'n90_three': '1990s Alternate'}
 KIT_TYPES = ('jersey', 'name', 'pant', 'sock', 'fe', 'helmet')   # файлы комплекта: только новых номеров (правило 05:50)
 DEFAULT_KITS = {'home': 0, 'away': 1}          # новые формы по умолчанию (правило 05:53): форма → islightcolor
+# ТЕСТ CHI3 (legacy-port, 10.10 06:22): игра ищет форму по умолчанию дома по isdefault + locstring 0, в гостях — по
+# isdefault + locstring 1 (у всех 222 команд EA строки по умолчанию — только loc 0 и 1, islightcolor любой); с locstring 6
+# новые формы по умолчанию не находились. Поэтому новые home/away — locstring 0/1 (подпись — стандартная Home/Away), а
+# прежние строки по умолчанию — locstring 6 со своей подписью (проверка механизма — ТЕСТ CHI3B; подписи окончательно —
+# после ответа пользователя)
+DEFAULT_LOC = {'home': 0, 'away': 1}
+OLD_DEFAULT_LABELS = {0: 'Home (EA)', 1: 'Away (EA)'}   # прежняя форма по умолчанию: islightcolor → подпись
 
 
 def label_of(kit, man_label=None):
@@ -341,13 +348,13 @@ def build_db(base, man, reg, files):
             helmet = HELMET.format(a=art, v=k['variant']) in files
             for f, v in (('teamid', team), ('teamartid', art), ('style', 1), ('variant', k['variant']),
                          ('fevariant', k['fevariant']), ('jerseyindex', k['jerseyindex']),
-                         ('locstring', k['locstring']), ('isdefault', 0), ('islockable', 0), ('hastie', 0),
+                         ('locstring', final_loc(k)), ('isdefault', 0), ('islockable', 0), ('hastie', 0),
                          ('helmetlogo', int(helmet)), ('helmetnumbers', 1), ('islightcolor', k['islightcolor'])):
                 db.set(T, f, n + i, v)
             added.append(f"{k['club']} {k['kit']} 1_{art}_{k['variant']} ji{k['jerseyindex']} "
-                         f"loc{k['locstring']} light{k['islightcolor']} helmetlogo{int(helmet)} (строка {n + i})")
+                         f"loc{final_loc(k)} light{k['islightcolor']} helmetlogo{int(helmet)} (строка {n + i})")
     helmets = add_helmets(db, rows, new)
-    defaults = set_defaults(db, rows, new, n_before)
+    defaults, old_labels = set_defaults(db, rows, new, n_before)
     import draft_roster                               # накладка не должна менять таблицы draft_roster.db (он — из out)
     base_db = open_db(base)[1]
     for name in draft_roster.KEEP:
@@ -359,18 +366,24 @@ def build_db(base, man, reg, files):
     out = bytes(db.d)
     rep = {'base': db_path, 'base_md5': md5(db_path), 'md5': hashlib.md5(out).hexdigest(),
            'hastie_zeroed': len(tie), 'rows_added': added, 'helmets': helmets, 'defaults': defaults}
-    loc, labels = build_loc(base, new)
+    loc, labels = build_loc(base, new, old_labels)
     if loc is not None:
         rep.update(loc_base_md5=md5(os.path.join(base, *LOC.split('/'))), loc_md5=hashlib.md5(loc).hexdigest(),
                    labels=labels)
     return (out, loc), rep
 
 
+def final_loc(k):
+    """locstring новой строки: у новых home/away (они — по умолчанию) — 0/1, у остальных — из реестра (6)."""
+    return DEFAULT_LOC.get(k['kit'], k['locstring'])
+
+
 def set_defaults(db, rows, new, n_before):
-    """Правило 10.10 (05:53): по умолчанию — формы NHL 24. Новый дом (тёмный) и выезд (светлый) — isdefault 1, прежняя
-    строка по умолчанию того же цвета у клуба (EA; у SEA/VGK — наши 1_100_0/1, 1_101_0/1) — isdefault 0. Нового дома
-    (выезда) нет — у клуба остаётся прежний. Новые строки — в [n_before, конец). → [описание]."""
-    out = []
+    """Правило 10.10 (05:53): по умолчанию — формы NHL 24. Новый дом (тёмный) и выезд (светлый) — isdefault 1 (их
+    locstring 0/1 — final_loc), прежняя строка по умолчанию того же цвета у клуба (EA; у SEA/VGK — наши 1_100_0/1,
+    1_101_0/1) — isdefault 0 и locstring 6 с подписью «Home (EA)» / «Away (EA)» (ТЕСТ CHI3). Нового дома (выезда) нет — у
+    клуба остаётся прежний. Новые строки — в [n_before, конец). → ([описание], {ключ Vintage_…: подпись})."""
+    out, labels = [], {}
     added = {(k['club'], k['kit']): n_before + i for i, k in enumerate(new)}
     for (code, kit), r_new in sorted(added.items(), key=lambda kv: kv[1]):
         if kit not in DEFAULT_KITS:
@@ -382,10 +395,14 @@ def set_defaults(db, rows, new, n_before):
             sys.exit(f'{code}: прежних форм по умолчанию с islightcolor {light} — {len(old)}, ждал одну')
         o = old[0]
         db.set(T, 'isdefault', o['row'], 0)
+        db.set(T, 'locstring', o['row'], 6)
         db.set(T, 'isdefault', r_new, 1)
+        key = f"Vintage_{o['style']}_{o['teamartid']}_{o['variant']}"
+        labels[key] = OLD_DEFAULT_LABELS[light]
         out.append(f"{code} {kit}: по умолчанию 1_{db.get(T, 'teamartid', r_new)}_{db.get(T, 'variant', r_new)} "
-                   f"(строка {r_new}) вместо {o['style']}_{o['teamartid']}_{o['variant']} (строка {o['row']}, isdefault 0)")
-    return out
+                   f"(строка {r_new}, locstring {db.get(T, 'locstring', r_new)}) вместо {o['style']}_{o['teamartid']}_"
+                   f"{o['variant']} (строка {o['row']}: isdefault 0, locstring {o['locstring']} → 6, «{labels[key]}»)")
+    return out, labels
 
 
 def add_helmets(db, rows, new):
@@ -421,12 +438,14 @@ def add_helmets(db, rows, new):
     return done
 
 
-def build_loc(base, new):
-    """Подписи новых форм с locstring 6 в локализации накладки (ключ Vintage_1_<арт>_<вариант>). → (байты | None,
-    {ключ: текст}); подписей нет — None (локализация накладкой не ставится)."""
+def build_loc(base, new, extra=None):
+    """Подписи новых форм с locstring 6 (ключ Vintage_1_<арт>_<вариант>) и прежних форм по умолчанию, ставших
+    locstring 6 (extra), в локализации накладки. → (байты | None, {ключ: текст}); подписей нет — None (локализация
+    накладкой не ставится)."""
     want = {f"Vintage_1_{k['art']}_{k['variant']}": label_of(k['kit'], k.get('label'))
-            for k in new if k['locstring'] == 6}
+            for k in new if final_loc(k) == 6}
     want = {key: text for key, text in want.items() if text}
+    want.update(extra or {})
     if not want:
         return None, {}
     src = os.path.join(base, *LOC.split('/'))
