@@ -1,0 +1,135 @@
+# Фэнтези-драфт на 32 клуба (src/nhllegacy_fantasy.cpp, cvar nhl_fd32, по умолчанию вкл. при nhl_teams = 32;
+# docs/legacy-port.md, «Фэнтези-драфт на 32»). Объект FantasyDraftLogic рассчитан на 30 мест; места 30/31 — в хвосте
+# увеличенного объекта. Врезки — в больших методах класса: после вычисления индекса или смещения места переводят
+# место 30/31 в хвост (места < 30 и −1 не трогают). Мелкие методы подменены целиком в .cpp.
+
+# --- Конструктор 82B80898: цикл по местам — до 30, места 30/31 заполняет подмена конструктора ----------------------
+
+[[midasm_hook]]
+address = 0x82B80AFC   # cmpw cr6, r21, r11 (r11 = N, r17 деньги, r20 флаг «+3», r23 множитель)
+name = "NhlLegacyFd32CtorLoop"
+registers = ["r11", "r17", "r20", "r23"]
+
+# --- 82B80CD8: можно ли брать игрока (вратарей у клуба) ------------------------------------------------------------
+
+[[midasm_hook]]
+address = 0x82B80D08   # addi r10, r9, 81 — порядок[позиция]
+name = "NhlLegacyFd32Order"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B80D1C   # mulli r11, r11, 236 — данные клуба (572(r8) / 572(r6))
+name = "NhlLegacyFd32Team"
+registers = ["r11"]
+after_instruction = true
+
+# --- 82B80E48: оценка кандидатов AI --------------------------------------------------------------------------------
+
+[[midasm_hook]]
+address = 0x82B80E80   # addi r11, r11, 81 — порядок[позиция] → r24 = место
+name = "NhlLegacyFd32Order"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B80EC8   # addi r10, r24, 3412 — деньги
+name = "NhlLegacyFd32Money"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B80EF4   # mulli r11, r24, 236 — вратарей у клуба (572(r11))
+name = "NhlLegacyFd32Team"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B80F9C   # addi r9, r24, 868 — нужды по типу [место][тип]
+name = "NhlLegacyFd32Need"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B80FA0   # mulli r10, r24, 59 — число по типу у клуба (+ тип + 195, ×4)
+name = "NhlLegacyFd32Team59"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B81030   # addi r8, r24, 3442 — тип AI
+name = "NhlLegacyFd32Ai"
+registers = ["r8"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B810F8   # addi r11, r24, 898 — вторая таблица по типу [место][тип]
+name = "NhlLegacyFd32Need2"
+registers = ["r11"]
+after_instruction = true
+
+# --- 82B81150: выбор игрока ----------------------------------------------------------------------------------------
+
+[[midasm_hook]]
+address = 0x82B81180   # addi r8, r11, 81 — порядок[позиция] → r30 = место
+name = "NhlLegacyFd32Order"
+registers = ["r8"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B8119C   # addi r10, r30, 111 — teamid места (в запись пула)
+name = "NhlLegacyFd32Ids"
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B811D8   # mulli r11, r30, 236 — данные клуба (+ объект, +568)
+name = "NhlLegacyFd32Team"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B81234   # mulli r9, r30, 50 — пик [место][раунд] (+ раунд + 1912, ×4)
+name = "NhlLegacyFd32Picks"
+registers = ["r9"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B812AC   # addi r11, r30, 3412 — деньги
+name = "NhlLegacyFd32Money"
+registers = ["r11"]
+after_instruction = true
+
+# --- 82B88200: выбор AI за текущий клуб ----------------------------------------------------------------------------
+
+[[midasm_hook]]
+address = 0x82B8823C   # addi r11, r11, 81 — порядок[позиция] → r30 = место
+name = "NhlLegacyFd32Order"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B88250   # mulli r11, r30, 236 — число по типу у клуба (+ объект + 780)
+name = "NhlLegacyFd32Team"
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82B88260   # addi r11, r30, 3442 — тип AI (r28 = ×4, два чтения)
+name = "NhlLegacyFd32Ai"
+registers = ["r11"]
+after_instruction = true
+
+# --- 82B8D1C8: состав клуба по teamid ------------------------------------------------------------------------------
+
+[[midasm_hook]]
+address = 0x82B8D1E4   # addi r9, r3, 444 — поиск места по teamid (до 30): при N > 30 — свой, место → r11
+name = "NhlLegacyFd32FindPlace"
+registers = ["r3", "r4", "r11"]
+jump_address_on_true = 0x82B8D210
+
+[[midasm_hook]]
+address = 0x82B8D210   # mulli r11, r11, 236 — данные клуба (+ объект, +568 / 568(r11) / 572(r11))
+name = "NhlLegacyFd32Team"
+registers = ["r11"]
+after_instruction = true
