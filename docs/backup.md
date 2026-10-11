@@ -17,8 +17,22 @@
 #!/bin/sh
 git push --quiet backup --all >/dev/null 2>&1
 git push --quiet backup --tags >/dev/null 2>&1
+git push --quiet origin --all >/dev/null 2>&1
+git push --quiet origin --tags >/dev/null 2>&1
 exit 0
 ```
+
+## Код: GitHub (с 11.10.2026)
+
+- Публичный репозиторий **NHL Legacy Remaster** — https://github.com/megarohas/nhl-legacy-remaster, remote
+  `origin`. Тот же хук `post-commit` после каждого коммита отправляет туда все ветки и теги.
+- **Защита публичного репозитория** — `.git/hooks/pre-push`: в `origin` уходят только текстовые файлы кода и
+  документации (`.py`, `.md`, `.cpp`, `.h`, `.json`, `.toml`, `.sh`, `.ps1`, `.patch`, `.cmake` и т. п., `VERSION`).
+  Любой другой файл (`.db`, `.big`, `.rx2`, `.png`, `.exe`…) и всё из `game/`, `ref/`, `best_of_nhl/` отменяют
+  пуск целиком. Зеркало `backup` на D: хук не проверяет. Хук тоже не в git: в новом клоне его копируют отсюда же
+  (полный текст — в `.git/hooks/pre-push` основной копии).
+- Версии — [VERSION](../VERSION), [CHANGELOG.md](../CHANGELOG.md) и метки `vX.Y.Z`. Вторая цифра — номер
+  сборки порта NHL Legacy.
 
 ## Данные вне git: `tools/backup_data.ps1`
 
