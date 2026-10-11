@@ -512,5 +512,23 @@ python tools/draft32_legacy.py check              # ролики разбира�
 - разбор нового кода совпадает с задуманным;
 - aptc: все блоки кода 5 досок, draftmanager, nhldraftinfo и stdControls пересобираются байт в байт.
 
-В игре не проверено. Установка: `bash tools/legacy_data/install-legacy-data.sh @game/work/legacy-data/draft32/files.txt`,
-при закрытой игре. Откат — `uninstall-legacy-data.sh` с тем же списком.
+**Проверено в игре** (11.10.2026, 15:22–15:47): копия userdata `game/work/legacy-fe/draft32/userdata`, exe b75836f5
+(как у пользователя) в своей папке `draft32/run`, окно без фокуса, виртуальный геймпад.
+- **Entry Draft** — Be a GM, Minnesota, Season Starting Date = NHL Entry Draft:
+  - три колонки, 31–32 видны (SEA и VGK);
+  - подсветка идёт по колонкам 1 и 2, выбор пользователя (№ 20, кнопка A) — игрок ушёл своему клубу;
+  - авто-драфт, раунды 1–7 по LT/RT — по 32 строки.
+  - Снимки — `game/work/legacy-fe/draft32/keyshots/1…3-*.png`.
+  - Подсветку на 31–32 снимок не поймал: CPU проходит их быстрее секунды. Код тот же, что у колонок 1–2
+    (`draft32PanelFor`).
+- **Фэнтези-драфт** падает в exe через 1–2 с после старта доски. A/B: с роликами EA падает так же.
+  - Путь: натив AS 832ECC00 → 82AB2EF8 → 82B8CDD0; запись 82B81150 или чтение 82B792B8.
+  - Уже в порядке драфта у EA в списке «Zlín» (клуб Экстралиги), у одного клуба логотип s65535.
+  - Значит, список клубов фэнтези-драфта на 32 у игры битый — задача legacy-port, не меню.
+  - Отчёты — `game/work/legacy-fe/draft32/evidence/`, снимок экрана порядка EA — `keyshots/4-*.png`.
+- Live the Life в игре не проверялась.
+
+**В out** — только Entry Draft (`'out': True` в SCREENS, `draft32/files.txt`). Фэнтези и Live the Life собираются в
+`build/`, в out идут после исправления падения и проверки (`build --all` — все 5). Установка:
+`bash tools/legacy_data/install-legacy-data.sh @game/work/legacy-data/draft32/files.txt`, при закрытой игре. Откат —
+`uninstall-legacy-data.sh` с тем же списком.

@@ -1,8 +1,9 @@
 """Доски драфта NHL Legacy на 32 клуба: три колонки 1–15 | 16–30 | 31–32 — файлы для cache: Legacy.
 
-    python draft32_legacy.py build [--work DIR] [--no-out]
-        # → WORK (game/work/legacy-data/draft32/build, раскладка cache:) и game/work/legacy-data/out; список своих
-        #   файлов — game/work/legacy-data/draft32/files.txt; разбор нового кода — WORK/review/*.txt
+    python draft32_legacy.py build [--work DIR] [--no-out] [--all]
+        # → WORK (game/work/legacy-data/draft32/build, раскладка cache:) — все 5 досок; в game/work/legacy-data/out —
+        #   только доски с 'out': True в SCREENS (проверенные в игре; --all — все 5); список того, что в out, —
+        #   game/work/legacy-data/draft32/files.txt; разбор нового кода — WORK/review/*.txt
     python draft32_legacy.py check [DIR]     # собранное: ролики разбираются, старая часть Apt Data — только правки
                                              # из списка, третья панель на месте, новый код без ошибок разбора
 
@@ -579,22 +580,26 @@ game.screens.pro.BeAProEntryDraft.prototype._OnHighlightThirdPanelRow = function
 
 # ---------------------------------------------------------------- экраны
 
+# 'out': True — доска идёт в out (в cache: при установке legacy-data). 11.10.2026 в игре проверена только Entry Draft;
+# фэнтези-драфт на 32 падает в exe и с роликами EA (натив AS 832ECC00, задача legacy-port) — его доски ждут исправления;
+# Live the Life проверена только по коду
 SCREENS = [
     {'rel': 'fe/ion/game/screens/dynasty/dm38_nhlentrydraft.big', 'what': 'Be a GM — NHL Entry Draft',
      'owner': 0, 'panels': ('mcLeftPanel', 'mcRightPanel', 'mcThirdPanel'), 'third_depth': 24, 'rc': 'rcTeams',
-     'texts': {4: 'txtPlayerName', 17: 'txtPlayerTitle'}, 'highlights': [14], 'code': CODE_ENTRY},
+     'texts': {4: 'txtPlayerName', 17: 'txtPlayerTitle'}, 'highlights': [14], 'code': CODE_ENTRY, 'out': True},
     {'rel': 'fe/ion/game/screens/gamemode/fantasydraft.big', 'what': 'фэнтези-драфт',
      'owner': 0, 'panels': ('mcLeftPanel', 'mcRightPanel', 'mcThirdPanel'), 'third_depth': 24, 'rc': 'rcTeams',
-     'texts': {4: 'txtPlayerName', 17: 'txtPlayerTitle'}, 'highlights': [14], 'code': CODE_FANTASY},
+     'texts': {4: 'txtPlayerName', 17: 'txtPlayerTitle'}, 'highlights': [14], 'code': CODE_FANTASY, 'out': False},
     {'rel': 'fe/ion/game/screens/gamemode/draftorder.big', 'what': 'порядок фэнтези-драфта',
      'owner': 0, 'panels': ('mcLeftPanel', 'mcRightPanel', 'mcThirdPanel'), 'third_depth': 30, 'rc': 'rcTeams',
-     'texts': {4: 'txtTeamName', 19: 'txtTeamTitle'}, 'highlights': [14, 16], 'code': CODE_ORDER},
+     'texts': {4: 'txtTeamName', 19: 'txtTeamTitle'}, 'highlights': [14, 16], 'code': CODE_ORDER, 'out': False},
     {'rel': 'fe/ion/game/screens/pro/draftday.big', 'what': 'Live the Life — день драфта',
      'owner': 0, 'panels': ('mcLeft', 'mcRight', 'mcThird'), 'third_depth': 21, 'rc': 'rc',
-     'texts': {4: 'txtName', 13: 'txtPlayerTitle'}, 'highlights': [14], 'code': CODE_DRAFTDAY},
+     'texts': {4: 'txtName', 13: 'txtPlayerTitle'}, 'highlights': [14], 'code': CODE_DRAFTDAY, 'out': False},
     {'rel': 'fe/ion/game/screens/pro/beaproentrydraft.big', 'what': 'Live the Life — драфт',
      'owner': 18, 'panels': ('mcLeft', 'mcRight', 'mcThird'), 'third_depth': 21, 'rc': 'rc',
-     'texts': {4: 'txtName', 13: 'txtPlayerTitle'}, 'highlights': [14], 'code': CODE_BAP, 'class_sprite': 21},
+     'texts': {4: 'txtName', 13: 'txtPlayerTitle'}, 'highlights': [14], 'code': CODE_BAP, 'class_sprite': 21,
+     'out': False},
 ]
 
 
@@ -900,14 +905,20 @@ def cmd_build(args):
     for x in lines:
         log(x)
     if '--no-out' not in args:
-        for rel in built:
+        to_out = [sc['rel'] for sc in SCREENS if sc.get('out') or '--all' in args]
+        old = [x.strip() for x in open(FILES, encoding='utf-8')] if os.path.exists(FILES) else []
+        for rel in sorted(set(old) - set(to_out)):
+            if rel and os.path.exists(p(P.out, rel)):
+                log(f'  !! {rel} остался в out от прошлой сборки — убрать вручную (в Корзину)')
+        for rel in to_out:
             d = p(P.out, rel)
             os.makedirs(os.path.dirname(d), exist_ok=True)
             shutil.copyfile(p(work, rel), d)
         os.makedirs(os.path.dirname(FILES), exist_ok=True)
         with open(FILES, 'w', encoding='utf-8', newline='\n') as f:
-            f.write(''.join(r + '\n' for r in built))
-        log(f'→ {P.out}: {len(built)} файлов; список — {FILES}')
+            f.write(''.join(r + '\n' for r in to_out))
+        log(f'→ {P.out}: {len(to_out)} из {len(built)} ({", ".join(os.path.basename(r) for r in to_out)}); '
+            f'список — {FILES}')
     else:
         log(f'→ {work} (в out не копировалось: --no-out)')
 
