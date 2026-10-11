@@ -25,7 +25,7 @@ L=game/other/legacy/big/cacheboot
 AHL32=0
 stages=()
 for a in "$@"; do [ "$a" = "--ahl32" ] && AHL32=1 || stages+=("$a"); done
-[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah ahl fonts music models art logos menu nhl24)
+[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah ahl useredits fonts music models art logos menu nhl24)
 want() { for s in "${stages[@]}"; do [ "$s" = "$1" ] && return 0; done; return 1; }
 say() { echo "== $(date +%H:%M:%S) $*"; }
 
@@ -139,6 +139,14 @@ if want ahl; then
   else
     say "АХЛ 2026/27: нет кэша HockeyTech — этап пропущен (python -m roster.ahl_ht teams; ids; players)"
   fi
+fi
+if want useredits; then
+  # правки экипировки пользователя из его сейва ROSTER (game/work/legacy-data/equipment-user/*правки.json, выгрузка —
+  # game/work/legacy-data/tmp/equip_from_save.py): ставятся, где в базе прежнее значение; повтор ничего не меняет
+  say "правки экипировки пользователя (user_equipment.py)"
+  for B in $O $W/out-ahl32; do
+    for F in nhlng.db draft_roster.db; do [ -f $B/db/$F ] && python $T/user_equipment.py $B/db/$F; done
+  done
 fi
 if want fonts; then
   say "шрифт меню NHL 12 (fefont --keep, скелет Legacy)"
