@@ -117,8 +117,17 @@ def home_template(art):
     return f"1_{art}_{legacy_target(art, 0)['variant']}"
 
 
+OURS_NAME = False  # 11.10: у новых форм SEA/VGK — карта номеров контейнера EA 1_131_0 (зоны рукавов как у EA),
+                  # а не наша czkit-карта: её зоны рукавов вдвое больше и номер ложился на полосы рукава
+
+
 def ours_name(art, od):
     """SEA/VGK: карта номеров и фамилии нашей домашней формы (legacy-data out) → od/name_cm.png. -> путь или None."""
+    stale = os.path.join(od, "name_cm.png")
+    if not OURS_NAME:
+        if os.path.exists(stale):
+            os.remove(stale)
+        return None
     from .pack import OURS
     p = os.path.join(OURS, "rendering", "jersey", f"name_1_{art}_0_cm.rx2")
     if art not in (100, 101) or not os.path.exists(p):
@@ -305,6 +314,52 @@ def lightness(tex):
     return float((0.2126 * a[..., 0] + 0.7152 * a[..., 1] + 0.0722 * a[..., 2]).mean())
 
 
+def sleeve_rule(od):
+    """Полоски рукавов ближе к кисти (kit_rules.toml [sleeve]): jersey_cm.png = правило(jersey_cm_raw.png).
+    Свитер, собранный до правила, — сам себе сырой (копия в jersey_cm_raw.png). -> план {зона: …} (и в info.json)."""
+    from . import sleeve
+    raw, cm = os.path.join(od, "jersey_cm_raw.png"), os.path.join(od, "jersey_cm.png")
+    if not os.path.exists(raw):
+        shutil.copyfile(cm, raw)
+    a = np.asarray(Image.open(raw).convert("RGB"))
+    tpl = json.load(open(os.path.join(od, "kit.json"), encoding="utf-8"))["template"]
+    zones = sleeve.name_zones(os.path.join(unpack(tpl), "name_cm.png"), a.shape[0])
+    if not _ISLAND:
+        _ISLAND.append(sleeve.island(a.shape[0]))
+    new, plan = sleeve.remap(a, zones, _ISLAND[0])
+    Image.fromarray(new).save(cm)
+    plan = {str(z): q for z, q in plan.items()}
+    info = os.path.join(od, "info.json")
+    if os.path.exists(info):
+        rec = json.load(open(info, encoding="utf-8"))
+        rec["sleeve"] = plan
+        text = json.dumps(rec, ensure_ascii=False, indent=1)     # сначала в строку: сбой не обрежет info.json
+        with open(info + ".tmp", "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(info + ".tmp", info)
+    return plan
+
+
+_ISLAND = []
+
+
+def cmd_sleeves(a):
+    """Только правило рукавов и превью меню у готовых форм (рендер переноса не повторяется)."""
+    codes = [c for _cl, _a, c in CLUBS if c not in EXCLUDE] if a.club == "all" else a.club.split(",")
+    n = 0
+    for code in codes:
+        for label, *_rest in kits_for(code):
+            od = os.path.join(OUTP, f"{code}_{label}")
+            if not os.path.exists(os.path.join(od, "info.json")):
+                continue
+            ours_name(club_info(code)[1], od)   # SEA/VGK: убрать прежнюю czkit-карту номеров
+            sleeve_rule(od)
+            fe_preview_ea(os.path.join(od, "jersey_cm.png")).save(os.path.join(od, "fe.png"))
+            n += 1
+            print(code, label, "рукава и превью обновлены", flush=True)
+    print(f"форм: {n}")
+
+
 def build_font(rec, folder, ok, p, family, club, kit, od, tpl_kit, own_name):
     from .fonts import normal_map, resize_premult
     fc, fn = p + f"font_{family}_{club}_{kit}_color", p + f"font_{family}_{club}_{kit}_normal"
@@ -376,6 +431,8 @@ def cmd_build(a):
         if getattr(a, "reuse", False) and done and os.path.exists(os.path.join(od, "info.json")):
             # рендер от номера варианта не зависит — меняются шаблон, номер, светлота; шрифт — заново (дёшево)
             old = json.load(open(os.path.join(od, "info.json"), encoding="utf-8"))
+            rec["sleeve"] = sleeve_rule(od)
+            fe_preview_ea(os.path.join(od, "jersey_cm.png")).save(os.path.join(od, "fe.png"))
             build_font(rec, folder, ok, p, family, club, kit, od, tpl_kit, own_name)
             finish_kit(rec, od, tpl_kit, art, variant, label, old.get("mode", ""), old.get("patches", []), t0,
                        pant=old.get("pant", ""), sock=old.get("sock", ""))
@@ -414,7 +471,8 @@ def cmd_build(a):
         collar = (crule, kit_hybrid.collar_color(base, crule)) if crule.get("mode", "body") == "body" else None
         post = kit_hybrid.decal_post(comp, placed, soft, n_jersey_tri, collar)
         img, mask, dist, info = kit3d.transfer(base, src, dst, 1024, 2, post=post)
-        Image.fromarray(np.clip(img, 0, 255).astype(np.uint8)).convert("RGB").save(os.path.join(od, "jersey_cm.png"))
+        Image.fromarray(np.clip(img, 0, 255).astype(np.uint8)).convert("RGB").save(os.path.join(od, "jersey_cm_raw.png"))
+        rec["sleeve"] = sleeve_rule(od)
         Image.open(os.path.join(CLEAN, f"{CLEAN_T}_3-12-21-30-39-48-57-66-75_sm.png")).resize((1024, 1024), Image.LANCZOS) \
             .save(os.path.join(od, "jersey_sm.png"))
         shutil.copyfile(os.path.join(CLEAN, f"{CLEAN_T}_3-12-21-30-39-48-57-66-75_nm.png"), os.path.join(od, "jersey_nm.png"))
@@ -933,6 +991,8 @@ def main():
     s.add_argument("--kits", default="")
     s.add_argument("--reuse", action="store_true", help="готовые рендеры не перерисовывать (номер сменился)")
     sub.add_parser("summary")
+    s = sub.add_parser("sleeves")
+    s.add_argument("--club", default="CHI", help="код клуба, коды через запятую или all")
     s = sub.add_parser("fe")
     s.add_argument("--club", default="CHI", help="код клуба, коды через запятую или all")
     s = sub.add_parser("fe-sheet")
@@ -946,13 +1006,17 @@ def main():
         p.add_argument("--all-kits", action="store_true", help="и спецформы (RR22/RR23, 90-е) — не только дом/выезд/третья")
         p.add_argument("--everything", action="store_true",
                        help="пакет на все клубы: формы в out/all, пакет в out/pack-all (иначе — пилот: out/pilot, out/pack)")
+        p.add_argument("--out-root", help="откуда брать собранные формы (вместо out/pilot или out/all)")
+        p.add_argument("--pack-root", help="куда класть пакет (вместо out/pack или out/pack-all)")
     a = ap.parse_args()
     global ALL_KITS
     ALL_KITS = a.all_kits
     if a.everything or a.cmd in ("all", "summary"):
         set_roots(ALL_OUT, ALL_PACK)
+    set_roots(a.out_root, a.pack_root)
     return {"build": cmd_build, "pack": cmd_pack, "common": cmd_common, "manifest": cmd_manifest,
             "sheets": cmd_sheets, "sticks": cmd_sticks, "all": cmd_all, "summary": cmd_summary, "fe": cmd_fe,
+            "sleeves": cmd_sleeves,
             "fe-sheet": cmd_fe_sheet}[a.cmd](a)
 
 
