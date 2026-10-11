@@ -155,6 +155,11 @@ class Model:
                          if st in D_STYLES + F_STYLES and len(d['p_speed']) >= 3}
         self.bias = {st: {f: int(statistics.median(x)) for f, x in d.items()} for st, d in bias.items()}
         self.estimated = {}
+        # OVR игры из атрибутов (модуль с ovr(класс, атрибуты) и weights(класс), roster.ovrformula): форма сдвигается,
+        # пока OVR формулы не даст целевой. None — как было: «среднее атрибутов + поправка группы» (верно только в
+        # середине шкалы: у Legacy OVR растёт в 1,9 раза быстрее среднего атрибута). Включают ahl2026_write и
+        # legacy_data/nhl_attrs.py.
+        self.formula = None
 
     # --- атрибуты ------------------------------------------------------------------------------
     def db_attrs(self, r):
@@ -231,6 +236,38 @@ class Model:
         # форма, сдвинутая так, чтобы среднее всех плюс поправка амплуа дало OVR
         unknown = [f for f in fs if f not in known]
         out = {f: known.get(f, shape[f]) for f in fs}
+        if self.formula is not None and unknown:
+            # OVR игры из атрибутов: форма сдвигается на (цель − OVR формулы) / прирост формулы от +1 к неизвестным,
+            # не упёршимся в 36/99 (повтор, пока не сойдётся); после округления — по одному атрибуту ±1 (тот шаг, что
+            # ближе к цели), пока OVR формулы не станет ближе 0,25: при общем сдвиге дробные части у всех одинаковые и
+            # округление сдвигает OVR до ±0,95
+            wts = self.formula.weights(c)
+            for _ in range(30):
+                cur = {f: min(BASE + 63.0, max(float(BASE), out[f])) for f in fs}
+                miss = ovr - self.formula.ovr(c, cur)
+                if abs(miss) < 0.02:
+                    break
+                free = [f for f in unknown if BASE < cur[f] < BASE + 63 or (cur[f] <= BASE and miss > 0)
+                        or (cur[f] >= BASE + 63 and miss < 0)]
+                gain = sum(wts[f] for f in free)
+                if gain < 0.3:
+                    break
+                for f in free:
+                    out[f] = cur[f] + miss / gain
+            res = {f: clamp_rating(x) for f, x in out.items()}
+            touched = set()
+            for _ in range(len(unknown)):
+                miss = ovr - self.formula.ovr(c, res)
+                if abs(miss) <= 0.25:
+                    break
+                steps = [(abs(miss - s * wts[f]), f in touched, f, s) for f in unknown for s in (1, -1)
+                         if BASE <= res[f] + s <= BASE + 63]
+                best = min(steps, key=lambda x: (round(x[0], 1), x[1]), default=None)
+                if best is None or best[0] >= abs(miss):
+                    break
+                res[best[2]] += best[3]
+                touched.add(best[2])
+            return res, ovr
         offset = self.group(p)[1].get(c, self.offset[c])      # клубы АХЛ / лиги конвейера — как у их клубов в базе
         for _ in range(10):   # упирающиеся в 36/99 значения съедают часть сдвига
             level = sum(clamp_rating(out[f]) for f in fs) / len(fs) + offset
