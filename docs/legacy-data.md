@@ -725,8 +725,22 @@ Wikipedia), портреты у 1303, проверки OK.
 - OVR формулы ±1: у игроков НХЛ ниже 84 и достроенных (445) и у всех игроков АХЛ и свободных агентов;
 - `draft_roster.db` — 10 таблиц байт в байт как в базе; CRC баз и `draft_roster`; локализация как была.
 
-Пользователю не ставилось. Установка — по слову координатора, одна: база (с `useredits`) → `utah` (новый арт Юты) →
-`nhl24` на новом пакете → `logos`.
+**У пользователя с 11.10, 05:41** (слово координатора «ставь»; игра закрыта, `nhllegacy.exe` нет).
+- Шаги: бэкап → `install-legacy-data.sh --ahl32 --nhl24` (`CACHE=legacy-port/userdata/cache/guest`, состояние —
+  `game/work/legacy-data`) → сверка → `nhl24.py verify`. Скрипт — `tmp/user_install_full.py backup|install|check|rollback`.
+- В `cache:` заменено 17 файлов, добавлено 30 (формы SEA и VGK), убрано 0. Остальное, сейвы и userdata не тронуты.
+
+  | файл | md5 | было |
+  |---|---|---|
+  | `db/nhlng.db` | 6df623b2 (out-nhl24-ahl32) | 4e793c6d |
+  | `db/draft_roster.db` | b1317559 | 4d6bb74b |
+  | `fe/loc/NHL_ENG_US.db` | a8db3617 | 13a8ea7f |
+
+- Остальные замены — арт Юты (4), CHI с новыми рукавами (5), центры льда и шайбы SEA и VGK (4).
+- Сверка: всё поставленное — как в `out*`. `nhl24.py verify` — 205 файлов пакета, расхождений 0, база — out-nhl24-ahl32,
+  8 подписей форм.
+- Бэкап — `game/work/legacy-data/backup-cache/user-20261011-054127` (заменённые файлы, `state/`, снимок `cache:`,
+  списки). Откат при закрытой игре — `python game/work/legacy-data/tmp/user_install_full.py rollback <бэкап>`.
 
 ## У пользователя (10.10.2026, 05:17)
 
