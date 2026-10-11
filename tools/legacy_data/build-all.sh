@@ -208,6 +208,10 @@ if want menu; then
   SPEC12=game/work/menu12/players/spec.json; [ -f $SPEC12 ] || SPEC12=$T/menu/menu12-rings.json
   python tools/menu12_legacy.py build --spec $SPEC12
   python tools/menuitems_legacy.py build
+  # доски драфта на 32 (Be a GM, фэнтези-драфт и его порядок, Live the Life): три колонки 15 + 15 + 2
+  # (docs/fe-menu-legacy.md §11); файлы — game/work/legacy-data/draft32/files.txt
+  say "доски драфта на 32 (draft32_legacy)"
+  python tools/draft32_legacy.py build
 fi
 if want nhl24; then
   # после collect (берёт out/db и out-ahl32/db): пакет агента nhl24 — формы, шрифты номеров, центры и реклама льда,

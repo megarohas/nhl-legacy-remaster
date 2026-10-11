@@ -447,3 +447,70 @@ bash game/work/legacy-fe/uninstall-legacy-fe.sh menufade   # откат: пре�
 6–7 игр, у Seattle и Vegas 0. В Player Stats у них «No Stats Available». В регулярке их игры идут и
 учитываются: на 12.10 Seattle 3-0-0, Vegas 1-1-0, у игроков есть GP, в Team Reports заполнены голы и
 спецбригады.
+
+Поправка (11.10.2026): «жёстких 30 нет» неверно для доски NHL Entry Draft — там граница в раскладке, а не числом:
+две панели по 15 (`MAX_TEAMS_PER_PANEL`), выборы 31–32 не видны. Разбор и правка — §11.
+
+## 11. Доски драфта на 32: три колонки 15 + 15 + 2 (11.10.2026, legacy-fe)
+
+**Что было.** На доске NHL Entry Draft видно 30 клубов, две колонки по 15. Игра отдаёт 32
+(`m_draftManager.getTeamIdsForDraftRound`, драфт на 32 — legacy-port, [legacy-port.md](legacy-port.md)), а ролик
+рассчитан на 30: `MAX_TEAMS_PER_PANEL = 15`, панели `mcLeftPanel`/`mcRightPanel`. У правой 17 строк данных при 15
+видимых (`RowControl.displayRows`), и выборы 31–32 не видны: строки съезжают на 2, только когда до них доходит
+подсветка. Такая же доска ещё в четырёх роликах (`cache:`, разбор — `game/work/legacy-fe/draft32/dis/`):
+
+| Ролик `fe/ion/game/screens/…` | Экран | Код |
+|---|---|---|
+| `dynasty/dm38_nhlentrydraft.big` | Be a GM — NHL Entry Draft | кадр 0 |
+| `gamemode/fantasydraft.big` | фэнтези-драфт | кадр 0 |
+| `gamemode/draftorder.big` | порядок фэнтези-драфта: курсор, обмен клубов (Y) | кадр 0 |
+| `pro/draftday.big` | Live the Life — день драфта | кадр 0 |
+| `pro/beaproentrydraft.big` | Live the Life — драфт | класс `game.screens.pro.BeAProEntryDraft` (InitAction спрайта 21) |
+
+У класса Live the Life смещение правой панели — `mNumPlayersRightPanel`: при 30 клубах это случайно 15, при 32
+было бы 17, и номера съехали бы.
+
+**Правка** — вариант пользователя A, макет `game/work/legacy-fe/draft32/mockup-AB.png` (сверху; снизу — отвергнутый
+B, 2 × 16: при строке 24 px 16-я строка в рамку не влезает). Три колонки: 1–15 | 16–30 | 31–32. Шрифт, строки 24 px
+и логотипы — как у EA. Инструмент — [tools/draft32_legacy.py](../tools/draft32_legacy.py) (этап `menu` build-all),
+новый код — компилятор [tools/aptc.py](../tools/aptc.py).
+- **Раскладка.**
+  - Колонки по 325 (976 / 3): панели x 152 | 477 | 802. У Live the Life — в спрайте экрана: 1 | 326 | 651.
+  - Третья панель — новый PlaceObject того же символа панели.
+  - Поле имени и заголовок колонки — до края колонки: имя 143 px вместо 308. Длинные фамилии обрезаются.
+  - Полоса выделения: Highlight ×1,53 → ×1,0433 (313 px).
+- **ActionScript.** Блок кода кадра 0 пересобирается целиком (у Live the Life — InitAction класса):
+  - функции EA, где были «левая/правая», заменены на месте, остальные — байт в байт;
+  - добавлены `draft32PanelOffset` (смещение панели 0/15/30) и `draft32PanelFor` (панель по номеру выбора), на
+    экране порядка — `draft32NextPanel`;
+  - что заменено:
+    - Entry Draft: initPanels, highlightRow, unhighlightRow, updateGUI, updateHighlight, pickPlayer;
+    - фэнтези: initPanels, highlightRow, updateGUI, updateHighlight;
+    - порядок: initPanels, highlightRow, unhighlightRow, completeSwapOperation, navigateUp/Down/LeftRight,
+      switchActivePanel, getPanelLastIndex, localEventHandler;
+    - день драфта: initGUI_2, updateHighlight;
+    - драфт Live the Life: _InitializeScreen, _UpdateHighlight, _OnUpdateRightPanelRow; новые
+      _OnUpdateThirdPanelRow, _OnHighlightThirdPanelRow;
+  - вставки: `addItem` третьей панели в анимацию входа, `refresh()` третьей панели рядом с правой;
+  - управление на экране порядка: ←/→ — соседняя колонка по кругу (1 → 2 → 3 → 1), ↑/↓ с края — в соседнюю
+    колонку, как у EA между двумя;
+  - прокрутка и выделение строки — тем же RowControl, что у первых двух панелей.
+- **Как устроено.** Новый код — без ConstantPool: имена строками PushString, поэтому пул старого кода не задет.
+  Старый блок остаётся в файле мёртвым. Exe не меняется.
+
+```bash
+python tools/draft32_legacy.py build [--no-out]   # → game/work/legacy-data/draft32/build и out; список — draft32/files.txt
+python tools/draft32_legacy.py check              # ролики разбираются, старая Apt Data — только правки, панели на местах
+```
+
+`build` кладёт в `build/review/*.txt` разбор нового блока кода (feapt). Сверка с исходным разбором:
+`game/work/legacy-fe/draft32/scripts/ddiff.py` — отличия только в заменённых функциях и вставках.
+
+**Проверено без игры** (11.10.2026):
+- `check`: все 5 роликов разбираются, BIGF туда-обратно; старая часть Apt Data отличается только в правках из
+  build.json, прочие записи BIGF те же;
+- разбор нового кода совпадает с задуманным;
+- aptc: все блоки кода 5 досок, draftmanager, nhldraftinfo и stdControls пересобираются байт в байт.
+
+В игре не проверено. Установка: `bash tools/legacy_data/install-legacy-data.sh @game/work/legacy-data/draft32/files.txt`,
+при закрытой игре. Откат — `uninstall-legacy-data.sh` с тем же списком.

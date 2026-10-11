@@ -22,6 +22,7 @@
 | Фон меню | варианты на выбор (у Legacy своя тёмная арена) | не ставился — решает пользователь |
 | Главное меню NHL 12: фон с игроками 2026/27, плашка и кегли 34/25 | `tools/menu12_legacy.py` (помощник menu) | ✔ арена NHL 12, игроки сменяются, кольца в цвет клуба, плашка; вход/выход PLAY, Play Now, CUSTOMIZE (полный список — [fe-menu-legacy.md](fe-menu-legacy.md) §5) |
 | Главное меню: без синей подложки на входе; пункты без онлайна, EXIT, панель описаний про офлайн | `tools/menu12_legacy.py` (подложка), `tools/menuitems_legacy.py` (legacy-fe, 09.10) | ✔ синего нет ([fe-menu-legacy.md](fe-menu-legacy.md) §7); меню и EXIT проверены, EXIT — только с exe legacy-port (§8) |
+| Доски драфта на 32: три колонки 15 + 15 + 2 (Be a GM, фэнтези-драфт и его порядок, Live the Life) | `tools/draft32_legacy.py` + `tools/aptc.py` (legacy-fe, 11.10) | собрано, в игре не проверено ([fe-menu-legacy.md](fe-menu-legacy.md) §11) |
 
 Набор — `game/work/legacy-data/out/` (дерево путей как в `cache:`); ставится при закрытой игре:
 
@@ -156,8 +157,9 @@ bash tools/legacy_data/uninstall-legacy-data.sh          # снять (чужи�
 
 Пересборка всего с нуля — `bash tools/legacy_data/build-all.sh [этап…] [--ahl32]` (этапы base, roster, photos,
 equip, collect, retire, fixdb, utah, ahl, nhlattrs, useredits, fonts, music, models, art, logos, menu, nhl24; сеть —
-только докачка недостающих портретов лиг). Этап `menu` (`menu12_legacy.py` и `menuitems_legacy.py`) идёт после
-`collect`: тот кладёт в `out/` локализацию nhl32 без правок меню, а `menuitems_legacy.py` вносит их снова.
+только докачка недостающих портретов лиг). Этап `menu` (`menu12_legacy.py`, `menuitems_legacy.py` и
+`draft32_legacy.py` — доски драфта на 32) идёт после `collect`: тот кладёт в `out/` локализацию nhl32 без правок меню, а
+`menuitems_legacy.py` вносит их снова.
 
 Этап `logos` (с 10.10) идёт после `art`: логотипы клубов 2026/27 агента logos ([logos-2026.md](logos-2026.md)) —
 готовые файлы `game/work/logos/out-nhl` и `out-ahl` по их `manifest.json`, со сверкой md5 (`tools/logos/outcopy.py`),
