@@ -314,7 +314,7 @@ def lightness(tex):
     return float((0.2126 * a[..., 0] + 0.7152 * a[..., 1] + 0.0722 * a[..., 2]).mean())
 
 
-def sleeve_rule(od):
+def sleeve_rule(od, tpl=None):
     """Полоски рукавов ближе к кисти (kit_rules.toml [sleeve]): jersey_cm.png = правило(jersey_cm_raw.png).
     Свитер, собранный до правила, — сам себе сырой (копия в jersey_cm_raw.png). -> план {зона: …} (и в info.json)."""
     from . import sleeve
@@ -322,7 +322,7 @@ def sleeve_rule(od):
     if not os.path.exists(raw):
         shutil.copyfile(cm, raw)
     a = np.asarray(Image.open(raw).convert("RGB"))
-    tpl = json.load(open(os.path.join(od, "kit.json"), encoding="utf-8"))["template"]
+    tpl = tpl or json.load(open(os.path.join(od, "kit.json"), encoding="utf-8"))["template"]  # при сборке kit.json ещё нет
     zones = sleeve.name_zones(os.path.join(unpack(tpl), "name_cm.png"), a.shape[0])
     if not _ISLAND:
         _ISLAND.append(sleeve.island(a.shape[0]))
@@ -346,11 +346,12 @@ _ISLAND = []
 def cmd_sleeves(a):
     """Только правило рукавов и превью меню у готовых форм (рендер переноса не повторяется)."""
     codes = [c for _cl, _a, c in CLUBS if c not in EXCLUDE] if a.club == "all" else a.club.split(",")
+    only = set(a.kits.split(",")) if a.kits else None
     n = 0
     for code in codes:
         for label, *_rest in kits_for(code):
             od = os.path.join(OUTP, f"{code}_{label}")
-            if not os.path.exists(os.path.join(od, "info.json")):
+            if (only and label not in only) or not os.path.exists(os.path.join(od, "info.json")):
                 continue
             ours_name(club_info(code)[1], od)   # SEA/VGK: убрать прежнюю czkit-карту номеров
             sleeve_rule(od)
@@ -431,7 +432,7 @@ def cmd_build(a):
         if getattr(a, "reuse", False) and done and os.path.exists(os.path.join(od, "info.json")):
             # рендер от номера варианта не зависит — меняются шаблон, номер, светлота; шрифт — заново (дёшево)
             old = json.load(open(os.path.join(od, "info.json"), encoding="utf-8"))
-            rec["sleeve"] = sleeve_rule(od)
+            rec["sleeve"] = sleeve_rule(od, tpl_kit)
             fe_preview_ea(os.path.join(od, "jersey_cm.png")).save(os.path.join(od, "fe.png"))
             build_font(rec, folder, ok, p, family, club, kit, od, tpl_kit, own_name)
             finish_kit(rec, od, tpl_kit, art, variant, label, old.get("mode", ""), old.get("patches", []), t0,
@@ -472,7 +473,7 @@ def cmd_build(a):
         post = kit_hybrid.decal_post(comp, placed, soft, n_jersey_tri, collar)
         img, mask, dist, info = kit3d.transfer(base, src, dst, 1024, 2, post=post)
         Image.fromarray(np.clip(img, 0, 255).astype(np.uint8)).convert("RGB").save(os.path.join(od, "jersey_cm_raw.png"))
-        rec["sleeve"] = sleeve_rule(od)
+        rec["sleeve"] = sleeve_rule(od, tpl_kit)
         Image.open(os.path.join(CLEAN, f"{CLEAN_T}_3-12-21-30-39-48-57-66-75_sm.png")).resize((1024, 1024), Image.LANCZOS) \
             .save(os.path.join(od, "jersey_sm.png"))
         shutil.copyfile(os.path.join(CLEAN, f"{CLEAN_T}_3-12-21-30-39-48-57-66-75_nm.png"), os.path.join(od, "jersey_nm.png"))
@@ -565,8 +566,11 @@ def cmd_pack(a):
     from .pack import OURS, centerlogo_template, legacy_has, write_rx2_rgba
     code = a.club
     club, art = club_info(code)
+    only = set(a.kits.split(",")) if getattr(a, "kits", "") else None
     entries, kits = [], []
     for label, family, kit, variant, new in kits_for(code):
+        if only and label not in only:
+            continue
         od = os.path.join(OUTP, f"{code}_{label}")
         if not os.path.exists(os.path.join(od, "info.json")):
             print(code, label, "не собрана (нет в NHL 24) — пропуск", flush=True)
@@ -617,6 +621,8 @@ def cmd_pack(a):
     # наклейки на шлем
     folder, ok = extract_club(club)
     for label, family, kit, variant, new in kits_for(code):
+        if only and label not in only:
+            continue
         name = prefix(club, family, kit) + f"helmetlogo_{family}_{club}_{kit}_0_color"
         if name not in ok or variant is None or not os.path.exists(os.path.join(OUTP, f"{code}_{label}", "info.json")):
             continue
@@ -982,8 +988,9 @@ def main():
     for c in ("build", "pack", "manifest", "sheets"):
         s = sub.add_parser(c)
         s.add_argument("--club", default="CHI")
-        if c == "build":
+        if c in ("build", "pack"):
             s.add_argument("--kits", default="", help="только эти формы (метки через запятую)")
+        if c == "build":
             s.add_argument("--reuse", action="store_true", help="готовые рендеры не перерисовывать (номер сменился)")
     s = sub.add_parser("all")
     s.add_argument("--group", default="", help="i/n — каждый n-й клуб, начиная с i (параллельный запуск)")
@@ -993,6 +1000,7 @@ def main():
     sub.add_parser("summary")
     s = sub.add_parser("sleeves")
     s.add_argument("--club", default="CHI", help="код клуба, коды через запятую или all")
+    s.add_argument("--kits", default="", help="только эти формы (метки через запятую)")
     s = sub.add_parser("fe")
     s.add_argument("--club", default="CHI", help="код клуба, коды через запятую или all")
     s = sub.add_parser("fe-sheet")
