@@ -580,19 +580,19 @@ game.screens.pro.BeAProEntryDraft.prototype._OnHighlightThirdPanelRow = function
 
 # ---------------------------------------------------------------- экраны
 
-# 'out': True — доска идёт в out (в cache: при установке legacy-data). 11.10.2026 в игре проверена только Entry Draft;
-# фэнтези-драфт на 32 падает в exe и с роликами EA (натив AS 832ECC00, задача legacy-port) — его доски ждут исправления;
-# Live the Life проверена только по коду
+# 'out': True — доска идёт в out (в cache: при установке legacy-data). 11.10.2026 в игре проверены Entry Draft и
+# фэнтези-драфт с его порядком (падение фэнтези-драфта на 32 починено в exe legacy-port a1cb8f74); Live the Life — только
+# по коду, в out не идёт
 SCREENS = [
     {'rel': 'fe/ion/game/screens/dynasty/dm38_nhlentrydraft.big', 'what': 'Be a GM — NHL Entry Draft',
      'owner': 0, 'panels': ('mcLeftPanel', 'mcRightPanel', 'mcThirdPanel'), 'third_depth': 24, 'rc': 'rcTeams',
      'texts': {4: 'txtPlayerName', 17: 'txtPlayerTitle'}, 'highlights': [14], 'code': CODE_ENTRY, 'out': True},
     {'rel': 'fe/ion/game/screens/gamemode/fantasydraft.big', 'what': 'фэнтези-драфт',
      'owner': 0, 'panels': ('mcLeftPanel', 'mcRightPanel', 'mcThirdPanel'), 'third_depth': 24, 'rc': 'rcTeams',
-     'texts': {4: 'txtPlayerName', 17: 'txtPlayerTitle'}, 'highlights': [14], 'code': CODE_FANTASY, 'out': False},
+     'texts': {4: 'txtPlayerName', 17: 'txtPlayerTitle'}, 'highlights': [14], 'code': CODE_FANTASY, 'out': True},
     {'rel': 'fe/ion/game/screens/gamemode/draftorder.big', 'what': 'порядок фэнтези-драфта',
      'owner': 0, 'panels': ('mcLeftPanel', 'mcRightPanel', 'mcThirdPanel'), 'third_depth': 30, 'rc': 'rcTeams',
-     'texts': {4: 'txtTeamName', 19: 'txtTeamTitle'}, 'highlights': [14, 16], 'code': CODE_ORDER, 'out': False},
+     'texts': {4: 'txtTeamName', 19: 'txtTeamTitle'}, 'highlights': [14, 16], 'code': CODE_ORDER, 'out': True},
     {'rel': 'fe/ion/game/screens/pro/draftday.big', 'what': 'Live the Life — день драфта',
      'owner': 0, 'panels': ('mcLeft', 'mcRight', 'mcThird'), 'third_depth': 21, 'rc': 'rc',
      'texts': {4: 'txtName', 13: 'txtPlayerTitle'}, 'highlights': [14], 'code': CODE_DRAFTDAY, 'out': False},

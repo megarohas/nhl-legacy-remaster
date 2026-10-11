@@ -528,7 +528,11 @@ python tools/draft32_legacy.py check              # ролики разбира�
   - Отчёты — `game/work/legacy-fe/draft32/evidence/`, снимок экрана порядка EA — `keyshots/4-*.png`.
 - Live the Life в игре не проверялась.
 
-**В out** — только Entry Draft (`'out': True` в SCREENS, `draft32/files.txt`). Фэнтези и Live the Life собираются в
-`build/`, в out идут после исправления падения и проверки (`build --all` — все 5). Установка:
+Падение фэнтези-драфта на 32 починено в exe (legacy-port, a1cb8f74) и проверено координатором на стенде с этими
+роликами. 16:36 координатор поставил пользователю в CACHE `dm38_nhlentrydraft.big`, `fantasydraft.big` и `draftorder.big`
+(список — `game/work/legacy-data/backup-cache/user-20261011-1636-draft32/added.txt`).
+
+**В out** — те же три (`'out': True` в SCREENS, `draft32/files.txt`; md5 1dd54883, 235e2431, 14fc0431 — как у
+пользователя). Доски Live the Life собираются только в `build/` (`build --all` — все 5). Установка:
 `bash tools/legacy_data/install-legacy-data.sh @game/work/legacy-data/draft32/files.txt`, при закрытой игре. Откат —
 `uninstall-legacy-data.sh` с тем же списком.
