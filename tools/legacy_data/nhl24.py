@@ -414,6 +414,24 @@ EQ = 'stockteamequipmenttable'
 EQ_HELMET = 7                                   # equipment шлема (в базе — 8, см. eq_low)
 EQ_KEY = ('era', 'variant', 'equipment', 'brand')
 EQ_ZONES = tuple(f'zone{i}_{c}' for i in range(1, 10) for c in 'rgb')
+# цвет каски новой формы явно (координатор 11.10): клуб → форма → RGB; зоны строки — как у тёмных шлемов EA, Юты и CHI
+HELMETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'nhl24_helmets.json')
+DARK_TRIM = ((32, 32, 32), (231, 231, 231)) + ((32, 32, 32),) * 6     # зоны 2–9
+
+
+def helmet_colors():
+    """{(клуб, форма): зоны строки шлема (27 чисел)} из nhl24_helmets.json; файла нет — {}."""
+    if not os.path.exists(HELMETS):
+        return {}
+    out = {}
+    for club, kits in json.load(open(HELMETS, encoding='utf-8')).items():
+        if club == 'about':
+            continue
+        for kit, rgb in kits.items():
+            if len(rgb) != 3 or not all(isinstance(c, int) and 0 <= c <= 255 for c in rgb):
+                sys.exit(f'{HELMETS}: {club} {kit} — нужен [R, G, B] 0…255, а не {rgb!r}')
+            out[(club, kit)] = tuple(c for z in (tuple(rgb),) + DARK_TRIM for c in z)
+    return out
 
 
 def eq_low(db):
@@ -479,11 +497,14 @@ def add_helmets(db, rows, new):
     были в белых шлемах (строки 6040/6041 были с era 0 — для ретро-форм — и variant на 1 меньше).
     Новой форме — строка (era как у шлемов форм стиля 1 этого клуба, variant формы) с цветами шлема, который игра сейчас
     даёт домашней (тёмной новой) или выездной (светлой) форме клуба; manifest kits[].helmet = home | away — явно.
-    Новые строки встают в порядке загрузки первыми и могут перехватить формы клуба без своей строки шлема — таким
-    формам дописывается строка с их нынешним цветом («закреплён»). Сверка на модели: у прежних форм клуба шлем не
-    меняется, у новых — как у образца. → [описание добавленного]."""
+    Цвет каски можно задать явно — nhl24_helmets.json (клуб → форма → RGB; координатор 11.10: у SEA и VGK прежние формы
+    czkit в белых шлемах, и новые тёмные брали белый): тогда у строки зона 1 — этот цвет, остальные — как у тёмных
+    шлемов EA, Юты и CHI (DARK_TRIM). Новые строки встают в порядке загрузки первыми и могут перехватить формы клуба без
+    своей строки шлема — таким формам дописывается строка с их нынешним цветом («закреплён»). Сверка на модели: у
+    прежних форм клуба шлем не меняется, у новых — как у образца или заданный. → [описание добавленного]."""
     low = eq_low(db)
     done, adds = [], []
+    explicit = helmet_colors()
     for code in sorted({k['club'] for k in new}, key=lambda c: CLUBS[c][0]):
         team, art = CLUBS[code]
         recs = club_equipment(db, low, team)
@@ -500,7 +521,7 @@ def add_helmets(db, rows, new):
 
         pre = {kv: eq_lookup(recs, key(*kv)) for kv in kits}
         era1 = 1 if any(x[0] == 1 for x in helm) else -1          # какие строки шлема берут формы стиля 1
-        club = []                                                  # (запись-образец, era, variant, описание)
+        club = []                                          # (запись-образец, era, variant, описание, зоны шлема)
         for k in [k for k in new if k['club'] == code]:
             like = k.get('helmet') or ('away' if k['islightcolor'] else 'home')
             sk = next((r for r in mine if r['style'] == 1 and r['locstring'] == (0 if like == 'home' else 1)), None)
@@ -510,11 +531,18 @@ def add_helmets(db, rows, new):
             if any(x[0] == era1 and x[1] == k['variant'] for x in helm):
                 sys.exit(f"{code} {k['kit']}: у варианта {k['variant']} уже есть строка шлема — не тот номер?")
             src = pre[(1, sk['variant'])]
-            club.append((src, era1, k['variant'],
-                         f"{code} {k['kit']} 1_{art}_{k['variant']}: шлем как у {'домашней' if like == 'home' else 'выездной'}"
-                         f" 1_{art}_{sk['variant']} — {_shade(src[5])} (строка {src[4]})"))
+            zones = explicit.get((code, k['kit']))
+            if zones is None:
+                club.append((src, era1, k['variant'],
+                             f"{code} {k['kit']} 1_{art}_{k['variant']}: шлем как у "
+                             f"{'домашней' if like == 'home' else 'выездной'} 1_{art}_{sk['variant']} — {_shade(src[5])} "
+                             f"(строка {src[4]})", src[5]))
+            else:
+                club.append((src, era1, k['variant'],
+                             f"{code} {k['kit']} 1_{art}_{k['variant']}: каска {zones[:3]} — {os.path.basename(HELMETS)}",
+                             zones))
         for _ in range(len(kits) + 1):
-            extra = [(era, v, EQ_HELMET, -1, None, src[5]) for src, era, v, _ in club]
+            extra = [(era, v, EQ_HELMET, -1, None, zones) for src, era, v, _, zones in club]
             post_recs = club_equipment(db, low, team, extra)
             moved = [kv for kv in kits if eq_lookup(post_recs, key(*kv))[5] != pre[kv][5]]
             if not moved:
@@ -522,23 +550,29 @@ def add_helmets(db, rows, new):
             for s, v in moved:
                 club.append((pre[(s, v)], era1 if s == 1 else 0, v,
                              f'{code} {s}_{art}_{v}: шлем как был — {_shade(pre[(s, v)][5])} (строка {pre[(s, v)][4]}), '
-                             f'закреплён'))
+                             f'закреплён', pre[(s, v)][5]))
         else:
             sys.exit(f'{code}: шлемы прежних форм не удаётся сохранить — модель не сошлась')
-        for src, era, v, _ in club[:len([k for k in new if k['club'] == code])]:
+        for src, era, v, _, zones in club[:len([k for k in new if k['club'] == code])]:
             got = eq_lookup(post_recs, key(1, v))
-            if got[5] != src[5]:
+            if got[5] != zones:
                 sys.exit(f'{code} 1_{art}_{v}: по модели шлем не тот (строка {got[4]})')
+        for kv in kits:                                     # прежние формы клуба — шлем как был
+            if kv[1] not in {k['variant'] for k in new if k['club'] == code} and                     eq_lookup(post_recs, key(*kv))[5] != pre[kv][5]:
+                sys.exit(f'{code} {kv[0]}_{art}_{kv[1]}: по модели у прежней формы сменился шлем')
         adds += club
-        done += [d for *_, d in club]
+        done += [d for _, _, _, d, _ in club]
     if adds:
         n = db.by_name[EQ]['rows']
         db.resize(EQ, n + len(adds))
-        for i, (src, era, v, _) in enumerate(adds):
+        for i, (src, era, v, _, zones) in enumerate(adds):
             db.put_record(EQ, n + i, db.record(EQ, src[4]))     # team, equipment, brand (−1), цвета — как у образца
             db.set(EQ, 'era', n + i, era - low['era'])
             db.set(EQ, 'variant', n + i, v - low['variant'])
             db.set(EQ, 'index', n + i, n + i)
+            if zones != src[5]:                                 # каска задана явно (nhl24_helmets.json)
+                for f, c in zip(EQ_ZONES, zones):
+                    db.set(EQ, f, n + i, c)
     return done
 
 
