@@ -1,24 +1,42 @@
-"""OVR NHL Legacy из атрибутов (c_*): игра показывает полевым OVR, посчитанный из атрибутов, а не поле overall
-(координатор 11.10; так же nhl-modding-studio, studio-domain/attributes.rs: «Derived skater Overall — the depth-chart /
-list number», вратарям — поле overall).
+"""OVR NHL Legacy из атрибутов (c_*) — точная формула игры (разбор кода порта legacy-port, 11.10.2026).
 
-Формулы игры у нас нет (в образе есть только веса карточек HUT, gCardOverallWeights_*). Здесь — линейная регрессия
-overall ~ атрибуты по базе EA Legacy (`gameprofile.LEGACY.db`, cacheboot/db/nhlng.db): отдельно C, W, D, G, все лиги,
-без пустышек (OVR ≤ 40). Сверка — `check`: по базе EA медиана остатка по лигам в пределах ±0,6 (у вратарей НХЛ −1,3),
-средняя ошибка 0,5–1,8 (НХЛ 1,1–1,4, АХЛ 1,5–1,8, вратари до 2,6). На настоящих атрибутах NHL 27 (топ-300 EA в наших
-составах НХЛ) — медиана −0,4. Та же форма, что у nhl-modding-studio (tdb-formula/overall.rs, регрессия по default.db
-EA): у нападающих 1,92 × взвешенное среднее − 78,7, у защитников сумма коэффициентов 1,86; здесь — 1,90 / 1,92 / 1,84 /
-1,80 (C/W/D/G). То есть OVR растёт почти вдвое быстрее среднего атрибута: у АХЛ EA средний атрибут 77,7 → OVR 69, у
-НХЛ 83,7 → 83. Поэтому сдвиг формы «среднее атрибутов + поправка группы = OVR» (ratings.Model, калибровка Liiga и
-CV/HSK) верен только в середине шкалы группы: OVR 82 по шкале АХЛ давал средний атрибут 91 и OVR из атрибутов 95, а
-OVR 78 по шкале НХЛ — 70. Model.formula = этот модуль — сдвиг формы до OVR формулы.
+Игра показывает OVR, посчитанный из атрибутов, а поле c_overall не читает вовсе: загрузчики exhibitionskaterai /
+exhibitiongoalieai (82A0B388 / 82A0A680) берут колонки по номеру, c_overall среди них нет, хеша имени нет нигде в
+коде. После загрузки 82B1FAC8 → 82A6C870 → 82A66948 → 82A66610 → 82A61210 считает OVR, 82B0E070 кладёт его в байт +130
+структуры игрока, а списки и звенья читают этот байт (82B8CE08). Веса — таблицы fe/resource_kernel/worth2.brk
+(ресурс 22, разбор 82A5A340): нападающие (C, LW, RW одинаково) — таблица 9, защитники — 6, вратари — 13 (номера —
+байты 0x839F60E8 / EB / EC). Стиль игрока на OVR не влияет.
 
-    python -m roster.ovrformula fit                  # коэффициенты заново по базе EA (печать для LEGACY_W)
-    python -m roster.ovrformula check [БАЗА …]       # OVR из атрибутов против поля overall по лигам
-    python -m roster.ovrformula compare ДО ПОСЛЕ     # распределения по группам и топ АХЛ / свободных агентов
+Формула (целые числа, как в игре). Атрибут — значение шкалы 36–99. Для каждой категории k:
+    S = Σ вес·атрибут, W = Σ вес, S зажимается в [lo·W, hi·W],
+    cat_k = (S − lo·W)·1000 // ((hi − lo)·W), не больше 999;
+    OVR = (Σ cat_k · доля_k) // 1000 (доли в сумме 100), затем в пределах 36–99.
+У полевых 6 категорий, у вратарей 3 (CATS). Сверка: 59 OVR полевых со снимков игры (Be a GM: звенья ANA, состав,
+свободные агенты, контракты, статистика; стартовые составы SEA–VGK; 50 нападающих и 9 защитников) и слова пользователя
+(Marcus Foligno 85, Nick Foligno 84) — все 61 точно, на базах тех дней. Регрессия (прежняя оценка) угадала 4 из 61,
+поле overall расходилось до 12. Вратари в коде считаются так же, но снимков с OVR вратаря нет — сверки по игре у них
+нет.
+
+Поле overall у EA с формулой не совпадает (по базе EA Legacy точно у 15 % полевых, формула в среднем на 1–2 выше): игра
+его не использует. У топ-300 EA NHL 27 в наших составах (настоящие атрибуты NHL 27, overall — OVR NHL 27) OVR игры по
+медиане на 1 выше overall.
+
+Функции:
+    game_ovr(c, attrs)   — OVR, который покажет игра (целое, атрибуты округляются);
+    ovr(c, attrs)        — непрерывная форма для подбора атрибутов (ratings.Model.formula): значение формулы без
+                           отбрасывания дробей минус 0,5, так что round(ovr) — OVR игры (кроме редких случаев у
+                           границы, точно — game_ovr), а ovr в пределах ±0,25 от цели даёт ровно цель;
+    weights(c)           — прирост ovr от +1 к атрибуту (пока категория не упёрлась в lo/hi или 999);
+    regression(c, attrs) — прежняя регрессия overall ~ атрибуты по базе EA (LEGACY_W), только для сверки.
+
+    python -m roster.ovrformula check [БАЗА …]       # формула и регрессия против поля overall по лигам
+    python -m roster.ovrformula verify [worth2.brk]  # константы CATS против таблиц игры (game/…/worth2.brk)
+    python -m roster.ovrformula compare ДО ПОСЛЕ     # распределения OVR игры по группам и топ АХЛ / свободных агентов
+    python -m roster.ovrformula fit                  # регрессия заново по базе EA (печать для LEGACY_W)
 """
 import os
 import statistics
+import struct
 import sys
 
 if __name__ == '__main__':
@@ -29,8 +47,51 @@ if __package__ in (None, ''):
 
 from .ratings import BASE, GK, SK, cls  # noqa: E402
 
-JUNK = 40              # OVR 36 (атрибуты 0) — пустышки базы EA, в регрессию не идут
-# [свободный член, коэффициенты по SK (полевые) или GK (вратари)] — `fit` по базе EA Legacy 11.10.2026
+# Категории worth2.brk: (доля в OVR, lo, hi, ((атрибут, вес), …)). Таблица 9 — нападающие, 6 — защитники, 13 — вратари.
+_F = (
+    (16, 40, 94, (('p_slapaccuracy', 17), ('p_slapshotpower', 17), ('p_wristaccuracy', 40), ('p_wristshotpower', 26))),
+    (16, 20, 94, (('p_passing', 55), ('p_puckcontrol', 23), ('p_handeye', 11), ('p_deking', 11))),
+    (16, 20, 94, (('p_offawareness', 80), ('p_poise', 19), ('p_discipline', 1))),
+    (20, 40, 93, (('p_speed', 25), ('p_acceleration', 25), ('p_agility', 25), ('p_balance', 24), ('p_endurance', 1))),
+    (10, 40, 94, (('p_strength', 55), ('p_bodychecking', 35), ('p_aggression', 2), ('p_fightingskill', 2),
+                  ('p_durability', 6))),
+    (22, 50, 93, (('p_defawareness', 69), ('p_shotblocking', 5), ('p_stickchecking', 25), ('p_faceoffs', 1))),
+)
+_D = (
+    (8, 40, 95, (('p_slapaccuracy', 30), ('p_slapshotpower', 55), ('p_wristaccuracy', 5), ('p_wristshotpower', 10))),
+    (11, 40, 94, (('p_passing', 60), ('p_puckcontrol', 25), ('p_handeye', 12), ('p_deking', 3))),
+    (10, 45, 95, (('p_offawareness', 97), ('p_discipline', 3))),
+    (11, 40, 93, (('p_speed', 26), ('p_acceleration', 21), ('p_agility', 26), ('p_balance', 26), ('p_endurance', 1))),
+    (10, 50, 95, (('p_strength', 55), ('p_bodychecking', 35), ('p_aggression', 2), ('p_fightingskill', 2),
+                  ('p_durability', 6))),
+    (50, 30, 93, (('p_defawareness', 55), ('p_shotblocking', 13), ('p_stickchecking', 20), ('p_poise', 11),
+                  ('p_faceoffs', 1))),
+)
+_G = (
+    (60, 27, 95, (('g_positioning', 15), ('g_breakaway', 12), ('g_5hole', 13), ('g_gsh', 15), ('g_gsl', 15),
+                  ('g_ssh', 15), ('g_ssl', 15))),
+    (20, 40, 95, (('g_passing', 1), ('g_pokecheck', 1), ('g_reboundcontrol', 46), ('g_shotrecover', 46),
+                  ('g_puckplayfrequency', 1), ('g_poise', 5))),
+    (20, 37, 94, (('g_aggression', 15), ('g_agility', 20), ('g_durability', 15), ('g_endurance', 20), ('g_speed', 15),
+                  ('g_vision', 15))),
+)
+CATS = {'C': _F, 'W': _F, 'D': _D, 'G': _G}
+TABLE = {'C': 9, 'W': 9, 'D': 6, 'G': 13}
+# номер атрибута в блоке со смещения +130 структуры игрока (колонки attr таблиц worth2.brk; 82A0B388 / 82A0A680)
+SLOT = {
+    'S': ('p_acceleration', 'p_aggression', 'p_agility', 'p_balance', 'p_bodychecking', 'p_defawareness', 'p_deking',
+          'p_discipline', 'p_durability', 'p_endurance', 'p_faceoffs', 'p_fightingskill', 'p_handeye',
+          'p_offawareness', 'p_passing', 'p_poise', 'p_puckcontrol', 'p_shotblocking', 'p_slapaccuracy',
+          'p_slapshotpower', 'p_speed', 'p_stickchecking', 'p_strength', 'p_wristaccuracy', 'p_wristshotpower'),
+    'G': ('g_aggression', 'g_agility', 'g_positioning', 'g_breakaway', 'g_durability', 'g_endurance', 'g_5hole',
+          'g_gsh', 'g_gsl', 'g_passing', 'g_poise', 'g_pokecheck', 'g_puckplayfrequency', 'g_reboundcontrol',
+          'g_shotrecover', 'g_speed', 'g_ssh', 'g_ssl', 'g_vision'),
+}
+WORTH2 = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'game', 'other',
+                      'legacy', 'big', 'cacheboot', 'fe', 'resource_kernel', 'worth2.brk')
+
+JUNK = 40              # OVR 36 (атрибуты 0) — пустышки базы EA, в регрессию и сверку не идут
+# Прежняя регрессия overall ~ атрибуты по базе EA Legacy: [свободный член, коэффициенты по SK или GK] — `fit` 11.10.2026
 LEGACY_W = {
     'C': [-78.44972, 0.064939, 0.049762, 0.039542, 0.067411, -0.117927, 0.026263, 0.031378, 0.115784, -0.016992,
           0.241539, 0.163611, 0.101828, 0.027905, 0.043452, 0.370698, 0.110138, 0.267067, 0.009329, 0.069195, 0.1996,
@@ -50,21 +111,100 @@ def fields(c):
     return GK if c == 'G' else SK
 
 
-def ovr(c, attrs, w=None):
-    """OVR из атрибутов (шкала 36–99, имена p_*/g_*) для класса C/W/D/G — без округления."""
+def categories(c, attrs):
+    """Категории игры 0…999 (целые, как в 82A5D530); атрибуты — шкала 36–99, округляются."""
+    out = []
+    for _, lo, hi, terms in CATS[c]:
+        s = sum(w * int(round(attrs[f])) for f, w in terms)
+        n = sum(w for _, w in terms)
+        s = min(max(s, lo * n), hi * n)
+        out.append(min(999, (s - lo * n) * 1000 // ((hi - lo) * n)))
+    return out
+
+
+def game_ovr(c, attrs):
+    """OVR, который покажет игра (36–99) для класса C/W/D/G; атрибуты — шкала 36–99 (имена p_*/g_*)."""
+    v = sum(k * share for k, (share, *_) in zip(categories(c, attrs), CATS[c])) // 1000
+    return min(max(v, 36), 99)
+
+
+def value(c, attrs):
+    """Формула игры без отбрасывания дробей и без пределов 36–99 (непрерывная по атрибутам, можно дробные)."""
+    v = 0.0
+    for share, lo, hi, terms in CATS[c]:
+        avg = sum(w * attrs[f] for f, w in terms) / sum(w for _, w in terms)
+        v += share * min(999.0, max(0.0, 1000.0 * (avg - lo) / (hi - lo)))
+    return v / 1000
+
+
+def ovr(c, attrs):
+    """Непрерывный OVR для подбора атрибутов: value − 0,5, round(ovr) ≈ game_ovr; ±0,25 от целого N даёт OVR игры N."""
+    return value(c, attrs) - 0.5
+
+
+def weights(c):
+    """{атрибут: прирост ovr от +1 к нему} (пока его категория не упёрлась в lo/hi или 999)."""
+    out = dict.fromkeys(fields(c), 0.0)
+    for share, lo, hi, terms in CATS[c]:
+        n = sum(w for _, w in terms)
+        for f, w in terms:
+            out[f] += share * w / (n * (hi - lo))
+    return out
+
+
+def gain(c, names):
+    """Насколько вырастет ovr при +1 ко всем атрибутам names."""
+    ws = weights(c)
+    return sum(ws[f] for f in names)
+
+
+def regression(c, attrs, w=None):
+    """Прежняя оценка: регрессия overall ~ атрибуты по базе EA Legacy (без округления) — только для сверки."""
     w = (w or LEGACY_W)[c]
     return w[0] + sum(k * attrs[f] for f, k in zip(fields(c), w[1:]))
 
 
-def weights(c, w=None):
-    """{атрибут: прирост OVR формулы от +1 к нему}."""
-    return dict(zip(fields(c), (w or LEGACY_W)[c][1:]))
+def parse_brk(data):
+    """{номер таблицы: [колонка, …]} из fe/resource_kernel/*.brk (формат по 82A5A340 / 82A573A8)."""
+    flag, n = data[2], struct.unpack_from('<H', data, 3)[0]
+    p, tabs = 5, {}
+    for k in range(n):
+        idx = k
+        if flag == 1:
+            idx, p = data[p], p + 1
+        w0, w1 = struct.unpack_from('<II', data, p)
+        p += 8 + (4 if w1 & 1 else 0)
+        last = struct.unpack_from('<I', data, p)[0]
+        p += 4
+        ncols, nval = last & 0xFF, (last >> 8) & 0xFFF
+        hdr = list(struct.unpack_from(f'<{ncols}h', data, p)) + [nval]
+        p += 2 * ncols
+        if w0 & 1:
+            vals = struct.unpack_from(f'<{nval}h', data, p)
+            p += 2 * nval
+        else:
+            vals = struct.unpack_from(f'<{nval}{"b" if w0 & 2 else "B"}', data, p)
+            p += nval
+        tabs[idx] = [list(vals[hdr[i]:hdr[i + 1]]) for i in range(ncols)]
+    return tabs
 
 
-def gain(c, names, w=None):
-    """Насколько вырастет OVR формулы при +1 ко всем атрибутам names."""
-    ws = weights(c, w)
-    return sum(ws[f] for f in names)
+def verify(path=WORTH2, log=print):
+    """CATS против таблиц worth2.brk: колонки весов 0…n−1, lo/hi — колонка n, номера атрибутов — n+1…2n, доли — 2n+1
+    (n — число категорий; так читает 82A61210). True, если всё совпало."""
+    tabs = parse_brk(open(path, 'rb').read())
+    ok = True
+    for c in 'CDG':
+        t, n = tabs[TABLE[c]], len(CATS[c])
+        slots = SLOT['G' if c == 'G' else 'S']
+        for k, (share, lo, hi, terms) in enumerate(CATS[c]):
+            got = tuple((slots[a - 1], w) for a, w in zip(t[n + 1 + k], t[k]) if a)
+            same = got == terms and (t[n][2 * k], t[n][2 * k + 1]) == (lo, hi) and t[2 * n + 1][k] == share
+            ok &= same
+            if not same:
+                log(f'  {c} категория {k}: в файле {t[2 * n + 1][k]}, {t[n][2 * k]}–{t[n][2 * k + 1]}, {got}')
+    log(f'{path}: CATS {"совпадают с таблицами 9 / 6 / 13" if ok else "НЕ совпадают"}')
+    return ok
 
 
 def rows_of(db_path, meta_path=None):
@@ -113,27 +253,30 @@ def league(team):
 
 
 def check(path, meta=None, w=None, log=print):
+    """OVR игры (game_ovr) и регрессия против поля overall по лигам и классам."""
     rows, _ = rows_of(path, meta)
     by = {}
     for c, a, o, t, _ in rows:
         if o > JUNK:
-            by.setdefault((league(t), c), []).append((ovr(c, a, w), o))
-    log(path)
-    for (lg, c), xs in sorted(by.items(), key=lambda kv: ([n for n, _, _ in LEAGUES] + ['без клуба', 'прочие']).index(
-            kv[0][0]) * 10 + 'CWDG'.index(kv[0][1])):
+            by.setdefault((league(t), c), []).append((game_ovr(c, a), regression(c, a, w), o))
+    log(f'{path}\n  OVR игры: p10 / медиана / p90 / макс | поле overall медиана | игра = поле, игра − поле (медиана, '
+        f'средний модуль) | регрессия − поле')
+    order = [n for n, _, _ in LEAGUES] + ['без клуба', 'прочие']
+    for (lg, c), xs in sorted(by.items(), key=lambda kv: order.index(kv[0][0]) * 10 + 'CWDG'.index(kv[0][1])):
         if len(xs) < 5:
             continue
-        f = sorted(x for x, _ in xs)
-        res = [x - o for x, o in xs]
-        q = lambda p: f[min(len(f) - 1, int(p * len(f)))]
-        log(f'  {lg:9s} {c} n={len(xs):4d}  из атрибутов p10 {q(.1):5.1f} медиана {statistics.median(f):5.1f} p90 '
-            f'{q(.9):5.1f} макс {f[-1]:5.1f} | поле overall медиана {statistics.median(o for _, o in xs):5.1f} | '
-            f'остаток медиана {statistics.median(res):+5.2f}, средний модуль {statistics.mean(abs(x) for x in res):4.2f}')
+        g = sorted(x for x, _, _ in xs)
+        q = lambda p: g[min(len(g) - 1, int(p * len(g)))]
+        dg, dr = [x - o for x, _, o in xs], [x - o for _, x, o in xs]
+        log(f'  {lg:9s} {c} n={len(xs):4d}  {q(.1):3d} / {statistics.median(g):4.1f} / {q(.9):3d} / {g[-1]:3d} | '
+            f'{statistics.median(o for _, _, o in xs):4.1f} | {100 * sum(d == 0 for d in dg) / len(xs):3.0f} %, '
+            f'{statistics.median(dg):+4.1f}, {statistics.mean(abs(d) for d in dg):4.2f} | '
+            f'{statistics.median(dr):+5.2f}, {statistics.mean(abs(d) for d in dr):4.2f}')
 
 
 def groups(path):
-    """{группа: [(класс, OVR из атрибутов, поле overall, имя)]}: НХЛ, АХЛ (с CV/HSK), свободные агенты (пул), Liiga,
-    CHL — по составам базы."""
+    """{группа: [(класс, OVR игры, поле overall, имя)]}: НХЛ, АХЛ (с CV/HSK), свободные агенты (пул), Liiga, CHL — по
+    составам базы."""
     rows, v = rows_of(path)
     fa = v.fa_rows
     out = {}
@@ -142,15 +285,15 @@ def groups(path):
         g = 'FA' if r in fa else next((league(x) for x in teams if league(x) in ('NHL', 'AHL', 'CV/HSK', 'Liiga', 'CHL')),
                                       None)
         if g:
-            out.setdefault('AHL' if g == 'CV/HSK' else g, []).append((c, ovr(c, a), o, v.name(r)))
+            out.setdefault('AHL' if g == 'CV/HSK' else g, []).append((c, game_ovr(c, a), o, v.name(r)))
     return out
 
 
 def compare(before, after, top=15, log=print):
-    """До/после: распределение OVR из атрибутов по группам и классам, топ АХЛ и свободных агентов."""
+    """До/после: распределение OVR игры по группам и классам, топ АХЛ и свободных агентов."""
     gb, ga = groups(before), groups(after)
     q = lambda xs, p: xs[min(len(xs) - 1, int(p * len(xs)))]
-    log(f'OVR из атрибутов (ovrformula): p10 / медиана / p90 / макс; в скобках — поле overall медиана\n'
+    log(f'OVR игры из атрибутов (ovrformula.game_ovr): p10 / медиана / p90 / макс; в скобках — поле overall медиана\n'
         f'  до:    {before}\n  после: {after}')
     for g in ('NHL', 'AHL', 'FA', 'Liiga', 'CHL'):
         for c in 'CWDG':
@@ -158,14 +301,14 @@ def compare(before, after, top=15, log=print):
             for gg in (gb, ga):
                 xs = sorted(f for k, f, _, _ in gg.get(g, []) if k == c)
                 st = [o for k, _, o, _ in gg.get(g, []) if k == c]
-                line.append(f'{q(xs, .1):5.1f} / {statistics.median(xs):5.1f} / {q(xs, .9):5.1f} / {xs[-1]:5.1f} '
+                line.append(f'{q(xs, .1):3d} / {statistics.median(xs):4.1f} / {q(xs, .9):3d} / {xs[-1]:3d} '
                             f'({statistics.median(st):4.1f})' if xs else '—')
             n = sum(1 for k, *_ in ga.get(g, []) if k == c)
             log(f'  {g:5s} {c} n={n:3d}  {line[0]}  →  {line[1]}')
     for g in ('AHL', 'FA'):
         for name, gg in (('до', gb), ('после', ga)):
             xs = sorted(gg.get(g, []), key=lambda x: -x[1])[:top]
-            log(f'  топ-{top} {g} {name}: ' + ', '.join(f'{n} {k} {f:.0f} ({o})' for k, f, o, n in xs))
+            log(f'  топ-{top} {g} {name}: ' + ', '.join(f'{n} {k} {f} ({o})' for k, f, o, n in xs))
 
 
 def main():
@@ -175,8 +318,9 @@ def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else 'check'
     if cmd == 'compare':
         compare(sys.argv[2], sys.argv[3])
-        return
-    if cmd == 'fit':
+    elif cmd == 'verify':
+        sys.exit(0 if verify(*(sys.argv[2:3] or [WORTH2])) else 1)
+    elif cmd == 'fit':
         rows, _ = rows_of(gp.db, gp.meta)
         w = fit(rows)
         print('LEGACY_W = {')
