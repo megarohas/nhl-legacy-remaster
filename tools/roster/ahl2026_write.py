@@ -5,6 +5,8 @@
 - донорами новых игроков служат только строки без клуба, прежнего пула свободных агентов и прежних игроков
   клубов АХЛ, которых нет в данных 2026/27 (строки игроков НХЛ, Европы и юниоров не трогаются);
 - записи составов НХЛ, Европы, юниоров и особых команд остаются как были (у Writer составы НХЛ пересобираются);
+- атрибуты строятся под OVR, который игра считает из атрибутов (legacy_model: ovrformula, формы NHL 27 по составам
+  НХЛ базы), а не «среднее атрибутов + поправка группы» (11.10);
 - проверки — по клубам АХЛ: 20 одетых, каждое место звеньев — одному, буквы, номера, 21–30 игроков (21 — у клубов,
   чьи составы в HockeyTech сами 22–24, а часть игроков в составах НХЛ на 08.10; координатор 10.10: настоящие
   составы, не добирать).
@@ -21,6 +23,36 @@ ROSTER_MIN, ROSTER_MAX = 21, 30          # 21: 20 одетых + запасно�
 
 
 class AhlWriter(W.Writer):
+    def legacy_model(self):
+        """Атрибуты — под OVR, который игра считает из атрибутов (ovrformula, Model.formula), а не «среднее атрибутов +
+        поправка АХЛ». Форма нового игрока — как у конвейера (ratings.Model): медиана атрибутов игроков NHL 27 его
+        амплуа и стиля; здесь — по игрокам составов НХЛ базы (их атрибуты писал конвейер 08.10), потому что в
+        players.json этапа игроков с атрибутами NHL 27 нет. У сопоставленного игрока форма — его атрибуты, стиль —
+        прежний (Model.style)."""
+        from . import ovrformula
+        from .ratings import BASE, GK, SK, _median, cls
+        m, v, db = self.model, self.v, self.db
+        m.formula = ovrformula
+        by_c, by_style = defaultdict(list), defaultdict(list)
+        for r in range(v.nbio):
+            if not v.ai(r) or v.created_slot(r) or not any(t in NHL for t in v.teams_of[r]):
+                continue
+            t, row = v.ai(r)
+            c = cls(POS_NAME[v.g('position', r)])
+            if (t == G) != (c == 'G'):
+                continue
+            a = {f: db.get(t, fld(f), row) + BASE for f in (GK if t == G else SK)}
+            by_c[c].append(a)
+            if t == S:
+                by_style[(c, db.get(S, fld('p_style'), row))].append(a)
+        for c, rows in by_c.items():
+            m.shape[c] = {f: _median([a[f] for a in rows]) for f in rows[0]}
+        m.shape_style = {k: {f: _median([a[f] for a in rows]) for f in SK} for k, rows in by_style.items()
+                         if len(rows) >= 5}
+        self.log(f'атрибуты — под OVR игры из атрибутов (ovrformula); формы NHL 27 по игрокам составов НХЛ: '
+                 + ', '.join(f'{c} {len(x)}' for c, x in sorted(by_c.items()))
+                 + f'; стилей {len(m.shape_style)}')
+
     def donor_candidates(self, taken):
         v = self.v
         out = {'G': [], 'S': []}
@@ -242,6 +274,7 @@ class AhlWriter(W.Writer):
 
 def run_write(paths, log=print):
     w = AhlWriter(paths, log, real_lines=False)
+    w.legacy_model()
     bad, crc, removed = w.run()
     if crc:
         raise SystemExit(f'CRC не сходятся: {crc[:3]}')
