@@ -312,8 +312,28 @@ def place3d(um, item):
     return out
 
 
-def make_jersey(js, svgs, palette, um, dist, log=print):
+def sleeve_rule(cm, nmap, um, log=print):
+    """Полоски рукавов ближе к кисти — то же правило, что у переноса форм NHL 24 (tools/fb/kit_rules.toml [sleeve],
+    решение пользователя 11.10): номер на плече (карта номеров формы, зоны 2 и 3) не ложится на полосы. До логотипов:
+    они правилом не сдвигаются."""
+    from fb import sleeve
+    a = from_img(cm)
+    zones = {}
+    nm = np.frombuffer(bytes(nmap.px), np.uint8).reshape(nmap.h, nmap.w, 4).astype(int)
+    for z in sleeve.NUMBER_ZONES:
+        ys, xs = np.nonzero((nm[..., 0] > 128) & (nm[..., 1] > 128) & (nm[..., 2] == z))
+        if len(xs):
+            zones[z] = (xs.min() / nmap.w, ys.min() / nmap.h, (xs.max() + 1) / nmap.w, (ys.max() + 1) / nmap.h)
+    new, plan = sleeve.remap(a, zones, um['mask'])
+    for z, q in plan.items():
+        log(f'  рукав (зона {z}): рисунок ×{q["k"]} к манжете, зазор до номера {q["gap_before"]} → {q["gap_after"]}')
+    return to_img(new)
+
+
+def make_jersey(js, svgs, palette, um, dist, log=print, nmap=None):
     cm = paint_jersey(js, palette, um, dist, log)
+    if nmap is not None:
+        cm = sleeve_rule(cm, nmap, um, log)
     nm, sm512, cal = clean_maps()
     sm = czkit.resize(sm512, 1024, 1024)
     if 'relief' in js:
@@ -407,9 +427,9 @@ def build(spec_path, outdir, only=None, work=None, log=print):
         new = kp.Kit.parse(ks['kit'])
         cont = kp.default_container(kp.Kit.parse(ks.get('container', spec.get('container', '1_131_0'))), new)
         log(f'{spec.get("team", "")} {name}: {new} (контейнер {cont})')
-        jl, cal = make_jersey(ks['jersey'], svgs, palette, um, dist, log)
-        fcm, fnm, fsm = make_font(spec['font'], ks.get('font', {}), base, masks_cache, palette)
         nmap = name_map(ks.get('name_map', spec.get('name_map', '1_22_3')))
+        jl, cal = make_jersey(ks['jersey'], svgs, palette, um, dist, log, nmap=nmap)
+        fcm, fnm, fsm = make_font(spec['font'], ks.get('font', {}), base, masks_cache, palette)
         ps = ks['pant']
         if 'same_as' in ps:
             pl = done[ps['same_as']]['pant']
