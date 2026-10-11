@@ -164,20 +164,6 @@ def regression(c, attrs, w=None):
     return w[0] + sum(k * attrs[f] for f, k in zip(fields(c), w[1:]))
 
 
-class SkatersExact:
-    """Для ratings.Model.formula (legacy-data, 11.10): у полевых — точная формула игры (ovr, weights), у вратарей —
-    прежняя регрессия: формула вратарей по игре не сверена, а с полем overall вратарей EA расходится на 2–6 (медиана),
-    поэтому их атрибуты пока строятся как раньше (координатор 11.10)."""
-
-    @staticmethod
-    def ovr(c, attrs):
-        return regression(c, attrs) if c == 'G' else ovr(c, attrs)
-
-    @staticmethod
-    def weights(c):
-        return dict(zip(fields(c), LEGACY_W[c][1:])) if c == 'G' else weights(c)
-
-
 def parse_brk(data):
     """{номер таблицы: [колонка, …]} из fe/resource_kernel/*.brk (формат по 82A5A340 / 82A573A8)."""
     flag, n = data[2], struct.unpack_from('<H', data, 3)[0]

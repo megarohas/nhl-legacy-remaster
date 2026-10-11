@@ -24,16 +24,15 @@ ROSTER_MIN, ROSTER_MAX = 21, 30          # 21: 20 одетых + запасно�
 
 class AhlWriter(W.Writer):
     def legacy_model(self):
-        """Атрибуты — под OVR, который игра считает из атрибутов (Model.formula), а не «среднее атрибутов + поправка АХЛ»:
-        у полевых — точная формула игры (ovrformula.ovr, worth2.brk; OVR игры = цель), у вратарей — прежняя регрессия
-        (ovrformula.SkatersExact: формула вратарей по игре не сверена). Форма нового игрока — как у конвейера
-        (ratings.Model): медиана атрибутов игроков NHL 27 его амплуа и стиля; здесь — по игрокам составов НХЛ базы (их
-        атрибуты писал конвейер 08.10), потому что в players.json этапа игроков с атрибутами NHL 27 нет. У
-        сопоставленного игрока форма — его атрибуты, стиль — прежний (Model.style)."""
+        """Атрибуты — под OVR, который игра считает из атрибутов (Model.formula = ovrformula: точная формула игры,
+        worth2.brk; OVR игры = цель у полевых и вратарей), а не «среднее атрибутов + поправка АХЛ». Форма нового
+        игрока — как у конвейера (ratings.Model): медиана атрибутов игроков NHL 27 его амплуа и стиля; здесь — по игрокам
+        составов НХЛ базы (их атрибуты писал конвейер 08.10), потому что в players.json этапа игроков с атрибутами NHL 27
+        нет. У сопоставленного игрока форма — его атрибуты, стиль — прежний (Model.style)."""
         from . import ovrformula
         from .ratings import BASE, GK, SK, _median, cls
         m, v, db = self.model, self.v, self.db
-        m.formula = ovrformula.SkatersExact
+        m.formula = ovrformula
         by_c, by_style = defaultdict(list), defaultdict(list)
         for r in range(v.nbio):
             if not v.ai(r) or v.created_slot(r) or not any(t in NHL for t in v.teams_of[r]):
@@ -50,7 +49,7 @@ class AhlWriter(W.Writer):
             m.shape[c] = {f: _median([a[f] for a in rows]) for f in rows[0]}
         m.shape_style = {k: {f: _median([a[f] for a in rows]) for f in SK} for k, rows in by_style.items()
                          if len(rows) >= 5}
-        self.log('атрибуты — под OVR игры (полевые — точная формула, вратари — регрессия); формы NHL 27 по игрокам '
+        self.log('атрибуты — под OVR игры (точная формула, ovrformula); формы NHL 27 по игрокам '
                  'составов НХЛ: ' + ', '.join(f'{c} {len(x)}' for c, x in sorted(by_c.items()))
                  + f'; стилей {len(m.shape_style)}')
 
