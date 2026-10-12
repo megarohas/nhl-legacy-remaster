@@ -4,13 +4,14 @@
 #   bash tools/legacy_data/build-all.sh [ЭТАП…] [--ahl32]
 #   LEGACY_DATA_WORK=папка bash tools/legacy_data/build-all.sh …   # сухой прогон: всё (и out) — в эту папку;
 #        входы, которые этапом не пересобираются (например, составы без сети), — положить туда заранее
-#        этапы: base roster photos equip collect retire fixdb utah ahl nhlattrs useredits fonts music models art logos
-#        menu nhl24
+#        этапы: base roster photos equip collect retire fixdb utah ahl nhlattrs useredits photos24 fonts music models art
+#        logos menu nhl24
 #        (без этапов — все по порядку;
 #        --ahl32 — ещё вариант «АХЛ на 32», накладка game/work/legacy-data/out-ahl32; nhl24 — накладка out-nhl24
 #        из пакета NHL 24, если он готов: game/work/nhl24/out/pack или NHL24_PACK=папка)
 # Сеть: roster — только кэш (--offline); photos — докачка недостающих портретов лиг (пауза ≥ 1 с), остальное — без сети.
-# Время (под нагрузкой ПК): base ~1 мин, roster ~6 мин, photos ~15 мин, models ~5 мин, art ~5 мин, music ~2 мин.
+# Время (под нагрузкой ПК): base ~1 мин, roster ~6 мин, photos ~15 мин, photos24 ~10 мин (повтор — секунды),
+# models ~5 мин, art ~5 мин, music ~2 мин.
 # Скрипты и спеки — в git (tools/legacy_data/), в game/work/legacy-data — только выход и временное (с 09.10.2026,
 # docs/incident-2026-10-09.md).
 set -e
@@ -26,8 +27,8 @@ L=game/other/legacy/big/cacheboot
 AHL32=0
 stages=()
 for a in "$@"; do [ "$a" = "--ahl32" ] && AHL32=1 || stages+=("$a"); done
-[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah ahl nhlattrs useredits fonts music models art
-                                  logos menu nhl24)
+[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah ahl nhlattrs useredits photos24 fonts music
+                                  models art logos menu nhl24)
 want() { for s in "${stages[@]}"; do [ "$s" = "$1" ] && return 0; done; return 1; }
 say() { echo "== $(date +%H:%M:%S) $*"; }
 
@@ -161,6 +162,21 @@ if want useredits; then
   for B in $O $W/out-ahl32; do
     for F in nhlng.db draft_roster.db; do [ -f $B/db/$F ] && python $T/user_equipment.py $B/db/$F; done
   done
+fi
+if want photos24; then
+  # портреты из NHL 24 тем, у кого портрета нет (docs/player-photos-nhl24.md): база NHL 24 из дампа (имя + дата
+  # рождения, ID EA), портрет → кадр EA, оба размера → out/fe и out-ahl32/fe, hasportrait = 1, draft_roster.db — заново.
+  # После ahl/useredits (берёт готовые базы out), до nhl24 (накладка собирается из out/db). Повтор ничего не меняет.
+  # Нужны дамп NHL 24 (game/other/nhl24 + каталог game/work/nhl24/catalog) и питон с numpy и Pillow
+  PY24=${PHOTOS24_PYTHON:-game/work/photos-nhl24/venv/Scripts/python.exe}; [ -x "$PY24" ] || PY24=python
+  if [ -f game/work/nhl24/catalog/textures.csv ]; then
+    say "портреты из NHL 24 (photos24)"
+    "$PY24" tools/photos24.py match
+    "$PY24" tools/photos24.py build --jobs 6
+    "$PY24" tools/photos24.py apply
+  else
+    say "портреты из NHL 24: нет каталога дампа NHL 24 — этап пропущен"
+  fi
 fi
 if want fonts; then
   say "шрифт меню NHL 12 (fefont --keep, скелет Legacy)"
