@@ -696,8 +696,10 @@ r14_crop22.png`, `r16_crop22.png` (№ 22 MTL). «До» — тот же мат�
 Таблицу и границы печатает `python tools/tapestyles.py --game legacy table`; правятся они в `STYLES`.
 
 **Сборка**:
+
     python tools/sticktape.py --game legacy build --round bottom2 --axial-uv --kinds player,dropped --no-preview
     python tools/tapestyles.py --game legacy build
+
 Первая — сетки в `game/work/legacy-data/models/tape/out-bottom2-axial/` (полевые и клюшка на льду; вратарские не
 нужны). Вторая — `game/work/models/tapevar/legacy/out/`: `rendering/playerstick/texlib_999.rx2` (раскладка `cache:`),
 `png/sticktape_<код>_cm.png`, `manifest.json` (границы в u, sha1), лист `preview/sheet.png` (крюк с каждой
