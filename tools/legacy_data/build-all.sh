@@ -4,7 +4,7 @@
 #   bash tools/legacy_data/build-all.sh [ЭТАП…] [--ahl32]
 #   LEGACY_DATA_WORK=папка bash tools/legacy_data/build-all.sh …   # сухой прогон: всё (и out) — в эту папку;
 #        входы, которые этапом не пересобираются (например, составы без сети), — положить туда заранее
-#        этапы: base roster photos equip collect retire fixdb utah ahl nhlattrs useredits tape goaliegear photos24 heads fonts
+#        этапы: base roster photos equip collect retire fixdb utah ahl nhlattrs useredits tape goaliegear photos24 heads scans24 fonts
 #        music models art logos menu nhl24
 #        (без этапов — все по порядку;
 #        --ahl32 — ещё вариант «АХЛ на 32», накладка game/work/legacy-data/out-ahl32; nhl24 — накладка out-nhl24
@@ -28,7 +28,7 @@ AHL32=0
 stages=()
 for a in "$@"; do [ "$a" = "--ahl32" ] && AHL32=1 || stages+=("$a"); done
 [ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah ahl nhlattrs useredits tape goaliegear photos24
-                                  heads fonts music models art logos menu nhl24)
+                                  heads scans24 fonts music models art logos menu nhl24)
 want() { for s in "${stages[@]}"; do [ "$s" = "$1" ] && return 0; done; return 1; }
 say() { echo "== $(date +%H:%M:%S) $*"; }
 
@@ -211,6 +211,23 @@ if want heads; then
     "$PY24" tools/heads24.py apply
   else
     say "головы: нет каталога дампа NHL 24 — этап пропущен"
+  fi
+fi
+if want scans24; then
+  # сканы голов NHL 24 игрокам с типовой головой (docs/heads-nhl24.md): сопоставление ID EA + имя/дата рождения (спорные —
+  # в match-<вариант>.json, не берутся), сборка player/texlib_<ID EA> по шаблону — скану EA Legacy (сетка 1:1 по UV,
+  # лицо 512 DXT1, пряди в haircap 256, суставы лица по смещению вершин) → out/rendering/player; headid и строки
+  # stockplayerheads на места доноров (число строк то же) в out/db и out-ahl32/db, draft_roster.db заново. Сканы EA не
+  # трогаются. После heads (типовые головы), до nhl24 (накладка из out/db). Повтор ничего не меняет (кэш голов —
+  # $W/scans24/cache). Сейв ROSTER — отдельно: python tools/scans24.py save СЕЙВ [--write]
+  PY24=${PHOTOS24_PYTHON:-game/work/photos-nhl24/venv/Scripts/python.exe}; [ -x "$PY24" ] || PY24=python
+  if [ -f game/work/nhl24/catalog/textures.csv ]; then
+    say "сканы голов NHL 24 (scans24)"
+    "$PY24" tools/scans24.py match
+    "$PY24" tools/scans24.py build --jobs 6
+    "$PY24" tools/scans24.py apply
+  else
+    say "сканы голов NHL 24: нет каталога дампа NHL 24 — этап пропущен"
   fi
 fi
 if want fonts; then

@@ -111,3 +111,62 @@
   - файлы и отчёт — `game/work/heads-research/makar/`;
   - картинка — `makar_pilot.png`;
   - скрипты `build_makar.py` (сборка), `makar_db.py` (база и сейв, по умолчанию без записи), `render_makar.py`.
+
+## Этап `scans24`: сканы NHL 24 всем, у кого типовая голова (12.10.2026)
+
+Код — `tools/scans24.py` и `tools/fb/heads.py` (сетки и текстуры голов NHL 24), этап `scans24` в
+`tools/legacy_data/build-all.sh` (после `heads`, до `nhl24`). Всё рабочее — в `game/work/legacy-data/scans24/`:
+кэш голов, `match-*.json`, `built.json`, `applied-*.json`, копии баз, лист. В git — только код. Сканы EA Legacy
+(у кого `headid` < 60000 и файл в архиве) этап не трогает.
+
+**Сопоставление** (`match`, по каждому варианту; out-ahl32 на 12.10 — 5452 игрока, у 158 скан EA):
+- принимается только однозначный кандидат по одному из признаков:
+  - ID EA (`artid`) + фамилия + дата рождения;
+  - имя + фамилия + дата рождения;
+  - фамилия + дата + похожее имя (Gabe/Gabriel, опечатка в папке EA `phillipe_myers`);
+- у игрока NHL 24 должен быть скан (`headid` < 60000) и папка `licensed/<имя>` с сеткой;
+- **спорные** не берутся, лежат в `disputed`:
+  - тёзки с другой датой — Pettersson 2004, Murray 1998, Hughes 2003, Aho 1996, Beauchemin 1996;
+  - та же фамилия и дата, другое имя — Joel/Henrik Lundqvist, Mike/Bryan Little, Taylor/Travis Sanheim;
+- **конфликты** (`conflict`):
+  - Ambühl: `player_3027` — его же скан EA, лежит в архиве, но база им не пользуется;
+  - Adam Fox: 20406 — номер женской головы EA;
+- в базе NHL 24 скан есть, а папки нет — Panarin, Morrissey, Sörensen, Lindblom;
+- совпал только номер конвейера (другой человек) — `artid_only`, не берутся.
+- Итог: out-ahl32 — **178** (НХЛ 150, FA 10, сборные 6, CHL 6, NLA 2, АХЛ 2, custom 2), out — 179.
+
+**Сборка** (`build`, 6–10 процессов, ~6 с на голову, кэш по версии) — как у пилота Макара. Сетка Макара выходит
+байт в байт как у пилота, проверенного в игре. Дополнительно:
+- **Шаблон** — ближайший по форме скан EA с тем же числом цифр в номере, без прядей. Таких шаблонов 50.
+- **Порядок вершин.** Почти у всех голов NHL 24 он общий, и карта вершин шаблона считается один раз. У 5 голов свой
+  порядок — они сопоставляются по UV, проверка — общих рёбер ≥ 80 %.
+- **Развёртка.** У 8 голов своя правка — текстура перекладывается в общую развёртку по треугольникам.
+- **Поза.** У 10 голов череп сдвинут или наклонён относительно шеи (> 2,5° или > 6 мм: Mark Stone — 2 см, Pettersson,
+  Sanderson…). Они выравниваются по черепу к шаблону, волосы — той же поправкой.
+
+**База** (`apply`, out/db и out-ahl32/db, копия до правки — `scans24/backup/<время>/<вариант>/`):
+- `headid` → ID EA;
+- в `stockplayerheads` строки новых голов ставятся на места доноров, число строк не меняется (1645);
+- `draft_roster.db` пересобирается.
+
+**Сейв ROSTER** игра грузит вместе с `stockplayerheads`, поэтому та же правка нужна и в сейве. Прогон без `--write`
+на `ROSTER 20261011041455`:
+- 177 к замене, Макар уже стоит, чужих правок нет;
+- +169 строк на места доноров, CRC ок.
+
+```bash
+P=game/work/photos-nhl24/venv/Scripts/python.exe
+bash tools/legacy_data/build-all.sh scans24 --ahl32          # match → build → apply (out и out-ahl32)
+bash tools/legacy_data/build-all.sh nhl24 --ahl32            # накладка NHL 24 из новых out/db
+bash tools/legacy_data/install-legacy-data.sh --ahl32 --nhl24   # установка, при закрытой игре
+$P tools/scans24.py save "legacy-port/userdata/B13EBABEBABEBABE/454109EC/00000001/ROSTER 20261011041455/ROSTER 20261011041455"
+                                                             # без --write — только отчёт; с --write копия в backup-saves/scans24-*
+$P tools/scans24.py sheet --stars --helmets 3                # лист «типовая сейчас | NHL 24 | наш» (scans24/sheet-out-ahl32.png)
+```
+
+**Откат:**
+1. Базы — скопировать `nhlng.db` и `draft_roster.db` из `game/work/legacy-data/scans24/backup/<время>/<вариант>/`
+   в `game/work/legacy-data/<вариант>/db/`.
+2. Файлы голов (список — `scans24/out-files.json`) из `out/rendering/player/` — в Корзину.
+3. Пересобрать накладку `nhl24` и переустановить. Полная установка убирает из `cache:` файлы, которых больше нет в out.
+4. Сейв — файл из `game/work/legacy-data/backup-saves/scans24-<время>/`.
