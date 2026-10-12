@@ -218,6 +218,36 @@ class CollarLace:
         self.report = {"from": rule["from"], "colors": {k: [int(x) for x in c] for k, c in self.colors.items()},
                        "lace_texels": int(lace.sum()), "eyelet_texels": int(eye.sum()), "shield_texels": int(sil.sum()),
                        "shield_down": self.shield_down}
+        if rule.get("recolor", True) is False:
+            self._keep(rule, ea, roi, lz, sil, H)
+            self.area = ndi.binary_dilation(roi & ((self.red_a > 0) | lbox | sbox), iterations=10) & roi
+            self.feather = ndi.gaussian_filter(self.area.astype(np.float64), 1.2) * self.area
+            self.protect = ndi.binary_dilation((self.red_a > 0.05) | self.lace_m | sil, iterations=3)
+
+    def _keep(self, rule, ea, roi, lz, sil, H):
+        """recolor = false — ворот уже в цветах клуба (например, EA-форма того же клуба): кусок EA как есть. Ворот и V —
+        по раскладке layout_from (красное EA-ворота выше низа щита), шнурки и люверсы — всё не цвета ткани EA в зоне
+        шнуровки у середины; цвет V-вставки «рубашки» — V EA (v_insert_uv на EA)."""
+        lay = np.asarray(Image.open(os.path.join(os.path.dirname(self.tpl_dir), rule.get("layout_from", rule["from"]),
+                                                 "jersey_cm.png")).convert("RGB").resize((H, H))).astype(np.float64)
+        R, G, B = lay[..., 0], lay[..., 1], lay[..., 2]
+        yy = (np.arange(H)[:, None] + 0.5) / H + np.zeros((1, H))
+        v_bottom = rule.get("v_bottom", rule["shield_box"][3])
+        tear = ndi.binary_closing(roi & (R > G + 40) & (R > B + 40), iterations=3) & (yy < v_bottom) & ~sil
+        ring = ndi.binary_dilation(lz, iterations=6) & ~ndi.binary_dilation(lz, iterations=2)
+        body = _mode(ea[ring])
+        content = lz & (np.abs(ea - body).sum(-1) > 60) & ~sil
+        lab, n = ndi.label(ndi.binary_closing(content, iterations=1))
+        keep = np.zeros_like(content)
+        for k, sl in enumerate(ndi.find_objects(lab), 1):
+            if sl is not None and 0.46 <= (sl[1].start + sl[1].stop) / 2 / H <= 0.54:
+                keep |= lab == k
+        self.red_a, self.red_col = _soft(tear, 0.5), ea
+        self.lace_m, self.lace_col = keep, ea
+        self.eye_m = np.zeros_like(keep)
+        u, v = rule.get("v_insert_ea_uv", [0.5, 0.56])
+        self.insert = np.concatenate([ea[int(v * H), int(u * H)], self.insert[3:]])
+        self.report.update(recolor=False, layout_from=rule.get("layout_from", rule["from"]), keep_texels=int(keep.sum()))
 
     def pre(self, out, msk):
         """Основа на сверхвыборке (до нашивок): ткань → ворот и V → шнурки → люверсы → щит NHL. Формы шнурков,
@@ -242,8 +272,9 @@ class CollarLace:
         return out
 
     def relief(self, nm_path, sm_path, clean_dir):
-        """Весь рельеф (nm, sm) — из шаблона EA; места нашивок (smooth_boxes) — чистая основа A (clean_A_*)."""
-        ea_cm = np.asarray(Image.open(os.path.join(self.tpl_dir, "jersey_cm.png")).convert("RGB").resize((1024, 1024))) \
+        """Весь рельеф (nm, sm) — из шаблона EA (relief_from, иначе from); места нашивок (smooth_boxes) — чистая основа A."""
+        rdir = os.path.join(os.path.dirname(self.tpl_dir), self.rule.get("relief_from", self.rule["from"]))
+        ea_cm = np.asarray(Image.open(os.path.join(rdir, "jersey_cm.png")).convert("RGB").resize((1024, 1024))) \
             .astype(np.float64)
         logo = np.zeros((1024, 1024), bool)
         for b in self.rule.get("smooth_boxes", []):
@@ -259,7 +290,7 @@ class CollarLace:
         mk = ndi.gaussian_filter(logo.astype(np.float64), 2.5)
         for path, name, clean in ((nm_path, "jersey_nm.png", "clean_A_nm.png"), (sm_path, "jersey_sm.png", "clean_A_sm.png")):
             mode = Image.open(path).mode
-            ea = np.asarray(Image.open(os.path.join(self.tpl_dir, name)).convert(mode).resize((1024, 1024), Image.LANCZOS)) \
+            ea = np.asarray(Image.open(os.path.join(rdir, name)).convert(mode).resize((1024, 1024), Image.LANCZOS)) \
                 .astype(np.float64)
             cl = np.asarray(Image.open(os.path.join(clean_dir, clean)).convert(mode).resize((1024, 1024), Image.LANCZOS)) \
                 .astype(np.float64)
