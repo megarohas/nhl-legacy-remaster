@@ -4,8 +4,8 @@
 #   bash tools/legacy_data/build-all.sh [ЭТАП…] [--ahl32]
 #   LEGACY_DATA_WORK=папка bash tools/legacy_data/build-all.sh …   # сухой прогон: всё (и out) — в эту папку;
 #        входы, которые этапом не пересобираются (например, составы без сети), — положить туда заранее
-#        этапы: base roster photos equip collect retire fixdb utah ahl nhlattrs useredits tape photos24 heads fonts music models
-#        art logos menu nhl24
+#        этапы: base roster photos equip collect retire fixdb utah ahl nhlattrs useredits tape goaliegear photos24 heads fonts
+#        music models art logos menu nhl24
 #        (без этапов — все по порядку;
 #        --ahl32 — ещё вариант «АХЛ на 32», накладка game/work/legacy-data/out-ahl32; nhl24 — накладка out-nhl24
 #        из пакета NHL 24, если он готов: game/work/nhl24/out/pack или NHL24_PACK=папка)
@@ -27,8 +27,8 @@ L=game/other/legacy/big/cacheboot
 AHL32=0
 stages=()
 for a in "$@"; do [ "$a" = "--ahl32" ] && AHL32=1 || stages+=("$a"); done
-[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah ahl nhlattrs useredits tape photos24 heads fonts
-                                  music models art logos menu nhl24)
+[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah ahl nhlattrs useredits tape goaliegear photos24
+                                  heads fonts music models art logos menu nhl24)
 want() { for s in "${stages[@]}"; do [ "$s" = "$1" ] && return 0; done; return 1; }
 say() { echo "== $(date +%H:%M:%S) $*"; }
 
@@ -172,6 +172,16 @@ if want tape; then
   for B in $O $W/out-ahl32; do
     for F in nhlng.db draft_roster.db; do [ -f $B/db/$F ] && python $T/tape_players.py db $B/db/$F; done
     [ -f $B/fe/loc/NHL_ENG_US.db ] && python $T/tape_players.py loc $B/fe/loc/NHL_ENG_US.db
+  done
+fi
+if want goaliegear; then
+  # командная экипировка вратарей (tools/legacy_data/goalie_gear.json): каждому вратарю клуба — набор вратаря клуба из
+  # stockgoalieequipment (щитки, блин, ловушка, клюшка, маска, цвета); у клуба без набора и у переименованных клубов с
+  # наборами прежних (white_names) — белая экипировка с чёрной графикой и белая маска. После utah/ahl (имена и составы
+  # клубов) и tape; draft_roster.db — по плану nhlng.db рядом. Повтор ничего не меняет. Отчёты — $W/goaliegear/
+  say "экипировка вратарей по клубам (goalie_gear.py)"
+  for B in $O $W/out-ahl32; do
+    for F in nhlng.db draft_roster.db; do [ -f $B/db/$F ] && python $T/goalie_gear.py db $B/db/$F; done
   done
 fi
 if want photos24; then

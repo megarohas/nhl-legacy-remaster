@@ -157,7 +157,7 @@ bash tools/legacy_data/uninstall-legacy-data.sh          # снять (чужи�
 это в `out-ahl32` (вместе с Liiga, ниже).
 
 Пересборка всего с нуля — `bash tools/legacy_data/build-all.sh [этап…] [--ahl32]` (этапы base, roster, photos,
-equip, collect, retire, fixdb, utah, ahl, nhlattrs, useredits, tape, fonts, music, models, art, logos, menu, nhl24; сеть —
+equip, collect, retire, fixdb, utah, ahl, nhlattrs, useredits, tape, goaliegear, fonts, music, models, art, logos, menu, nhl24; сеть —
 только докачка недостающих портретов лиг). Этап `menu` (`menu12_legacy.py`, `menuitems_legacy.py` и
 `draft32_legacy.py` — доски драфта на 32, `year2026_legacy.py` — год 2026 в копирайтах) идёт после `collect`: тот кладёт в `out/` локализацию nhl32 без правок меню, а
 `menuitems_legacy.py` вносит их снова.
@@ -1209,3 +1209,41 @@ game/work/legacy-data/equipment-user`: полный снимок экипиро�
   0 → 1 — решение 12.10 её заменяет.
 - Сейв состава: `python tools/legacy_data/tape_players.py save СЕЙВ [--write]` — по фамилии и дате рождения в живых
   строках сейва. С `--write` — копия в `backup-saves`, после записи — проверка CRC и обёртки. Запись на копии проверена.
+
+## Экипировка вратарей по клубам (этап goaliegear, 12.10.2026)
+
+Решение пользователя: каждому вратарю клуба — экипировка, заготовленная EA для этого клуба. У клуба без заготовки —
+белая экипировка с чёрной графикой и белая маска. Скрипт `tools/legacy_data/goalie_gear.py`, спецификация
+`goalie_gear.json`, этап после `tape`.
+- **Заготовки** — `stockgoalieequipment` (552 строки). Строка — набор вратаря клуба (`team` = клуб + 1):
+  - модели щитков, блина, ловушки и клюшки;
+  - маска (`masktype`, `maskid` → `rendering/goaliehelmet/goaliehelmet_<masktype>_<maskid>_cm.rx2`);
+  - цвета 9 зон щитков, блина и ловушки, 3 зон клюшки, `showcustomcolors`/`showcustomstick` (0 — цвета клуба из
+    `stockteamequipmenttable`, виды 0–2 — щитки, блин, ловушка).
+
+  У клуба 1–5 наборов. Основной — тот, у кого маска равна `exhibitionteams.goaliemask<masktype>_starter`, запасной —
+  `_backup`. Наборы есть у 222 строк. Нет у SEA и VGK, CV и HSK, заготовок Custom.
+- **Кому что.** Вратарь по составу (`exhibitionrostertable`): g1 — основной набор, g2 — запасной, третий и дальше —
+  следующие. Клуб — первый клуб лиг НХЛ (строки 0–31), АХЛ, Европы и CHL. Сборные, Матч звёзд, Top Prospects, Winter
+  Classic и EASHL не считаются. Копируются все поля набора, кроме своих у вратаря: `jerseytuck`, `sticktapecolor`,
+  `keepcustom*`. Свободные агенты не трогаются.
+- **Белый** (`white`): модели вратаря свои, маска 0_120 — белая. Зоны 1, 4, 6–9 белые (231), 2, 3, 5 чёрные (32) —
+  как у заготовки PIT с золотом → чёрным. Клюшка: 1 белая, 2–3 чёрные.
+- **Спорные** (`white_names` / `keep_names`): у Юты (набор Аризоны, маски с койотом) и у переименованных слотов АХЛ
+  — наборы прежних клубов. Сверено с логотипами 2026/27 (`game/work/logos/work-ahl/svg`), лист —
+  `game/work/models/goalie/look/contested.png`.
+  - Белый: Utah, Abbotsford, Hamilton, Cleveland, Springfield, Colorado Eagles, Utica Comets (цвета 2015 года ≠ 2026).
+  - Набор оставлен: Belleville, Laval, Calgary Wranglers (цвета те же; у Laval и Calgary на масках логотип прежнего
+    клуба).
+- **12.10, 09:47**: out — 274 вратаря, out-ahl32 — 276 (у остальных набор клуба уже стоял). Менялась только
+  `exhibitiongoalieequipment`, CRC OK, повтор — 0. В out-ahl32 по набору — 184 клуба (442 вратаря), белый — 11 клубов
+  (22 вратаря).
+  - Базы: out 7befb0f4 / draft 26441945, out-ahl32 09aa4fdc / draft f2b5e8d9.
+  - Накладка (пакет `pack-installed-b589fa58`): out-nhl24 1b7a04a1, out-nhl24-ahl32 e99165e5.
+  - Бэкап — `backup-cache/out-before-goaliegear-20261012-094715`, отчёты — `game/work/legacy-data/goaliegear/`.
+  - Правок пользователя по вратарям нет: в `equipment-user` ни одной, в сейве ROSTER 20261011041455 вратари совпадают с
+    `cache:`.
+- Не сделано: 4 набора EA (Lausanne 165, München 540, Olomouc 545/546) берут цвета клуба, а у этих клубов в
+  `stockteamequipmenttable` цветов вратаря нет — в игре будут общие. Оставлено как у EA. Игра не проверялась.
+- Сейв: `python tools/legacy_data/goalie_gear.py save СЕЙВ [--write]` — по составам и наборам самого сейва; с
+  `--write` — копия в `backup-saves`, после записи — проверка CRC и обёртки.
