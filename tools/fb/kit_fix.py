@@ -170,7 +170,8 @@ class CollarLace:
 
         def color(part):
             if part + "_color" in rule:
-                return np.array(rule[part + "_color"], dtype=np.float64)
+                c = np.array(rule[part + "_color"], dtype=np.float64)
+                return np.concatenate([c, np.full(max(src_tex.shape[-1] - len(c), 0), 255.0)])  # + альфа основы
             return collar_color(src_tex, {"sample_uv": rule[part + "_uv"], "sample_box": rule.get(part + "_win", 0.004),
                                           "method": "mode"})
         full = {k: color(k) for k in ("collar", "v_insert", "lace")}
@@ -218,7 +219,7 @@ class CollarLace:
         self.report = {"from": rule["from"], "colors": {k: [int(x) for x in c] for k, c in self.colors.items()},
                        "lace_texels": int(lace.sum()), "eyelet_texels": int(eye.sum()), "shield_texels": int(sil.sum()),
                        "shield_down": self.shield_down}
-        if rule.get("recolor", True) is False:
+        if rule.get("recolor", True) is not True:      # false — как есть, "palette" — по палитре
             self._keep(rule, ea, roi, lz, sil, H)
             self.area = ndi.binary_dilation(roi & ((self.red_a > 0) | lbox | sbox), iterations=10) & roi
             self.feather = ndi.gaussian_filter(self.area.astype(np.float64), 1.2) * self.area
@@ -245,8 +246,33 @@ class CollarLace:
         self.red_a, self.red_col = _soft(tear, 0.5), ea
         self.lace_m, self.lace_col = keep, ea
         self.eye_m = np.zeros_like(keep)
+        self._tear = tear
         u, v = rule.get("v_insert_ea_uv", [0.5, 0.56])
         self.insert = np.concatenate([ea[int(v * H), int(u * H)], self.insert[3:]])
+        if rule.get("recolor") == "palette":   # ворот EA → цвета клуба по палитре со светотенью EA
+            lum = ea @ np.array([0.299, 0.587, 0.114])
+            src = {k: ea[int(rule[k + "_src_uv"][1] * H), int(rule[k + "_src_uv"][0] * H)]
+                   for k in ("collar", "v_insert")}
+            d = np.stack([np.sqrt(((ea - src[k]) ** 2).sum(-1)) for k in ("collar", "v_insert")])
+            w = np.exp(-(d / 40.0) ** 2)
+            w = w / np.maximum(w.sum(0), 1e-6)
+            out = np.zeros_like(ea)
+            for i, k in enumerate(("collar", "v_insert")):
+                ls = max(float(src[k] @ np.array([0.299, 0.587, 0.114])), 1.0)
+                out += w[i][..., None] * self.colors[k] * np.clip(lum / ls, 0.6, 1.2)[..., None]
+            self.red_col = out
+            # шнуровка: светлое (как ворот EA) — цвет шнурков, как V EA (прорезь) — цвет V, чёрное (обводка,
+            # люверсы) — как у EA
+            refs = [(src["collar"], self.colors["lace"]), (src["v_insert"], self.colors["v_insert"]), (np.zeros(3), None)]
+            d = np.stack([np.sqrt(((ea - c) ** 2).sum(-1)) for c, _t in refs])
+            w = np.exp(-(d / 45.0) ** 2)
+            w = w / np.maximum(w.sum(0), 1e-6)
+            lc = np.zeros_like(ea)
+            for i, (c, t) in enumerate(refs):
+                ls = max(float(c @ np.array([0.299, 0.587, 0.114])), 1.0)
+                lc += w[i][..., None] * (ea if t is None else t * np.clip(lum / ls, 0.6, 1.2)[..., None])
+            self.lace_col = lc
+            self.insert = np.concatenate([self.colors["v_insert"], self.insert[3:]])
         self.report.update(recolor=False, layout_from=rule.get("layout_from", rule["from"]), keep_texels=int(keep.sum()))
 
     def pre(self, out, msk):
@@ -296,6 +322,12 @@ class CollarLace:
                 .astype(np.float64)
             m = mk[..., None] if ea.ndim == 3 else mk
             res = ea * (1 - m) + cl * m
+            if self.rule.get("relief", "all") == "collar":   # только ворот (шнуровка, щит) поверх нынешнего рельефа
+                cur = np.asarray(Image.open(path).convert(mode).resize((1024, 1024))).astype(np.float64)
+                region = self.protect | getattr(self, "_tear", np.zeros_like(self.protect))
+                rm = ndi.gaussian_filter(ndi.binary_dilation(region, iterations=4).astype(np.float64), 2.0)
+                rm = rm[..., None] if ea.ndim == 3 else rm
+                res = cur * (1 - rm) + ea * rm
             k = self.shield_down * 1024 // self.ea.shape[0]
             if k:  # рельеф щита — вместе со щитом (ниже на shield_down)
                 sb = _box(1024, self.rule["shield_box"])
