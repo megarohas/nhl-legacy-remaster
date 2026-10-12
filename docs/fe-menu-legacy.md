@@ -536,3 +536,54 @@ python tools/draft32_legacy.py check              # ролики разбира�
 пользователя). Доски Live the Life собираются только в `build/` (`build --all` — все 5). Установка:
 `bash tools/legacy_data/install-legacy-data.sh @game/work/legacy-data/draft32/files.txt`, при закрытой игре. Откат —
 `uninstall-legacy-data.sh` с тем же списком.
+
+## 12. Год 2015 → 2026 в надписях (12.10.2026, legacy-fe)
+
+**Где «2015».** Искали везде:
+- локализация `fe/loc/NHL_ENG_US.db`;
+- все файлы распакованных архивов Legacy (29 295 файлов, записи BIGF разжаты: ролики Apt, базы, тексты);
+- образ exe `legacy-port/images/legacy.bin`;
+- текстуры заставок и юридических экранов: `bootflow/01_legal`, `03_pressstart`, `pressstart/*`, `ddpsplash`, `demo/bootflowlegal`, `nhlbootflowbackground`, загрузочные экраны;
+- видео `ealogo.vp6` и `attract_eng.vp6`.
+
+Год есть только в строках локализации. Ни в роликах, ни в exe, ни на картинках его нет.
+- Вне локализации «2015» нашлось только в `scenario/scenario_manifest.json` (даты матчей Moments Live) и в именах `faceposer_2015x.cba`.
+- Attract-ролик на стартовом экране при простое заканчивается логотипом «NHL 15», но года 2015 в нём нет. Переделать его можно только перекодированием VP6, в задачу не берём.
+
+**Стартовый экран.** Подпись внизу — не картинка. `cacheboot:fe/ion/game/screens/bootflow/03_pressstart.big`, `showPressStart`:
+`txtCopyright.text = ltxt("TitleScreen_Copyright")`, `autoSize = "center"`.
+- Поле стоит в (382, 599), ширина 520, кегль 16, цвет #E6E6E6.
+- Шрифт в поле — «Arial». Файла `arial.ttf` нет, поэтому игра рисует подпись шрифтом «Med»; с модом шрифтов это NHL 12 Med (сверено со снимком игры, ширина 187 px).
+
+Правка строки меняет экран: шрифт, место и вид остаются прежними.
+Лист «было | стало» — `game/work/legacy-fe/year2026/title-before-after.png`. Сцена собрана из текстур ролика, подпись — шрифтом мода, положение подогнано по снимку игры (корреляция 0,97).
+
+**Правка** — [tools/year2026_legacy.py](../tools/year2026_legacy.py), этап `menu` в build-all после `menuitems_legacy.py`. Через `locdb put` меняется только слово с годом, остальной текст ключа остаётся:
+
+| Ключ | Где видно | Было → стало |
+|---|---|---|
+| `TitleScreen_Copyright` | стартовый экран | © 2015 Electronic Arts Inc. → © 2026 … |
+| `LegalText` | юридический экран при запуске (`01_legal.big`) | … © NHL 2015. All Rights Reserved. … → © NHL 2026. |
+| `CREDITS_NHL_LEGAL_3` | титры (`fe/credits/credits`) | © NHL 2015 All Rights Reserved. → 2026 |
+| `CREDITS_AHL_LEGAL_2`, `CREDITS_CHL_LEGAL_2` | титры | ©2015 AHL/CHL. → ©2026 |
+| `License_NHL`, `TXT_ARCADE_TitleScreen_Copyright` | роликами fe не используются | 2015 → 2026, для порядка |
+| `TXT_HELP_FREE_AGENT_0_BLURB3` | подсказка о свободных агентах (строку зовёт exe) | …575K for 2015. → …850K for 2026. (как `nhl_salary_min` порта) |
+
+**Что не меняли** (решение координатора 12.10):
+- Moments Live: «2014-2015 Season», «2015-2016 Season», даты матчей. Это реальные моменты сезона.
+- Названия старых форм «2014-15 Home».
+- «NHL® 15/16» — названия игр в онлайн-пунктах.
+- Чужие копирайты (Naxos, On2).
+- Ачивка «Raise Your Banner '15».
+- Задача «2014/2015 NHL® Rookie Entry Draft».
+
+```bash
+python tools/year2026_legacy.py build [--no-out]   # → game/work/legacy-data/year2026/build, out и out-ahl32; список — year2026/files.txt
+python tools/year2026_legacy.py check              # отличается только текст 8 ключей; locdb check; где «2015» осталось
+python tools/year2026_legacy.py scan [DB]          # все ключи с «2015»
+```
+
+- Правки той же локализации, что у `menuitems_legacy.py`: EXIT и панель описаний. Повторная сборка ничего не добавляет: если текст уже нужный, правки нет.
+- Накладки `out-nhl24` и `out-nhl24-ahl32` этап `nhl24` собирает из локализации `out` и `out-ahl32`. Пока этап `nhl24` не пересобран после `menu`, в них прежний год. При установке с `--nhl24` их локализация ложится поверх.
+- Проверено без игры (12.10): `check` — 8 ключей, другого текста нет, `locdb check` OK, в `out` и `out-ahl32` лежат собранные файлы.
+- В игре не проверялось. Пользователю не ставилось: ставить вместе с остальным по его слову.

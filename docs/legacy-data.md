@@ -23,6 +23,7 @@
 | Главное меню NHL 12: фон с игроками 2026/27, плашка и кегли 34/25 | `tools/menu12_legacy.py` (помощник menu) | ✔ арена NHL 12, игроки сменяются, кольца в цвет клуба, плашка; вход/выход PLAY, Play Now, CUSTOMIZE (полный список — [fe-menu-legacy.md](fe-menu-legacy.md) §5) |
 | Главное меню: без синей подложки на входе; пункты без онлайна, EXIT, панель описаний про офлайн | `tools/menu12_legacy.py` (подложка), `tools/menuitems_legacy.py` (legacy-fe, 09.10) | ✔ синего нет ([fe-menu-legacy.md](fe-menu-legacy.md) §7); меню и EXIT проверены, EXIT — только с exe legacy-port (§8) |
 | Доски драфта на 32: три колонки 15 + 15 + 2 (Be a GM, фэнтези-драфт и его порядок, Live the Life) | `tools/draft32_legacy.py` + `tools/aptc.py` (legacy-fe, 11.10) | ✔ Entry Draft и фэнтези-драфт (exe legacy-port a1cb8f74), у пользователя с 11.10 16:36; в out — эти 3 ролика, Live the Life — нет ([fe-menu-legacy.md](fe-menu-legacy.md) §11) |
+| Год 2015 → 2026 в надписях: стартовый экран, юридический текст, титры, подсказка FA | `tools/year2026_legacy.py` (legacy-fe, 12.10) | в игре не проверялось, не поставлено; в out и out-ahl32 ([fe-menu-legacy.md](fe-menu-legacy.md) §12) |
 
 Набор — `game/work/legacy-data/out/` (дерево путей как в `cache:`); ставится при закрытой игре:
 
@@ -158,7 +159,7 @@ bash tools/legacy_data/uninstall-legacy-data.sh          # снять (чужи�
 Пересборка всего с нуля — `bash tools/legacy_data/build-all.sh [этап…] [--ahl32]` (этапы base, roster, photos,
 equip, collect, retire, fixdb, utah, ahl, nhlattrs, useredits, fonts, music, models, art, logos, menu, nhl24; сеть —
 только докачка недостающих портретов лиг). Этап `menu` (`menu12_legacy.py`, `menuitems_legacy.py` и
-`draft32_legacy.py` — доски драфта на 32) идёт после `collect`: тот кладёт в `out/` локализацию nhl32 без правок меню, а
+`draft32_legacy.py` — доски драфта на 32, `year2026_legacy.py` — год 2026 в копирайтах) идёт после `collect`: тот кладёт в `out/` локализацию nhl32 без правок меню, а
 `menuitems_legacy.py` вносит их снова.
 
 Этап `logos` (с 10.10) идёт после `art`: логотипы клубов 2026/27 агента logos ([logos-2026.md](logos-2026.md)) —

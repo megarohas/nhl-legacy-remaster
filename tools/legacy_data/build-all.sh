@@ -212,6 +212,10 @@ if want menu; then
   # (docs/fe-menu-legacy.md §11); файлы — game/work/legacy-data/draft32/files.txt
   say "доски драфта на 32 (draft32_legacy)"
   python tools/draft32_legacy.py build
+  # год 2015 → 2026 в копирайтах и юридическом тексте (стартовый экран, legal, титры, подсказка FA) — локализация out и
+  # out-ahl32, после menuitems_legacy (docs/fe-menu-legacy.md §12); файлы — game/work/legacy-data/year2026/files.txt
+  say "год 2015 → 2026 в надписях (year2026_legacy)"
+  python tools/year2026_legacy.py build
 fi
 if want nhl24; then
   # после collect (берёт out/db и out-ahl32/db): пакет агента nhl24 — формы, шрифты номеров, центры и реклама льда,
