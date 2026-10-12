@@ -24,7 +24,7 @@ import time
 import numpy as np
 from PIL import Image
 
-from . import kit3d, kit_hybrid
+from . import kit3d, kit_fix, kit_hybrid
 from .cas import REPO
 from .kit_batch import CLEAN, CLEAN_T, CLUBS, MESH, collar_rule, legacy_target, prefix
 from .pack import CACHE, PACK, TMP, TOOLS, md5
@@ -445,6 +445,7 @@ def cmd_build(a):
             tids[family], _ = kit3d.raster_uv(srcs[family], 1024)
         src, tid24 = srcs[family], tids[family]
         defaults, rules = kit_hybrid.load_rules(kit_hybrid.RULES, code, label, [])
+        fit = kit_fix.crest_fit(os.path.join(unpack(tpl_kit), "name_cm.png"))  # герб не на букву капитана
         comp = kit3d.load_tex(png(folder, jc))
         bc = p + f"jersey_{family}_{club}_{kit}_base_color"
         if bc in ok and Image.open(png(folder, bc)).size == (comp.shape[1], comp.shape[0]):
@@ -452,8 +453,11 @@ def cmd_build(a):
             lab, patches = kit_hybrid.find_patches(comp, base, defaults)
             mode = "base"
         else:
-            base, lab, patches = kit_hybrid.standard_patches(comp, rules, defaults)
-            mode = "без base: щит NHL и логотип сзади — декалями"
+            names = ("neck_shield", "back_neck") + tuple(k for k, r in rules.items() if r.get("sponsor"))
+            if fit:  # герб — тоже декалью, чтобы его можно было уменьшить
+                names += ("crest",)
+            base, lab, patches = kit_hybrid.standard_patches(comp, rules, defaults, names=names)
+            mode = "без base: щит NHL, логотип сзади" + (" и герб" if fit else "") + " — декалями"
         if mode == "base":  # спонсор зашит в сам base (у MIN — Tria): тоже снимается — закраской по строкам
             sp = tuple(k for k, r in rules.items() if r.get("sponsor"))
             base, _lab_sp, sp_found = kit_hybrid.standard_patches(base, rules, defaults, names=sp)
@@ -470,13 +474,26 @@ def cmd_build(a):
             placed += p2
             soft.update(s2)
         collar = (crule, kit_hybrid.collar_color(base, crule)) if crule.get("mode", "body") == "body" else None
-        post = kit_hybrid.decal_post(comp, placed, soft, n_jersey_tri, collar)
+        pre, laces, band = [], kit_fix.club_rule("laces", code, label), kit_fix.club_rule("chest_band", code, label)
+        if laces:  # ворот со шнуровкой без 3D-шнурков: раскладка и рельеф EA-комплекта laces.from, цвета NHL 24
+            laces_fix = kit_fix.Laces(laces, base, unpack(laces["from"]))
+            pre.append(laces_fix.pre)
+            collar = (crule, laces_fix.insert)
+            rec["laces"] = {"from": laces["from"], "colors": {k: [int(x) for x in c] for k, c in laces_fix.colors.items()}}
+        if band:
+            band_fix = kit_fix.BandTrim(band)
+            pre.append(band_fix)
+        post = kit_hybrid.decal_post(comp, placed, soft, n_jersey_tri, collar, pre=pre, crest_fit=fit)
         img, mask, dist, info = kit3d.transfer(base, src, dst, 1024, 2, post=post)
+        if band:
+            rec["chest_band"] = getattr(band_fix, "report", None)
         Image.fromarray(np.clip(img, 0, 255).astype(np.uint8)).convert("RGB").save(os.path.join(od, "jersey_cm_raw.png"))
         rec["sleeve"] = sleeve_rule(od, tpl_kit)
         Image.open(os.path.join(CLEAN, f"{CLEAN_T}_3-12-21-30-39-48-57-66-75_sm.png")).resize((1024, 1024), Image.LANCZOS) \
             .save(os.path.join(od, "jersey_sm.png"))
         shutil.copyfile(os.path.join(CLEAN, f"{CLEAN_T}_3-12-21-30-39-48-57-66-75_nm.png"), os.path.join(od, "jersey_nm.png"))
+        if laces:
+            laces_fix.relief(os.path.join(od, "jersey_nm.png"), os.path.join(od, "jersey_sm.png"))
         build_font(rec, folder, ok, p, family, club, kit, od, tpl_kit, own_name)
         # шорты и гетры: точно через 3D (сетки по .toc), выравнивание по рамкам
         pc, sc = p + f"pant_{family}_{club}_{kit}_color", p + f"sock_{family}_{club}_{kit}_color"

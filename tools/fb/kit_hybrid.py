@@ -141,6 +141,30 @@ def fill_rows(img, hole):
     return out
 
 
+def fill_mirror(img, hole):
+    """Дыра — отражением соседних пикселей той же строки (левая половина — слева, правая — справа): фактура ткани
+    и горизонтальные полосы сохраняются; что не нашлось — растеканием цвета соседей."""
+    out = img.copy()
+    W = img.shape[1]
+    left_over = np.zeros_like(hole)
+    for y in np.nonzero(hole.any(1))[0]:
+        row = hole[y]
+        xs = np.nonzero(row)[0]
+        cuts = np.nonzero(np.diff(xs) > 1)[0]
+        for seg in np.split(xs, cuts + 1):
+            a, b = seg[0], seg[-1]
+            mid = (a + b) / 2
+            src = np.where(seg <= mid, a - 1 - (seg - a), b + 1 + (b - seg))
+            ok = (src >= 0) & (src < W)
+            ok[ok] = ~row[src[ok]]
+            out[y, seg[ok]] = img[y, src[ok]]
+            left_over[y, seg[~ok]] = True
+    if left_over.any():
+        from .kit3d import fill_holes
+        out = fill_holes(out, ~left_over, iters=48)
+    return out
+
+
 def standard_patches(comp, rules, defaults, names=None, win=0.022):
     """Для комплектов без base-слоёв: нашивки в стандартных местах развёртки (у всех adidas-свитеров NHL 24 щит NHL
     у ворота и логотип сзади лежат в одних и тех же uv). В окне вокруг uv правила фон — медиана рамки окна, нашивка —
@@ -173,6 +197,8 @@ def standard_patches(comp, rules, defaults, names=None, win=0.022):
             base[y0:y1, x0:x1, 3] = a
             continue
         box = comp[y0:y1, x0:x1, :3]
+        if r.get("smooth"):  # фактура ткани (блёстки у VGK) — не нашивка: разница по сглаженному окну
+            box = ndi.gaussian_filter(box, (r["smooth"], r["smooth"], 0))
         border = np.concatenate([box[0], box[-1], box[:, 0], box[:, -1]])
         bg = np.median(border, axis=0)
         m = np.abs(box - bg).sum(-1) > defaults.get("threshold", 30) * 1.3
@@ -190,13 +216,24 @@ def standard_patches(comp, rules, defaults, names=None, win=0.022):
                 best, bd = k, dd
         if not best or bd > w * 0.6:
             continue
+        ys, xs = np.nonzero(l == best)
+        if r.get("smooth") and (ys.min() == 0 or xs.min() == 0 or ys.max() == l.shape[0] - 1 or xs.max() == l.shape[1] - 1):
+            continue  # слилось с окружением (до края окна) — не нашивка, не трогаем
         mk = ndi.binary_dilation(l == best, iterations=2)
         lab[y0:y1, x0:x1][mk] = i
         hole[y0:y1, x0:x1] |= mk
         ys, xs = np.nonzero(mk)
         sl = (slice(y0 + ys.min(), y0 + ys.max() + 1), slice(x0 + xs.min(), x0 + xs.max() + 1))
         patches.append((i, sl, int(mk.sum())))
-        # закрасить нашивку: спонсор — построчно (полосы рядом не размываются), прочие — растеканием цвета соседей
+        # закрасить нашивку: спонсор — построчно (полосы рядом не размываются), герб — отражением соседей той же
+        # строки (фактура ткани и полосы сохраняются), прочие — растеканием цвета соседей
+        if r.get("fill") == "mirror":
+            gh = np.zeros((H, H), dtype=bool)
+            gh[y0:y1, x0:x1] = mk
+            a = base[..., 3].copy()
+            base = fill_mirror(base, gh)
+            base[..., 3] = a
+            continue
         a = base[y0:y1, x0:x1, 3].copy()
         if r.get("sponsor"):
             base[y0:y1, x0:x1] = fill_rows(base[y0:y1, x0:x1], hole[y0:y1, x0:x1])
@@ -251,7 +288,8 @@ def plan_decals(comp, lab, patches, rules, defaults, src, dst, tid24):
         placed.append({"name": name, "uv": [round(float(u_c), 4), round(float(v_c), 4)], "area": area,
                        "nhl24_3d": np.round(p, 4).tolist(), "legacy_3d": np.round(cL, 4).tolist(),
                        "snap_cm": round(float(ld[0]) * 100, 2), "rule": {k: v for k, v in rule.items() if k != "note"},
-                       "_frame": (cL, nL, pinv, R, sc, rad, u_c, v_c), "_lid": lid})
+                       "_frame": (cL, nL, pinv, R, sc, rad, u_c, v_c), "_lid": lid,
+                       "_box": (sl[1].start / H, sl[0].start / H, sl[1].stop / H, sl[0].stop / H)})
     return placed, soft
 
 
@@ -283,12 +321,19 @@ def legacy_with_shirt():
     return merge(j, load_legacy(LEGACY_SHIRT)), len(j["tri"])
 
 
-def decal_post(comp, placed, soft, n_jersey_tri, collar=None):
+def decal_post(comp, placed, soft, n_jersey_tri, collar=None, pre=(), crest_fit=None):
     """collar — (правило, цвет): V-вставка ворота Edge — сетка «рубашки» (треугольники после свитера) — заливается
-    цветом свитера под воротом: у adidas ворот круглый, выреза нет."""
+    цветом свитера под воротом: у adidas ворот круглый, выреза нет.
+    pre — правки основы до нашивок: fn(img, mask) -> img на сверхвыборке (kit_fix: ворот со шнуровкой, полоса на груди).
+    crest_fit — герб не на букву капитана (kit_fix.crest_fit): масштаб герба подбирается по зазору до зон букв."""
     def post(img, msk, P, N, tri, UV=None):
         out = img.copy()
+        for fn in pre:
+            out = fn(out, msk)
         flat = out[msk]
+        if crest_fit is not None:
+            yy, xx = np.nonzero(msk)
+            du, dv = (xx + 0.5) / msk.shape[1], (yy + 0.5) / msk.shape[0]
         on_jersey = tri < n_jersey_tri
         if collar is not None:
             rule, color = collar
@@ -306,6 +351,8 @@ def decal_post(comp, placed, soft, n_jersey_tri, collar=None):
             duv = duv @ R.T
             uu = u_c + duv[:, 0]
             vv = v_c + duv[:, 1]
+            if crest_fit is not None and pl["name"] == "crest":
+                uu, vv = _fit_crest(pl, uu, vv, soft[pl["_lid"]], du[sel], dv[sel], crest_fit)
             col = sample_bilinear(comp, uu, vv)
             a = sample_bilinear(soft[pl["_lid"]][..., None], uu, vv)[:, 0]
             inside = (uu >= 0) & (uu <= 1) & (vv >= 0) & (vv <= 1)
@@ -315,6 +362,34 @@ def decal_post(comp, placed, soft, n_jersey_tri, collar=None):
         out[msk] = flat
         return out
     return post
+
+
+def _fit_crest(pl, uu, vv, soft_m, du, dv, fit):
+    """Герб не на букву капитана: сначала ниже (низ — не ниже max_bottom, как у EA-форм), потом меньше — масштаб s ≤ 1
+    относительно середины нижнего края (или центра), чтобы до зон букв было ≥ gap_min. -> (uu, vv) на развёртке NHL 24."""
+    from .kit_fix import fit_crest, rect_gap
+    b0, b1, b2, b3 = pl["_box"]
+    au, av = (b0 + b2) / 2, (b3 if fit.get("anchor", "bottom") == "bottom" else (b1 + b3) / 2)
+    k = np.cov(vv, dv)[0, 1] / max(np.var(dv), 1e-12)        # v NHL 24 на единицу v Legacy у герба
+
+    def moved(s, dlv):
+        return au + (uu - au) / s, av + (vv - k * dlv - av) / s
+
+    def foot(s, dlv):
+        u2, v2 = moved(s, dlv)
+        a = sample_bilinear(soft_m[..., None], u2, v2)[:, 0]
+        return (a > 0.5) & (u2 >= 0) & (u2 <= 1) & (v2 >= 0) & (v2 <= 1)
+
+    def gap_of(s, dlv=0.0):
+        fp = foot(s, dlv)
+        return rect_gap(du[fp], dv[fp], fit["rects"])
+
+    fp0 = foot(1.0, 0.0)
+    bottom = float(dv[fp0].max()) if fp0.any() else 1.0
+    s, dlv, g0, g1 = fit_crest(fit, gap_of, max(0.0, fit.get("max_bottom", 0.85) - bottom))
+    pl["fit_scale"], pl["fit_down_v"] = round(s, 3), round(dlv, 4)
+    pl["letter_gap_before"], pl["letter_gap"] = round(g0, 4), round(g1, 4)
+    return moved(s, dlv)
 
 
 def hybrid(comp_path, base_path, out_path, club=None, kit=None, rules_path=RULES, size=1024, ss=2, report=None,
