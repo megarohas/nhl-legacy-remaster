@@ -49,6 +49,7 @@ note = "щит NHL у горловины — на месте щита EA-фор�
 
 [patch.back_neck]
 uv = [0.500, 0.434]
+enabled = false       # 12.10: вместо adidas — Reebok как у EA-форм ([brand]); у комплектов без base adidas закрашивается
 note = "логотип производителя сзади у ворота (adidas)"
 
 [patch.hem_tag]
@@ -164,6 +165,7 @@ anchor = "bottom"
 shield_box = [0.488, 0.583, 0.512, 0.607]
 lace_box = [0.455, 0.590, 0.545, 0.670]
 split_v = 0.524        # выше — ворот (внутренняя сторона, видна в вырезе), ниже — нарисованный V на груди
+piping_v = [0.575, 0.586]   # кант кокетки EA (1_14_2) — полоса во всю ширину под воротом: не ворот и не шнуровка
 lace_top = 0.592       # шнурки — ниже края кокетки EA (выше зелёное — кокетка, не шнурок)
 shield_down = 0.0      # сдвиг щита EA вниз (доля v); 0 — на месте щита EA, как у всех EA-форм
 
@@ -173,7 +175,7 @@ shield_down = 0.0      # сдвиг щита EA вниз (доля v); 0 — н�
 [collar_lace.MIN.home]
 from = "1_14_2"
 recolor = false
-layout_from = "1_14_3"
+layout_from = "1_14_2"        # своя раскладка: ворот сзади шире, до шва (12.10)
 relief_from = "1_14_3"
 collar_uv = [0.5, 0.50]
 v_insert_uv = [0.5, 0.565]
@@ -186,7 +188,7 @@ smooth_boxes = [[0.44, 0.380, 0.56, 0.420], [0.34, 0.44, 0.43, 0.52], [0.57, 0.4
 [collar_lace.VGK.home]
 from = "1_14_2"
 recolor = "palette"
-layout_from = "1_14_3"
+layout_from = "1_14_2"        # своя раскладка: ворот сзади шире, до шва (12.10)
 relief_from = "1_14_3"
 relief = "collar"
 collar_src_uv = [0.5, 0.48]
@@ -199,7 +201,7 @@ lace_color = [252, 201, 96]
 [collar_lace.VGK.away]
 from = "1_14_2"
 recolor = "palette"
-layout_from = "1_14_3"
+layout_from = "1_14_2"        # своя раскладка: ворот сзади шире, до шва (12.10)
 relief_from = "1_14_3"
 relief = "collar"
 collar_src_uv = [0.5, 0.48]
@@ -212,7 +214,7 @@ lace_color = [252, 201, 96]
 [collar_lace.VGK.three]
 from = "1_14_2"
 recolor = "palette"
-layout_from = "1_14_3"
+layout_from = "1_14_2"        # своя раскладка: ворот сзади шире, до шва (12.10)
 relief_from = "1_14_3"
 relief = "collar"
 collar_src_uv = [0.5, 0.48]
@@ -225,7 +227,7 @@ lace_color = [60, 59, 66]
 [collar_lace.SEA.home]
 from = "1_14_2"
 recolor = "palette"
-layout_from = "1_14_3"
+layout_from = "1_14_2"        # своя раскладка: ворот сзади шире, до шва (12.10)
 relief_from = "1_14_3"
 relief = "collar"
 collar_src_uv = [0.5, 0.48]
@@ -238,7 +240,7 @@ lace_color = [150, 216, 216]
 [collar_lace.SEA.away]
 from = "1_14_2"
 recolor = "palette"
-layout_from = "1_14_3"
+layout_from = "1_14_2"        # своя раскладка: ворот сзади шире, до шва (12.10)
 relief_from = "1_14_3"
 relief = "collar"
 collar_src_uv = [0.5, 0.48]
@@ -251,7 +253,7 @@ lace_color = [0, 34, 62]
 [collar_lace.CHI.home]
 from = "1_14_2"
 recolor = "palette"
-layout_from = "1_14_3"
+layout_from = "1_14_2"        # своя раскладка: ворот сзади шире, до шва (12.10)
 relief_from = "1_14_3"
 relief = "collar"
 collar_src_uv = [0.5, 0.48]
@@ -264,7 +266,7 @@ lace_color = [27, 28, 27]
 [collar_lace.CHI.away]
 from = "1_14_2"
 recolor = "palette"
-layout_from = "1_14_3"
+layout_from = "1_14_2"        # своя раскладка: ворот сзади шире, до шва (12.10)
 relief_from = "1_14_3"
 relief = "collar"
 collar_src_uv = [0.5, 0.48]
@@ -277,7 +279,7 @@ lace_color = [159, 14, 10]
 [collar_lace.CHI.three]
 from = "1_14_2"
 recolor = "palette"
-layout_from = "1_14_3"
+layout_from = "1_14_2"        # своя раскладка: ворот сзади шире, до шва (12.10)
 relief_from = "1_14_3"
 relief = "collar"
 collar_src_uv = [0.5, 0.48]
@@ -285,6 +287,19 @@ v_insert_src_uv = [0.5, 0.56]
 collar_color = [233, 233, 233]
 v_insert_color = [159, 14, 10]
 lace_color = [233, 233, 233]
+
+# Логотип производителя (решение пользователя 12.10): везде вместо adidas — Reebok, как у EA-форм Legacy: надпись Reebok
+# из EA-комплекта (from, рамка src_box) — сзади у ворота на месте Reebok EA (back: центр, ширина на развёртке Legacy;
+# у всех EA-форм одно место) с его рельефом; цвет — цвет adidas этой формы в NHL 24 (nhl24_uv — точка у логотипа).
+# Прочие места adidas формы — [brand.<КЛУБ>.<форма>] spots: clear — закрасить цветом ткани, center, width.
+[brand]
+from = "1_14_3"
+src_box = [0.468, 0.400, 0.532, 0.417]
+back = { center = [0.5, 0.4085], width = 0.064, nhl24_uv = [0.5, 0.434] }
+
+# CHI третья: adidas спереди слева у ворота → Reebok того же размера
+[brand.CHI.three]
+spots = [{ clear = [0.400, 0.538, 0.447, 0.568], center = [0.423, 0.553], width = 0.040, nhl24_uv = [0.426, 0.566], nhl24_win = 0.015 }]
 
 # MIN дом (решение пользователя 12.10): кремовая полоса на груди чуть уже — заходила на подмышку при движении рук.
 # Верхний край — прямая на trim ниже прежнего (по середине груди, столбцы ref_u), выше — цвет свитера (body_uv);

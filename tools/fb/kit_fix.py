@@ -234,14 +234,29 @@ class CollarLace:
         R, G, B = lay[..., 0], lay[..., 1], lay[..., 2]
         yy = (np.arange(H)[:, None] + 0.5) / H + np.zeros((1, H))
         v_bottom = rule.get("v_bottom", rule["shield_box"][3])
-        tear = ndi.binary_closing(roi & (R > G + 40) & (R > B + 40), iterations=3) & (yy < v_bottom) & ~sil
+        if rule.get("layout_from", rule["from"]) == rule["from"]:
+            # своя раскладка: ворот и V — не цвет ткани EA, связное с серединой ворота; кант кокетки (тонкая
+            # полоса во всю ширину у низа ворота) — не ворот
+            xx = (np.arange(H)[None, :] + 0.5) / H + np.zeros((H, 1))
+            body_l = _mode(lay[_box(H, (0.40, 0.62, 0.46, 0.66))])
+            non = roi & (np.abs(lay - body_l).sum(-1) > 60) & (yy < v_bottom)
+            pip = rule.get("piping_v", [0.575, 0.586])
+            non &= ~((yy >= pip[0]) & (yy < pip[1]) & (np.abs(xx - 0.5) > 0.035))
+            lab_t, _n = ndi.label(non)
+            seed = lab_t[int(rule.get("seed_v", 0.47) * H), H // 2]
+            tear = ndi.binary_fill_holes(lab_t == seed) & ~sil if seed else np.zeros((H, H), bool)
+        else:
+            tear = ndi.binary_closing(roi & (R > G + 40) & (R > B + 40), iterations=3) & (yy < v_bottom) & ~sil
         ring = ndi.binary_dilation(lz, iterations=6) & ~ndi.binary_dilation(lz, iterations=2)
         body = _mode(ea[ring])
         content = lz & (np.abs(ea - body).sum(-1) > 60) & ~sil
+        pip = rule.get("piping_v", [0.575, 0.586])
+        content &= ~((yy >= pip[0]) & (yy < pip[1] + 0.002))                  # кант кокетки EA — не шнуровка
         lab, n = ndi.label(ndi.binary_closing(content, iterations=1))
         keep = np.zeros_like(content)
         for k, sl in enumerate(ndi.find_objects(lab), 1):
-            if sl is not None and 0.46 <= (sl[1].start + sl[1].stop) / 2 / H <= 0.54:
+            if (sl is not None and 0.46 <= (sl[1].start + sl[1].stop) / 2 / H <= 0.54
+                    and (sl[1].stop - sl[1].start) / H <= 0.10):                 # шире шнуровки — не она
                 keep |= lab == k
         self.red_a, self.red_col = _soft(tear, 0.5), ea
         self.lace_m, self.lace_col = keep, ea
@@ -334,6 +349,74 @@ class CollarLace:
                 sb = ndi.binary_dilation(sb, iterations=3)
                 res[sb] = np.roll(res, k, axis=0)[sb]
             Image.fromarray(np.clip(np.round(res), 0, 255).astype(np.uint8), mode).save(path)
+
+
+class BrandSwap:
+    """adidas → Reebok ([brand], решение пользователя 12.10): логотип Reebok из EA-комплекта (from, рамка src_box)
+    ставится на место Reebok у EA-форм (back: центр и ширина на развёртке Legacy) и на места adidas формы
+    ([brand.<КЛУБ>.<форма>] spots: clear — что закрасить цветом ткани, center, width); цвет — цвет adidas этой формы на
+    NHL 24 (nhl24_uv — точка у логотипа). Рельеф Reebok — из того же EA-комплекта (relief())."""
+
+    def __init__(self, rule, comp, tpl_dir, spots=()):
+        self.rule, self.tpl_dir = rule, tpl_dir
+        ea = np.asarray(Image.open(os.path.join(tpl_dir, "jersey_cm.png")).convert("RGB").resize((1024, 1024))) \
+            .astype(np.float64)
+        u0, v0, u1, v1 = (int(round(x * 1024)) for x in rule["src_box"])
+        win = ea[v0:v1, u0:u1] @ np.array([0.299, 0.587, 0.114])
+        bg, fg = np.percentile(win, 10), np.percentile(win, 99)
+        self.src_a = np.clip((win - bg) / max(fg - bg, 1.0), 0, 1)              # форма надписи Reebok (альфа EA)
+        self.src_wh = (rule["src_box"][2] - rule["src_box"][0], rule["src_box"][3] - rule["src_box"][1])
+        self.spots = [dict(rule["back"], name="back")] + [dict(sp) for sp in spots]
+        for sp in self.spots:
+            sp["color"] = self._logo_color(comp, sp["nhl24_uv"], sp.get("nhl24_win", 0.02))
+        self.report = [{"spot": sp.get("name", "spot"), "center": sp["center"], "width": sp["width"],
+                        "color": [int(c) for c in sp["color"][:3]]} for sp in self.spots]
+
+    @staticmethod
+    def _logo_color(comp, uv, win):
+        H = comp.shape[0]
+        x, y, w = int(uv[0] * H), int(uv[1] * H), max(int(win * H), 4)
+        box = comp[max(y - w, 0):y + w, max(x - w, 0):x + w, :3]
+        border = np.concatenate([box[0], box[-1], box[:, 0], box[:, -1]])
+        bg = np.median(border, 0)
+        d = np.abs(box - bg).sum(-1) > 90
+        return np.median(box[d], 0) if d.any() else np.array([230.0, 230.0, 230.0])
+
+    def __call__(self, out, msk):
+        Hs, Ws = msk.shape
+        for sp in self.spots:
+            if "clear" in sp:  # место adidas — цветом ткани (по кольцу вокруг)
+                cb = np.zeros((Hs, Ws), bool)
+                a0, b0, a1, b1 = sp["clear"]
+                cb[int(b0 * Hs):int(b1 * Hs), int(a0 * Ws):int(a1 * Ws)] = True
+                ring = ndi.binary_dilation(cb, iterations=8) & ~ndi.binary_dilation(cb, iterations=3) & msk
+                if ring.any():
+                    out[cb & msk, :3] = _mode(out[ring])[:3]
+            w = sp["width"]
+            h = w * self.src_wh[1] / self.src_wh[0]
+            pw, ph = max(int(round(w * Ws)), 1), max(int(round(h * Hs)), 1)
+            a = np.asarray(Image.fromarray((self.src_a * 255).astype(np.uint8)).resize((pw, ph), Image.LANCZOS)) / 255.0
+            cx, cy = sp["center"]
+            x0, y0 = int(round(cx * Ws - pw / 2)), int(round(cy * Hs - ph / 2))
+            reg = out[y0:y0 + ph, x0:x0 + pw, :3]
+            aa = (a * msk[y0:y0 + ph, x0:x0 + pw])[..., None]
+            out[y0:y0 + ph, x0:x0 + pw, :3] = reg * (1 - aa) + sp["color"][:3] * aa
+        return out
+
+    def relief(self, nm_path, sm_path):
+        """Рельеф надписи Reebok (рамка src_box EA) — на место back; у прочих мест рельеф не меняется."""
+        b = self.rule["back"]
+        if abs(b["width"] - self.src_wh[0]) > 1e-3:
+            return
+        box = _box(1024, self.rule["src_box"])
+        m = ndi.gaussian_filter(ndi.binary_dilation(box, iterations=3).astype(np.float64), 1.5)
+        for path, name in ((nm_path, "jersey_nm.png"), (sm_path, "jersey_sm.png")):
+            mode = Image.open(path).mode
+            cur = np.asarray(Image.open(path).convert(mode).resize((1024, 1024))).astype(np.float64)
+            ea = np.asarray(Image.open(os.path.join(self.tpl_dir, name)).convert(mode).resize((1024, 1024), Image.LANCZOS)) \
+                .astype(np.float64)
+            mm = m[..., None] if cur.ndim == 3 else m
+            Image.fromarray(np.clip(np.round(cur * (1 - mm) + ea * mm), 0, 255).astype(np.uint8), mode).save(path)
 
 
 class BandTrim:
@@ -506,6 +589,7 @@ def cmd_backsheet(a):
     f16 = ImageFont.truetype("C:/Windows/Fonts/segoeuib.ttf", 16)
     f20 = ImageFont.truetype("C:/Windows/Fonts/segoeuib.ttf", 20)
     BACK = (-0.14, 0.14, 1.58, 1.80)
+    LOGO = (-0.06, 0.06, 1.62, 1.72)
     UVBOX = (0.36, 0.30, 0.64, 0.66)
 
     def load(d, n):
@@ -516,13 +600,15 @@ def cmd_backsheet(a):
         name, d = spec.split("=", 1)
         cm, nm, sm = load(d, "jersey_cm.png"), load(d, "jersey_nm.png"), load(d, "jersey_sm.png")
         v = kit3d.render_lit(mesh, cm, "back", 300, frame=BACK, nmap=nm, smap=sm, ss=2)
+        z = kit3d.render_lit(mesh, cm, "back", 240, frame=LOGO, nmap=nm, smap=sm, ss=3)   # место Reebok крупно
         u0, v0, u1, v1 = (int(x * 1024) for x in UVBOX)
         uv = Image.fromarray(cm[v0:v1, u0:u1].astype(np.uint8)).resize((int((u1 - u0) * 1.2), int((v1 - v0) * 1.2)),
                                                                          Image.NEAREST)
-        t = Image.new("RGB", (v.width + uv.width + 8, max(v.height, uv.height) + 28), (30, 30, 34))
+        t = Image.new("RGB", (v.width + z.width + uv.width + 16, max(v.height, z.height, uv.height) + 28), (30, 30, 34))
         ImageDraw.Draw(t).text((2, 2), name.replace("|", " "), fill=(240, 240, 240), font=f16)
         t.paste(v, (0, 26))
-        t.paste(uv, (v.width + 8, 26))
+        t.paste(z, (v.width + 8, 26))
+        t.paste(uv, (v.width + z.width + 16, 26))
         tiles.append(t)
         print(name, flush=True)
     cols = a.cols
@@ -530,8 +616,8 @@ def cmd_backsheet(a):
     th = max(t.height for t in tiles)
     rows = (len(tiles) + cols - 1) // cols
     S = Image.new("RGB", (cols * (tw + 16) + 16, 50 + rows * (th + 16)), (30, 30, 34))
-    ImageDraw.Draw(S).text((16, 12), "Ворот сзади: шея со спины (3D, с рельефом) | развёртка ворота (u 0,36–0,64, "
-                           "v 0,30–0,66; низ — грудь, верх — спина)", fill=(240, 240, 240), font=f20)
+    ImageDraw.Draw(S).text((16, 12), "Ворот сзади: шея со спины (3D, с рельефом) | место Reebok крупно | развёртка ворота "
+                           "(u 0,36–0,64, v 0,30–0,66; низ — грудь, верх — спина)", fill=(240, 240, 240), font=f20)
     for i, t in enumerate(tiles):
         S.paste(t, (16 + (i % cols) * (tw + 16), 50 + (i // cols) * (th + 16)))
     S.save(a.out)

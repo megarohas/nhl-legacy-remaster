@@ -487,6 +487,12 @@ def cmd_build(a):
         if band:
             band_fix = kit_fix.BandTrim(band)
             pre.append(band_fix)
+        brand_rule = kit_fix._rules().get("brand")
+        if brand_rule:  # adidas → Reebok (сзади у ворота как у EA, и места adidas формы)
+            own = brand_rule.get(code, {}).get(label, {})
+            brand_fix = kit_fix.BrandSwap(brand_rule, comp, unpack(brand_rule["from"]), own.get("spots", []))
+            pre.append(brand_fix)
+            rec["brand"] = brand_fix.report
         post = kit_hybrid.decal_post(comp, placed, soft, n_jersey_tri, collar, pre=pre, crest_fit=fit,
                                      protect=laces_fix.protect if lace_rule else None)
         img, mask, dist, info = kit3d.transfer(base, src, dst, 1024, 2, post=post)
@@ -499,6 +505,8 @@ def cmd_build(a):
         shutil.copyfile(os.path.join(CLEAN, f"{CLEAN_T}_3-12-21-30-39-48-57-66-75_nm.png"), os.path.join(od, "jersey_nm.png"))
         if lace_rule:
             laces_fix.relief(os.path.join(od, "jersey_nm.png"), os.path.join(od, "jersey_sm.png"), os.path.join(NHL24, "relief"))
+        if brand_rule:  # после рельефа ворота: надпись Reebok — поверх
+            brand_fix.relief(os.path.join(od, "jersey_nm.png"), os.path.join(od, "jersey_sm.png"))
         build_font(rec, folder, ok, p, family, club, kit, od, tpl_kit, own_name)
         # шорты и гетры: точно через 3D (сетки по .toc), выравнивание по рамкам
         pc, sc = p + f"pant_{family}_{club}_{kit}_color", p + f"sock_{family}_{club}_{kit}_color"
