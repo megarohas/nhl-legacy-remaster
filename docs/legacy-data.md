@@ -1229,24 +1229,20 @@ game/work/legacy-data/equipment-user`: полный снимок экипиро�
   `keepcustom*`. Свободные агенты не трогаются.
 - **Белый** (`white`): модели вратаря свои, маска 0_120 — белая. Зоны 1, 4, 6–9 белые (231), 2, 3, 5 чёрные (32) —
   как у заготовки PIT с золотом → чёрным. Клюшка: 1 белая, 2–3 чёрные.
-- **Спорные** (`white_names` / `keep_names`): у Юты (набор Аризоны, маски с койотом) и у переименованных слотов АХЛ
-  — наборы прежних клубов. Сверено с логотипами 2026/27 (`game/work/logos/work-ahl/svg`), лист —
-  `game/work/models/goalie/look/contested.png`.
-  - Белый: Utah, Abbotsford, Hamilton, Cleveland, Springfield, Colorado Eagles, Utica Comets (цвета 2015 года ≠ 2026).
-  - Набор оставлен: Belleville (маска с символикой Senators — аффилиат Оттавы), Laval, Calgary Wranglers (цвета те же).
-    У Laval и Calgary на масках наборов логотип прежнего клуба (IceCaps, Heat), поэтому маска своя (`mask_names`):
-    однотонная чёрная 6_60, щитки и цвета — набора.
-- **12.10, 09:47**: out — 274 вратаря, out-ahl32 — 276 (у остальных набор клуба уже стоял). Менялась только
-  `exhibitiongoalieequipment`, CRC OK, повтор — 0. В out-ahl32 по набору — 184 клуба (442 вратаря), белый — 11 клубов
-  (22 вратаря).
-  - 09:49 — маски Laval и Calgary (3 вратаря, 6 значений).
-  - Базы: out 51a3a188 / draft 158842f1, out-ahl32 03ba627d / draft 5c602213.
-  - Накладка (пакет `pack-installed-b589fa58`): out-nhl24 5bb46b23, out-nhl24-ahl32 dd0ac511.
-  - Бэкапы — `backup-cache/out-before-goaliegear-20261012-094715` и `out-before-goaliemask-*`, отчёты —
+- **Спорные — всегда белый** (решение пользователя 12.10, `white_names`). Сюда входят наборы прежних клубов на
+  переименованных слотах: Юта (Аризона, маски с койотом), Abbotsford, Belleville, Hamilton, Cleveland, Springfield,
+  Laval, Colorado Eagles, Calgary Wranglers, Utica Comets. Сверка с логотипами 2026/27 — лист
+  `game/work/models/goalie/look/contested.png`. Ещё сюда входят клубы, чьи наборы EA берут цвета клуба, которых в
+  `stockteamequipmenttable` нет: HC Lausanne, EHC München, HC Olomouc. Вместе с SEA, VGK, CV и HSK (наборов нет) —
+  белые 17 клубов (37 вратарей) в out-ahl32 и 15 (33) в out.
+- **12.10, 09:50**: менялась только `exhibitiongoalieequipment`, CRC OK, повтор — 0. В out-ahl32 по набору —
+  178 клубов (427 вратарей), белые — 17 клубов (37 вратарей). Сначала было 09:47: Belleville, Laval, Calgary и 3
+  европейских клуба шли с набором.
+  - Базы: out 71286e7d / draft eb7a3a5c, out-ahl32 da4e8845 / draft fb6e04a8.
+  - Накладка (пакет `pack-installed-b589fa58`): out-nhl24 ce0b2abe, out-nhl24-ahl32 f820ccf3.
+  - Бэкапы — `backup-cache/out-before-goaliegear-20261012-094715` и `out-before-goaliewhite-*`, отчёты —
     `game/work/legacy-data/goaliegear/`.
   - Правок пользователя по вратарям нет: в `equipment-user` ни одной, в сейве ROSTER 20261011041455 вратари совпадают с
-    `cache:`.
-- Не сделано: 4 набора EA (Lausanne 165, München 540, Olomouc 545/546) берут цвета клуба, а у этих клубов в
-  `stockteamequipmenttable` цветов вратаря нет — в игре будут общие. Оставлено как у EA. Игра не проверялась.
+    `cache:`. Игра не проверялась.
 - Сейв: `python tools/legacy_data/goalie_gear.py save СЕЙВ [--write]` — по составам и наборам самого сейва; с
   `--write` — копия в `backup-saves`, после записи — проверка CRC и обёртки.

@@ -1,30 +1,100 @@
 {
-  "note": "Командная экипировка вратарей (12.10.2026, решение пользователя): каждому вратарю клуба — набор вратаря этого клуба из stockgoalieequipment (щитки, блин, ловушка, клюшка, маска и цвета зон); у клуба без набора — белая экипировка с чёрной графикой и белая маска. Этап build-all goaliegear (tools/legacy_data/goalie_gear.py). Описание — docs/legacy-data.md, «Экипировка вратарей».",
-  "club_leagues": [0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11],
+  "note": "Командная экипировка вратарей (12.10.2026, решение пользователя): каждому вратарю клуба — набор вратаря этого клуба из stockgoalieequipment (щитки, блин, ловушка, клюшка, маска и цвета зон); у клуба без набора — белая экипировка с чёрной графикой и белая маска. Этап build-all goaliegear (tools/legacy_data/goalie_gear.py). Решение пользователя 12.10: любой спорный случай (набор прежнего клуба на переименованном слоте, набор без цветов клуба в базе) — белый, без исключений. Описание — docs/legacy-data.md, «Экипировка вратарей».",
+  "club_leagues": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    9,
+    10,
+    11
+  ],
   "nhl_rows": 32,
   "white_names": {
-    "Utah Mammoth": "наборы Аризоны (кирпичный, песочный, маски с койотом) — у Юты чёрный, голубой, белый",
-    "Abbotsford Canucks": "наборы Albany Devils (красный, чёрный) — у Абботсфорда синий, зелёный",
-    "Hamilton Hammers": "наборы Bridgeport Sound Tigers (оранжевый, тёмно-синий) — у Гамильтона синий, медный",
-    "Cleveland Monsters": "наборы Lake Erie Monsters (оранжевый, красный, синий) — у Кливленда чёрный, серый",
-    "Springfield Thunderbirds": "наборы Portland Pirates (чёрный, бордо) — у Спрингфилда синий, бирюзовый",
-    "Colorado Eagles": "наборы San Antonio Rampage (бордо, чёрный) — у Eagles главный ещё золотой",
-    "Utica Comets": "наборы Comets 2015 (синий, зелёный, оранжевый) — с 2021 чёрный, красный"
-  },
-  "keep_names": {
-    "Belleville Senators": "наборы Binghamton Senators: красный, чёрный, белый — те же цвета; маска с символикой Senators (аффилиат Оттавы) — оставлена",
-    "Laval Rocket": "наборы St. John's IceCaps: красный, синий, белый — те же цвета; маска — mask_names",
-    "Calgary Wranglers": "наборы Stockton Heat: красный, чёрный — те же цвета; маска — mask_names"
-  },
-  "mask_names": {
-    "Laval Rocket": {"mask": [6, 60], "why": "на масках наборов (0_287, 0_288) — логотип St. John's IceCaps; однотонная чёрная, как в наборе Лаваля"},
-    "Calgary Wranglers": {"mask": [6, 60], "why": "на маске наборов (0_290) — логотип Stockton Heat; однотонная чёрная"}
+    "Utah Mammoth": "набор Аризоны (маски с койотом)",
+    "Abbotsford Canucks": "набор Albany Devils",
+    "Belleville Senators": "набор Binghamton Senators",
+    "Hamilton Hammers": "набор Bridgeport Sound Tigers",
+    "Cleveland Monsters": "набор Lake Erie Monsters",
+    "Springfield Thunderbirds": "набор Portland Pirates",
+    "Laval Rocket": "набор St. John's IceCaps",
+    "Colorado Eagles": "набор San Antonio Rampage",
+    "Calgary Wranglers": "набор Stockton Heat",
+    "Utica Comets": "набор Comets 2015 (синий, зелёный, оранжевый)",
+    "HC Lausanne": "набор EA с цветами клуба, а цветов вратаря у клуба в stockteamequipmenttable нет",
+    "EHC München": "набор EA с цветами клуба, а цветов вратаря у клуба в stockteamequipmenttable нет",
+    "HC Olomouc": "наборы EA с цветами клуба, а цветов вратаря у клуба в stockteamequipmenttable нет"
   },
   "white": {
     "masktype": 0,
     "maskid": 120,
-    "zones": {"1": [231, 231, 231], "2": [32, 32, 32], "3": [32, 32, 32], "4": [231, 231, 231], "5": [32, 32, 32],
-              "6": [231, 231, 231], "7": [231, 231, 231], "8": [231, 231, 231], "9": [231, 231, 231]},
-    "stick": {"1": [231, 231, 231], "2": [32, 32, 32], "3": [32, 32, 32]}
+    "zones": {
+      "1": [
+        231,
+        231,
+        231
+      ],
+      "2": [
+        32,
+        32,
+        32
+      ],
+      "3": [
+        32,
+        32,
+        32
+      ],
+      "4": [
+        231,
+        231,
+        231
+      ],
+      "5": [
+        32,
+        32,
+        32
+      ],
+      "6": [
+        231,
+        231,
+        231
+      ],
+      "7": [
+        231,
+        231,
+        231
+      ],
+      "8": [
+        231,
+        231,
+        231
+      ],
+      "9": [
+        231,
+        231,
+        231
+      ]
+    },
+    "stick": {
+      "1": [
+        231,
+        231,
+        231
+      ],
+      "2": [
+        32,
+        32,
+        32
+      ],
+      "3": [
+        32,
+        32,
+        32
+      ]
+    }
   }
 }

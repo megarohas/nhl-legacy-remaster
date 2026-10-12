@@ -16,8 +16,8 @@
   только строки 0…31). Свободные агенты не трогаются;
 - в exhibitiongoalieequipment вратаря копируются все поля набора, кроме своих: jerseytuck, sticktapecolor,
   keepcustomiftraded, keepcustomstickiftraded;
-- mask_names: набор клуба, но маска своя (на масках набора — логотип прежнего клуба: Laval, Calgary Wranglers);
-- без набора (SEA, VGK, CV, HSK, часть европейских) и клубы из white_names (наборы прежних клубов на переименованных
+- mask_names (по желанию): набор клуба, но маска своя;
+- без набора (SEA, VGK, CV, HSK) и клубы из white_names (все спорные — решение пользователя 12.10) (наборы прежних клубов на переименованных
   слотах, у Юты — Аризоны): модели вратаря свои, маска 0/120 (белая), цвета зон — white.zones и white.stick,
   showcustomcolors и showcustomstick = 1.
 draft_roster.db (там нет stockgoalieequipment и exhibitionteams) берёт план у nhlng.db рядом, по game_id. Сейв — по своим
@@ -117,7 +117,7 @@ def plan(db):
                 used.append(db.get(SG, 'key', s))
             summary[t] = (name, 'набор', len(gs), len(rows), used)
         else:
-            why = 'нет набора' if not rows else 'набор прежнего клуба'
+            why = 'нет набора' if not rows else 'спорный набор — white_names'
             for _, g in gs:
                 out[g] = (white_values(db, sp, None), f'{name}: белый ({why})')
             summary[t] = (name, 'белый', len(gs), len(rows), why)
