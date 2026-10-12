@@ -125,12 +125,13 @@ void ParseToml(const std::wstring& path, Cvars& out) {
 
 struct State {
   int render = 0;  // 0 — D3D12 ROV, 1 — D3D12 RTV, 2 — Vulkan FSI
-  int scale = 1;   // resolution_scale 1–2
+  int scale = 1;   // resolution_scale 1–3
   int present = 0;  // 0 — bilinear, 1 — cas, 2 — fsr
   int sharp_fsr = 90;  // 0–100 → present_fsr_sharpness_reduction = (100 − x) / 50 стопа
   int sharp_cas = 0;   // 0–100 → present_cas_additional_sharpness = x / 100
   int aniso = 5;       // anisotropic_override: 0, 2, 3, 4, 5
   bool fullscreen = true;
+  int window = 0;  // окно без полного экрана: 0 — 1280×720 (умолч.), 1 — 960×540, 2 — 1920×1080, 3 — 2560×1440, 4 — 3840×2160
   bool vsync = false;  // = !d3d12_allow_variable_refresh_rate_and_tearing, !vulkan_allow_present_mode_immediate
   bool mnk = false;
   bool vibration = true;
@@ -174,7 +175,7 @@ State FromCvars(const Cvars& c) {
   } else {
     s.render = Get(c, "render_target_path_d3d12", "rov") == "rtv" ? 1 : 0;
   }
-  s.scale = static_cast<int>(std::clamp<long long>(GetInt(c, "resolution_scale", 1), 1, 2));
+  s.scale = static_cast<int>(std::clamp<long long>(GetInt(c, "resolution_scale", 1), 1, 3));
   const std::string pe = Get(c, "present_effect", "bilinear");
   s.present = pe == "cas" ? 1 : (pe == "fsr" || pe == "fsr2" || pe == "fsr3") ? 2 : 0;
   s.sharp_fsr = std::clamp(static_cast<int>(std::lround(100.0 - GetDouble(c, "present_fsr_sharpness_reduction", 0.2) * 50.0)), 0, 100);
@@ -182,6 +183,12 @@ State FromCvars(const Cvars& c) {
   const long long af = GetInt(c, "anisotropic_override", 3);
   s.aniso = af <= 1 ? (af < 0 ? 3 : 0) : static_cast<int>(std::min<long long>(af, 5));
   s.fullscreen = GetBool(c, "fullscreen", true);
+  {
+    const long long ww = GetInt(c, "window_width", 0), wh = GetInt(c, "window_height", 0);
+    const long long sizes[][2] = {{0, 0}, {960, 540}, {1920, 1080}, {2560, 1440}, {3840, 2160}};
+    for (int i = 1; i < 5; ++i)
+      if (ww == sizes[i][0] && wh == sizes[i][1]) s.window = i;
+  }
   s.vsync = !GetBool(c, "d3d12_allow_variable_refresh_rate_and_tearing", true);
   s.mnk = GetBool(c, "mnk_mode", false);
   s.vibration = GetBool(c, "vibration", true);
@@ -227,6 +234,14 @@ std::vector<Kv> ToCvars(const State& s) {
   kv.push_back({"present_cas_additional_sharpness", Fmt2(s.sharp_cas / 100.0), false, kGfx});
   kv.push_back({"anisotropic_override", std::to_string(s.aniso), false, kGfx});
   kv.push_back({"fullscreen", b(s.fullscreen), false, kScreen});
+  {
+    // Размер окна (только без полного экрана). SDK делает его и видеорежимом приставки (docs/graphics-settings.md):
+    // 0 — умолчание, 1280×720.
+    const int sizes[][2] = {{0, 0}, {960, 540}, {1920, 1080}, {2560, 1440}, {3840, 2160}};
+    const int w = s.fullscreen ? 0 : std::clamp(s.window, 0, 4);
+    kv.push_back({"window_width", std::to_string(sizes[w][0]), false, kScreen});
+    kv.push_back({"window_height", std::to_string(sizes[w][1]), false, kScreen});
+  }
   kv.push_back({"d3d12_allow_variable_refresh_rate_and_tearing", b(!s.vsync), false, kScreen});
   kv.push_back({"vulkan_allow_present_mode_immediate", b(!s.vsync), false, kScreen});
   kv.push_back({"mnk_mode", b(s.mnk), false, kInput});
@@ -300,6 +315,7 @@ enum HintId {
   kHintAniso,
   kHintFullscreen,
   kHintVsync,
+  kHintWindow,
   kHintMnk,
   kHintVibration,
   kHintSeason,
@@ -326,7 +342,9 @@ const Hint kHints[kHintCount] = {
      L"собирает шейдеры, поэтому подтормаживает."},
     {L"Разрешение",
      L"Внутреннее разрешение 3D. ×1 — 1280×720, как на Xbox. ×2 — 2560×1440: заметно чётче, нагрузка на "
-     L"видеокарту примерно в 4 раза больше. На Vulkan ×2 — экспериментально."},
+     L"видеокарту примерно в 4 раза больше. ×3 — 3840×2160 (4K): примерно в 9 раз больше, для замера; лучше с "
+     L"рендером «D3D12 — быстрый (RTV)», на Vulkan экипировка может стать чёрной. Только целые кратные 720p: "
+     L"540p или 1080p внутри игра не умеет. На Vulkan ×2 — экспериментально."},
     {L"Вывод кадра",
      L"Как кадр игры растягивается на экран. Обычный — билинейно (мягко). CAS — повышение резкости. "
      L"FSR 1 — апскейл AMD с резкостью: лучше всего при ×1 на мониторе 1080p и выше."},
@@ -334,11 +352,15 @@ const Hint kHints[kHintCount] = {
     {L"Анизотропия",
      L"Чёткость льда, разметки и бортов под углом камеры. 16x почти ничего не стоит — оставьте."},
     {L"Полный экран",
-     L"Окно без рамки на весь экран — меньше задержка. Без галочки — окно 1280×720, его можно растянуть "
-     L"мышью."},
+     L"Окно без рамки на весь экран — меньше задержка. Без галочки — окно размера из строки «Окно», его можно "
+     L"растянуть мышью."},
     {L"Без разрывов кадра (V-Sync)",
      L"Кадр выводится по обновлению монитора: без разрывов, но до 1 кадра задержки. С G-SYNC / FreeSync "
      L"не нужен. Скорость игры не меняется — она всегда 60 кадров/с, как на Xbox."},
+    {L"Окно",
+     L"Размер окна без полного экрана — для замеров. Игра узнаёт его как видеорежим приставки, поэтому 540p "
+     L"может и рисовать меньше, а не только сжимать картинку — смотрите загрузку видеокарты. Внутреннее 3D задаёт "
+     L"«Разрешение» (×1–×3). Обычное значение — 1280×720."},
     {L"Клавиатура как геймпад",
      L"Играть без геймпада: Enter — Start, Пробел — A, Backspace — B, L — X, P — Y, WASD — стик, "
      L"Shift+стрелки — крестовина, Q/E — LT/RT, 1/3 — LB/RB, Tab — Back."},
@@ -394,6 +416,7 @@ enum ControlId {
   kIdAniso,
   kIdFullscreen,
   kIdVsync,
+  kIdWindow,
   kIdMnk,
   kIdVibration,
   kIdSeason,
@@ -561,7 +584,7 @@ void CreateControls() {
   Group(L"Графика", lx, 76, lw, 194);
   ComboRow(L"Рендер", kIdRender, ix, 100, lab, cw,
            {L"D3D12 — точный (ROV)", L"D3D12 — быстрый (RTV)", L"Vulkan"}, kHintRender);
-  ComboRow(L"Разрешение", kIdScale, ix, 132, lab, cw, {L"×1 — 1280×720, как на Xbox", L"×2 — 2560×1440"},
+  ComboRow(L"Разрешение", kIdScale, ix, 132, lab, cw, {L"×1 — 1280×720, как на Xbox", L"×2 — 2560×1440", L"×3 — 3840×2160 (4K)"},
            kHintScale);
   ComboRow(L"Вывод кадра", kIdPresent, ix, 164, lab, cw,
            {L"Обычный (билинейный)", L"CAS — резкость", L"FSR 1 — апскейл и резкость"}, kHintPresent);
@@ -578,8 +601,8 @@ void CreateControls() {
   Group(L"Экран", lx, 282, lw, 106);
   Check(L"Полный экран", kIdFullscreen, ix, 304, lw - 32, kHintFullscreen);
   Check(L"Без разрывов кадра (V-Sync)", kIdVsync, ix, 330, lw - 32, kHintVsync);
-  Add(L"STATIC", L"Частота кадров — 60, как на Xbox: скорость игры привязана к ней.", SS_LEFT | SS_NOPREFIX, ix + 2,
-      360, lw - 34, 18, kIdNote, kFontSmall);
+  ComboRow(L"Окно", kIdWindow, ix, 356, lab, cw,
+           {L"1280×720 — обычное", L"960×540", L"1920×1080", L"2560×1440", L"3840×2160 (4K)"}, kHintWindow);
 
   Group(L"Управление", lx, 400, lw, 110);
   Check(L"Клавиатура как геймпад", kIdMnk, ix, 424, lw - 32, kHintMnk);
@@ -681,6 +704,7 @@ void UpdateSharpLabel() {
 void UpdateEnabled() {
   const bool nhl32 = GetCheck(kIdNhl32);
   for (int id : {kIdMenu32, kIdAhl32, kIdAigm32, kIdFa32, kIdFd32}) EnableWindow(Item(id), nhl32);
+  EnableWindow(Item(kIdWindow), !GetCheck(kIdFullscreen));
   const bool sharp = ComboSel(kIdPresent) != 0;
   EnableWindow(Item(kIdSharp), sharp);
   EnableWindow(Item(kIdSharpValue), sharp);
@@ -695,6 +719,7 @@ void ToUi(const State& s) {
   const int aniso_index[] = {0, 0, 1, 2, 3, 4};  // 0→Выкл., 2→2x, 3→4x, 4→8x, 5→16x
   SetComboSel(kIdAniso, aniso_index[std::clamp(s.aniso, 0, 5)]);
   SetCheck(kIdFullscreen, s.fullscreen);
+  SetComboSel(kIdWindow, s.window);
   SetCheck(kIdVsync, s.vsync);
   SetCheck(kIdMnk, s.mnk);
   SetCheck(kIdVibration, s.vibration);
@@ -739,6 +764,7 @@ bool FromUi() {
   const int aniso_value[] = {0, 2, 3, 4, 5};
   s.aniso = aniso_value[std::clamp(ComboSel(kIdAniso), 0, 4)];
   s.fullscreen = GetCheck(kIdFullscreen);
+  s.window = std::max(0, ComboSel(kIdWindow));
   s.vsync = GetCheck(kIdVsync);
   s.mnk = GetCheck(kIdMnk);
   s.vibration = GetCheck(kIdVibration);
@@ -1006,7 +1032,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_COMMAND: {
       const int id = LOWORD(wp);
       const int code = HIWORD(wp);
-      if (id == kIdNhl32 && code == BN_CLICKED) UpdateEnabled();
+      if ((id == kIdNhl32 || id == kIdFullscreen) && code == BN_CLICKED) UpdateEnabled();
       if (id == kIdPresent && code == CBN_SELCHANGE) {
         // У CAS и FSR своя резкость: запомнить ползунок старого режима, показать нового.
         const int sharp = static_cast<int>(SendMessageW(Item(kIdSharp), TBM_GETPOS, 0, 0));
