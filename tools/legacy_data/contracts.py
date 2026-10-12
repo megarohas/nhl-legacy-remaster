@@ -14,9 +14,16 @@ Goaltenders и Non-roster * — игроки клуба; Retained, Buyout, Burie
   сведения транслитерации (Vasilevskiy / Vasilevsky, Yegor / Egor);
 - спорные — не берутся, идут в отчёт: похожее имя при той же дате, то же имя при почти той же дате, две строки базы на
   одного игрока, одна строка базы на двух игроков страниц, нет даты рождения на странице.
-Клуб: если в базе у игрока права другого клуба НХЛ (сделка после нашей сборки), игрок не переводится — контракт
-ставится (он идёт вместе с игроком), а игрок попадает в список «клуб в базе ≠ клубу на странице». Без прав НХЛ в базе
-(proteam 0) или в пуле свободных агентов — контракт не ставится, только список.
+Клуб: если в базе у игрока права другого клуба НХЛ (сделка после нашей сборки), игрок переводится в клуб страницы
+(решение пользователя 12.10; --no-move — без перевода, только список): proteam и team; запись exhibitionrostertable
+прежнего клуба уходит в новый — основной состав страницы → клуб НХЛ, Non-roster → его фарм-клуб АХЛ
+(exhibitionteams.ahlaffiliate, rangelow −1), в запас (не одет, без звеньев и буквы). Его места в звеньях,
+спецбригадах, буллитах и «одет» прежнего клуба получает запасной того же амплуа (лучший по OVR); своего нет (клубы
+АХЛ/Европы/CHL одеты целиком) — запасной того же амплуа клуба той же лиги, где запасных больше всего, с номером
+ушедшего (как roster/write.py free_vacancy). Буква — лучшему одетому полевому без буквы. Номер в новом клубе — свой,
+занят — ближайший свободный (в отчёте). Затронутые клубы проверяются: места звеньев и одетые — как были, буквы те же,
+новых повторов номеров нет, записей ≤ 40, key подряд. Без прав НХЛ в базе (proteam 0) или в пуле свободных агентов —
+контракт не ставится, только список.
 
 Поля (docs/legacy-port.md, «Продление контракта»; суммы в базе × 5000 $):
 - отрезки контракта — подряд идущие сезоны с одним кэп-хитом, начиная с 2026/27; последний отрезок длится до года
@@ -54,11 +61,14 @@ os.environ.setdefault('NHL_GAME', 'legacy')
 from tdb import SaveFile, Tdb, load_meta  # noqa: E402
 from roster.build import same_first  # noqa: E402
 from roster.common import SLOT_TEAM, TEAM_SLOT, norm  # noqa: E402
+from roster.dbview import FLAGS, fld  # noqa: E402
 
 W = os.environ.get('LEGACY_DATA_WORK', os.path.join(ROOT, 'game', 'work', 'legacy-data'))
 SCREENS = os.environ.get('CONTRACTS_SCREENS', os.path.join(ROOT, 'game', 'work', 'contracts', 'screens'))
 CACHE_META = os.path.join(ROOT, 'legacy-port', 'userdata', 'cache', 'guest', 'db', 'nhlng-meta.xml')
 B, P, R, F = 'exhibitionplayerbiotable', 'exhibitionplayers', 'exhibitionrostertable', 'exhibitionfreeagents'
+T, SAI, GAI = 'exhibitionteams', 'exhibitionskaterai', 'exhibitiongoalieai'
+MAX_PER_TEAM = 40                # записей состава у клуба (roster/write.py): key = клуб × 40 + номер
 SKIP_GROUPS = ('Retained', 'Buyout', 'Buried')
 SEASON = 2026                    # 1-й сезон страниц (2026-27)
 CAP = 104_000_000                # потолок 2026/27 (врезка legacy-port nhl_salary_cap)
@@ -311,7 +321,7 @@ def plan(db, pages):
                                                               f'{SLOT_TEAM.get(base.club(r), "-")}' for r in rows]}
                        for p, rows, why in disputed]
     rep['missing'] = [who(p) for p, _, _ in missing]
-    changes, real = [], set()
+    changes, real, moves = [], set(), []
     for p, r, how in found:
         t = terms(p)
         if t is None:
@@ -326,6 +336,7 @@ def plan(db, pages):
             continue
         if club != mine:
             rep['club_differs'].append(f'{who(p)}: в базе {SLOT_TEAM[club]}')
+            moves.append((p, r))
         if len(segs) > 2:
             rep['more_segments'].append(f"{who(p)}: " + ' → '.join(f"{s['cap'] / 1e6:g}×{s['n']}" for s in segs))
         if new['extensionlength']:
@@ -340,6 +351,7 @@ def plan(db, pages):
                 changes.append((r, f, old, new[f]))
     rep['changed_values'] = len(changes)
     rep['changed_players'] = len({c[0] for c in changes})
+    rep['moves'] = moves
     return base, changes, real, rep
 
 
@@ -347,6 +359,226 @@ def apply(db, changes):
     for r, f, old, new in changes:
         db.set(B, f, r, new)
 
+
+# --- перевод в клуб по контракту ----------------------------------------------------------------------------------
+def pos_kind(pos):
+    return 'G' if pos == 4 else 'D' if pos == 3 else 'F'
+
+
+class Rosters:
+    """Записи exhibitionrostertable (живые строки подряд с начала — как у баз и сохранённых составов)."""
+
+    def __init__(self, db, base):
+        self.db, self.base = db, base
+        rows = db.live_rows(R)
+        if list(rows) != list(range(len(rows))):
+            raise ValueError(f'{R}: живые записи не подряд (удалённые в середине) — перевод не делаю')
+        self.fields = list(db.by_name[R]['fields'])
+        self.orig = [{f: db.get(R, f, e) for f in self.fields} for e in rows]
+        self.entries = [dict(e) for e in self.orig]
+        self.touched = set()                    # ещё клубы, чьи составы менялись (донор запасного)
+        self.ai = {}
+        for t in (SAI, GAI):
+            for x in db.live_rows(t):
+                self.ai[db.get(t, 'game_id', x)] = (t, x)
+
+    def row(self, e):
+        return self.base.row_of_gid.get(self.base.link.get(e['playerindex']))
+
+    def ovr(self, r):
+        t, x = self.ai.get(self.db.get(B, 'game_id', r), (None, None))
+        return self.db.get(t, fld('p_overall' if t == SAI else 'g_overall'), x) if t else 0
+
+    def kind(self, e):
+        r = self.row(e)
+        return pos_kind(self.db.get(B, 'position', r)) if r is not None else None
+
+    def team(self, t):
+        return [e for e in self.entries if e['team'] == t]
+
+    @staticmethod
+    def busy(e):
+        return e['rosterstatus'] or e['captain'] or any(e[f] for f in FLAGS)
+
+    def renumber(self, t):
+        for k, e in enumerate(sorted(self.team(t), key=lambda e: e['key'])):
+            e['key'] = t * MAX_PER_TEAM + k
+
+    def write(self):
+        """Записи по возрастанию key на прежние строки; пишутся только изменившиеся поля."""
+        self.entries.sort(key=lambda e: e['key'])
+        n = 0
+        for i, (e, o) in enumerate(zip(self.entries, self.orig)):
+            for f in self.fields:
+                if e[f] != o[f]:
+                    self.db.set(R, f, i, e[f])
+                    n += 1
+        return n
+
+
+def team_label(db, t):
+    return SLOT_TEAM.get(t) or db.get_string(T, 'fullname', t) or str(t)
+
+
+def dressed(e):
+    return bool(e['rosterstatus'] or any(e[f] for f in FLAGS))
+
+
+def move(ros, p, r, log):
+    """Перевод игрока r в клуб страницы p: запись состава прежнего клуба → новому (основной состав страницы — клуб
+    НХЛ, Non-roster — фарм-клуб АХЛ), его звенья, спецбригады, буллиты и «одет» в прежнем клубе — запасному того же
+    амплуа (лучшему по OVR), буква — лучшему одетому полевому без буквы; номер в новом клубе без совпадения
+    (занят — ближайший свободный). → строка отчёта или None (перевода нет, причина — в log)."""
+    db, base = ros.db, ros.base
+    club = TEAM_SLOT[p['team']]
+    if p['group'].startswith('Non-roster'):
+        new_t = db.get(T, 'ahlaffiliate', club) - 1        # rangelow −1: значение = сырое − 1 (teamid)
+        if new_t < 32:
+            log.append(f"{base.name(r)}: у {p['team']} нет фарм-клуба АХЛ — не переведён")
+            return None
+    else:
+        new_t = club
+    rights = base.club(r)
+    cur = db.get(B, 'team', r) - 1
+    olds = [e for e in ros.entries if ros.row(e) == r and e['team'] == cur]
+    e_old = olds[0] if olds else None
+    me = pos_kind(db.get(B, 'position', r))
+    note = []
+    if e_old is not None and e_old['team'] == new_t:
+        return None
+    if len(ros.team(new_t)) + 1 > MAX_PER_TEAM:
+        log.append(f'{base.name(r)}: в {team_label(db, new_t)} уже {MAX_PER_TEAM} записей — не переведён')
+        return None
+    if e_old is not None and ros.busy(e_old):
+        t_old = e_old['team']
+        if dressed(e_old):
+            free = [x for x in ros.team(t_old) if x is not e_old and not ros.busy(x) and ros.row(x) is not None]
+            same = [x for x in free if ros.kind(x) == me]
+            other = [x for x in free if me != 'G' and ros.kind(x) in ('F', 'D')]
+            pool = same or other
+            src = None
+            if not same and t_old >= 32:
+                # своего запасного того же амплуа нет (клубы АХЛ/Европы/CHL одеты целиком) — запасной того же амплуа
+                # из клуба той же лиги, где запасных больше всего (как roster/write.py free_vacancy)
+                league, spares = db.get(T, 'league', t_old), defaultdict(list)
+                for x in ros.entries:
+                    u = x['team']
+                    if (u >= 32 and u != t_old and u != new_t and db.get(T, 'league', u) == league
+                            and not ros.busy(x) and ros.kind(x) == me):
+                        spares[u].append(x)
+                if spares:
+                    src = min(spares, key=lambda u: (-len(spares[u]), u))
+                    pool = spares[src]
+            if not pool:
+                log.append(f'{base.name(r)}: в {team_label(db, t_old)} нет запасного на его места — не переведён')
+                return None
+            sp = max(pool, key=lambda x: (ros.ovr(ros.row(x)), -x['key']))
+            for f in FLAGS:
+                sp[f] = e_old[f]
+            sp['rosterstatus'] = e_old['rosterstatus']
+            if src is not None:                 # запасной другого клуба — в прежний клуб игрока, с его номером
+                rs = ros.row(sp)
+                sp['team'], sp['jersey'], sp['key'] = t_old, e_old['jersey'], t_old * MAX_PER_TEAM + 10 ** 6 - 1
+                db.set(B, 'team', rs, t_old + 1)
+                db.set(B, 'jersey', rs, e_old['jersey'])
+                ros.renumber(src)
+                ros.touched.add(src)
+            slots = [f for f in FLAGS if e_old[f]]
+            note.append(f"места в {team_label(db, t_old)} ({len(slots)} {' '.join(slots[:5])}"
+                        f"{'…' if len(slots) > 5 else ''}{', одет' if e_old['rosterstatus'] else ''}) → "
+                        f"{base.name(ros.row(sp))}{'' if sp in same else ' (другое амплуа)' if src is None else ''}"
+                        f"{'' if src is None else ' из ' + team_label(db, src) + ', № ' + str(e_old['jersey'])}")
+        if e_old['captain']:
+            cand = [x for x in ros.team(t_old) if x is not e_old and dressed(x) and not x['captain']
+                    and ros.kind(x) in ('F', 'D')]
+            if cand:
+                c = max(cand, key=lambda x: (ros.ovr(ros.row(x)), -x['key']))
+                c['captain'] = e_old['captain']
+                note.append(f"буква {'C' if e_old['captain'] == 1 else 'A'} в {team_label(db, t_old)} → "
+                            f"{base.name(ros.row(c))}")
+            else:
+                note.append(f"буква {'C' if e_old['captain'] == 1 else 'A'} в {team_label(db, t_old)} снята")
+    taken = {x['jersey'] for x in ros.team(new_t)}
+    want = db.get(B, 'jersey', r) or (e_old or {}).get('jersey') or 0
+    num = want
+    if not 1 <= want <= 98 or want in taken:
+        num = min((n for n in range(1, 99) if n not in taken), key=lambda n: (abs(n - want), n))
+        note.append(f'№ {want} в {team_label(db, new_t)} занят → {num}')
+    if e_old is not None:
+        ros.entries.remove(e_old)
+        ne = dict(e_old)
+    else:
+        links = [i for i, g in base.link.items() if g == db.get(B, 'game_id', r)]
+        if not links:
+            log.append(f'{base.name(r)}: нет связи в exhibitionplayers — не переведён')
+            return None
+        ne = {f: 0 for f in ros.fields}
+        ne['playerindex'] = links[0]
+    for f in FLAGS:
+        ne[f] = 0
+    ne.update(team=new_t, jersey=num, rosterstatus=0, captain=0, key=new_t * MAX_PER_TEAM + 10 ** 6)
+    ros.entries.append(ne)
+    if e_old is not None:
+        ros.renumber(e_old['team'])
+    ros.renumber(new_t)
+    db.set(B, 'proteam', r, club + 1)
+    db.set(B, 'team', r, new_t + 1)
+    db.set(B, 'jersey', r, num)
+    frm = team_label(db, e_old['team']) if e_old is not None else 'без клуба'
+    return (f"{base.name(r)}: {frm} (права {SLOT_TEAM.get(rights, '—')}) → {team_label(db, new_t)}"
+            f"{'' if new_t == club else ' (фарм ' + p['team'] + ')'}, № {num}, в запасе"
+            + (f"; {'; '.join(note)}" if note else ''))
+
+
+def team_state(ros, entries, t):
+    te = [e for e in entries if e['team'] == t]
+    dr = [e for e in te if any(e[f] for f in FLAGS)]
+    caps = Counter(e['captain'] for e in te)
+    return {'flags': {f: sum(e[f] for e in te) for f in FLAGS},
+            'dressed': len(dr) if all(bool(e['rosterstatus']) == (e in dr) for e in te) else -1,
+            'letters': (caps[1], caps[2]),
+            'dup_numbers': sorted(n for n, c in Counter(e['jersey'] for e in te).items() if c > 1),
+            'size': len(te)}
+
+
+def check_teams(ros, teams):
+    """Затронутые клубы не хуже, чем были: места звеньев — у стольких же, одетых столько же (rosterstatus = одет),
+    те же буквы; новых повторов номеров нет; записей не больше 40; key без повторов."""
+    bad = []
+    for t in teams:
+        a, b = team_state(ros, ros.orig, t), team_state(ros, ros.entries, t)
+        name = team_label(ros.db, t)
+        bad += [f'{name}: место {f} у {b["flags"][f]} (было {a["flags"][f]})' for f in FLAGS if a['flags'][f] != b['flags'][f]]
+        if a['dressed'] != b['dressed']:
+            bad.append(f'{name}: одетых {b["dressed"]} (было {a["dressed"]})')
+        if a['letters'] != b['letters']:
+            bad.append(f'{name}: буквы C/A {b["letters"]} (было {a["letters"]})')
+        if set(b['dup_numbers']) - set(a['dup_numbers']):
+            bad.append(f'{name}: повтор номеров {b["dup_numbers"]}')
+        if b['size'] > MAX_PER_TEAM:
+            bad.append(f'{name}: записей {b["size"]}')
+    keys = [e['key'] for e in ros.entries]
+    if len(set(keys)) != len(keys):
+        bad.append('key повторяются')
+    return bad
+
+
+def do_moves(db, base, rep):
+    """Переводы игроков, у которых в базе права другого клуба НХЛ → (строки отчёта, записано полей, клубы)."""
+    if not rep['moves']:
+        return [], 0, set()
+    ros = Rosters(db, base)
+    lines, log, teams = [], [], set()
+    for p, r in rep['moves']:
+        cur = db.get(B, 'team', r) - 1
+        line = move(ros, p, r, log)
+        if line:
+            lines.append(line)
+            teams |= {cur, db.get(B, 'team', r) - 1}
+    bad = check_teams(ros, sorted(t for t in teams | ros.touched if t >= 0))
+    if bad:
+        sys.exit('перевод: проверки не прошли — ' + '; '.join(bad))
+    return lines + [f'НЕ ПЕРЕВЕДЁН: {x}' for x in log], ros.write(), teams
 
 def payroll(base, real, pages=None):
     """Ведомости 32 клубов по составу НХЛ: [(клуб, млн, настоящих, заглушек, сверх потолка, по странице млн)]."""
@@ -390,7 +622,29 @@ def meta_for(path):
     return load_meta(m)
 
 
-def cmd_db(paths, dry, report):
+def moves_and_payroll(db, base, real, rep, pages, no_move):
+    """Переводы (если не --no-move) и ведомости до/после у затронутых клубов НХЛ → (таблица, строки, полей, base)."""
+    before = {c: t for c, t, *_ in payroll(base, real, pages)}
+    lines, n, teams = ([], 0, set()) if no_move else do_moves(db, base, rep)
+    if n:                                   # составы изменились — ведомость заново
+        rows_real = {db.get(B, 'game_id', r) for r in real}
+        base = Base(db)
+        real = {r for r in base.rows if db.get(B, 'game_id', r) in rows_real}
+    table = payroll(base, real, pages)
+    clubs = sorted({SLOT_TEAM[t] for t in teams if t in SLOT_TEAM}
+                   | {p['team'] for p, _ in rep['moves']} if lines else set())
+    after = {c: t for c, t, *_ in table}
+    rep['transfers'] = lines
+    rep['payroll_moved'] = {c: [before[c], after[c]] for c in clubs}
+    for s in lines:
+        print('  перевод:', s)
+    if clubs:
+        print('  ведомости затронутых клубов: ' + ', '.join(f'{c} {before[c] / 1e6:.2f} → {after[c] / 1e6:.2f}'
+                                                          for c in clubs))
+    return table, n, base
+
+
+def cmd_db(paths, dry, report, no_move=False):
     pages = load_pages()
     for path in paths:
         meta = meta_for(path)
@@ -398,7 +652,8 @@ def cmd_db(paths, dry, report):
         base, changes, real, rep = plan(db, pages)
         apply(db, changes)
         summary(path, rep)
-        table = payroll(base, real, pages)
+        table, moved, base = moves_and_payroll(db, base, real, rep, pages, no_move)
+        changes = changes or moved
         md = payroll_md(table)
         print(md)
         if report:
@@ -406,6 +661,7 @@ def cmd_db(paths, dry, report):
             os.makedirs(os.path.dirname(os.path.abspath(dst)), exist_ok=True)
             rep['payroll'] = [{'club': c, 'payroll': t, 'real': a, 'stub': s, 'over_cap': o, 'page_roster': pg}
                               for c, t, a, s, o, pg in table]
+            rep['moves'] = [f"{p['team']} {p['name']} {p.get('birth')}" for p, _ in rep['moves']]
             json.dump(rep, open(dst, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
             open(os.path.splitext(dst)[0] + '-payroll.md', 'w', encoding='utf-8').write(md + '\n')
             print(f'отчёт → {dst}')
@@ -434,20 +690,24 @@ def cmd_payroll(path, md_out):
         open(md_out, 'w', encoding='utf-8').write(md + '\n')
 
 
-def cmd_save(save, write):
+def cmd_save(save, write, no_move=False):
     meta = load_meta(CACHE_META)
     raw = open(save, 'rb').read()
     sf = SaveFile(raw, meta)
-    base, changes, real, rep = plan(sf.db, load_pages())
-    summary(save, rep)
-    for r, f, old, new in changes[:12]:
-        print(f'  {base.name(r)}: {f} {old} → {new}')
-    if len(changes) > 12:
-        print(f'  … ещё {len(changes) - 12}')
-    if not write or not changes:
-        print('без --write ничего не записано' if changes else 'сейв уже совпадает')
-        return
+    pages = load_pages()
+    base, changes, real, rep = plan(sf.db, pages)
     apply(sf.db, changes)
+    summary(save, rep)
+    for r, f, old, new in changes[:6]:
+        print(f'  {base.name(r)}: {f} {old} → {new}')
+    if len(changes) > 6:
+        print(f'  … ещё {len(changes) - 6}')
+    table, moved, base = moves_and_payroll(sf.db, base, real, rep, pages, no_move)
+    over = [c for c, t, *_ in table if t > CAP]
+    print(f'  сверх потолка {CAP / 1e6:g} млн: {len(over)} — {", ".join(over) or "нет"}')
+    if not write or not (changes or moved):
+        print('без --write ничего не записано' if changes or moved else 'сейв уже совпадает')
+        return
     out = sf.bytes(fix=True)
     bdir = os.path.join(ROOT, 'game', 'work', 'legacy-data', 'backup-saves',
                         f'{os.path.basename(save)}-{time.strftime("%Y%m%d-%H%M%S")}')
@@ -472,11 +732,11 @@ def main(argv):
     vals = {opt('--report'), opt('--md')}
     paths = [a for a in rest if not a.startswith('--') and a not in vals]
     if cmd == 'db':
-        cmd_db(paths, '--dry-run' in rest, opt('--report'))
+        cmd_db(paths, '--dry-run' in rest, opt('--report'), '--no-move' in rest)
     elif cmd == 'payroll':
         cmd_payroll(paths[0], opt('--md'))
     else:
-        cmd_save(paths[0], '--write' in rest)
+        cmd_save(paths[0], '--write' in rest, '--no-move' in rest)
 
 
 if __name__ == '__main__':
