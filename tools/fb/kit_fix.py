@@ -498,6 +498,46 @@ def cmd_sheet(a):
     print(a.out, S.size)
 
 
+def cmd_backsheet(a):
+    """Лист «ворот сзади»: шея и задняя часть ворота со спины (3D, с рельефом) и развёртка ворота. ИМЯ=папка."""
+    from PIL import ImageDraw, ImageFont
+    from . import kit3d, kit_hybrid
+    mesh, _ = kit_hybrid.legacy_with_shirt()
+    f16 = ImageFont.truetype("C:/Windows/Fonts/segoeuib.ttf", 16)
+    f20 = ImageFont.truetype("C:/Windows/Fonts/segoeuib.ttf", 20)
+    BACK = (-0.14, 0.14, 1.58, 1.80)
+    UVBOX = (0.36, 0.30, 0.64, 0.66)
+
+    def load(d, n):
+        return np.asarray(Image.open(os.path.join(d, n)).convert("RGB").resize((1024, 1024))).astype(np.float64)
+
+    tiles = []
+    for spec in a.kits:
+        name, d = spec.split("=", 1)
+        cm, nm, sm = load(d, "jersey_cm.png"), load(d, "jersey_nm.png"), load(d, "jersey_sm.png")
+        v = kit3d.render_lit(mesh, cm, "back", 300, frame=BACK, nmap=nm, smap=sm, ss=2)
+        u0, v0, u1, v1 = (int(x * 1024) for x in UVBOX)
+        uv = Image.fromarray(cm[v0:v1, u0:u1].astype(np.uint8)).resize((int((u1 - u0) * 1.2), int((v1 - v0) * 1.2)),
+                                                                         Image.NEAREST)
+        t = Image.new("RGB", (v.width + uv.width + 8, max(v.height, uv.height) + 28), (30, 30, 34))
+        ImageDraw.Draw(t).text((2, 2), name.replace("|", " "), fill=(240, 240, 240), font=f16)
+        t.paste(v, (0, 26))
+        t.paste(uv, (v.width + 8, 26))
+        tiles.append(t)
+        print(name, flush=True)
+    cols = a.cols
+    tw = max(t.width for t in tiles)
+    th = max(t.height for t in tiles)
+    rows = (len(tiles) + cols - 1) // cols
+    S = Image.new("RGB", (cols * (tw + 16) + 16, 50 + rows * (th + 16)), (30, 30, 34))
+    ImageDraw.Draw(S).text((16, 12), "Ворот сзади: шея со спины (3D, с рельефом) | развёртка ворота (u 0,36–0,64, "
+                           "v 0,30–0,66; низ — грудь, верх — спина)", fill=(240, 240, 240), font=f20)
+    for i, t in enumerate(tiles):
+        S.paste(t, (16 + (i % cols) * (tw + 16), 50 + (i // cols) * (th + 16)))
+    S.save(a.out)
+    print(a.out, S.size)
+
+
 def main():
     import argparse
     ap = argparse.ArgumentParser()
@@ -509,8 +549,12 @@ def main():
     s.add_argument("out")
     s.add_argument("kits", nargs="+", help="ИМЯ=заголовок@папка;…;name_cm.png («|» в ИМЕНИ — перенос)")
     s.add_argument("--title", default="", help="заголовок листа («\n» — перенос)")
+    s = sub.add_parser("backsheet")
+    s.add_argument("out")
+    s.add_argument("kits", nargs="+", help="ИМЯ=папка формы (jersey_cm/nm/sm)")
+    s.add_argument("--cols", type=int, default=5)
     a = ap.parse_args()
-    return {"survey": cmd_survey, "sheet": cmd_sheet}[a.cmd](a)
+    return {"survey": cmd_survey, "sheet": cmd_sheet, "backsheet": cmd_backsheet}[a.cmd](a)
 
 
 if __name__ == "__main__":
