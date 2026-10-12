@@ -24,7 +24,7 @@ from . import kit3d
 from .kit3d import _unit, load_legacy, load_nhl24, load_tex, project, raster_uv, sample_bilinear
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RULES = os.path.join(HERE, "kit_rules.toml")
+RULES = os.environ.get("FB_KIT_RULES") or os.path.join(HERE, "kit_rules.toml")  # FB_KIT_RULES — пробы с другими правилами
 
 
 def load_rules(path, club=None, kit=None, profiles=()):
