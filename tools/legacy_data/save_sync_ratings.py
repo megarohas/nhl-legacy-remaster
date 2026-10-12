@@ -2,9 +2,11 @@
 
 Игра при запуске загружает последний сохранённый состав целиком, вместе с атрибутами, поэтому после установки базы
 с новыми рейтингами в игре видны старые, пока они не перенесены в этот сейв (11.10.2026). Переносятся только
-атрибуты c_* в exhibitionskaterai / exhibitiongoalieai по game_id (живые строки сейва); growth* и прочее, что игра
-считает сама, и все остальные таблицы сейва (правки пользователя, звенья, экипировка) не трогаются. Рядом —
-копия сейва в game/work/legacy-data/backup-saves, после записи — проверка CRC и обёртки, при ошибке сейв возвращается.
+атрибуты c_* в exhibitionskaterai / exhibitiongoalieai и признак портрета (hasportrait, artid) в
+exhibitionplayerbiotable — по game_id (живые строки сейва); иначе новые портреты (этап photos24, 12.10.2026) в игре
+не видны. growth* и прочее, что игра считает сама, и все остальные поля и таблицы сейва (правки пользователя,
+звенья, экипировка) не трогаются. Рядом — копия сейва в game/work/legacy-data/backup-saves, после записи —
+проверка CRC и обёртки, при ошибке сейв возвращается.
 
     python tools/legacy_data/save_sync_ratings.py СЕЙВ [--write]
 """
@@ -16,7 +18,8 @@ sys.path.insert(0, os.path.join(ROOT, 'tools'))
 from tdb import SaveFile, Tdb, load_meta  # noqa: E402
 
 CACHE_DB = os.path.join(ROOT, 'legacy-port', 'userdata', 'cache', 'guest', 'db')
-TABLES = ('exhibitionskaterai', 'exhibitiongoalieai')
+TABLES = ('exhibitionskaterai', 'exhibitiongoalieai', 'exhibitionplayerbiotable')
+BIO_FIELDS = ('hasportrait', 'artid')  # портрет fe: p<artid>, показывается при hasportrait = 1
 
 
 def main(save, write=False):
@@ -27,7 +30,8 @@ def main(save, write=False):
     sv = sf.db
     total = 0
     for t in TABLES:
-        fields = [f for f in db.by_name[t]['fields'] if f.startswith('c_')]
+        fields = (BIO_FIELDS if t == 'exhibitionplayerbiotable'
+                  else [f for f in db.by_name[t]['fields'] if f.startswith('c_')])
         src = {db.get(t, 'game_id', r): r for r in db.live_rows(t)}
         players = values = 0
         for r in sv.live_rows(t):
@@ -43,7 +47,7 @@ def main(save, write=False):
             if changed:
                 players += 1
                 values += changed
-        print(f'{t}: игроков с новыми атрибутами {players}, значений {values}')
+        print(f'{t}: игроков с новыми значениями {players}, значений {values}')
         total += players
     if not write or not total:
         print('без --write ничего не записано' if total else 'сейв уже совпадает с базой')
@@ -66,4 +70,5 @@ def main(save, write=False):
 
 
 if __name__ == '__main__':
+    sys.stdout.reconfigure(encoding='utf-8')  # в канал Windows пишет в cp1251
     main(sys.argv[1], '--write' in sys.argv[2:])
