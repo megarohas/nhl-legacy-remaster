@@ -2,11 +2,13 @@
 
     python sticktape.py info                          # разбор: кольца ленты, носок клюшки, стык (полевые и вратарские)
     python sticktape.py build [--round none,strong,bottom1,bottom2] [--kinds player,goalie] [--goalie-round]
-                              [--preview DIR] [--no-preview]
+                              [--axial-uv] [--preview DIR] [--no-preview]
                                                       # варианты (ROUNDS) в game/work/models/tape/out (none — без
                                                       # скругления) и out-<вариант>, раскладка cache:; лист превью.
                                                       # --kinds goalie пересобирает только вратарские (записи
-                                                      # остальных в manifest.json сохраняются)
+                                                      # остальных в manifest.json сохраняются); --axial-uv — UV-u
+                                                      # вершин крюка по глубине вдоль оси (папки out-…-axial; для
+                                                      # частичной обмотки tapestyles.py), у всех команд
     python sticktape.py preview [--round …] [--preview DIR]   # лист превью по готовым файлам
     python sticktape.py check [--round …]             # проверки собранного
 
@@ -67,6 +69,7 @@ DROPPED = 'rendering/prop/droppedstick_0.rx2'               # NHL Legacy: две
 KINDS['dropped'] = (DROPPED, DROPPED)
 KIND_DIR['dropped'] = 'prop'
 UV_GAP = 0.012                              # отступ рисунка крюка от рисунка набалдашника по UV-u
+AXIAL_UV = False                            # --axial-uv: UV-u вершин крюка — по глубине вдоль оси (см. build_pair)
 
 
 def v_add(a, b):
@@ -609,7 +612,7 @@ def rail_candidates(q, T, limit, eps0=0.02):
     return sorted((c, p) for p, c in out.items())
 
 
-def build_pair(pair, rounding=None, uv_max=None, use_rails=True):
+def build_pair(pair, rounding=None, uv_max=None, use_rails=True, axial_uv=None):
     """Лента до носка (и, если rounding = (Rв, Rн) в долях высоты крюка у носка, — носок круглее: дуги радиуса Rв у
     верхнего угла и Rн у нижнего, касательные к кромкам и к концу носка). → (файл ленты, файл клюшки, отчёт).
 
@@ -1027,13 +1030,37 @@ def build_pair(pair, rounding=None, uv_max=None, use_rails=True):
     scale = min(1.0, (uv_max - u0) / (end_raw - u0))
     sq = lambda x: u0 + (x - u0) * scale
 
+    # «осевой» UV-u (axial_uv, по умолчанию — AXIAL_UV, ключ --axial-uv): u каждой вершины крюка — по её глубине вдоль
+    # оси крюка (кусочно-линейно по средним глубинам колец и их u), а не по кольцу. Кольца EA от пятки до середины
+    # косые (верх крюка глубже низа на 9–26 мм), и граница в текстуре по u шла бы наискось; с осевым u столбец
+    # текстуры — плоскость поперёк крюка: край частичной обмотки (tapestyles.py) ровный и чёткий
+    if axial_uv is None:
+        axial_uv = AXIAL_UV
+    axial = None
+    if axial_uv:
+        tab = []
+        for k in range(anchor + 1):
+            P = [pair.local(tp.pos[i])[0] for i in pair.rings[k].values()]
+            tab.append((sum(P) / len(P), sq(pair.ring_u[k])))
+        for sv, ring in zip(s_new, new_rings):
+            P = [pair.local(q[0])[0] for q in ring.values()]
+            tab.append((sum(P) / len(P), sq(uv_anchor + dens * (sv - s_body[anchor]))))
+        tab.sort()
+
+        def axial(p):
+            dd = pair.local(p)[0]
+            k = 0
+            while k < len(tab) - 2 and dd > tab[k + 1][0]:
+                k += 1
+            (d0, u0_), (d1, u1_) = tab[k], tab[k + 1]
+            return min(uv_max, max(0.001, u0_ + (u1_ - u0_) * (dd - d0) / (d1 - d0)))
     # буфер вершин: исходные (у колец крюка до якоря — новый UV-u; кольца после якоря больше не используются)
     vb = []
     ring_of = {i: k for k, rr in enumerate(pair.rings) for i in rr.values()}
     for i in range(tp.nv):
         raw = tp.vertex_raw(i)
         if i in ring_of and ring_of[i] <= anchor:
-            raw = tp.pack_vertex(raw, uv=(sq(tp.uv[i][0]), tp.uv[i][1]))
+            raw = tp.pack_vertex(raw, uv=(axial(tp.pos[i]) if axial else sq(tp.uv[i][0]), tp.uv[i][1]))
         vb.append(raw)
     base = pair.rings[j8]
     ring_ids = [dict(pair.rings[anchor])]
@@ -1043,7 +1070,7 @@ def build_pair(pair, rounding=None, uv_max=None, use_rails=True):
         ids = {}
         for r, (pos, nrm, tan) in ring.items():
             vb.append(tp.pack_vertex(tp.vertex_raw(base[r]), pos=out_p(pos), nrm=out_n(nrm), tan=out_t(tan),
-                                     uv=(uu, tp.uv[base[r]][1])))
+                                     uv=(axial(pos) if axial else uu, tp.uv[base[r]][1])))
             ids[r] = len(vb) - 1
             apos[len(vb) - 1] = pos
         ring_ids.append(ids)
@@ -1110,6 +1137,8 @@ def build_pair(pair, rounding=None, uv_max=None, use_rails=True):
            'radii_mm': [round(Rt * 1000, 1), round(Rb * 1000, 1)], 'blade_height_mm': round(H * 1000, 1),
            'new_rings_mm': [round(u * 1000, 2) for u in depths], 'toe_depth_mm': round(tip * 1000, 2),
            'uv_u_scale': round(scale, 4), 'uv_u_end': round(uv_end, 4), 'stick_island_vertices': len(pair.island)}
+    if axial:
+        rep['axial_uv'] = True
     return tape_bytes, st2.bytes(), rep
 
 
@@ -1165,7 +1194,7 @@ def cmd_info(args):
 
 
 def out_dir(variant):
-    return os.path.join(tape_dir(), 'out' if variant == 'none' else f'out-{variant}')
+    return os.path.join(tape_dir(), ('out' if variant == 'none' else f'out-{variant}') + ('-axial' if AXIAL_UV else ''))
 
 
 def cmd_build(args):
@@ -1215,7 +1244,9 @@ def cmd_build(args):
 
 
 def main():
+    global AXIAL_UV
     args = rm.take_game(sys.argv[1:])
+    AXIAL_UV = rm.flag(args, '--axial-uv')
     if not args:
         print(__doc__)
         return

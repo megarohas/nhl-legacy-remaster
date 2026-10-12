@@ -1,8 +1,8 @@
-"""Варианты обмотки крюка: свободные коды sticktapecolor (2–9) — частичная обмотка белой и чёрной лентой.
+"""Варианты обмотки крюка: свободные коды sticktapecolor (2–6) — частичная обмотка белой лентой.
 
     python tapestyles.py table                         # таблица «код → вид обмотки» и границы по UV
     python tapestyles.py build [--out DIR] [--no-preview]
-                                                       # texlib_999.rx2 с новыми текстурами sticktape_2…9_cm в
+                                                       # texlib_999.rx2 с новыми текстурами sticktape_2…6_cm в
                                                        # раскладке cache: (DIR/rendering/playerstick/), картинки
                                                        # текстур (DIR/png) и лист вариантов на крюке
     python tapestyles.py preview [--out DIR]           # только лист (по готовому texlib_999 из DIR)
@@ -17,13 +17,16 @@ exhibitiongoalieequipment); в базах NHL 13 и Legacy заняты толь
 UV-u идёт вдоль крюка: у мода «низ-2» от пятки (кольцо 0, u = 0,018) до кончика (u ≈ 0,684), правее 0,696 —
 рисунок набалдашника; UV-v — по кругу сечения. Значит, частичную обмотку можно нарисовать в текстуре: там, где
 ленты нет, — голый крюк (тёмный карбон), сетки не меняются. Голый крюк один на все клюшки (текстура ленты не знает
-модели клюшки): тёмно-серый карбон. Границы — доли длины крюка от пятки к кончику; переводятся в u по сетке мода
-(кольца ленты, sticktape.py «низ-2», для _2 и _4 одинаково, обе руки — зеркало с теми же UV). Край ленты — косой
-(лента идёт по спирали) с тонкой тенью. Набалдашник — как у полной ленты того же цвета.
+модели клюшки): чёрный карбон. Сетки — мод «низ-2» с осевым UV (sticktape.py --axial-uv, папка out-bottom2-axial):
+у каждой вершины крюка u — по её глубине вдоль оси крюка, так что столбец текстуры — плоскость поперёк крюка (у
+исходных колец EA от пятки до середины u шёл бы наискось, на 9–26 мм). Границы — доли длины крюка от пятки к
+кончику, в u — по кольцам этой сетки (_2 и _4 одинаково, обе руки — зеркало с теми же UV). Край ленты ровный,
+поперёк оси крюка, жёсткий: пиксель — либо лента, либо карбон, без смешивания (размывают только мипы вдали). Набалдашник — как у полной ленты того же цвета. Чёрных частичных нет: на
+чёрном карбоне их не видно; 7–9 — цвета EA, не меняются.
 
 Только стандартная библиотека (+ Chrome/Edge без окна — подписи листа, как в teamart/sticktape).
 """
-import hashlib, json, math, os, random, sys
+import hashlib, json, os, random, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import rw4mesh as rm  # noqa: E402
@@ -41,13 +44,12 @@ STYLES = {
     3: (1, [(0.30, 0.87)], 'белая, середина: пятка и носок голые (Селебрини)'),
     4: (1, [(0.0, 0.87)], 'белая, носок голый (~3 см)'),
     5: (1, [(0.55, 0.85)], 'белая, узкая полоса ближе к носку'),
-    6: (0, [(0.45, 1.0)], 'чёрная, от середины до носка, пятка голая (Овечкин, Лайне)'),
-    7: (0, [(0.30, 0.87)], 'чёрная, середина: пятка и носок голые'),
-    8: (0, [(0.0, 0.87)], 'чёрная, носок голый (~3 см)'),
-    9: (1, [(0.25, 1.0)], 'белая, голая только пятка (четверть крюка)'),
+    6: (1, [(0.25, 1.0)], 'белая, голая только пятка (четверть крюка)'),
 }
-EDGE_SLANT = 0.035          # край ленты косой: сдвиг границы по длине крюка поперёк лицевой стороны (доля длины)
-CARBON = (21, 22, 25)       # голый крюк: чёрный карбон (темнее чёрной ленты — она матовая, светлее)
+# 7–9 — как у EA (голубая, розовая, фиолетовая): текстуры не меняются. Чёрные частичные не делаются: на чёрном
+# карбоне их не видно (отзыв пользователя 12.10)
+EA_COLORS = {7: 'голубая (EA)', 8: 'розовая (EA)', 9: 'фиолетовая (EA)'}
+CARBON = (21, 22, 25)       # голый крюк: чёрный карбон
 UV_KNOB = 0.69              # правее — набалдашник (не трогается)
 
 
@@ -59,11 +61,12 @@ def out_root(args=None):
 # ---------------------------------------------------------------- доля длины крюка ↔ UV-u (по сетке мода)
 
 def blade_mapping():
-    """Кольца ленты крюка у мода «низ-2» (_2, левый хват): [(u, доля длины от пятки к кончику)], по возрастанию u.
-    Сетка мода собирается в памяти (sticktape.build_pair), без файлов."""
+    """Кольца ленты крюка у мода «низ-2» с осевым UV (_2, левый хват): [(u, доля длины от пятки к кончику по оси
+    крюка)], по возрастанию u. С осевым UV u вершины зависит только от её глубины вдоль оси (рамка носка sticktape, n —
+    к кончику), поэтому эта таблица верна для любого пикселя. Сетка собирается в памяти (sticktape.build_pair)."""
     import sticktape as stt
     pair = stt.make_pair('player', 0, 2)
-    tb, _, _ = stt.build_pair(pair, stt.ROUNDS['bottom2'])
+    tb, _, _ = stt.build_pair(pair, stt.ROUNDS['bottom2'], axial_uv=True)
     pair = stt.make_pair('player', 0, 2)              # рамка — по исходной сетке, как у build_pair
     pair.align_to_edges()
     nt = rm.Mesh(tb, pair.rel_tape)
@@ -117,58 +120,26 @@ def decode(rw, name):
 
 
 def carbon_px(x, y, rnd):
-    """Голый крюк: тёмный карбон, чуть светлее у кромок (по v), лёгкий шум и косое плетение 2×2."""
+    """Голый крюк: тёмный карбон, лёгкий шум и мелкое плетение."""
     weave = 2 if (x + y) % 2 == 0 else -1
     n = rnd.randint(-1, 1)
     return tuple(max(0, min(255, c + weave + n)) for c in CARBON)
 
 
 def paint_style(base_rgba, intervals, rows):
-    """Текстура варианта: основа (полная лента) + голый крюк вне кусков intervals (доли длины крюка). Край ленты —
-    косой на лицевых сторонах, сглажен (покрытие пикселя — по 4×4 подточкам) и чуть темнее у самой кромки (толщина
-    ленты)."""
+    """Текстура варианта: основа (полная лента) + голый крюк вне кусков intervals (доли длины крюка). Граница —
+    жёсткая (пиксель либо лента, либо карбон, без смешивания) и поперёк оси крюка (осевой UV: столбец — плоскость)."""
     rnd = random.Random(1)
     px = bytearray(base_rgba)
-    # сечение по v: верхняя кромка ~0,12–0,15, лицо A, нижняя кромка ~0,41–0,49, лицо B, верхняя кромка ~0,84–0,89;
-    # на лицах край ленты косой (лента идёт по спирали), на кромках — прямой
-    def slant(v):
-        if 0.15 <= v <= 0.41:
-            return (v - 0.28) / 0.13
-        if 0.49 <= v <= 0.84:
-            return -(v - 0.665) / 0.175
-        return 0.0
-
-    def edges(v):
-        s_ = slant(v) * EDGE_SLANT
-        return [(a - s_ if a > 0 else -1.0, b + s_ if b < 1 else 2.0) for a, b in intervals]
-    f_px = {}
-    for x in range(W):
-        for k in range(4):
-            u = (x + (k + 0.5) / 4) / W
-            f_px[(x, k)] = interp(rows, u)
-    df = abs(interp(rows, 1.0 / W) - interp(rows, 0.0))         # доля длины крюка на пиксель
     for y in range(H):
         for x in range(W):
             if (x + 0.5) / W >= UV_KNOB:
                 continue
-            cov, dist = 0, 9.0
-            for j in range(4):
-                v = (y + (j + 0.5) / 4) / H
-                ee = edges(v)
-                for k in range(4):
-                    f = f_px[(x, k)]
-                    if any(a <= f <= b for a, b in ee):
-                        cov += 1
-                    for a, b in ee:
-                        dist = min(dist, abs(f - a), abs(f - b))
-            c = cov / 16
+            f = interp(rows, (x + 0.5) / W)                    # осевой UV: столбец текстуры — плоскость поперёк крюка
+            if any(a <= f <= b for a, b in intervals):
+                continue
             o = (y * W + x) * 4
-            car = carbon_px(x, y, rnd)
-            tape = list(px[o:o + 3])
-            if c > 0 and dist < 1.2 * df:                       # кромка ленты — темнее
-                tape = [int(t * 0.82) for t in tape]
-            for i in range(3):
-                px[o + i] = int(round(tape[i] * c + car[i] * (1 - c)))
+            px[o:o + 3] = bytes(carbon_px(x, y, rnd))
             px[o + 3] = 255
     return bytes(px)
 
@@ -200,15 +171,14 @@ def build(args):
     # проверка: файл читается, 0, 1 и остальные текстуры — байт в байт как у игры
     src = load_texlib()
     chk = __import__('teamart').Rw4(data, dst)
-    same = [t.name for t in src.textures if not t.name.startswith(('sticktape_2', 'sticktape_3', 'sticktape_4',
-                                                                   'sticktape_5', 'sticktape_6', 'sticktape_7',
-                                                                   'sticktape_8', 'sticktape_9'))]
+    changed = tuple(f'sticktape_{c}_cm' for c in STYLES if c not in (0, 1))
+    same = [t.name for t in src.textures if not t.name.startswith(changed)]
     bad = [n for n in same if src.buffer(tex_of(src, n.split('.')[0])) != chk.buffer(tex_of(chk, n.split('.')[0]))]
     if len(data) != len(src.bytes()) or bad:
         raise SystemExit(f'проверка: размер {len(data)} / {len(src.bytes())}, изменились чужие текстуры: {bad}')
     man['unchanged'] = same
     json.dump(man, open(os.path.join(out, 'manifest.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
-    print(f'{dst}: sha1 {man["sha1"][:12]}, размер {len(data)} (как у игры), заменены sticktape_2…9_cm; '
+    print(f'{dst}: sha1 {man["sha1"][:12]}, размер {len(data)} (как у игры), заменены sticktape_2…{max(STYLES)}_cm; '
           f'остальные {len(same)} текстур — байт в байт')
     if not rm.flag(args, '--no-preview'):
         preview(out)
@@ -220,6 +190,8 @@ def table(args):
     for code, (base, iv, name) in sorted(STYLES.items()):
         us = ', '.join(f'{interp(rows, a, 1, 0):.3f}…{interp(rows, b, 1, 0):.3f}' for a, b in iv)
         print(f'{code} | {"белая" if base else "чёрная"} | {iv} | {us} | {name}')
+    for code, name in sorted(EA_COLORS.items()):
+        print(f'{code} | — | — | — | {name}, не меняется')
 
 
 # ---------------------------------------------------------------- лист вариантов на крюке
@@ -235,12 +207,12 @@ def preview(out):
     import teamart as ta
     rw = ta.Rw4(open(os.path.join(out, *TEXLIB.split('/')), 'rb').read(), TEXLIB)
     tex = {c: kp.Img(*kp.tex_decode(rw, tex_of(rw, TAPE_TEX.format(c)), 0)) for c in STYLES}
-    mdir = os.path.join(rm.models_dir(), 'tape', 'out-bottom2')
+    mdir = os.path.join(rm.models_dir(), 'tape', 'out-bottom2-axial')
     pair = stt.Pair(0, 2)
     if os.path.exists(os.path.join(mdir, *pair.rel_tape.split('/'))):
         stick, tape = stt.load_pair(mdir, pair)
     else:                                           # нет готового мода — собрать в памяти
-        tb, sb, _ = stt.build_pair(stt.make_pair('player', 0, 2), stt.ROUNDS['bottom2'])
+        tb, sb, _ = stt.build_pair(stt.make_pair('player', 0, 2), stt.ROUNDS['bottom2'], axial_uv=True)
         stick, tape = rm.Mesh(sb, pair.rel_stick), rm.Mesh(tb, pair.rel_tape)
     cams = dict(stt.blade_views(pair))
     views = [('сбоку', cams['сбоку']), ('обратная сторона', cams['сбоку, обратная сторона']),
@@ -275,11 +247,12 @@ def preview(out):
             'margin-bottom:6px}.code{font-size:26px;font-weight:600;width:34px;text-align:center}'
             '.nm{width:190px;font-size:13px}figure{margin:0}figcaption{font-size:11px;color:#aaa;text-align:center}'
             '</style></head><body><h1>Варианты обмотки крюка: код sticktapecolor → вид — ' + rm.PROFILE.title
-            + '</h1><p>Сетка — мод «низ-2» (лента до кончика, носок скруглён), левый хват, клюшка Reebok 11K. 0 и 1 — '
-            'как у EA; 2–9 — новые текстуры (вместо синей, красной, жёлтой, зелёной, оранжевой, голубой, розовой, '
-            'фиолетовой). Голый крюк — тёмный карбон, один на все клюшки.</p>' + ''.join(body) + '</body></html>')
+            + '</h1><p>Сетка — мод «низ-2» с осевым UV (лента до кончика, носок скруглён), левый хват, клюшка Reebok 11K. '
+            '0 и 1 — как у EA; 2–6 — новые текстуры (вместо синей, красной, жёлтой, зелёной, оранжевой); 7–9 — цвета EA '
+            '(голубая, розовая, фиолетовая), не меняются. Голый крюк — чёрный карбон, один на все клюшки. Край ленты — '
+            'поперёк крюка, жёсткий.</p>' + ''.join(body) + '</body></html>')
     sheet = os.path.join(pdir, 'sheet.png')
-    ta.render_html(html, sheet, 1200, 90 + len(cards) * 232)
+    ta.render_html(html, sheet, 1200, 110 + len(cards) * 240)
     print(f'лист: {sheet}')
 
 
