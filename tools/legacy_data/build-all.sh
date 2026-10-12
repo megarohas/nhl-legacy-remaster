@@ -4,7 +4,8 @@
 #   bash tools/legacy_data/build-all.sh [ЭТАП…] [--ahl32]
 #   LEGACY_DATA_WORK=папка bash tools/legacy_data/build-all.sh …   # сухой прогон: всё (и out) — в эту папку;
 #        входы, которые этапом не пересобираются (например, составы без сети), — положить туда заранее
-#        этапы: base roster photos equip collect retire fixdb utah ahl nhlattrs useredits tape goaliegear photos24 heads scans24 fonts
+#        этапы: base roster photos equip collect retire fixdb utah ahl nhlattrs useredits tape goaliegear contracts photos24 heads
+#        scans24 fonts
 #        music models art logos menu nhl24
 #        (без этапов — все по порядку;
 #        --ahl32 — ещё вариант «АХЛ на 32», накладка game/work/legacy-data/out-ahl32; nhl24 — накладка out-nhl24
@@ -27,7 +28,7 @@ L=game/other/legacy/big/cacheboot
 AHL32=0
 stages=()
 for a in "$@"; do [ "$a" = "--ahl32" ] && AHL32=1 || stages+=("$a"); done
-[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah ahl nhlattrs useredits tape goaliegear photos24
+[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah ahl nhlattrs useredits tape goaliegear contracts photos24
                                   heads scans24 fonts music models art logos menu nhl24)
 want() { for s in "${stages[@]}"; do [ "$s" = "$1" ] && return 0; done; return 1; }
 say() { echo "== $(date +%H:%M:%S) $*"; }
@@ -183,6 +184,27 @@ if want goaliegear; then
   for B in $O $W/out-ahl32; do
     for F in nhlng.db draft_roster.db; do [ -f $B/db/$F ] && python $T/goalie_gear.py db $B/db/$F; done
   done
+fi
+if want contracts; then
+  # настоящие контракты клубов НХЛ 2026/27 (docs/legacy-data.md, «Контракты 2026/27»): страницы клубов от пользователя,
+  # разобранные в game/work/contracts/screens/*.json (личное использование, не в git; CONTRACTS_SCREENS=папка) → сумма,
+  # срок, двусторонность, yearufa и подписанное продление (extension*) сшитым по дате рождения и имени игрокам; спорные
+  # не берутся. После roster (--payroll-max ужимает только заглушки, настоящие суммы — после него) и goaliegear, до
+  # nhl24 (накладка из out/db). Повтор ничего не меняет; draft_roster.db — заново. Отчёты и ведомости — $W/contracts/.
+  # Сейв ROSTER — отдельно: python tools/legacy_data/contracts.py save СЕЙВ [--write]
+  S=${CONTRACTS_SCREENS:-game/work/contracts/screens}
+  if ls $S/*.json >/dev/null 2>&1; then
+    say "контракты клубов НХЛ 2026/27 (contracts.py)"
+    mkdir -p $W/contracts
+    for B in $O $W/out-ahl32; do
+      if [ -f $B/db/nhlng.db ]; then
+        python $T/contracts.py db $B/db/nhlng.db --report $W/contracts/$(basename $B).json
+        python $T/draft_roster.py $B/db/nhlng.db $B/db/draft_roster.db
+      fi
+    done
+  else
+    say "контракты: нет $S/*.json — этап пропущен"
+  fi
 fi
 if want photos24; then
   # портреты из NHL 24 тем, у кого портрета нет (docs/player-photos-nhl24.md): база NHL 24 из дампа (имя + дата
