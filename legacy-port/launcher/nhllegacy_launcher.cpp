@@ -139,6 +139,7 @@ struct State {
   bool nhl32 = false, menu32 = false, ahl32 = false, aigm32 = false, fa32 = false, fd32 = true;
   bool draft_age = false;
   bool menu_exit = false, sim_guard = true, sim_guard_live = true;
+  bool settings_profile = true;  // nhl_settings_from_profile: настройки главного меню — в новую карьеру
   long long cap = 0, floor = 0, min_salary = 0;  // $
 };
 
@@ -203,6 +204,7 @@ State FromCvars(const Cvars& c) {
   s.menu_exit = GetBool(c, "nhl_menu_exit", false);
   s.sim_guard = GetBool(c, "nhl_sim_guard", true);
   s.sim_guard_live = GetBool(c, "nhl_sim_guard_live", true);
+  s.settings_profile = GetBool(c, "nhl_settings_from_profile", true);
   s.cap = GetInt(c, "nhl_salary_cap", 0);
   s.floor = GetInt(c, "nhl_salary_floor", 0);
   s.min_salary = GetInt(c, "nhl_salary_min", 0);
@@ -260,6 +262,7 @@ std::vector<Kv> ToCvars(const State& s) {
   kv.push_back({"nhl_menu_exit", b(s.menu_exit), false, kFix});
   kv.push_back({"nhl_sim_guard", b(s.sim_guard), false, kFix});
   kv.push_back({"nhl_sim_guard_live", b(s.sim_guard_live), false, kFix});
+  kv.push_back({"nhl_settings_from_profile", b(s.settings_profile), false, kFix});
   return kv;
 }
 
@@ -330,6 +333,7 @@ enum HintId {
   kHintMenuExit,
   kHintSimGuard,
   kHintSimGuardLive,
+  kHintSettingsProfile,
   kHintReset,
   kHintPlay,
   kHintCount
@@ -395,6 +399,9 @@ const Hint kHints[kHintCount] = {
      L"зависаний и падений. Лучше не выключать."},
     {L"Страховка сима в «Стань профи»",
      L"Сим до следующей смены в «Стань профи» без падения после удаления. Лучше не выключать."},
+    {L"Мои настройки — в новую карьеру",
+     L"Новая франшиза и «Стань профи» начинаются с правил, слайдеров, звука и видео из главного меню, а не с "
+     L"заводских. Уже начатые карьеры хранят свои настройки — их это не меняет."},
     {L"Сбросить", L"Вернуть все настройки как в nhllegacy.toml (как без лаунчера)."},
     {L"Играть",
      L"Сохранить настройки в nhllegacy_launcher.toml и запустить игру. nhllegacy.toml не меняется."},
@@ -433,6 +440,7 @@ enum ControlId {
   kIdMenuExit,
   kIdSimGuard,
   kIdSimGuardLive,
+  kIdSettingsProfile,
   kIdReset,
   kIdPlay,
   kIdNote,
@@ -604,7 +612,7 @@ void CreateControls() {
   ComboRow(L"Окно", kIdWindow, ix, 356, lab, cw,
            {L"1280×720 — обычное", L"960×540", L"1920×1080", L"2560×1440", L"3840×2160 (4K)"}, kHintWindow);
 
-  Group(L"Управление", lx, 400, lw, 110);
+  Group(L"Управление", lx, 400, lw, 118);
   Check(L"Клавиатура как геймпад", kIdMnk, ix, 424, lw - 32, kHintMnk);
   Check(L"Вибрация геймпада", kIdVibration, ix, 450, lw - 32, kHintVibration);
 
@@ -638,10 +646,11 @@ void CreateControls() {
   MoneyEdit(L"Минимум", kIdMin, jx + 244, 348, 64, 58);
   AddZone(jx, 322, rcw, 52, kHintMoney);
 
-  Group(L"Исправления", rx, 400, rw, 110);
-  Check(L"Пункт EXIT в главном меню", kIdMenuExit, jx, 424, rcw, kHintMenuExit);
-  Check(L"Страховка сима матча (неполная пятёрка)", kIdSimGuard, jx, 450, rcw, kHintSimGuard);
-  Check(L"Страховка сима в «Стань профи»", kIdSimGuardLive, jx, 476, rcw, kHintSimGuardLive);
+  Group(L"Исправления", rx, 400, rw, 118);
+  Check(L"Пункт EXIT в главном меню", kIdMenuExit, jx, 420, rcw, kHintMenuExit);
+  Check(L"Страховка сима матча (неполная пятёрка)", kIdSimGuard, jx, 442, rcw, kHintSimGuard);
+  Check(L"Страховка сима в «Стань профи»", kIdSimGuardLive, jx, 464, rcw, kHintSimGuardLive);
+  Check(L"Мои настройки — в новую карьеру", kIdSettingsProfile, jx, 486, rcw, kHintSettingsProfile);
 
   // Кнопки.
   HWND reset = Add(L"BUTTON", L"Сбросить", BS_PUSHBUTTON | WS_TABSTOP, 16, 602, 120, 34, kIdReset);
@@ -749,6 +758,7 @@ void ToUi(const State& s) {
   SetCheck(kIdMenuExit, s.menu_exit);
   SetCheck(kIdSimGuard, s.sim_guard);
   SetCheck(kIdSimGuardLive, s.sim_guard_live);
+  SetCheck(kIdSettingsProfile, s.settings_profile);
   UpdateEnabled();
 }
 
@@ -780,6 +790,7 @@ bool FromUi() {
   s.menu_exit = GetCheck(kIdMenuExit);
   s.sim_guard = GetCheck(kIdSimGuard);
   s.sim_guard_live = GetCheck(kIdSimGuardLive);
+  s.settings_profile = GetCheck(kIdSettingsProfile);
   struct {
     int id;
     double max;
