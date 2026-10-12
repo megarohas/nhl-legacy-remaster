@@ -445,6 +445,9 @@ def cmd_build(a):
             tids[family], _ = kit3d.raster_uv(srcs[family], 1024)
         src, tid24 = srcs[family], tids[family]
         defaults, rules = kit_hybrid.load_rules(kit_hybrid.RULES, code, label, [])
+        lace_rule = kit_fix.collar_lace_rule(code, label)
+        if lace_rule:  # щит NHL — из ворота EA (по контуру), свой не ставится
+            rules.setdefault("neck_shield", {})["enabled"] = False
         fit = kit_fix.crest_fit(os.path.join(unpack(tpl_kit), "name_cm.png"))  # герб не на букву капитана
         comp = kit3d.load_tex(png(folder, jc))
         bc = p + f"jersey_{family}_{club}_{kit}_base_color"
@@ -475,16 +478,17 @@ def cmd_build(a):
             placed += p2
             soft.update(s2)
         collar = (crule, kit_hybrid.collar_color(base, crule)) if crule.get("mode", "body") == "body" else None
-        pre, laces, band = [], kit_fix.club_rule("laces", code, label), kit_fix.club_rule("chest_band", code, label)
-        if laces:  # ворот со шнуровкой без 3D-шнурков: раскладка и рельеф EA-комплекта laces.from, цвета NHL 24
-            laces_fix = kit_fix.Laces(laces, base, unpack(laces["from"]))
+        pre, band = [], kit_fix.club_rule("chest_band", code, label)
+        if lace_rule:  # ворот со шнуровкой без 3D-шнурков по EA-комплекту lace_rule.from, цвета клуба
+            laces_fix = kit_fix.CollarLace(lace_rule, base, unpack(lace_rule["from"]))
             pre.append(laces_fix.pre)
             collar = (crule, laces_fix.insert)
-            rec["laces"] = {"from": laces["from"], "colors": {k: [int(x) for x in c] for k, c in laces_fix.colors.items()}}
+            rec["collar_lace"] = laces_fix.report
         if band:
             band_fix = kit_fix.BandTrim(band)
             pre.append(band_fix)
-        post = kit_hybrid.decal_post(comp, placed, soft, n_jersey_tri, collar, pre=pre, crest_fit=fit)
+        post = kit_hybrid.decal_post(comp, placed, soft, n_jersey_tri, collar, pre=pre, crest_fit=fit,
+                                     protect=laces_fix.area if lace_rule else None)
         img, mask, dist, info = kit3d.transfer(base, src, dst, 1024, 2, post=post)
         if band:
             rec["chest_band"] = getattr(band_fix, "report", None)
@@ -493,7 +497,7 @@ def cmd_build(a):
         Image.open(os.path.join(CLEAN, f"{CLEAN_T}_3-12-21-30-39-48-57-66-75_sm.png")).resize((1024, 1024), Image.LANCZOS) \
             .save(os.path.join(od, "jersey_sm.png"))
         shutil.copyfile(os.path.join(CLEAN, f"{CLEAN_T}_3-12-21-30-39-48-57-66-75_nm.png"), os.path.join(od, "jersey_nm.png"))
-        if laces:
+        if lace_rule:
             laces_fix.relief(os.path.join(od, "jersey_nm.png"), os.path.join(od, "jersey_sm.png"), os.path.join(NHL24, "relief"))
         build_font(rec, folder, ok, p, family, club, kit, od, tpl_kit, own_name)
         # шорты и гетры: точно через 3D (сетки по .toc), выравнивание по рамкам

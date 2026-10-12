@@ -341,16 +341,21 @@ def legacy_with_shirt():
     return merge(j, load_legacy(LEGACY_SHIRT)), len(j["tri"])
 
 
-def decal_post(comp, placed, soft, n_jersey_tri, collar=None, pre=(), crest_fit=None):
+def decal_post(comp, placed, soft, n_jersey_tri, collar=None, pre=(), crest_fit=None, protect=None):
     """collar — (правило, цвет): V-вставка ворота Edge — сетка «рубашки» (треугольники после свитера) — заливается
     цветом свитера под воротом: у adidas ворот круглый, выреза нет.
     pre — правки основы до нашивок: fn(img, mask) -> img на сверхвыборке (kit_fix: ворот со шнуровкой, полоса на груди).
-    crest_fit — герб не на букву капитана (kit_fix.crest_fit): масштаб герба подбирается по зазору до зон букв."""
+    crest_fit — герб не на букву капитана (kit_fix.crest_fit): масштаб герба подбирается по зазору до зон букв.
+    protect — маска развёртки (любого размера), куда нашивки не кладутся (ворот со шнуровкой от EA)."""
     def post(img, msk, P, N, tri, UV=None):
         out = img.copy()
         for fn in pre:
             out = fn(out, msk)
         flat = out[msk]
+        free = None
+        if protect is not None:
+            pm = np.asarray(Image.fromarray(protect.astype(np.uint8) * 255).resize(msk.shape[::-1], Image.NEAREST)) > 0
+            free = ~pm[msk]
         if crest_fit is not None:
             yy, xx = np.nonzero(msk)
             du, dv = (xx + 0.5) / msk.shape[1], (yy + 0.5) / msk.shape[0]
@@ -364,6 +369,8 @@ def decal_post(comp, placed, soft, n_jersey_tri, collar=None, pre=(), crest_fit=
             cL, nL, pinv, R, sc, rad, u_c, v_c = pl["_frame"]
             d = P - cL
             sel = (on_jersey & (np.linalg.norm(d, axis=1) < rad) & ((N @ nL) > 0.25) & (np.abs(d @ nL) < 0.06))
+            if free is not None:
+                sel &= free
             if not sel.any():
                 pl["texels"] = 0
                 continue
