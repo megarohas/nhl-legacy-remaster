@@ -54,7 +54,8 @@ from tdb_read import load_meta  # noqa: E402
 
 G = P24.G
 VARIANTS = P24.VARIANTS
-VERSION = 3                                   # версия сборки головы (кэш); 2 — карта вершин шаблона, UV; 3 — поза
+VERSION = 4                                   # версия сборки головы (кэш); 2 — карта вершин шаблона, UV; 3 — поза;
+                                              # 4 — глаза по глазам NHL 24 (вершина роговицы)
 EA_PLAYER = os.path.join(G.big, 'cacherender', 'rendering', 'player')
 COMMON = os.path.join(G.big, 'renderboot', 'rendering', 'player_common', 'texlib_999.rx2')
 BIO, HEADS, PLACE = 'exhibitionplayerbiotable', 'stockplayerheads', 'stockplayerhelmetplacement'
@@ -472,14 +473,28 @@ def build_one(job):
     newp = lpos + w * (npos[j] - lpos)
     disp = newp - lpos
     rep.update(uv_match_max=duv, shape_change_mm=round(float(np.linalg.norm(disp, axis=1).mean() * 1000), 2))
-    # глаза — вместе с веками
+    # глаза: шапочка глаза шаблона — сдвиг так, чтобы вершина роговицы совпала с вершиной роговицы глаза NHL 24 (x, y —
+    # середина передних вершин в пределах 1 мм от передней точки, z — передняя точка). До 12.10 (v3) глаз шёл за веками
+    # (смещение ближайших вершин головы) и у части голов вставал не там, где у NHL 24: у Matthews на 3,4 мм ближе к
+    # переносице, у DeBrincat выше/вперёд — глаза «вылуплены» и режут веки (замечание пользователя после проверки в игре)
     th = cKDTree(lpos[:nh])
-    eyes = {}
-    for name in ('eyel', 'eyer'):
+    eN = N['mat_eyes']['pos'] if 'mat_eyes' in N else None
+    if eN is not None and rigid is not None:
+        eN = (eN - rigid[1]) @ rigid[0].T + rigid[2]
+    eyes, rep['eyes'] = {}, {}
+    for name, side in (('eyel', 1), ('eyer', -1)):
         q = P[name]['pos']
         d, ii = th.query(q.mean(0), k=24)
         wv = 1.0 / np.maximum(d, 1e-4) ** 2
-        eyes[name] = q + (disp[:nh][ii] * wv[:, None]).sum(0) / wv.sum()
+        t_old = (disp[:nh][ii] * wv[:, None]).sum(0) / wv.sum()
+        e = eN[np.sign(eN[:, 0]) == side] if eN is not None else np.zeros((0, 3))
+        if len(e) >= 20:
+            t = cornea(e) - cornea(q)
+        else:                                  # нет глаз у головы NHL 24 — как раньше, вместе с веками
+            t = t_old
+        eyes[name] = q + t
+        rep['eyes'][name] = {'shift_mm': np.round(t * 1000, 2).tolist(),
+                             'vs_v3_mm': np.round((t - t_old) * 1000, 2).tolist()}
     # haircap: поле смещений + высота по прядям NHL 24
     cap = P['haircap']
     d, ii = th.query(cap['pos'], k=8)
@@ -606,6 +621,13 @@ def build_one(job):
     rep['seconds'] = round(time.time() - t0, 1)
     json.dump(rep, open(info_fn, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
     return rep
+
+
+def cornea(p):
+    """Вершина роговицы шапочки/сетки глаза: x, y — середина вершин в пределах 1 мм от передней точки, z — передняя точка."""
+    z = p[:, 2].max()
+    f = p[p[:, 2] > z - 0.001]
+    return np.array([f[:, 0].mean(), f[:, 1].mean(), z])
 
 
 _REF = None
