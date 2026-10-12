@@ -464,7 +464,8 @@ def cmd_build(a):
             if sp_found:
                 rec["sponsor_in_base"] = len(sp_found)
         placed, soft = kit_hybrid.plan_decals(comp, lab, patches, rules, defaults, src, dst, tid24)
-        missing_std = [nm for nm in ("neck_shield", "back_neck") if nm not in [pl["name"] for pl in placed]]
+        missing_std = [nm for nm in ("neck_shield", "back_neck") if nm not in [pl["name"] for pl in placed]
+                       and rules.get(nm, {}).get("enabled", True)]  # выключенная правилом — не «потерянная»
         if missing_std and mode == "base":
             base, lab2, patches2 = kit_hybrid.standard_patches(base, rules, defaults, names=tuple(missing_std))
             off = int(lab.max()) + 10
@@ -493,7 +494,7 @@ def cmd_build(a):
             .save(os.path.join(od, "jersey_sm.png"))
         shutil.copyfile(os.path.join(CLEAN, f"{CLEAN_T}_3-12-21-30-39-48-57-66-75_nm.png"), os.path.join(od, "jersey_nm.png"))
         if laces:
-            laces_fix.relief(os.path.join(od, "jersey_nm.png"), os.path.join(od, "jersey_sm.png"))
+            laces_fix.relief(os.path.join(od, "jersey_nm.png"), os.path.join(od, "jersey_sm.png"), os.path.join(NHL24, "relief"))
         build_font(rec, folder, ok, p, family, club, kit, od, tpl_kit, own_name)
         # шорты и гетры: точно через 3D (сетки по .toc), выравнивание по рамкам
         pc, sc = p + f"pant_{family}_{club}_{kit}_color", p + f"sock_{family}_{club}_{kit}_color"

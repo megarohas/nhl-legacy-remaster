@@ -244,6 +244,24 @@ def standard_patches(comp, rules, defaults, names=None, win=0.022):
     return base, lab, patches
 
 
+def uv_point(mesh, u, v):
+    """Точка и нормаль сетки в точке развёртки (u, v) (первый треугольник, в который она попала)."""
+    uv = mesh["uv"][mesh["tri"]]                                   # T × 3 × 2
+    a, b, c = uv[:, 0], uv[:, 1], uv[:, 2]
+    den = (b[:, 1] - c[:, 1]) * (a[:, 0] - c[:, 0]) + (c[:, 0] - b[:, 0]) * (a[:, 1] - c[:, 1])
+    with np.errstate(all="ignore"):
+        l0 = ((b[:, 1] - c[:, 1]) * (u - c[:, 0]) + (c[:, 0] - b[:, 0]) * (v - c[:, 1])) / den
+        l1 = ((c[:, 1] - a[:, 1]) * (u - c[:, 0]) + (a[:, 0] - c[:, 0]) * (v - c[:, 1])) / den
+    l2 = 1 - l0 - l1
+    ok = np.nonzero((l0 >= -1e-9) & (l1 >= -1e-9) & (l2 >= -1e-9) & np.isfinite(l0))[0]
+    if not len(ok):
+        raise ValueError(f"({u}, {v}) вне развёртки")
+    t = ok[0]
+    w = np.array([l0[t], l1[t], l2[t]])
+    T = mesh["tri"][t]
+    return w @ mesh["pos"][T], _unit(w @ mesh["nrm"][T])
+
+
 def plan_decals(comp, lab, patches, rules, defaults, src, dst, tid24):
     """Рамки декалей: центр и якобиан на свитере NHL 24 → правила → посадка на Legacy. -> (placed, soft)."""
     H = comp.shape[0]
@@ -273,6 +291,8 @@ def plan_decals(comp, lab, patches, rules, defaults, src, dst, tid24):
         T = dst["tri"][lt[0]]
         cL = lb[0] @ dst["pos"][T]
         nL = _unit(lb[0] @ dst["nrm"][T])
+        if "legacy_uv" in rule:  # место задано на развёртке Legacy (щит NHL — как у всех EA-форм, по центру)
+            cL, nL = uv_point(dst, *rule["legacy_uv"])
         JL = J - np.outer(nL, nL @ J)
         sc = float(rule.get("scale", 1.0))
         th = np.radians(float(rule.get("rotate_deg", 0.0)))
