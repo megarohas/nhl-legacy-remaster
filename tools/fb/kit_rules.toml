@@ -195,6 +195,97 @@ collar_color = [252, 201, 96]
 v_insert_color = [27, 28, 27]
 lace_color = [252, 201, 96]
 
+# VGK выезд (выбор пользователя 12.10, вариант A): ворот золото, V чёрный, шнурки золото
+[collar_lace.VGK.away]
+from = "1_14_2"
+recolor = "palette"
+layout_from = "1_14_3"
+relief_from = "1_14_3"
+relief = "collar"
+collar_src_uv = [0.5, 0.48]
+v_insert_src_uv = [0.5, 0.56]
+collar_color = [252, 201, 96]
+v_insert_color = [27, 28, 27]
+lace_color = [252, 201, 96]
+
+# VGK третья (выбор пользователя 12.10, вариант B): ворот стальной, V чёрный, шнурки стальные
+[collar_lace.VGK.three]
+from = "1_14_2"
+recolor = "palette"
+layout_from = "1_14_3"
+relief_from = "1_14_3"
+relief = "collar"
+collar_src_uv = [0.5, 0.48]
+v_insert_src_uv = [0.5, 0.56]
+collar_color = [60, 59, 66]
+v_insert_color = [27, 28, 27]
+lace_color = [60, 59, 66]
+
+# SEA дом (выбор пользователя 12.10, вариант B): ворот ледяной голубой, V красный, шнурки голубые
+[collar_lace.SEA.home]
+from = "1_14_2"
+recolor = "palette"
+layout_from = "1_14_3"
+relief_from = "1_14_3"
+relief = "collar"
+collar_src_uv = [0.5, 0.48]
+v_insert_src_uv = [0.5, 0.56]
+collar_color = [150, 216, 216]
+v_insert_color = [178, 16, 41]
+lace_color = [150, 216, 216]
+
+# SEA выезд (выбор пользователя 12.10, вариант B): ворот тёмно-синий, V голубой, шнурки синие
+[collar_lace.SEA.away]
+from = "1_14_2"
+recolor = "palette"
+layout_from = "1_14_3"
+relief_from = "1_14_3"
+relief = "collar"
+collar_src_uv = [0.5, 0.48]
+v_insert_src_uv = [0.5, 0.56]
+collar_color = [0, 34, 62]
+v_insert_color = [150, 216, 216]
+lace_color = [0, 34, 62]
+
+# CHI дом (выбор пользователя 12.10, вариант B): ворот чёрный, V белый, шнурки чёрные
+[collar_lace.CHI.home]
+from = "1_14_2"
+recolor = "palette"
+layout_from = "1_14_3"
+relief_from = "1_14_3"
+relief = "collar"
+collar_src_uv = [0.5, 0.48]
+v_insert_src_uv = [0.5, 0.56]
+collar_color = [27, 28, 27]
+v_insert_color = [233, 233, 233]
+lace_color = [27, 28, 27]
+
+# CHI выезд (выбор пользователя 12.10, вариант A): ворот красный, V чёрный, шнурки красные
+[collar_lace.CHI.away]
+from = "1_14_2"
+recolor = "palette"
+layout_from = "1_14_3"
+relief_from = "1_14_3"
+relief = "collar"
+collar_src_uv = [0.5, 0.48]
+v_insert_src_uv = [0.5, 0.56]
+collar_color = [159, 14, 10]
+v_insert_color = [27, 28, 27]
+lace_color = [159, 14, 10]
+
+# CHI третья (выбор пользователя 12.10, вариант B): ворот белый, V красный, шнурки белые
+[collar_lace.CHI.three]
+from = "1_14_2"
+recolor = "palette"
+layout_from = "1_14_3"
+relief_from = "1_14_3"
+relief = "collar"
+collar_src_uv = [0.5, 0.48]
+v_insert_src_uv = [0.5, 0.56]
+collar_color = [233, 233, 233]
+v_insert_color = [159, 14, 10]
+lace_color = [233, 233, 233]
+
 # MIN дом (решение пользователя 12.10): кремовая полоса на груди чуть уже — заходила на подмышку при движении рук.
 # Верхний край — прямая на trim ниже прежнего (по середине груди, столбцы ref_u), выше — цвет свитера (body_uv);
 # band_uv — точка полосы на развёртке Legacy.
