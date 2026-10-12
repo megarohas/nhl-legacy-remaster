@@ -4,7 +4,7 @@
 #   bash tools/legacy_data/build-all.sh [ЭТАП…] [--ahl32]
 #   LEGACY_DATA_WORK=папка bash tools/legacy_data/build-all.sh …   # сухой прогон: всё (и out) — в эту папку;
 #        входы, которые этапом не пересобираются (например, составы без сети), — положить туда заранее
-#        этапы: base roster photos equip collect retire fixdb utah ahl nhlattrs useredits tape goaliegear contracts photos24 heads
+#        этапы: base roster photos equip collect retire fixdb utah ahl nhlattrs useredits tape contracts goaliegear photos24 heads
 #        scans24 fonts
 #        music models art logos menu nhl24
 #        (без этапов — все по порядку;
@@ -28,7 +28,7 @@ L=game/other/legacy/big/cacheboot
 AHL32=0
 stages=()
 for a in "$@"; do [ "$a" = "--ahl32" ] && AHL32=1 || stages+=("$a"); done
-[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah ahl nhlattrs useredits tape goaliegear contracts photos24
+[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah ahl nhlattrs useredits tape contracts goaliegear photos24
                                   heads scans24 fonts music models art logos menu nhl24)
 want() { for s in "${stages[@]}"; do [ "$s" = "$1" ] && return 0; done; return 1; }
 say() { echo "== $(date +%H:%M:%S) $*"; }
@@ -175,22 +175,12 @@ if want tape; then
     [ -f $B/fe/loc/NHL_ENG_US.db ] && python $T/tape_players.py loc $B/fe/loc/NHL_ENG_US.db
   done
 fi
-if want goaliegear; then
-  # командная экипировка вратарей (tools/legacy_data/goalie_gear.json): каждому вратарю клуба — набор вратаря клуба из
-  # stockgoalieequipment (щитки, блин, ловушка, клюшка, маска, цвета); у клуба без набора и у переименованных клубов с
-  # наборами прежних (white_names) — белая экипировка с чёрной графикой и белая маска. После utah/ahl (имена и составы
-  # клубов) и tape; draft_roster.db — по плану nhlng.db рядом. Повтор ничего не меняет. Отчёты — $W/goaliegear/
-  say "экипировка вратарей по клубам (goalie_gear.py)"
-  for B in $O $W/out-ahl32; do
-    for F in nhlng.db draft_roster.db; do [ -f $B/db/$F ] && python $T/goalie_gear.py db $B/db/$F; done
-  done
-fi
 if want contracts; then
   # настоящие контракты клубов НХЛ 2026/27 (docs/legacy-data.md, «Контракты 2026/27»): страницы клубов от пользователя,
   # разобранные в game/work/contracts/screens/*.json (личное использование, не в git; CONTRACTS_SCREENS=папка) → сумма,
   # срок, двусторонность, yearufa и подписанное продление (extension*) сшитым по дате рождения и имени игрокам; спорные
-  # не берутся. После roster (--payroll-max ужимает только заглушки, настоящие суммы — после него) и goaliegear, до
-  # nhl24 (накладка из out/db). Повтор ничего не меняет; draft_roster.db — заново. Отчёты и ведомости — $W/contracts/.
+  # не берутся. После roster (--payroll-max ужимает только заглушки, настоящие суммы — после него) и tape, до
+  # goaliegear (переводы игроков меняют вратарей клубов) и nhl24 (накладка из out/db). Повтор ничего не меняет; draft_roster.db — заново. Отчёты и ведомости — $W/contracts/.
   # Сейв ROSTER — отдельно: python tools/legacy_data/contracts.py save СЕЙВ [--write]
   S=${CONTRACTS_SCREENS:-game/work/contracts/screens}
   if ls $S/*.json >/dev/null 2>&1; then
@@ -205,6 +195,16 @@ if want contracts; then
   else
     say "контракты: нет $S/*.json — этап пропущен"
   fi
+fi
+if want goaliegear; then
+  # командная экипировка вратарей (tools/legacy_data/goalie_gear.json): каждому вратарю клуба — набор вратаря клуба из
+  # stockgoalieequipment (щитки, блин, ловушка, клюшка, маска, цвета); у клуба без набора и у переименованных клубов с
+  # наборами прежних (white_names) — белая экипировка с чёрной графикой и белая маска. После utah/ahl (имена и составы
+  # клубов), tape и contracts (переводы игроков); draft_roster.db — по плану nhlng.db рядом. Повтор ничего не меняет. Отчёты — $W/goaliegear/
+  say "экипировка вратарей по клубам (goalie_gear.py)"
+  for B in $O $W/out-ahl32; do
+    for F in nhlng.db draft_roster.db; do [ -f $B/db/$F ] && python $T/goalie_gear.py db $B/db/$F; done
+  done
 fi
 if want photos24; then
   # портреты из NHL 24 тем, у кого портрета нет (docs/player-photos-nhl24.md): база NHL 24 из дампа (имя + дата
