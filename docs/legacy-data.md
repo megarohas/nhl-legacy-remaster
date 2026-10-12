@@ -1233,14 +1233,17 @@ game/work/legacy-data/equipment-user`: полный снимок экипиро�
   — наборы прежних клубов. Сверено с логотипами 2026/27 (`game/work/logos/work-ahl/svg`), лист —
   `game/work/models/goalie/look/contested.png`.
   - Белый: Utah, Abbotsford, Hamilton, Cleveland, Springfield, Colorado Eagles, Utica Comets (цвета 2015 года ≠ 2026).
-  - Набор оставлен: Belleville, Laval, Calgary Wranglers (цвета те же; у Laval и Calgary на масках логотип прежнего
-    клуба).
+  - Набор оставлен: Belleville (маска с символикой Senators — аффилиат Оттавы), Laval, Calgary Wranglers (цвета те же).
+    У Laval и Calgary на масках наборов логотип прежнего клуба (IceCaps, Heat), поэтому маска своя (`mask_names`):
+    однотонная чёрная 6_60, щитки и цвета — набора.
 - **12.10, 09:47**: out — 274 вратаря, out-ahl32 — 276 (у остальных набор клуба уже стоял). Менялась только
   `exhibitiongoalieequipment`, CRC OK, повтор — 0. В out-ahl32 по набору — 184 клуба (442 вратаря), белый — 11 клубов
   (22 вратаря).
-  - Базы: out 7befb0f4 / draft 26441945, out-ahl32 09aa4fdc / draft f2b5e8d9.
-  - Накладка (пакет `pack-installed-b589fa58`): out-nhl24 1b7a04a1, out-nhl24-ahl32 e99165e5.
-  - Бэкап — `backup-cache/out-before-goaliegear-20261012-094715`, отчёты — `game/work/legacy-data/goaliegear/`.
+  - 09:49 — маски Laval и Calgary (3 вратаря, 6 значений).
+  - Базы: out 51a3a188 / draft 158842f1, out-ahl32 03ba627d / draft 5c602213.
+  - Накладка (пакет `pack-installed-b589fa58`): out-nhl24 5bb46b23, out-nhl24-ahl32 dd0ac511.
+  - Бэкапы — `backup-cache/out-before-goaliegear-20261012-094715` и `out-before-goaliemask-*`, отчёты —
+    `game/work/legacy-data/goaliegear/`.
   - Правок пользователя по вратарям нет: в `equipment-user` ни одной, в сейве ROSTER 20261011041455 вратари совпадают с
     `cache:`.
 - Не сделано: 4 набора EA (Lausanne 165, München 540, Olomouc 545/546) берут цвета клуба, а у этих клубов в

@@ -16,6 +16,7 @@
   только строки 0…31). Свободные агенты не трогаются;
 - в exhibitiongoalieequipment вратаря копируются все поля набора, кроме своих: jerseytuck, sticktapecolor,
   keepcustomiftraded, keepcustomstickiftraded;
+- mask_names: набор клуба, но маска своя (на масках набора — логотип прежнего клуба: Laval, Calgary Wranglers);
 - без набора (SEA, VGK, CV, HSK, часть европейских) и клубы из white_names (наборы прежних клубов на переименованных
   слотах, у Юты — Аризоны): модели вратаря свои, маска 0/120 (белая), цвета зон — white.zones и white.stick,
   showcustomcolors и showcustomstick = 1.
@@ -105,11 +106,14 @@ def plan(db):
                 return (0 if mid == st else 1 if mid == bk else 2, db.get(SG, 'key', r))
             rows = sorted(rows, key=rank)
             used = []
+            mask = sp.get('mask_names', {}).get(name, {}).get('mask')
             for k, (_, g) in enumerate(gs):
                 s = rows[min(k, len(rows) - 1)]
-                out[g] = ({f: db.get(SG, f, s) for f in fields},
-                          f'{name}: набор key {db.get(SG, "key", s)} (маска {db.get(SG, "masktype", s)}_'
-                          f'{db.get(SG, "maskid", s)})')
+                vals = {f: db.get(SG, f, s) for f in fields}
+                if mask:                                   # маска набора с логотипом прежнего клуба — своя
+                    vals['masktype'], vals['maskid'] = mask
+                out[g] = (vals, f'{name}: набор key {db.get(SG, "key", s)} (маска {vals["masktype"]}_{vals["maskid"]}'
+                                + (', вместо маски набора' if mask else '') + ')')
                 used.append(db.get(SG, 'key', s))
             summary[t] = (name, 'набор', len(gs), len(rows), used)
         else:
