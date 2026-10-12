@@ -54,15 +54,22 @@ from tdb_read import load_meta  # noqa: E402
 
 G = P24.G
 VARIANTS = P24.VARIANTS
-VERSION = 4                                   # версия сборки головы (кэш); 2 — карта вершин шаблона, UV; 3 — поза;
-                                              # 4 — глаза по глазам NHL 24 (вершина роговицы)
+VERSION = 5                                   # версия сборки головы (кэш); 2 — карта вершин шаблона, UV; 3 — поза;
+                                              # 4 — глаза по глазам NHL 24 (вершина роговицы);
+                                              # 5 — суставы век/бровей/скул = общий скелет (EYE_BONES)
 EA_PLAYER = os.path.join(G.big, 'cacherender', 'rendering', 'player')
 COMMON = os.path.join(G.big, 'renderboot', 'rendering', 'player_common', 'texlib_999.rx2')
 BIO, HEADS, PLACE = 'exhibitionplayerbiotable', 'stockplayerheads', 'stockplayerhelmetplacement'
 TYPICAL = 60000
 NECK = (1.60, 1.66)                           # низ шеи — от шаблона (у сканов EA общий), переход
 CAP_ADD, CAP_MAX, CAP_MIN = 0.004, 0.012, 0.0015
-POSE_DEG, POSE_MM = 2.5, 6.0                  # голова NHL 24 в другой позе (наклон/сдвиг черепа) — выровнять
+POSE_DEG, POSE_MM = 2.5, 6.0
+# Суставы вокруг глаз — как в общем скелете (skeleton_bindpose_player), а не сдвинутые по смещению вершин: в игре поза
+# лица берёт переносы суставов общего скелета, а InvBind — из файла головы, так что сдвинутый сустав даёт в покое
+# смещение вершин на (J_общий − J_головы). У век это раздвигало веки (Matthews: белок по кругу, DeBrincat: веко поднято —
+# пользователь, 12.10). 23/24, 34/35 — оси век в центре глаза, 36/37 — нижние веки, 38–41 — брови, 25/26 — скулы у
+# глаза. Челюсть и губы (16–22, 27–33, 42–47) — как раньше, по смещению вершин (рот в этом экране приоткрыт у всех).
+EYE_BONES = (23, 24, 25, 26, 34, 35, 36, 37, 38, 39, 40, 41)                  # голова NHL 24 в другой позе (наклон/сдвиг черепа) — выровнять
 ROW_TEMPLATE = 11145                          # строка stockplayerheads образец (haircards_a/b = 0)
 # пилот 12.10.2026: в out-ahl32 Макар поставлен makar_db.py до этапа (headid 60112 → 20185) — прежняя голова для сейва
 PILOT_OLD = {('cale', 'makar', (1998, 10, 30)): 60112}
@@ -591,8 +598,12 @@ def build_one(job):
         jn = Jt[bone] + (disp * ws[:, None]).sum(0) / ws.sum()
         inv2[bone, 3, :3] = -(jn @ inv[bone, :3, :3])
         moved += 1
+    inv0 = skeleton_inv()
+    for bone in EYE_BONES:
+        inv2[bone] = inv0[bone]
     struct.pack_into('>%df' % inv2.size, raw, bpo + 16, *inv2.reshape(-1))
     rep['joints_moved'] = moved
+    rep['eye_bones_global'] = len(EYE_BONES)
     # проверка разбора
     P2, _, inv3 = parse_rx2(raw)
     rep['check_pos_err_mm'] = round(max(float(np.abs(P2[n]['pos'] - newparts[n]).max()) for n in newparts) * 1000, 3)
