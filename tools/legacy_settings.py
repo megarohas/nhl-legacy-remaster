@@ -2,12 +2,17 @@
 
     python tools/legacy_settings.py show FILE [--raw]       # все поля блока настроек сейва
     python tools/legacy_settings.py diff A B [C …]          # поля, где сейвы расходятся (A — как эталон)
+    python tools/legacy_settings.py copy-sliders SRC DST [--sets 3,4] [--write]
+                                                           # наборы слайдеров SRC → DST (без --write — прогон)
 
 FILE — внутренний файл сейва Legacy из userdata порта: PROFILE (UserProfileFile), DYNASTY, BEAPRO, SEASON,
-PLAYOFF, TOURNAMENT. Только чтение. Разбор — docs/legacy-port.md, «Настройки по умолчанию для новых карьер».
+PLAYOFF, TOURNAMENT. show и diff только читают. Разбор — docs/legacy-port.md, «Настройки по умолчанию для новых
+карьер».
 
 Хвост сейва (после базы: 0x2C + u32@0x24) — цепочка блоков: u32 номер, u32 версия (1), u32 размер, u32 сумма,
-данные (все поля big-endian). Блок 2 — копия настроек менеджера настроек игры (объект *(0x83BD3074), конструктор
+данные (все поля big-endian). Сумма — CRC-32/BZIP2 по данным блока, так проверяет игра: 82BBA660 обходит блоки и
+сравнивает сумму с 82BB6A90 / 826575C0 (CRC MSB-first, начало FFFFFFFF, в конце NOT); при неверной сумме сейв не
+читается. Сверено на всех 880 блоках сейвов userdata порта. Блок 2 — копия настроек менеджера настроек игры (объект *(0x83BD3074), конструктор
 829F4158): в профиле — общие настройки, в сейве карьеры — настройки этой карьеры. Раскладка 656 байт:
 
 | Смещение | Что | ID настройки |
@@ -20,8 +25,25 @@ PLAYOFF, TOURNAMENT. Только чтение. Разбор — docs/legacy-por
 ID — номер настройки игры (таблица описаний меню 82050FB0: имя, тип, диапазон, значение по умолчанию). Имена
 слайдеров — из таблицы меню и твиков `gTweakByGameStyle*` (829F8A20 берёт из них наборы 0…2), правил — из
 «ruledefaults» (829FC060). Наборы слайдеров 0…2 — заводские Arcade / Hybrid / Simulation, 3 и 4 — свои.
+
+copy-sliders: в блоке 2 сейва DST наборы слайдеров (по 77 байт) заменяются наборами из SRC. Общие и правила
+остаются, сумма блока пересчитывается. Обёртку сейва пересобирает tools/tdb.py (SaveFile: суммы 0x10 / 0x28; у
+ZlibV4 база не меняется, область и поток — как были). До записи проверяется:
+- суммы DST сходятся, пересборка без правок даёт тот же файл;
+- новый файл отличается от старого только суммой 0x10, суммой и наборами блока 2.
+С --write:
+- игра nhllegacy.exe не должна быть запущена;
+- копия DST до правки — в game/work/legacy-data/backup-saves/ (`--backup-dir`);
+- запись, затем повторный разбор: наборы = SRC, остальные поля как были, все суммы сходятся; иначе файл
+  возвращается из копии.
 """
-import argparse, struct, sys
+import argparse, datetime, os, shutil, struct, subprocess, sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from tdb import SaveFile, crc32_bzip2
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BACKUP_DIR = os.path.join(REPO, 'game', 'work', 'legacy-data', 'backup-saves')
 
 CHUNK_SETTINGS = 2
 SIZE = 656
@@ -100,6 +122,15 @@ def chunks(data):
     return out
 
 
+def tail_start(data):
+    return 0x2C + struct.unpack('>I', data[0x24:0x28])[0]
+
+
+def bad_chunks(data):
+    """Номера блоков хвоста, у которых сумма не сходится (CRC-32/BZIP2 по данным)."""
+    return [cid for cid, (o, ver, h, d) in sorted(chunks(data).items()) if crc32_bzip2(d) != h]
+
+
 def settings(path):
     c = chunks(open(path, 'rb').read())
     if CHUNK_SETTINGS not in c or len(c[CHUNK_SETTINGS][3]) != SIZE:
@@ -134,13 +165,129 @@ def fields(d):
     return out
 
 
+def game_running():
+    if os.name != 'nt':
+        return False
+    out = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq nhllegacy.exe', '/NH'], capture_output=True)
+    return b'nhllegacy.exe' in out.stdout.lower()
+
+
+def set_offsets(sets):
+    """Смещения в блоке 2 всех байтов наборов sets."""
+    return {SLIDERS + k * SET_LEN + j for k in sets for j in range(SET_LEN)}
+
+
+def with_sliders(dst, src_block, sets):
+    """(новые байты сейва dst, смещение блока 2): наборы sets — из src_block, сумма блока и обёртка пересчитаны."""
+    o, ver, h, block = chunks(dst)[CHUNK_SETTINGS]
+    new = bytearray(block)
+    for i in set_offsets(sets):
+        new[i] = src_block[i]
+    ts = tail_start(dst)
+    tail = bytearray(dst[ts:])
+    rel = o - ts
+    tail[rel + 12:rel + 16] = struct.pack('>I', crc32_bzip2(bytes(new)))
+    tail[rel + 16:rel + 16 + SIZE] = new
+    sf = SaveFile(dst, {})
+    if sf.zlib is not None:
+        sf.zlib.tail = bytes(tail)
+    sf.tail = bytes(tail)
+    return sf.bytes(), o
+
+
+def check(old, new, src_block, sets, o):
+    """Ошибки нового файла: суммы, наборы ≠ источник, изменения вне наборов и сумм."""
+    err = SaveFile(new, {}).verify() + [f'блок {cid}: сумма не сходится' for cid in bad_chunks(new)]
+    if len(new) != len(old):
+        return err + [f'длина {len(new)} вместо {len(old)}']
+    c = chunks(new)
+    if CHUNK_SETTINGS not in c or c[CHUNK_SETTINGS][0] != o:
+        return err + ['блок 2 не на прежнем месте']
+    nb, ob = c[CHUNK_SETTINGS][3], chunks(old)[CHUNK_SETTINGS][3]
+    in_sets = set_offsets(sets)
+    differ = sorted(i for i in in_sets if nb[i] != src_block[i])
+    if differ:
+        err.append(f'наборы расходятся с источником: {len(differ)} байт (первый 0x{differ[0]:03X})')
+    other = [i for i in range(SIZE) if i not in in_sets and nb[i] != ob[i]]
+    if other:
+        err.append(f'блок 2: изменились байты вне наборов: {[hex(i) for i in other[:8]]}')
+    allowed = set(range(0x10, 0x14)) | set(range(o + 12, o + 16)) | {o + 16 + i for i in in_sets}
+    outside = [i for i in range(len(new)) if new[i] != old[i] and i not in allowed]
+    if outside:
+        err.append(f'файл: изменились байты вне сумм и наборов: {[hex(i) for i in outside[:8]]}')
+    return err
+
+
+def copy_sliders(a):
+    sets = sorted({int(x) for x in a.sets.split(',')})
+    if not sets or any(not 0 <= k < SETS_N for k in sets):
+        sys.exit(f'--sets: номера наборов 0…{SETS_N - 1}')
+    src, dst = a.files
+    src_block = settings(src)
+    settings(dst)
+    old = open(dst, 'rb').read()
+    pre = SaveFile(old, {}).verify() + [f'блок {cid}: сумма не сходится' for cid in bad_chunks(old)]
+    if pre:
+        sys.exit(f'{dst}: суммы не сходятся до правки — не трогаю:\n  ' + '\n  '.join(pre))
+    if SaveFile(old, {}).bytes() != old:
+        sys.exit(f'{dst}: пересборка без правок не даёт исходный файл — не трогаю')
+    new, o = with_sliders(old, src_block, sets)
+    before, after = fields(chunks(old)[CHUNK_SETTINGS][3]), fields(chunks(new)[CHUNK_SETTINGS][3])
+    changed = [(b, c[4]) for b, c in zip(before, after) if b[4] != c[4]]
+    names = [x.replace('\\', '/').split('/')[-1] for x in (src, dst)]
+    print(f'{names[1]} ← {names[0]}: наборы {", ".join(SET_NAMES[k] for k in sets)}; меняется значений: {len(changed)}')
+    for (grp, off, sid, name, v0), v1 in changed:
+        print(f'  {grp:20} 0x{off:03X} id {sid:3} {name:26} {v0} → {v1}')
+    err = check(old, new, src_block, sets, o)
+    if err:
+        sys.exit('проверка нового файла не прошла:\n  ' + '\n  '.join(err))
+    print(f'проверка: все суммы сходятся, вне сумм и наборов байты те же (блок 2 @0x{o:X})')
+    if not changed:
+        print('менять нечего')
+        return
+    if not a.write:
+        print('прогон без --write: файл не записан')
+        return
+    if game_running():
+        sys.exit('nhllegacy.exe запущен — не пишу (закрой игру)')
+    os.makedirs(a.backup_dir, exist_ok=True)
+    stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+    backup = os.path.join(a.backup_dir, f'{os.path.basename(dst)}.{stamp}')
+    shutil.copy2(dst, backup)
+    if open(backup, 'rb').read() != old:
+        sys.exit(f'копия {backup} не совпала с исходным — не пишу')
+    print(f'копия до правки: {backup}')
+    try:
+        with open(dst, 'wb') as f:
+            f.write(new)
+        back = open(dst, 'rb').read()
+        err = ([] if back == new else ['записанный файл не равен подготовленному']) + \
+            check(old, back, src_block, sets, o)
+    except OSError as e:
+        err = [f'запись: {e}']
+    if err:
+        shutil.copy2(backup, dst)
+        ok = open(dst, 'rb').read() == old
+        sys.exit('после записи проверка не прошла, файл возвращён из копии'
+                 + ('' if ok else ' — НО НЕ СОВПАЛ С ИСХОДНЫМ, верни вручную') + ':\n  ' + '\n  '.join(err))
+    print(f'записано: {dst}\nповторный разбор: наборы = источник, остальное как было, все суммы сходятся')
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument('cmd', choices=['show', 'diff'])
+    ap.add_argument('cmd', choices=['show', 'diff', 'copy-sliders'])
     ap.add_argument('files', nargs='+')
     ap.add_argument('--raw', action='store_true', help='show: ещё и неразобранный остаток блока')
+    ap.add_argument('--sets', default='3,4', help='copy-sliders: номера наборов через запятую (3,4 — свои)')
+    ap.add_argument('--write', action='store_true', help='copy-sliders: записать (без него — только прогон)')
+    ap.add_argument('--backup-dir', default=BACKUP_DIR, help='copy-sliders: куда копия DST до правки')
     a = ap.parse_args()
     sys.stdout.reconfigure(encoding='utf-8')
+    if a.cmd == 'copy-sliders':
+        if len(a.files) != 2:
+            ap.error('copy-sliders: нужно SRC DST')
+        copy_sliders(a)
+        return
     data = [settings(f) for f in a.files]
     if a.cmd == 'show':
         d = data[0]
