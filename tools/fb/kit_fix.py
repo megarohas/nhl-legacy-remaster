@@ -99,6 +99,18 @@ def _box(H, b):
     return m
 
 
+def _up_smooth(a, shape):
+    """Поле 1024² → размер сверхвыборки билинейно (края масок без «лестницы»)."""
+    f = (shape[0] / a.shape[0], shape[1] / a.shape[1]) + ((1,) if a.ndim == 3 else ())
+    return ndi.zoom(a, f, order=1, mode="nearest", grid_mode=True)
+
+
+def _smooth_shape(mask, shape):
+    """Бинарная форма 1024² → альфа на сверхвыборке: гладкий контур (билинейно, порог 0,5) и край ~1 тексель."""
+    m = _up_smooth(mask.astype(np.float64), shape) > 0.5
+    return np.clip(ndi.gaussian_filter(m.astype(np.float64), 0.8) * 1.5 - 0.25, 0, 1)
+
+
 def _up(a, shape):
     """Маска/поле 1024² → размер сверхвыборки (повтор пикселей)."""
     fy, fx = shape[0] // a.shape[0], shape[1] // a.shape[1]
@@ -133,9 +145,12 @@ class CollarLace:
       * ткань — цвет свитера под всей областью ворота и шнуровки (остатки ворота NHL 24 закрываются);
       * ворот и нарисованный V — красное EA выше низа щита (v_bottom), перекраска со светотенью EA: выше split_v —
         цвет ворота (collar), ниже — цвет V (v_insert); красное ниже щита (прорезь под шнурками) — не берётся;
-      * шнурки — по форме шнурков EA (антиалиасинг 1 тексель), цвет lace со светотенью EA без тёмной обводки;
-      * люверсы — по форме, как у EA (металл);
-      * щит NHL — по контуру щита EA, без подложки.
+      * шнурки — альфа по цвету EA (её же сглаживание краёв: доля «тёмного» против белой ткани и красной прорези),
+        цвет lace со светотенью EA, без тёмной обводки; всё зелёное EA в зоне шнуровки — шнурки;
+      * люверсы — так же по альфе, цвет как у EA (металл);
+      * щит NHL — по контуру щита EA (белая кайма + чёрный контур), без подложки, ниже на shield_down (верх не
+        уходит под край выреза).
+    Альфы и цвета переходят на сверхвыборку билинейно (без «лестницы»).
     Цвета: <часть>_color = [r, g, b] или <часть>_uv = [u, v] — точка на основе NHL 24 (самый частый цвет окна)."""
 
     def __init__(self, rule, src_tex, tpl_dir, size=1024):
@@ -161,52 +176,69 @@ class CollarLace:
         full = {k: color(k) for k in ("collar", "v_insert", "lace")}
         self.colors = {k: c[:3] for k, c in full.items()}
         self.insert = full["v_insert"]                                  # V-вставка «рубашки» (все каналы основы)
-        # щит NHL EA: чёрный контур → заливка дыр → силуэт (наибольшая область)
-        outline = sbox & (lum < 80) & (sat < 50)
-        sil = ndi.binary_fill_holes(ndi.binary_closing(outline, iterations=1))
-        lab, n = ndi.label(sil)
+        greenish = (G - R) > 10
+        w_red = np.clip((R - np.maximum(G, B) - 20) / 60.0, 0, 1)     # доля «красного EA»
+        # щит NHL EA: белая кайма → заливка → +контур (нейтральное, не зелёное и не красное)
+        white_ring = sbox & (lum > 150) & (sat < 45)
+        lab, n = ndi.label(ndi.binary_closing(white_ring, iterations=1))
         if n:
-            sil = lab == (np.argmax(ndi.sum(sil, lab, range(1, n + 1))) + 1)
-        self.shield_a = _soft(sil)
+            white_ring = lab == (np.argmax(ndi.sum(white_ring, lab, range(1, n + 1))) + 1)
+        inner = ndi.binary_fill_holes(white_ring)
+        sil = inner | (ndi.binary_dilation(inner, iterations=2) & (sat < 50) & ~greenish & (w_red < 0.3))
+        sil = ndi.binary_fill_holes(sil)
         # ворот и V: красное EA выше низа щита
         v_bottom = rule.get("v_bottom", rule["shield_box"][3])
         red_strong = roi & (R > G + 40) & (R > B + 40)
-        self.red_a = np.clip((R - np.maximum(G, B) - 20) / 60.0, 0, 1) * roi * (yy < v_bottom)
+        self.red_a = w_red * roi * (yy < v_bottom)
         lum_s = ndi.gaussian_filter(lum, 1.2)
         shade = np.clip(lum_s / ref(red_strong), 0.6, 1.25)[..., None]
         self.red_col = np.where((yy >= rule["split_v"])[..., None], self.colors["v_insert"], self.colors["collar"]) * shade
-        # шнурки и люверсы: тёмное в зоне шнуровки (ниже кокетки), не щит, не красное
+        # шнурки и люверсы: альфа по цвету EA в зоне шнуровки (ниже кокетки), без щита
         white = ref(roi & ~red_strong & (sat < 12) & (lum > 170))
-        zone = lbox & (yy >= rule["lace_box"][1]) & ~ndi.binary_dilation(sil, iterations=1)
-        red_any = (R - np.maximum(G, B) - 20) / 60.0 > 0.3                         # прорезь под шнурками — не шнурок
-        dark = zone & (lum < 0.6 * white) & ~red_any
+        zone = lbox & (yy >= rule["lace_box"][1]) & ~sil
+        dark = zone & (lum < 0.6 * white) & (w_red < 0.3)
         lab, n = ndi.label(dark)
         idx = np.arange(1, n + 1)
         size_ = ndi.sum(np.ones_like(lum), lab, idx)
-        green = ndi.maximum((G - R) > 10, lab, idx)
-        lace = np.isin(lab, idx[(size_ >= 12) & (green > 0)])
-        eye = np.isin(lab, idx[(size_ >= 12) & (green == 0)])
-        self.lace_a, self.eye_a = _soft(lace), _soft(eye)
-        core = lace & ((G - R) > 10)
-        self.lace_col = self.colors["lace"] * np.clip(lum_s / ref(core), 0.82, 1.12)[..., None]
+        green = ndi.maximum(greenish, lab, idx)
+        lz = zone & (yy >= rule.get("lace_top", rule["lace_box"][1]))          # ниже края кокетки EA
+        lace = np.isin(lab, idx[(size_ >= 12) & (green > 0)]) & lz
+        lace = ndi.binary_fill_holes(ndi.binary_closing(lace | (lz & greenish), iterations=1)) & lz & (w_red < 0.3)
+        eye = np.isin(lab, idx[(size_ >= 12) & (green == 0)]) & ~lace
+        core = lace & greenish
+        lace_lum = ref(core)
+        self.lace_m, self.eye_m, self.shield_m = lace, eye, sil                # формы: шнурки (с обводкой), люверсы, щит
+        # куда нашивкам нельзя: сами слои ворота (не вся рамка — герб на груди под шнуровкой не режется)
+        self.protect = ndi.binary_dilation((self.red_a > 0.05) | lace | eye | sil, iterations=3)
+        self.lace_col = self.colors["lace"] * np.clip(lum_s / lace_lum, 0.82, 1.12)[..., None]
         self.ea = ea
+        self.shield_down = int(round(rule.get("shield_down", 0.0) * H))
         self.area = ndi.binary_dilation(roi & ((self.red_a > 0) | lbox | sbox), iterations=10) & roi  # под тканью
         self.feather = ndi.gaussian_filter(self.area.astype(np.float64), 1.2) * self.area
         self.report = {"from": rule["from"], "colors": {k: [int(x) for x in c] for k, c in self.colors.items()},
-                       "lace_texels": int(lace.sum()), "eyelet_texels": int(eye.sum()), "shield_texels": int(sil.sum())}
+                       "lace_texels": int(lace.sum()), "eyelet_texels": int(eye.sum()), "shield_texels": int(sil.sum()),
+                       "shield_down": self.shield_down}
 
     def pre(self, out, msk):
-        """Основа на сверхвыборке (до нашивок): ткань → ворот и V → шнурки → люверсы → щит NHL."""
+        """Основа на сверхвыборке (до нашивок): ткань → ворот и V → шнурки → люверсы → щит NHL. Формы шнурков,
+        люверсов и щита — гладким контуром на сверхвыборке (билинейно и порог 0,5), край — 1 тексель."""
         sh = msk.shape
         ring = ndi.binary_dilation(self.area, iterations=10) & ~ndi.binary_dilation(self.area, iterations=3)
         ring = _up(ring, sh) & msk
         body = _mode(out[ring])[:3] if ring.any() else np.array([24.0, 55.0, 46.0])
-        new = np.broadcast_to(body, self.ea.shape).copy()
-        for a, col in ((self.red_a, self.red_col), (self.lace_a, self.lace_col), (self.eye_a, self.ea),
-                       (self.shield_a, self.ea)):
-            new = new * (1 - a[..., None]) + col * a[..., None]
-        a = (_up(self.feather, sh) * msk)[..., None]
-        out[..., :3] = out[..., :3] * (1 - a) + _up(np.clip(new, 0, 255), sh) * a
+        new = np.broadcast_to(body, sh + (3,)).copy()
+        k = self.shield_down
+
+        def layer(alpha, col):
+            nonlocal new
+            new = new * (1 - alpha[..., None]) + col * alpha[..., None]
+
+        layer(_up_smooth(self.red_a, sh), _up_smooth(self.red_col, sh))
+        layer(_smooth_shape(self.lace_m, sh), _up_smooth(self.lace_col, sh))
+        layer(_smooth_shape(self.eye_m, sh), _up_smooth(self.ea, sh))
+        layer(_smooth_shape(np.roll(self.shield_m, k, axis=0), sh), _up(np.roll(self.ea, k, axis=0), sh))  # щит — чётко
+        a = (_up_smooth(self.feather, sh) * msk)[..., None]
+        out[..., :3] = out[..., :3] * (1 - a) + np.clip(new, 0, 255) * a
         return out
 
     def relief(self, nm_path, sm_path, clean_dir):
@@ -232,7 +264,13 @@ class CollarLace:
             cl = np.asarray(Image.open(os.path.join(clean_dir, clean)).convert(mode).resize((1024, 1024), Image.LANCZOS)) \
                 .astype(np.float64)
             m = mk[..., None] if ea.ndim == 3 else mk
-            Image.fromarray(np.clip(np.round(ea * (1 - m) + cl * m), 0, 255).astype(np.uint8), mode).save(path)
+            res = ea * (1 - m) + cl * m
+            k = self.shield_down * 1024 // self.ea.shape[0]
+            if k:  # рельеф щита — вместе со щитом (ниже на shield_down)
+                sb = _box(1024, self.rule["shield_box"])
+                sb = ndi.binary_dilation(sb, iterations=3)
+                res[sb] = np.roll(res, k, axis=0)[sb]
+            Image.fromarray(np.clip(np.round(res), 0, 255).astype(np.uint8), mode).save(path)
 
 
 class BandTrim:

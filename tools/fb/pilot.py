@@ -488,7 +488,7 @@ def cmd_build(a):
             band_fix = kit_fix.BandTrim(band)
             pre.append(band_fix)
         post = kit_hybrid.decal_post(comp, placed, soft, n_jersey_tri, collar, pre=pre, crest_fit=fit,
-                                     protect=laces_fix.area if lace_rule else None)
+                                     protect=laces_fix.protect if lace_rule else None)
         img, mask, dist, info = kit3d.transfer(base, src, dst, 1024, 2, post=post)
         if band:
             rec["chest_band"] = getattr(band_fix, "report", None)
