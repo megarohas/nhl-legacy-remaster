@@ -1,8 +1,8 @@
-"""Варианты обмотки крюка: свободные коды sticktapecolor (2–6) — частичная обмотка белой лентой.
+"""Варианты обмотки крюка: свободные коды sticktapecolor (3, 4, 6, 8, 9) — частичная обмотка белой лентой.
 
     python tapestyles.py table                         # таблица «код → вид обмотки» и границы по UV
     python tapestyles.py build [--out DIR] [--no-preview]
-                                                       # texlib_999.rx2 с новыми текстурами sticktape_2…6_cm в
+                                                       # texlib_999.rx2 с новыми текстурами sticktape_N_cm в
                                                        # раскладке cache: (DIR/rendering/playerstick/), картинки
                                                        # текстур (DIR/png) и лист вариантов на крюке
     python tapestyles.py preview [--out DIR]           # только лист (по готовому texlib_999 из DIR)
@@ -22,7 +22,7 @@ UV-u идёт вдоль крюка: у мода «низ-2» от пятки (�
 исходных колец EA от пятки до середины u шёл бы наискось, на 9–26 мм). Границы — доли длины крюка от пятки к
 кончику, в u — по кольцам этой сетки (_2 и _4 одинаково, обе руки — зеркало с теми же UV). Край ленты ровный,
 поперёк оси крюка, жёсткий: пиксель — либо лента, либо карбон, без смешивания (размывают только мипы вдали). Набалдашник — как у полной ленты того же цвета. Чёрных частичных нет: на
-чёрном карбоне их не видно; 7–9 — цвета EA, не меняются.
+чёрном карбоне их не видно; 2, 5, 7 — цвета EA, не меняются (их ключи подписей общие с цветами глаз).
 
 Только стандартная библиотека (+ Chrome/Edge без окна — подписи листа, как в teamart/sticktape).
 """
@@ -40,15 +40,19 @@ W, H = 128, 64
 STYLES = {
     0: (0, [(0.0, 1.0)], 'чёрная, весь крюк (EA)'),
     1: (1, [(0.0, 1.0)], 'белая, весь крюк (EA; так у Кейна)'),
-    2: (1, [(0.45, 1.0)], 'белая, от середины до носка, пятка голая (Бенн)'),
     3: (1, [(0.30, 0.87)], 'белая, середина: пятка и носок голые (Селебрини)'),
     4: (1, [(0.0, 0.87)], 'белая, носок голый (~3 см)'),
-    5: (1, [(0.55, 0.85)], 'белая, узкая полоса ближе к носку'),
     6: (1, [(0.25, 1.0)], 'белая, голая только пятка (четверть крюка)'),
+    8: (1, [(0.45, 1.0)], 'белая, от середины до носка, пятка голая (Овечкин)'),
+    9: (1, [(0.55, 0.85)], 'белая, узкая полоса ближе к носку (Бенн)'),
 }
-# 7–9 — как у EA (голубая, розовая, фиолетовая): текстуры не меняются. Чёрные частичные не делаются: на чёрном
-# карбоне их не видно (отзыв пользователя 12.10)
-EA_COLORS = {7: 'голубая (EA)', 8: 'розовая (EA)', 9: 'фиолетовая (EA)'}
+# 2, 5, 7 — как у EA (синяя, зелёная, голубая): текстуры не меняются. Подписи цветов в меню — общие ключи
+# локализации (blue, green, lightblue — и цвета глаз в редакторе внешности), поэтому варианты — на кодах, чьи ключи
+# (red, yellow, orange, pink, purple) больше нигде не нужны (12.10). Чёрных частичных нет: на чёрном карбоне не видно
+EA_COLORS = {2: 'синяя (EA)', 5: 'зелёная (EA)', 7: 'голубая (EA)'}
+# подписи вариантов в меню экипировки (fe/loc NHL_ENG_US: ключ цвета кода → текст), ставит tape_players.py
+LABELS = {3: ('red', 'White Middle'), 4: ('yellow', 'White No Toe'), 6: ('orange', 'White No Heel'),
+          8: ('pink', 'White Toe Half'), 9: ('purple', 'White Strip')}
 CARBON = (21, 22, 25)       # голый крюк: чёрный карбон
 UV_KNOB = 0.69              # правее — набалдашник (не трогается)
 
@@ -178,7 +182,7 @@ def build(args):
         raise SystemExit(f'проверка: размер {len(data)} / {len(src.bytes())}, изменились чужие текстуры: {bad}')
     man['unchanged'] = same
     json.dump(man, open(os.path.join(out, 'manifest.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
-    print(f'{dst}: sha1 {man["sha1"][:12]}, размер {len(data)} (как у игры), заменены sticktape_2…{max(STYLES)}_cm; '
+    print(f'{dst}: sha1 {man["sha1"][:12]}, размер {len(data)} (как у игры), заменены sticktape_{",".join(str(c) for c in STYLES if c > 1)}_cm; '
           f'остальные {len(same)} текстур — байт в байт')
     if not rm.flag(args, '--no-preview'):
         preview(out)
@@ -239,7 +243,8 @@ def preview(out):
     for code, name, cells in cards:
         figs = ''.join(f'<figure><img src="{uri(fn)}" width="{w}" height="{h}"><figcaption>{lab}</figcaption>'
                        f'</figure>' for fn, lab, w, h in cells)
-        body.append(f'<div class="card"><div class="code">{code}</div><div class="nm">{name}</div>{figs}</div>')
+        lab = f'<br><i>«{LABELS[code][1]}»</i>' if code in LABELS else ''
+        body.append(f'<div class="card"><div class="code">{code}</div><div class="nm">{name}{lab}</div>{figs}</div>')
     html = ('<!doctype html><html><head><meta charset="utf-8"><style>'
             'body{margin:0;background:#26272c;color:#ddd;font:13px Segoe UI,Arial,sans-serif;padding:12px;width:1176px}'
             'h1{font-size:18px;margin:0 0 4px}p{margin:4px 0 10px;color:#bbb}'
@@ -248,9 +253,9 @@ def preview(out):
             '.nm{width:190px;font-size:13px}figure{margin:0}figcaption{font-size:11px;color:#aaa;text-align:center}'
             '</style></head><body><h1>Варианты обмотки крюка: код sticktapecolor → вид — ' + rm.PROFILE.title
             + '</h1><p>Сетка — мод «низ-2» с осевым UV (лента до кончика, носок скруглён), левый хват, клюшка Reebok 11K. '
-            '0 и 1 — как у EA; 2–6 — новые текстуры (вместо синей, красной, жёлтой, зелёной, оранжевой); 7–9 — цвета EA '
-            '(голубая, розовая, фиолетовая), не меняются. Голый крюк — чёрный карбон, один на все клюшки. Край ленты — '
-            'поперёк крюка, жёсткий.</p>' + ''.join(body) + '</body></html>')
+            '0 и 1 — как у EA; 3, 4, 6, 8, 9 — новые текстуры (вместо красной, жёлтой, оранжевой, розовой, фиолетовой; '
+            'подпись в меню — справа от номера); 2, 5, 7 — цвета EA (синяя, зелёная, голубая), не меняются. Голый крюк — '
+            'чёрный карбон, один на все клюшки. Край ленты — поперёк крюка, жёсткий.</p>' + ''.join(body) + '</body></html>')
     sheet = os.path.join(pdir, 'sheet.png')
     ta.render_html(html, sheet, 1200, 110 + len(cards) * 240)
     print(f'лист: {sheet}')
