@@ -35,6 +35,7 @@
 | [docs/player-equipment.md](docs/player-equipment.md) | Экипировка игроков по фото (НХЛ + Wikimedia Commons): обмотка клюшки, гетры, свитер, визор — поля базы и охват |
 | [docs/teams.md](docs/teams.md) | Команды, лиги, ссылки на команду и календари в базе; НХЛ на 32 команды |
 | [docs/graphics-settings.md](docs/graphics-settings.md) | Настройки графики порта: cvar'ы рантайма, апскейл, RTV/ROV, задержка ввода, лаунчер |
+| [docs/launcher.md](docs/launcher.md) | Лаунчер NHL Legacy (`legacy-port/launcher`): окно настроек графики и переключателей `nhl_*` перед запуском, свой файл настроек, игре — аргументами |
 | [docs/performance.md](docs/performance.md) | Производительность: замеры GPU/CPU в игре, цена FSI против хостовых RT, спин потока рендера (исправлен), подвисания от пайплайнов, план A/B |
 | [docs/legacy-port-feasibility.md](docs/legacy-port-feasibility.md) | Перенос наработок в NHL Legacy (2015): что находится автоматически, сколько работы по каждой, как друзьям играть в Legacy на ПК, план |
 | [docs/legacy-port.md](docs/legacy-port.md) | Свой порт NHL Legacy (`legacy-port/`): что работает, сборка, запуск, папка для друзей, год и 32 команды |

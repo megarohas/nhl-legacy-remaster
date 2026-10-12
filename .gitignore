@@ -46,6 +46,7 @@ best_of_nhl/
 !/legacy-port/nhllegacy_*.toml
 !/legacy-port/nhllegacy_*.json
 !/legacy-port/dist-template/
+!/legacy-port/launcher/
 !/legacy-port/nhllegacy.example.toml
 !/legacy-port/generated/
 /legacy-port/generated/*
