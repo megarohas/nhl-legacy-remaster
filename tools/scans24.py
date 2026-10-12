@@ -54,9 +54,10 @@ from tdb_read import load_meta  # noqa: E402
 
 G = P24.G
 VARIANTS = P24.VARIANTS
-VERSION = 5                                   # версия сборки головы (кэш); 2 — карта вершин шаблона, UV; 3 — поза;
+VERSION = 6                                   # версия сборки головы (кэш); 2 — карта вершин шаблона, UV; 3 — поза;
                                               # 4 — глаза по глазам NHL 24 (вершина роговицы);
-                                              # 5 — суставы век/бровей/скул = общий скелет (EYE_BONES)
+                                              # 5 — суставы век/бровей/скул = общий скелет (EYE_BONES);
+                                              # 6 — глаза снова вслед за веками (v3), ось взгляда 23/24 — вместе с глазом
 EA_PLAYER = os.path.join(G.big, 'cacherender', 'rendering', 'player')
 COMMON = os.path.join(G.big, 'renderboot', 'rendering', 'player_common', 'texlib_999.rx2')
 BIO, HEADS, PLACE = 'exhibitionplayerbiotable', 'stockplayerheads', 'stockplayerhelmetplacement'
@@ -69,7 +70,11 @@ POSE_DEG, POSE_MM = 2.5, 6.0
 # смещение вершин на (J_общий − J_головы). У век это раздвигало веки (Matthews: белок по кругу, DeBrincat: веко поднято —
 # пользователь, 12.10). 23/24, 34/35 — оси век в центре глаза, 36/37 — нижние веки, 38–41 — брови, 25/26 — скулы у
 # глаза. Челюсть и губы (16–22, 27–33, 42–47) — как раньше, по смещению вершин (рот в этом экране приоткрыт у всех).
-EYE_BONES = (23, 24, 25, 26, 34, 35, 36, 37, 38, 39, 40, 41)                  # голова NHL 24 в другой позе (наклон/сдвиг черепа) — выровнять
+EYE_BONES = (25, 26, 34, 35, 36, 37, 38, 39, 40, 41)
+# 23/24 — ось взгляда (игра поворачивает яблоко вокруг сустава из файла головы: у сканов EA он точно у центра яблока,
+# J − центр = ±1,3/0/1,6 мм, а от общего скелета у EA глаза на 5–15 мм). С v6 сустав двигается вместе с глазом:
+# J = J шаблона + сдвиг глаза (в v5 был общий скелет → у Zegras «косоглазие», пользователь 12.10).
+GAZE_BONES = {'eyel': 23, 'eyer': 24}                  # голова NHL 24 в другой позе (наклон/сдвиг черепа) — выровнять
 ROW_TEMPLATE = 11145                          # строка stockplayerheads образец (haircards_a/b = 0)
 # пилот 12.10.2026: в out-ahl32 Макар поставлен makar_db.py до этапа (headid 60112 → 20185) — прежняя голова для сейва
 PILOT_OLD = {('cale', 'makar', (1998, 10, 30)): 60112}
@@ -488,20 +493,22 @@ def build_one(job):
     eN = N['mat_eyes']['pos'] if 'mat_eyes' in N else None
     if eN is not None and rigid is not None:
         eN = (eN - rigid[1]) @ rigid[0].T + rigid[2]
-    eyes, rep['eyes'] = {}, {}
+    eyes, rep['eyes'], eye_shift = {}, {}, {}
     for name, side in (('eyel', 1), ('eyer', -1)):
         q = P[name]['pos']
         d, ii = th.query(q.mean(0), k=24)
         wv = 1.0 / np.maximum(d, 1e-4) ** 2
         t_old = (disp[:nh][ii] * wv[:, None]).sum(0) / wv.sum()
         e = eN[np.sign(eN[:, 0]) == side] if eN is not None else np.zeros((0, 3))
-        if len(e) >= 20:
-            t = cornea(e) - cornea(q)
-        else:                                  # нет глаз у головы NHL 24 — как раньше, вместе с веками
-            t = t_old
+        # v6: глаз — вслед за веками (как v3). Правило v4/v5 «вершина роговицы = передняя точка глаза NHL 24» сводило
+        # яблоки к переносице у голов, где глаза NHL 24 в bind сведены (Matthews, Zegras: 2,5–3,4 мм) — асимметрия
+        # зрачков в разрезах век в покое p95 0,26 (у сканов EA 0,15), по веткам вслед за веками — 0,13
+        t = t_old
         eyes[name] = q + t
         rep['eyes'][name] = {'shift_mm': np.round(t * 1000, 2).tolist(),
-                             'vs_v3_mm': np.round((t - t_old) * 1000, 2).tolist()}
+                             'vs_nhl24_cornea_mm': np.round((cornea(e) - cornea(q) - t) * 1000, 2).tolist()
+                             if len(e) >= 20 else None}
+        eye_shift[name] = t
     # haircap: поле смещений + высота по прядям NHL 24
     cap = P['haircap']
     d, ii = th.query(cap['pos'], k=8)
@@ -601,6 +608,10 @@ def build_one(job):
     inv0 = skeleton_inv()
     for bone in EYE_BONES:
         inv2[bone] = inv0[bone]
+    for name, bone in GAZE_BONES.items():      # ось взгляда — вместе с глазом
+        jn = Jt[bone] + eye_shift[name]
+        inv2[bone] = inv[bone].copy()
+        inv2[bone][3, :3] = -(jn @ inv[bone][:3, :3])
     struct.pack_into('>%df' % inv2.size, raw, bpo + 16, *inv2.reshape(-1))
     rep['joints_moved'] = moved
     rep['eye_bones_global'] = len(EYE_BONES)
