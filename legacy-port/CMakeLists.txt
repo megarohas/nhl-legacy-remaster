@@ -35,6 +35,7 @@ set(NHLLEGACY_SOURCES
     src/nhllegacy_drafttrace.cpp
     src/nhllegacy_printf.cpp
     src/nhllegacy_astrace.cpp
+    src/nhllegacy_settings.cpp
 )
 
 if(WIN32)
