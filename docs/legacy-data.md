@@ -157,7 +157,7 @@ bash tools/legacy_data/uninstall-legacy-data.sh          # снять (чужи�
 это в `out-ahl32` (вместе с Liiga, ниже).
 
 Пересборка всего с нуля — `bash tools/legacy_data/build-all.sh [этап…] [--ahl32]` (этапы base, roster, photos,
-equip, collect, retire, fixdb, utah, ahl, nhlattrs, useredits, fonts, music, models, art, logos, menu, nhl24; сеть —
+equip, collect, retire, fixdb, utah, ahl, nhlattrs, useredits, tape, fonts, music, models, art, logos, menu, nhl24; сеть —
 только докачка недостающих портретов лиг). Этап `menu` (`menu12_legacy.py`, `menuitems_legacy.py` и
 `draft32_legacy.py` — доски драфта на 32, `year2026_legacy.py` — год 2026 в копирайтах) идёт после `collect`: тот кладёт в `out/` локализацию nhl32 без правок меню, а
 `menuitems_legacy.py` вносит их снова.
@@ -1188,3 +1188,24 @@ game/work/legacy-data/equipment-user`: полный снимок экипиро�
 иное — конфликт в отчёт; повтор ничего не меняет. 11.10 04:07: сейв `ROSTER 20261011010728` — 191 правка у 105
 игроков (клюшки 53, обмотка 54, гетры 43, коньки 15…), внесены в out, out-ahl32, out-nhl24, out-nhl24-ahl32 (бэкап
 баз — `backup-cache/out-before-useredits-20261011-0431`); копии сейвов — `backup-saves/saves-20261011-0428` (и на D:).
+
+## Обмотка игрокам и варианты обмотки (этапы tape и models, 12.10.2026)
+
+Варианты обмотки — коды `sticktapecolor` 3, 4, 6, 8, 9 (белая частичная лента), текстуры `texlib_999.rx2` и сетки
+ленты с осевым UV — [player-models.md](player-models.md) §13.
+- **models**: `tools/legacy_data/models/build.sh` собирает ещё клюшки полевых и клюшку на льду с осевым UV
+  (`models/tape/out-bottom2-axial`, они главнее `out-bottom2`, вратарские остаются оттуда) и `texlib_999.rx2`
+  (`models/tapevar`, `tools/tapestyles.py`). В out — 75 своих файлов (`models/files.txt`): + `rendering/playerstick/
+  texlib_999.rx2`, заменены 4 `playersticktape_*` и `prop/droppedstick_0`. Проверки — `models/check.sh`
+  (`check-tape-axial.log`).
+- **tape** (после `useredits`): `tools/legacy_data/tape_players.py` по `tools/legacy_data/tape_players.json` (фамилия
+  + дата рождения → код; вратари не трогаются) ставит обмотку в `nhlng.db` и `draft_roster.db` out и out-ahl32. Он же
+  пишет подписи вариантов в меню экипировки, в `fe/loc/NHL_ENG_US.db` out и out-ahl32: ключи цветов red, yellow, orange,
+  pink, purple → White Middle, White No Toe, White No Heel, White Toe Half, White Strip. Это своя строка в конец пула,
+  поэтому «Red» у TEAMLINE2_PRSA остаётся. Ключи blue, green, lightblue не трогаются: они же — цвета глаз в редакторе
+  внешности.
+- 12.10 (решение пользователя): Jamie Benn 9, Macklin Celebrini 3, Patrick Kane 1, Alex Ovechkin 8, Patrik Laine 0
+  (у Кейна и Лайне так и было). У Овечкина в правках пользователя (`ROSTER 20261011010728 — правки.json`) обмотка
+  0 → 1 — решение 12.10 её заменяет.
+- Сейв состава: `python tools/legacy_data/tape_players.py save СЕЙВ [--write]` — по фамилии и дате рождения в живых
+  строках сейва. С `--write` — копия в `backup-saves`, после записи — проверка CRC и обёртки. Запись на копии проверена.

@@ -1,0 +1,10 @@
+{
+  "note": "Обмотка крюка игрокам по решению пользователя (12.10.2026): код sticktapecolor — варианты tools/tapestyles.py (0 чёрная, 1 белая, 3 White Middle, 4 White No Toe, 6 White No Heel, 8 White Toe Half, 9 White Strip). Игрок ищется по фамилии и дате рождения; вратари не трогаются. Этап build-all «tape» (tools/legacy_data/tape_players.py).",
+  "players": [
+    {"first": "Jamie", "last": "Benn", "birth": [1989, 7, 18], "sticktapecolor": 9},
+    {"first": "Macklin", "last": "Celebrini", "birth": [2006, 6, 13], "sticktapecolor": 3},
+    {"first": "Patrick", "last": "Kane", "birth": [1988, 11, 19], "sticktapecolor": 1},
+    {"first": "Alex", "last": "Ovechkin", "birth": [1985, 9, 17], "sticktapecolor": 8},
+    {"first": "Patrik", "last": "Laine", "birth": [1998, 4, 19], "sticktapecolor": 0}
+  ]
+}

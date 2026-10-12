@@ -4,7 +4,7 @@
 #   bash tools/legacy_data/build-all.sh [ЭТАП…] [--ahl32]
 #   LEGACY_DATA_WORK=папка bash tools/legacy_data/build-all.sh …   # сухой прогон: всё (и out) — в эту папку;
 #        входы, которые этапом не пересобираются (например, составы без сети), — положить туда заранее
-#        этапы: base roster photos equip collect retire fixdb utah ahl nhlattrs useredits photos24 fonts music models art
+#        этапы: base roster photos equip collect retire fixdb utah ahl nhlattrs useredits tape photos24 fonts music models art
 #        logos menu nhl24
 #        (без этапов — все по порядку;
 #        --ahl32 — ещё вариант «АХЛ на 32», накладка game/work/legacy-data/out-ahl32; nhl24 — накладка out-nhl24
@@ -27,7 +27,7 @@ L=game/other/legacy/big/cacheboot
 AHL32=0
 stages=()
 for a in "$@"; do [ "$a" = "--ahl32" ] && AHL32=1 || stages+=("$a"); done
-[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah ahl nhlattrs useredits photos24 fonts music
+[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah ahl nhlattrs useredits tape photos24 fonts music
                                   models art logos menu nhl24)
 want() { for s in "${stages[@]}"; do [ "$s" = "$1" ] && return 0; done; return 1; }
 say() { echo "== $(date +%H:%M:%S) $*"; }
@@ -161,6 +161,17 @@ if want useredits; then
   say "правки экипировки пользователя (user_equipment.py)"
   for B in $O $W/out-ahl32; do
     for F in nhlng.db draft_roster.db; do [ -f $B/db/$F ] && python $T/user_equipment.py $B/db/$F; done
+  done
+fi
+if want tape; then
+  # обмотка крюка игрокам по решению пользователя (tools/legacy_data/tape_players.json: фамилия + дата рождения → код
+  # sticktapecolor, варианты — tools/tapestyles.py, docs/player-models.md §13) и подписи вариантов в меню экипировки
+  # (fe/loc). После useredits (решение главнее прежних правок пользователя) и collect (локализация — после него);
+  # правит на месте, повтор ничего не меняет. Текстуры и сетки вариантов — этап models
+  say "обмотка игроков и подписи вариантов (tape_players.py)"
+  for B in $O $W/out-ahl32; do
+    for F in nhlng.db draft_roster.db; do [ -f $B/db/$F ] && python $T/tape_players.py db $B/db/$F; done
+    [ -f $B/fe/loc/NHL_ENG_US.db ] && python $T/tape_players.py loc $B/fe/loc/NHL_ENG_US.db
   done
 fi
 if want photos24; then

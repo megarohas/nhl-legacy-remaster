@@ -1,6 +1,8 @@
 #!/bin/bash
 # 3D-правки игроков для NHL Legacy: гетры (голень), обмотка клюшки до носка («низ-2», вратарские — без скругления,
 # и реквизит вратарской клюшки prop/goaliestick*_left/right_0), нижний край свитера сзади как в NHL 10.
+# Клюшки полевых и клюшка на льду — с осевым UV ленты (tape/out-bottom2-axial, sticktape.py --axial-uv) и варианты
+# обмотки texlib_999.rx2 (tools/tapestyles.py → tapevar/: коды 3, 4, 6, 8, 9 — белая частичная, docs/player-models.md §13).
 # Собирает инструментами с --game legacy (источник — распакованные архивы game/other/legacy/big) в
 # game/work/legacy-data/models/{out,tape/out-bottom2,jersey10/out} и раскладывает готовые .rx2 в
 # game/work/legacy-data/out/ (дерево cache:), список своих файлов — models/files.txt.
@@ -18,15 +20,22 @@ if [ "$1" != "--collect" ]; then
   python tools/rw4mesh.py --game legacy shin --no-preview > $M/build-sock.log 2>&1 || { echo "гетры: ошибка, $M/build-sock.log"; exit 1; }
   python tools/sticktape.py --game legacy build --round bottom2 --no-preview > $M/build-tape.log 2>&1 \
     || { echo "клюшки: ошибка, $M/build-tape.log"; exit 1; }
+  python tools/sticktape.py --game legacy build --round bottom2 --axial-uv --kinds player,dropped --no-preview \
+    > $M/build-tape-axial.log 2>&1 || { echo "клюшки (осевой UV): ошибка, $M/build-tape-axial.log"; exit 1; }
+  python tools/tapestyles.py --game legacy build --out $M/tapevar > $M/build-tapevar.log 2>&1 \
+    || { echo "варианты обмотки: ошибка, $M/build-tapevar.log"; exit 1; }
   python tools/jersey10.py --game legacy build > $M/build-jersey.log 2>&1 || { echo "свитера: ошибка, $M/build-jersey.log"; exit 1; }
 fi
 # раскладка: только свои файлы (чужие в out/ — формы, текстуры — не трогаются)
 L=$M/files.txt
 touch $L
 : > $L.new
-for src in $M/out $M/tape/out-bottom2 $M/jersey10/out; do
+# источники по старшинству: у одного пути берётся последний — клюшки полевых и клюшка на льду из out-bottom2-axial
+# главнее out-bottom2 (там остаются вратарские); texlib_999.rx2 — из tapevar
+for src in $M/out $M/tape/out-bottom2 $M/tape/out-bottom2-axial $M/jersey10/out $M/tapevar; do
+  [ -d $src/rendering ] || continue
   (cd $src && find rendering -type f -name '*.rx2') | while read -r f; do echo "$src	$f"; done
-done | sort -t$'\t' -k2 > $M/.collect
+done | awk -F'\t' '{src[$2] = $1} END {for (f in src) print src[f] "\t" f}' | sort -t$'\t' -k2 > $M/.collect
 n=0; bad=0
 while IFS=$'\t' read -r src f; do
   if [ -e "$O/$f" ] && ! grep -qxF "$f" $L; then

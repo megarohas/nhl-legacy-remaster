@@ -6,8 +6,10 @@ cd "$R" || exit 1
 M=${LEGACY_DATA_WORK:-game/work/legacy-data}/models
 mkdir -p "$M"
 export PYTHONIOENCODING=utf-8
-python tools/rw4mesh.py --game legacy roundtrip $M/out $M/tape/out-bottom2 $M/jersey10/out > $M/check-roundtrip.log 2>&1
+python tools/rw4mesh.py --game legacy roundtrip $M/out $M/tape/out-bottom2 $M/tape/out-bottom2-axial $M/jersey10/out \
+  > $M/check-roundtrip.log 2>&1
 python tools/rw4mesh.py --game legacy check > $M/check-sock.log 2>&1
 python tools/sticktape.py --game legacy check --round bottom2 > $M/check-tape.log 2>&1
+python tools/sticktape.py --game legacy check --round bottom2 --axial-uv > $M/check-tape-axial.log 2>&1
 python tools/jersey10.py --game legacy check > $M/check-jersey.log 2>&1
-tail -n 1 $M/check-roundtrip.log $M/check-sock.log $M/check-tape.log $M/check-jersey.log
+tail -n 1 $M/check-roundtrip.log $M/check-sock.log $M/check-tape.log $M/check-tape-axial.log $M/check-jersey.log
