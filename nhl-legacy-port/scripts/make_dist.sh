@@ -9,7 +9,7 @@
 set -euo pipefail
 P=$(cd "$(dirname "$0")/.." && pwd)
 B="${BUILD:-$P/out/build/win-amd64-release}"   # BUILD=папка сборки (по умолчанию — рабочая)
-V=$(tr -d '
+V=$(tr -d '
  ' < "$P/../VERSION" 2>/dev/null || echo dev)
 D="$P/dist/NHL Legacy Remaster v$V"
 CRT="/c/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Redist/MSVC/14.44.35112/x64/Microsoft.VC143.CRT"
@@ -18,7 +18,7 @@ CRT="/c/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Redist/MS
 [ -e "$D" ] && mv "$D" "$D.prev-$(date +%Y%m%d-%H%M)"
 mkdir -p "$D/game" "$D/userdata/cache/guest"
 cp "$B/nhllegacy.exe" "$B/nhllegacy_snap.exe" "$B/rexruntime.dll" "$B/rexgpu-xenos.dll" "$D/"
-L="$B/nhllegacy_launcher.exe"; [ -f "$L" ] || L="$P/out/launcher/nhllegacy_launcher.exe"
+L="$P/out/launcher/nhllegacy_launcher.exe"; [ -f "$L" ] || L="$B/nhllegacy_launcher.exe"  # свежая сборка лаунчера
 [ -f "$L" ] && cp "$L" "$D/" || echo "нет лаунчера — nhl-legacy-port/launcher/build.cmd"
 ICO="$P/launcher/icon/nhllegacy.ico"
 if [ -f "$ICO" ]; then python "$P/../tools/set_exe_icon.py" "$D/nhllegacy.exe" "$ICO" --no-backup; else
@@ -44,6 +44,22 @@ if [ "${1:-}" = "--mods" ]; then
   # база «АХЛ на 32» (legacy-data --ahl32: в лиге АХЛ 32 клуба — Coachella Valley и Henderson) → АХЛ на 32
   if [ "${AHL32:-}" = "1" ]; then
     sed -i 's/^nhl_ahl_teams = 30$/nhl_ahl_teams = 32/' "$D/nhllegacy.toml"
+  fi
+  # Сейвы пользователя по умолчанию (SAVES=0 — без них): последний PROFILE (настройки игры, правила, слайдеры
+  # геймплея, звук, видео, управление) и последний ROSTER (составы с правками). Профиль порта один на всех ПК
+  # (XUID B13EBABEBABEBABE, имя «User» — SDK, xam/user_profile.cpp), так что игра друга подхватит их как свои.
+  # Карьеры (DYNASTY, BEAPRO…) не переносим.
+  if [ "${SAVES:-1}" = "1" ]; then
+    U="B13EBABEBABEBABE/454109EC"
+    S="$P/userdata/$U"
+    for kind in PROFILE ROSTER; do
+      last=$(cd "$S/00000001" && ls -d "$kind "* 2>/dev/null | sort | tail -1)
+      [ -n "$last" ] || { echo "нет сейва $kind в $S"; continue; }
+      mkdir -p "$D/userdata/$U/00000001" "$D/userdata/$U/Headers/00000001"
+      cp -r "$S/00000001/$last" "$D/userdata/$U/00000001/"
+      cp "$S/Headers/00000001/$last.header" "$D/userdata/$U/Headers/00000001/"
+      echo "сейв: $last"
+    done
   fi
 fi
 du -sh "$D"
