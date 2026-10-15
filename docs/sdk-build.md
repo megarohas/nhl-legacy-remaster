@@ -50,8 +50,8 @@ NHLFFX_NORMALPRIO=1 JOBS=12 cmd //c 'S:\Claude\megarohas_nhl13\port-ffx\scripts\
 
 Чтобы в следующий раз было ещё быстрее: `tools\backup_data.ps1` копирует `ref\rexglue-sdk-custom\install`
 на `D:\backup\megarohas_nhl13-data\` — после него восстановление = копия обратно (минута). На 09.10
-(14:20) копии SDK на D: ещё не было. Если пропадёт и `port-ffx/`, патчи целиком есть в приложении
-ниже — каждый блок `diff` сохранить как `.patch` и положить в `sdk-patches/`.
+(14:20) копии SDK на D: ещё не было. Если пропадёт и `port-ffx/`, патчи есть в git —
+`legacy-port/scripts/sdk-patches/` (с 15.10.2026), и целиком в приложении ниже.
 
 Ночная `ref/rexglue-sdk-0.10.0.24` (её берёт `port/` NHL 13 и пресет `win-amd64-relwithdebinfo`) после
 инцидента тоже неполная (129 файлов, нет `bin`/`lib`); цел её zip
@@ -167,7 +167,8 @@ S:\Claude\megarohas_nhl13\port-ffx\scripts\codegen_check.cmd
 ## Патчи к SDK
 
 Все четыре — в `port-ffx/scripts/sdk-patches/`, накладываются `sdk_fetch.ps1` по порядку;
-полный дифф — в приложении.
+полный дифф — в приложении. `port-ffx/` не в git, копия патчей в git — `legacy-port/scripts/sdk-patches/`
+(там же следующие, 0005 и 0006, — [legacy-port.md](legacy-port.md)).
 
 | Патч | Файлы | Зачем |
 |---|---|---|

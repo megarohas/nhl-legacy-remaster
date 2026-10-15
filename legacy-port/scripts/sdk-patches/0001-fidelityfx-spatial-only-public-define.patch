@@ -1,0 +1,109 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index c9dfc17..44becb4 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -256,6 +256,14 @@ add_compile_options(
+ 
+ include_directories(${REXGLUE_ROOT}/include)
+ 
++# FSR / CAS presenter effects. REX_HAS_FIDELITYFX_SDK changes the layout of
++# Presenter and GuestOutputPaintConfig (include/rex/ui/presenter.h), so every
++# SDK target (rexruntime, rexgpu-xenos, rexglue) must agree on it; consumers get
++# it through rexruntime's PUBLIC definition (src/system/CMakeLists.txt).
++if(REXGLUE_ENABLE_FIDELITYFX)
++    add_compile_definitions(REX_HAS_FIDELITYFX_SDK=1)
++endif()
++
+ add_subdirectory(src/core)
+ add_subdirectory(src/filesystem)
+ add_subdirectory(src/ui)
+diff --git a/cmake/rexglue_fidelityfx.cmake b/cmake/rexglue_fidelityfx.cmake
+index af35fa8..8f352ef 100644
+--- a/cmake/rexglue_fidelityfx.cmake
++++ b/cmake/rexglue_fidelityfx.cmake
+@@ -8,6 +8,25 @@ if(NOT REXGLUE_ENABLE_FIDELITYFX)
+     return()
+ endif()
+ 
++set(REXGLUE_FIDELITYFX_BACKEND "auto" CACHE STRING
++    "FidelityFX runtime backend to build (auto, vk, dx12; none = spatial FSR 1 / CAS only)")
++set_property(CACHE REXGLUE_FIDELITYFX_BACKEND PROPERTY STRINGS auto vk dx12 none)
++string(TOLOWER "${REXGLUE_FIDELITYFX_BACKEND}" _rexglue_fidelityfx_backend)
++
++# ── Spatial-only mode ────────────────────────────────────────────────────
++# FSR 1 (EASU + RCAS) and CAS at present time are the SDK's own presenter
++# shaders, prebuilt for both D3D12 and Vulkan (src/ui/shaders/bytecode/
++# d3d12_5_1, src/ui/shaders/vulkan_spirv), with constants computed in
++# include/rex/ui/presenter.h. They only need REX_HAS_FIDELITYFX_SDK. The
++# FidelityFX SDK (amd_fidelityfx_<backend>.dll, one backend per build) is used
++# only by the temporal FSR2/FSR3 path, so "none" skips fetching and building it.
++if(_rexglue_fidelityfx_backend STREQUAL "none")
++    message(STATUS
++        "FidelityFX: spatial only (FSR 1 / CAS presenter effects for every backend, "
++        "no ffx-api runtime, fsr2/fsr3 fall back to spatial)")
++    return()
++endif()
++
+ # ── Dependency validation ────────────────────────────────────────────────
+ if(NOT WIN32)
+     find_package(Vulkan QUIET)
+@@ -62,12 +81,6 @@ set(REXGLUE_FIDELITYFX_SOURCE_DIR "${fidelityfx_SOURCE_DIR}" CACHE INTERNAL
+     "Root of the fetched FidelityFX SDK source tree")
+ 
+ # ── Backend selection ────────────────────────────────────────────────────
+-set(REXGLUE_FIDELITYFX_BACKEND "auto" CACHE STRING
+-    "FidelityFX backend to build (auto, vk, dx12)")
+-set_property(CACHE REXGLUE_FIDELITYFX_BACKEND PROPERTY STRINGS auto vk dx12)
+-set(_rexglue_fidelityfx_backend "${REXGLUE_FIDELITYFX_BACKEND}")
+-string(TOLOWER "${_rexglue_fidelityfx_backend}" _rexglue_fidelityfx_backend)
+-
+ if(_rexglue_fidelityfx_backend STREQUAL "auto")
+     if(WIN32 AND REXGLUE_USE_D3D12)
+         set(_rexglue_fidelityfx_backend "dx12")
+@@ -95,7 +108,7 @@ elseif(_rexglue_fidelityfx_backend STREQUAL "")
+ else()
+     message(FATAL_ERROR
+         "Invalid REXGLUE_FIDELITYFX_BACKEND='${REXGLUE_FIDELITYFX_BACKEND}' "
+-        "(expected auto, vk, or dx12)")
++        "(expected auto, vk, dx12, or none)")
+ endif()
+ 
+ if(REXGLUE_USE_VULKAN AND REXGLUE_USE_D3D12)
+diff --git a/src/system/CMakeLists.txt b/src/system/CMakeLists.txt
+index 05979a3..e2e4e7f 100644
+--- a/src/system/CMakeLists.txt
++++ b/src/system/CMakeLists.txt
+@@ -126,3 +126,11 @@ if(REXGLUE_USE_VULKAN)
+     )
+     target_compile_definitions(rexruntime PUBLIC REX_HAS_VULKAN=1)
+ endif()
++
++# PUBLIC on purpose: presenter.h changes the layout of Presenter and
++# GuestOutputPaintConfig under REX_HAS_FIDELITYFX_SDK, and the game compiles
++# rex_app.cpp and the UI headers itself, so it must see the same define as the
++# SDK binaries (see the root CMakeLists.txt).
++if(REXGLUE_ENABLE_FIDELITYFX)
++    target_compile_definitions(rexruntime PUBLIC REX_HAS_FIDELITYFX_SDK=1)
++endif()
+diff --git a/src/ui/CMakeLists.txt b/src/ui/CMakeLists.txt
+index 5bd3dc5..360e1df 100644
+--- a/src/ui/CMakeLists.txt
++++ b/src/ui/CMakeLists.txt
+@@ -116,12 +116,15 @@ target_link_libraries(rexui PUBLIC
+ )
+ target_link_libraries(rexui PRIVATE utf8cpp)
+ 
+-if(REXGLUE_FIDELITYFX_SOURCE_DIR AND EXISTS "${REXGLUE_FIDELITYFX_SOURCE_DIR}/sdk/include")
++# REX_HAS_FIDELITYFX_SDK itself is defined for the whole SDK in the root
++# CMakeLists.txt (it is ABI-relevant). The FidelityFX SDK headers are only
++# needed by the ffx-api runtime path (temporal FSR2/FSR3).
++if(REXGLUE_ENABLE_FIDELITYFX AND REXGLUE_FIDELITYFX_SOURCE_DIR AND
++   EXISTS "${REXGLUE_FIDELITYFX_SOURCE_DIR}/sdk/include")
+     target_include_directories(rexui PRIVATE
+         "${REXGLUE_FIDELITYFX_SOURCE_DIR}/sdk/include"
+         "${REXGLUE_FIDELITYFX_SOURCE_DIR}/ffx-api/include"
+     )
+-    target_compile_definitions(rexui PRIVATE REX_HAS_FIDELITYFX_SDK=1)
+ endif()
+ 
+ set(REXUI_HAS_FIDELITYFX_RUNTIME OFF)

@@ -276,15 +276,18 @@ exe и DLL — в `legacy-port-clean/out/build/win-amd64-release/`.
 меню (`k_8` 1280x720, linear) и у потоковых таблиц `k_32_32_32_32_FLOAT` 384x160 / 384x64 (linear) в матче; журнал
 упёрся в предел 400 строк.
 
-**Патчи SDK в репозитории** — `legacy-port/scripts/sdk-patches/`, поверх 0001…0004 (`port-ffx/scripts/sdk-patches/`,
-[sdk-build.md](sdk-build.md)):
+**Патчи SDK в репозитории** — `legacy-port/scripts/sdk-patches/`, все по порядку: 0001…0004 — сборка SDK с Vulkan и
+FSR 1 / CAS ([sdk-build.md](sdk-build.md), «Патчи к SDK»; копия из `port-ffx/scripts/sdk-patches/`, которой нет в git),
+0005 и 0006 — поверх них:
 
 | Патч | Файлы | Что |
 |---|---|---|
+| `0001`…`0004` | см. [sdk-build.md](sdk-build.md) | FSR 1 / CAS без FidelityFX SDK, установка без реестра пакетов CMake, cvar `gpu_backend`, `exp_adjust` текстур в Vulkan |
 | `0005-d3d12-memexport-trace` | `src/graphics/d3d12/command_processor.cpp` | cvar `d3d12_memexport_trace` (по умолчанию выкл.): журнал рисований с memexport |
 | `0006-texture-load-race` | `include/rex/graphics/shared_memory.h`, `src/graphics/shared_memory.cpp`, `src/graphics/pipeline/texture/cache.cpp` | журнал и исправление гонки загрузки текстур (выше) |
 
-Наложить: `git -C ref/rexglue-sdk-custom/src apply S:/Claude/megarohas_nhl13/legacy-port/scripts/sdk-patches/0005-….patch`
+Наложить: на чистый клон SDK (`bd833a2`) — все шесть по порядку; на `ref/rexglue-sdk-custom`, где 0001…0004 уже
+стоят, — только `git -C ref/rexglue-sdk-custom/src apply S:/Claude/megarohas_nhl13/legacy-port/scripts/sdk-patches/0005-….patch`
 (и 0006). Пересобрать только GPU-плагин — `legacy-port/scripts/sdk_gpu_build.cmd` (≈2 мин; DLL —
 `ref/rexglue-sdk-custom/src/out/win-amd64/Release/rexgpu-xenos.dll`, установка SDK не меняется).
 
