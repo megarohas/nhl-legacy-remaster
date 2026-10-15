@@ -1,5 +1,13 @@
 # Файлы игры
 
+> **Состояние на 15.10.2026 (уборка).** Распакованных файлов NHL 13 (`game/raw`, `game/extracted`) нет с инцидента
+> 09.10.2026 — для анализа их снимают с приставки заново ([xbox-transfer.md](xbox-transfer.md)). У NHL 10 и NHL 12 в
+> `game/other/<игра>/` оставлены архивы диска (`disc/*.big`, без звука и роликов), распакованные `big/` удалены,
+> кроме незаменимого: `nhl10/big/fe` (архива `fe.big` больше нет) и `nhl12/big/cache/fe/ion/fonts` (шрифт меню NHL 12
+> для этапа `fonts` сборки Legacy). Распаковать заново: `python tools/big.py disc game/other/nhl12/disc
+> game/other/nhl12/big` (то же для nhl10). NHL Legacy (`game/other/legacy`) — без изменений. Опись уборки —
+> `game/work/cleanup-audit/report.md` (локально).
+
 Источник — установка с диска с приставки (см. [xbox-transfer.md](xbox-transfer.md)).
 
 ## Распаковка
