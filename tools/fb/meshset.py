@@ -64,5 +64,6 @@ def parse(res, meta, chunk_data=None):
             a = raw[:, ofs:ofs + np.dtype(dt).itemsize * n].copy().view(dt).reshape(nv, n)
             attrs[usage] = a.astype(np.float32)
         tri = ib[sec["first"]:sec["first"] + 3 * sec["ntri"]].reshape(-1, 3).astype(np.int64)
-        out.append({"pos": attrs.get(1)[:, :3], "uv": attrs.get(0x21), "nrm": attrs.get(6), "tri": tri, "info": sec})
+        out.append({"pos": attrs.get(1)[:, :3], "uv": attrs.get(0x21), "nrm": attrs.get(6), "tan": attrs.get(7),
+                    "tri": tri, "info": sec})
     return out

@@ -62,7 +62,10 @@ def load_nhl24(name=NHL24_JERSEY):
         for k in range(3):
             np.add.at(nrm, T[:, k], fn)
         nrm = _unit(nrm)
-    return {"pos": pos, "uv": s["uv"][:, :2].astype(np.float64), "tri": s["tri"], "nrm": nrm}
+    out = {"pos": pos, "uv": s["uv"][:, :2].astype(np.float64), "tri": s["tri"], "nrm": nrm}
+    if s.get("tan") is not None:  # касательная NHL 24 (для сборки сеток Legacy из NHL 24 — fb.jersey_mesh)
+        out["tan24"] = s["tan"][:, :3].astype(np.float64)
+    return out
 
 
 def load_legacy(rel=LEGACY_JERSEY):
