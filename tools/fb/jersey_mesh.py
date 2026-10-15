@@ -40,7 +40,7 @@ N24_GOALIE = "content/character/skater/goalie/jersey/adidas/components/goalie_je
 LEG = "rendering/jersey/jersey_{g}_{s}_{h}_{t}_{p}_{lod}.rx2"
 TUCKS = ("notuck", "fulltuck", "lefttuck", "righttuck")
 SIZES = ("large", "small")
-LODS = {2: 0, 0: 1, 3: 2}          # детализация Legacy (файл _L) ← lod NHL 24
+LODS = {2: 0, 0: 1, 3: 2}          # детализация Legacy (файл _L) ← lod NHL 24; ближняя (_2) — первой
 STYLE_SRC, STYLE_DST = 1, 0        # кости — со стиля 1, пишем в слот стиля 0
 SKATER_T, SKATER_P = range(4), range(2)
 GOALIE_H = range(2)                # рука ловушки
@@ -109,6 +109,162 @@ def variant_map():
     return out
 
 
+# ---------------------------------------------------------------- форма — по свитеру Edge, ворот — NHL 24
+
+# Замечания пользователя к пилоту (15.10): у adidas «приталенность» (полуширина 0,246 м на 1,10 → 0,223 на 1,30 против
+# прямых 0,241 у Edge), спина площе на 1–2 см, у вратаря плечи «странные» (свитер NHL 24 на 6,5 см выше вратарского
+# Legacy). Поэтому тело свитера садится на поверхность Edge того же варианта (ближайшая точка той же стороны), а ворот
+# (до NECK_KEEP[0] от края горловины, переход к NECK_KEEP[1]) сохраняет форму NHL 24 и сдвигается целиком вместе с
+# окружением (гармоническое продолжение сдвигов). Вершины-дубли по швам UV сдвигаются одинаково (сварка).
+NECK_KEEP = (0.035, 0.07)        # полоса ворота; шире — у вратаря в неё попадал верх плеча (+3 см к Edge)
+SIDE_DOT = 0.3                     # нормаль ближайшей точки — той же стороны ткани
+MAX_D = 0.08                       # дальше — сдвиг не берётся, а продолжается от соседей (внутренние кромки)
+
+
+def weld(pos, eps=1e-5):
+    """Вершины с одной позицией (дубли по швам UV и нормалей) → номер узла; -> (узел вершины, первая вершина узла)."""
+    key = np.round(pos / eps).astype(np.int64)
+    _, first, inv = np.unique(key, axis=0, return_index=True, return_inverse=True)
+    return inv.ravel(), first
+
+
+def adjacency(tri_g, n):
+    import scipy.sparse as sp
+    e = np.concatenate([tri_g[:, [0, 1]], tri_g[:, [1, 2]], tri_g[:, [2, 0]]])
+    e = np.concatenate([e, e[:, ::-1]])
+    A = sp.coo_matrix((np.ones(len(e)), (e[:, 0], e[:, 1])), shape=(n, n)).tocsr()
+    A.data[:] = 1.0
+    return A
+
+
+def harmonic(A, val, known):
+    """Значения в неизвестных узлах — гармоническое продолжение известных по графу сетки."""
+    import scipy.sparse as sp
+    import scipy.sparse.linalg as sla
+    u = ~known
+    if not u.any():
+        return val.copy()
+    L = sp.diags(np.asarray(A.sum(1)).ravel()) - A
+    Luu = (L[u][:, u] + sp.identity(int(u.sum())) * 1e-9).tocsc()
+    rhs = -(L[u][:, known] @ val[known])
+    out = val.copy()
+    out[u] = np.stack([sla.spsolve(Luu, rhs[:, c]) for c in range(val.shape[1])], -1)
+    return out
+
+
+def boundary_nodes(tri_g):
+    from collections import Counter
+    c = Counter()
+    for a, b, d in tri_g:
+        for e in ((a, b), (b, d), (d, a)):
+            c[(min(e), max(e))] += 1
+    return np.array(sorted({v for e, k in c.items() if k == 1 for v in e}), dtype=np.int64)
+
+
+def node_normals(pos, tri_g, n):
+    fn = np.cross(pos[tri_g[:, 1]] - pos[tri_g[:, 0]], pos[tri_g[:, 2]] - pos[tri_g[:, 0]])
+    out = np.zeros((n, 3))
+    for k in range(3):
+        np.add.at(out, tri_g[:, k], fn)
+    return kit3d._unit(out)
+
+
+def rotate_onto(v, a, b):
+    """Повернуть векторы v поворотом, переводящим единичные a в b (Родриг, построчно)."""
+    axis = np.cross(a, b)
+    s = np.linalg.norm(axis, axis=1, keepdims=True)
+    c = (a * b).sum(1, keepdims=True)
+    k = axis / np.maximum(s, 1e-12)
+    return v * c + np.cross(k, v) * s + k * (k * v).sum(1, keepdims=True) * (1 - c)
+
+
+def neck_ring(pos, tri):
+    """Узлы края горловины (граница сетки выше 1,45 м у оси) и их середина. -> (позиции сваренной сетки, кромка, середина)."""
+    g, first = weld(pos)
+    P = pos[first]
+    Tg = g[tri]
+    bnd = boundary_nodes(Tg)
+    neck = bnd[(P[bnd, 1] > 1.45) & (np.abs(P[bnd, 0]) < 0.2)]
+    return P, neck, P[neck].mean(0)
+
+
+def morph_to(n24, src, t_neck=None):
+    """Сетка NHL 24 с телом по поверхности src (свитер Legacy того же варианта) и воротом NHL 24. -> (сетка, сводка).
+
+    Тело: сдвиг к ближайшей точке src той же стороны; где её нет (внутренние кромки) или где сдвиг выворачивает
+    треугольники (подмышки: рядом и рукав, и бок) — продолжение сдвига от соседей. Ворот (до NECK_KEEP[0] от края
+    горловины) — целиком на разницу середин горловин src и NHL 24 (у вратаря NHL 24 горловина выше ≈ на 5 см),
+    переход к телу — гармонический до NECK_KEEP[1]."""
+    from scipy.spatial import cKDTree
+    g, first = weld(n24["pos"])
+    n = len(first)
+    P = n24["pos"][first]
+    Tg = g[n24["tri"]]
+    N0 = node_normals(P, Tg, n)
+    A = adjacency(Tg, n)
+    t, b, dist = kit3d.project(P, N0, src)
+    T = src["tri"][t]
+    q = (b[:, :, None] * src["pos"][T]).sum(1)
+    nq = kit3d._unit((b[:, :, None] * src["nrm"][T]).sum(1))
+    ok = (dist < MAX_D) & ((nq * N0).sum(1) > SIDE_DOT)
+    bnd = boundary_nodes(Tg)
+    neck = bnd[(P[bnd, 1] > 1.45) & (np.abs(P[bnd, 0]) < 0.2)]
+    dn = cKDTree(P[neck]).query(P)[0]
+    s = np.clip((dn - NECK_KEEP[0]) / (NECK_KEEP[1] - NECK_KEEP[0]), 0, 1)
+    k = 1.0 - s * s * (3 - 2 * s)
+    if t_neck is None:                                 # у дальних детализаций — сдвиг ближней (ворот не «прыгает»)
+        _, _, c_src = neck_ring(src["pos"], src["tri"])
+        t_neck = c_src - P[neck].mean(0)
+        t_neck[0] = 0.0                                # по x не двигаем: обе горловины по оси
+    fn0 = np.cross(P[Tg[:, 1]] - P[Tg[:, 0]], P[Tg[:, 2]] - P[Tg[:, 0]])
+    known = ok.copy()
+    collar_in, collar_out = k > 0.999, k < 1e-3
+    rounds = 0
+    for rounds in range(1, 9):
+        d_full = harmonic(A, q - P, known)
+        vals = d_full.copy()
+        vals[collar_in] = t_neck
+        D = harmonic(A, vals, collar_in | collar_out)
+        deg = np.asarray(A.sum(1)).ravel()[:, None]
+        for _ in range(3):  # шум ближайшей точки на складках
+            D = 0.5 * D + 0.5 * (A @ D) / np.maximum(deg, 1)
+        P2 = P + D
+        fn1 = np.cross(P2[Tg[:, 1]] - P2[Tg[:, 0]], P2[Tg[:, 2]] - P2[Tg[:, 0]])
+        flipped = (fn0 * fn1).sum(1) <= 0
+        if not flipped.any():
+            break
+        bad = np.zeros(n, bool)
+        bad[Tg[flipped].ravel()] = True
+        bad |= (A @ bad.astype(float)) > 0             # и соседи
+        known &= ~bad
+    # что осталось (складка подмышки: рукав и бок тянутся в разные стороны) — разгладить сдвиг вокруг выворотов
+    relax = 0
+    while flipped.any() and relax < 200:
+        relax += 1
+        reg = np.zeros(n, bool)
+        reg[Tg[flipped].ravel()] = True
+        for _ in range(3):
+            reg |= (A @ reg.astype(float)) > 0
+        reg &= ~collar_in
+        avg = (A @ D) / np.maximum(deg, 1)
+        D[reg] = 0.3 * D[reg] + 0.7 * avg[reg]
+        P2 = P + D
+        fn1 = np.cross(P2[Tg[:, 1]] - P2[Tg[:, 0]], P2[Tg[:, 2]] - P2[Tg[:, 0]])
+        flipped = (fn0 * fn1).sum(1) <= 0
+    N1 = node_normals(P2, Tg, n)
+    out = dict(n24)
+    out["pos"] = P2[g]
+    out["nrm"] = kit3d._unit(rotate_onto(kit3d._unit(n24["nrm"]), N0[g], N1[g]))
+    out.pop("_tan", None)
+    out.pop("_bit", None)
+    shift = np.linalg.norm(D, axis=1)
+    out["_t_neck"] = t_neck
+    info = {"ok": float(known.mean()), "shift_mean_cm": float(shift.mean() * 100),
+            "neck_shift_y_cm": float(t_neck[1] * 100), "neck_shift_z_cm": float(t_neck[2] * 100),
+            "flip_rounds": rounds, "relax": relax, "flipped_left": int(flipped.sum())}
+    return out, info
+
+
 # ---------------------------------------------------------------- кости и веса
 
 def skin_from(dst, src):
@@ -143,11 +299,19 @@ def strips(tris):
     return idx
 
 
-def build_one(n24, skin_src_rel, dst_rel):
-    """Сетка dst_rel (файл Legacy слота, его секции и шейдер) с геометрией n24; кости — с skin_src_rel."""
+def build_one(n24, skin_src_rel, dst_rel, morph=True, t_neck=None):
+    """Сетка dst_rel (файл Legacy слота, его секции и шейдер) с развёрткой и воротом n24, телом по skin_src_rel
+    (morph_to); кости — с skin_src_rel, у дублей по швам UV — одинаковые (по сваренным узлам)."""
     _, src = legacy(skin_src_rel)
     base = rw.Mesh.game(dst_rel)
-    bones, weights, dist = skin_from(n24, src)
+    minfo = {}
+    if morph:
+        n24, minfo = morph_to(n24, src, t_neck)
+    g, first = weld(n24["pos"])
+    Tg = g[n24["tri"]]
+    nodes = {"pos": n24["pos"][first], "nrm": node_normals(n24["pos"][first], Tg, len(first))}
+    nb, nw, nd = skin_from(nodes, src)
+    bones, weights, dist = [nb[i] for i in g], [nw[i] for i in g], nd[g]
     tv, _ = kit3d.vertex_tangents(n24)
     P, N, UV, T = n24["pos"], kit3d._unit(n24["nrm"]), np.clip(n24["uv"], 0.0, 1.0), n24["tri"]
     # обход — как у EA в NHL 24 (у навыпуск 100 % треугольников наружу, как у Legacy); у заправленных 11–16
@@ -167,8 +331,12 @@ def build_one(n24, skin_src_rel, dst_rel):
     data = tmp.bytes()
     chk = rw.Mesh(data, dst_rel)
     assert chk.nv == len(P) and len(chk.tris) == len(T), (chk.nv, len(chk.tris))
-    return data, {"nv": chk.nv, "tris": len(chk.tris), "against_nrm": int(flip.sum()), "skin_d_mean": float(dist.mean()),
-                  "skin_d95": float(np.percentile(dist, 95))}
+    if morph:
+        minfo["_t_neck"] = n24["_t_neck"]
+    return data, {"nv": chk.nv, "tris": len(chk.tris), "against_nrm": int(flip.sum()),
+                  "skin_d_mean_cm": round(float(dist.mean()) * 100, 2),
+                  "skin_d95_cm": round(float(np.percentile(dist, 95)) * 100, 2),
+                  **{k: (v if k.startswith("_") else round(v, 3)) for k, v in minfo.items()}}
 
 
 def write(out_dir, rel, data):
@@ -193,16 +361,20 @@ def cmd_build(a):
     vm = variant_map()
     n = 0
     for (t, p), (_, _, tuck, size) in sorted(vm.items()):
+        tn = None
         for lod, l24 in LODS.items():
             n24 = nhl24(N24.format(tuck=tuck, size=size, lod=l24))
-            data, info = build_one(n24, skater_rel(t, p, 2, STYLE_SRC), skater_rel(t, p, lod, STYLE_DST))
+            data, info = build_one(n24, skater_rel(t, p, 2, STYLE_SRC), skater_rel(t, p, lod, STYLE_DST), t_neck=tn)
+            tn = info.pop("_t_neck")
             write(a.out, skater_rel(t, p, lod, STYLE_DST), data)
             n += 1
             print(f"{skater_rel(t, p, lod, STYLE_DST)} ← {tuck}_{size} lod{l24}: {info}")
     for h in GOALIE_H:
+        tn = None
         for lod, l24 in LODS.items():
             n24 = nhl24(N24_GOALIE.format(lod=l24))
-            data, info = build_one(n24, goalie_rel(h, 2, STYLE_SRC), goalie_rel(h, lod, STYLE_DST))
+            data, info = build_one(n24, goalie_rel(h, 2, STYLE_SRC), goalie_rel(h, lod, STYLE_DST), t_neck=tn)
+            tn = info.pop("_t_neck")
             write(a.out, goalie_rel(h, lod, STYLE_DST), data)
             n += 1
             print(f"{goalie_rel(h, lod, STYLE_DST)} ← goalie lod{l24}: {info}")
@@ -340,6 +512,94 @@ def name_map(leg_png, leg_d, dst_d, size=256):
     return out, rects, up_ok
 
 
+SLEEVE_ZONES = (2, 3)              # номера на рукавах (у EA — у локтя: центр на |x| 0,40 м при плече 0,21 и локте 0,43)
+SLEEVE_UP_CM = 8.0                 # пользователь (15.10): у adidas номер — ближе к плечевому суставу
+# Фамилия (зона 0) — пользователь (15.10, после теста пилота): «слишком близко к номерам, слишком большие буквы,
+# слишком большое расстояние между буквами» → зона меньше (ширина, высота — доли размера EA) и выше на NAME_UP_CM.
+NAME_ZONE, NAME_SCALE, NAME_UP_CM = 0, (0.75, 0.8), 2.0  # разрядка — главное (игра, похоже, раскладывает буквы по ширине зоны)
+
+
+def uv_jacobian(m, tri, size):
+    """dP/d(пиксель развёртки size²) треугольника tri: 3×2 (столбцы — по u и по v)."""
+    T = m["tri"][tri]
+    P, U = m["pos"][T], m["uv"][T] * size
+    E = np.stack([P[1] - P[0], P[2] - P[0]], 1)
+    D = np.array([[U[1, 0] - U[0, 0], U[2, 0] - U[0, 0]], [U[1, 1] - U[0, 1], U[2, 1] - U[0, 1]]])
+    return E @ np.linalg.inv(D)
+
+
+def name_map_cm(leg_png, leg_d, dst_d, size=256, sleeve_up_cm=SLEEVE_UP_CM, grid=5):
+    """Карта мест номера/фамилии в развёртке dst с размерами зон в сантиметрах — как у Legacy.
+
+    Сетка grid×grid точек внутри зоны Legacy (у рукавов — сдвинутая вдоль руки к плечу на sleeve_up_cm) → точки
+    свитера Legacy → ближайшие точки dst → их UV; по парам — аффинное соответствие пикселей Legacy → пикселей dst
+    (наименьшие квадраты), зона dst — образ прямоугольника Legacy (рамка параллелограмма). Без раздувания рамки, как у
+    переноса тексель-в-тексель (фамилия была на 32 % выше), и без шума якобиана одного треугольника.
+    -> (RGBA, {зона: прямоугольник}, {зона: сводка})."""
+    src = np.asarray(Image.open(leg_png).convert("RGBA"))
+    tid, bar = kit3d.raster_uv(leg_d, size)
+    tid_d, _ = kit3d.raster_uv(dst_d, size)
+    out = np.full((size, size, 4), 255, np.uint8)
+    rects, info = {}, {}
+    LP, LT, LN = leg_d["pos"], leg_d["tri"], leg_d["nrm"]
+
+    def on_leg(xs, ys):
+        ix = np.clip(xs.astype(int), 0, size - 1)
+        iy = np.clip(ys.astype(int), 0, size - 1)
+        t = tid[iy, ix]
+        ok = t >= 0
+        bb = bar[iy[ok], ix[ok]]
+        T = LT[t[ok]]
+        return ok, (bb[:, :, None] * LP[T]).sum(1), kit3d._unit((bb[:, :, None] * LN[T]).sum(1)), t[ok]
+
+    for z in sorted(set(src[..., 2][src[..., 2] < 255].tolist())):
+        ys, xs = np.nonzero(src[..., 2] == z)
+        x0, x1, y0, y1 = xs.min(), xs.max() + 1, ys.min(), ys.max() + 1
+        w, h = x1 - x0, y1 - y0
+        off = np.zeros(2)
+        if z in SLEEVE_ZONES and sleeve_up_cm:
+            # вдоль руки — ось u зоны (у EA так у обоих рукавов); к плечу — туда, где |x| меньше
+            cx, cy = np.array([(x0 + x1) / 2.0]), np.array([(y0 + y1) / 2.0])
+            _, pc, _, tc = on_leg(cx, cy)
+            Jl = uv_jacobian(leg_d, tc[0], size)
+            du = 1.0 if abs((pc[0] + Jl[:, 0])[0]) < abs(pc[0][0]) else -1.0
+            off = np.array([du * sleeve_up_cm / 100.0 / np.linalg.norm(Jl[:, 0]), 0.0])
+        if z == NAME_ZONE and NAME_UP_CM:
+            # вверх по свитеру — вдоль v зоны, туда, где y точки свитера больше
+            cx, cy = np.array([(x0 + x1) / 2.0]), np.array([(y0 + y1) / 2.0])
+            _, pc, _, tc = on_leg(cx, cy)
+            Jl = uv_jacobian(leg_d, tc[0], size)
+            dv = 1.0 if (pc[0] + Jl[:, 1])[1] > pc[0][1] else -1.0
+            off = np.array([0.0, dv * NAME_UP_CM / 100.0 / np.linalg.norm(Jl[:, 1])])
+        gx, gy = np.meshgrid(np.linspace(x0 + 0.5, x1 - 0.5, grid), np.linspace(y0 + 0.5, y1 - 0.5, grid))
+        gx, gy = gx.ravel() + off[0], gy.ravel() + off[1]
+        ok, p, nrm, tl = on_leg(gx, gy)
+        t2, b2, d2 = kit3d.project(p, nrm, dst_d)
+        uvd = (b2[:, :, None] * dst_d["uv"][dst_d["tri"][t2]]).sum(1) * size
+        X = np.stack([gx[ok], gy[ok], np.ones(ok.sum())], 1)
+        M, *_ = np.linalg.lstsq(X, uvd, rcond=None)       # 3×2: [x, y, 1] Legacy → (u, v) dst, пиксели
+        corners = np.array([[x0, y0, 1], [x1, y0, 1], [x0, y1, 1], [x1, y1, 1]], float)
+        if z == NAME_ZONE:                              # меньше — от центра зоны
+            cc = np.array([(x0 + x1) / 2.0, (y0 + y1) / 2.0])
+            corners[:, :2] = cc + (corners[:, :2] - cc) * np.array(NAME_SCALE)
+        corners[:, :2] += off
+        cd = corners @ M
+        rx0, ry0 = int(round(cd[:, 0].min())), int(round(cd[:, 1].min()))
+        rx1, ry1 = int(round(cd[:, 0].max())) - 1, int(round(cd[:, 1].max())) - 1
+        rx0, ry0, rx1, ry1 = max(rx0, 0), max(ry0, 0), min(rx1, size - 1), min(ry1, size - 1)
+        out[ry0:ry1 + 1, rx0:rx1 + 1] = (255, 255, z, 255)
+        rects[z] = (rx0, ry0, rx1, ry1)
+        cover = float((tid_d[ry0:ry1 + 1, rx0:rx1 + 1] >= 0).mean())
+        Jl = uv_jacobian(leg_d, tl[len(tl) // 2], size)
+        res = np.abs(X @ M - uvd).max()
+        info[z] = {"legacy_px": (int(w), int(h)),
+                   "cm": (round(float(w * np.linalg.norm(Jl[:, 0]) * 100), 1), round(float(h * np.linalg.norm(Jl[:, 1]) * 100), 1)),
+                   "dst_px": (rx1 - rx0 + 1, ry1 - ry0 + 1), "scale": (round(float(M[0, 0]), 3), round(float(M[1, 1]), 3)),
+                   "shear": (round(float(M[1, 0]), 3), round(float(M[0, 1]), 3)), "fit_err_px": round(float(res), 2),
+                   "on_mesh": round(cover, 3), "dist_cm": round(float(d2.mean()) * 100, 2)}
+    return out, rects, info
+
+
 def zone_overlay(tex, nm_rgba, alpha=0.6):
     """Текстура с зонами карты номеров поверх (красным; размер карты → размер текстуры) — для проверки на 3D."""
     H, W = tex.shape[:2]
@@ -348,6 +608,48 @@ def zone_overlay(tex, nm_rgba, alpha=0.6):
     out = tex[..., :3].astype(np.float64).copy()
     out[m] = out[m] * (1 - alpha) + np.array([255.0, 30.0, 30.0]) * alpha
     return out
+
+
+# Нашивки шире, чем надо (пользователь, 15.10: «логотип в ширину растянут», у вратаря — сильнее): герб PIT
+# спереди, ширина/высота по хорде (вид спереди) — у EA на Edge 1,06; NHL 24 на своей сетке — 1,18; на сетке с телом
+# Edge — 1,26 (грудь площе), у вратаря — 1,25. Поэтому нашивки (готовый свитер минус основа без нашивок) кладутся на
+# основу сжатыми по u вокруг своей середины: DECAL_SQUEEZE = 1,06 / 1,26.
+DECAL_SQUEEZE = 0.84
+DECAL_DIFF = 60                    # порог «нашивка ≠ основа» (сумма |ΔRGB|)
+DECAL_MIN_PX = 40                  # меньше — шум сжатия, не нашивка (2048²)
+
+
+def squeeze_decals(color, base, layers, f=DECAL_SQUEEZE):
+    """Нашивки (связные участки color ≠ base, с заливкой дыр) — на основу, сжатые по u в f раз от своей середины.
+    layers — [(готовый слой, слой основы)] той же раскладки (цвет, рельеф): правка одна на все. -> (слои, сводка)."""
+    from scipy import ndimage
+    diff = np.abs(color.astype(np.int32) - base.astype(np.int32)).sum(-1) > DECAL_DIFF
+    diff = ndimage.binary_closing(diff, iterations=2)
+    # близкие куски (детали герба, логотип и надпись спонсора) — одна нашивка, сжатие от общей середины
+    lab, n = ndimage.label(ndimage.binary_dilation(diff, iterations=8))
+    outs = [b.astype(np.float64).copy() for _, b in layers]
+    info = []
+    for i, sl in enumerate(ndimage.find_objects(lab), start=1):
+        m = ndimage.binary_fill_holes((lab[sl] == i) & diff[sl])
+        if m.sum() < DECAL_MIN_PX:
+            continue
+        ys, xs = sl
+        y0, y1, x0, x1 = ys.start, ys.stop, xs.start, xs.stop
+        w = x1 - x0
+        if y1 - y0 < 4 or w > 12 * (y1 - y0):        # полосы и линии шва — не нашивки
+            continue
+        nw = max(1, int(round(w * f)))
+        nx0 = x0 + (w - nw) // 2
+        mm = np.asarray(Image.fromarray((ndimage.binary_dilation(m, iterations=1) * 255).astype(np.uint8))
+                        .resize((nw, y1 - y0), Image.BILINEAR)).astype(np.float64)[..., None] / 255.0
+        for (full, _), out in zip(layers, outs):
+            crop = full[y0:y1, x0:x1].astype(np.float32)
+            sq = np.stack([np.asarray(Image.fromarray(crop[..., c]).resize((nw, y1 - y0), Image.LANCZOS))
+                           for c in range(crop.shape[-1])], -1).astype(np.float64)
+            region = out[y0:y1, nx0:nx0 + nw]
+            out[y0:y1, nx0:nx0 + nw] = region * (1 - mm) + sq * mm
+        info.append((int(x0), int(y0), int(w), int(y1 - y0)))
+    return [np.clip(o, 0, 255).astype(np.uint8) for o in outs], info
 
 
 def cmd_kit(a):
@@ -364,20 +666,34 @@ def cmd_kit(a):
         if not os.path.exists(os.path.join(unpack(kit), "kit.json")):
             subprocess.run([sys.executable, os.path.join(REPO, "tools", "kitpaint.py"), "--game", "legacy", "unpack",
                             kit, unpack(kit)], check=True, capture_output=True)
-    # свитер: цвет и рельеф NHL 24 как есть (2048 → 1024), блик — ровный, как ткань Legacy
-    cm = Image.open(n24_tex(a.club, a.kit, "color")).convert("RGB").resize((1024, 1024), Image.LANCZOS)
-    cm.convert("RGBA").save(os.path.join(d, "jersey_cm.png"))
+    # свитер: цвет и рельеф NHL 24 (2048 → 1024), нашивки — сжатые по ширине (squeeze_decals; если у комплекта нет
+    # основы без нашивок — как есть); блик — ровный, как ткань Legacy
     from .fonts import normal_map
-    Image.fromarray(normal_map(n24_tex(a.club, a.kit, "normal"), 1024)).save(os.path.join(d, "jersey_nm.png"))
+    rgb = lambda p: np.asarray(Image.open(p).convert("RGB"))  # noqa: E731
+    color, normal = rgb(n24_tex(a.club, a.kit, "color")), rgb(n24_tex(a.club, a.kit, "normal"))
+    if os.path.exists(n24_tex(a.club, a.kit, "base_color")) and a.squeeze < 1.0:
+        base, base_n = rgb(n24_tex(a.club, a.kit, "base_color")), rgb(n24_tex(a.club, a.kit, "base_normal"))
+        (color, normal), dinfo = squeeze_decals(color, base, [(color, base), (normal, base_n)], a.squeeze)
+        print(f"нашивок сжато по ширине ×{a.squeeze}: {len(dinfo)} — {dinfo}")
+    Image.fromarray(color).resize((1024, 1024), Image.LANCZOS).convert("RGBA").save(os.path.join(d, "jersey_cm.png"))
+    tmp_n = os.path.join(d, "_normal_2048.png")
+    Image.fromarray(normal).save(tmp_n)
+    Image.fromarray(normal_map(tmp_n, 1024)).save(os.path.join(d, "jersey_nm.png"))
+    os.remove(tmp_n)
     sm = np.zeros((1024, 1024, 4), np.uint8)
     sm[..., :3], sm[..., 3] = LEG_SM, 255
     Image.fromarray(sm).save(os.path.join(d, "jersey_sm.png"))
     # карта номеров — из комплекта Legacy (развёртка Edge) в развёртку NHL 24
     _, leg = legacy(skater_rel(0, 1, 2, STYLE_SRC))
-    dst = nhl24(N24.format(tuck="notuck", size="large", lod=0))
-    nmap, rects, up_ok = name_map(os.path.join(unpack(a.legacy), "name_cm.png"), leg, dst)
+    built = os.path.join(a.dst, *skater_rel(0, 1, 2, STYLE_DST).split("/"))   # собранная сетка (build) — с телом Edge
+    bm = rw.Mesh.load(built)
+    dst = {"pos": np.array([p[:3] for p in bm.pos]), "uv": np.array(bm.uv), "tri": np.array(bm.tris),
+           "nrm": kit3d._unit(np.array(bm.nrm))}
+    nmap, rects, zinfo = name_map_cm(os.path.join(unpack(a.legacy), "name_cm.png"), leg, dst)
     Image.fromarray(nmap).save(os.path.join(d, "name_cm.png"))
-    print("зоны номеров (x0, y0, x1, y1 из 256):", rects, "вверх ок:", up_ok)
+    print("зоны номеров (x0, y0, x1, y1 из 256):", rects)
+    for z, v in zinfo.items():
+        print(f"  зона {z}: {v}")
     # шрифт NHL 24 (fb.kit_batch), шорты и гетры Legacy, меню и kit.json слота
     for f in ("font_cm", "font_nm", "font_sm"):
         shutil.copy2(os.path.join(a.font_dir, f + ".png"), os.path.join(d, f + ".png"))
@@ -429,6 +745,7 @@ def main():
     k.add_argument("--slot", required=True, help="номер слота стиля 0, куда собирать (0_23_0)")
     k.add_argument("--font-dir", required=True, help="папка шрифта NHL 24 из fb.kit_batch (out/kits/PIT_home)")
     k.add_argument("--dst", default=OUT)
+    k.add_argument("--squeeze", type=float, default=DECAL_SQUEEZE, help="сжатие нашивок по ширине (1 — как есть)")
     a = ap.parse_args()
     {"map": cmd_map, "build": cmd_build, "preview": cmd_preview, "kit": cmd_kit}[a.cmd](a)
 
