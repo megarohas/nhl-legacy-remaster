@@ -1,0 +1,44 @@
+# nhl13 - ReXGlue Recompiled Project
+#
+# SDK boilerplate lives in generated/rexglue.cmake.
+
+cmake_minimum_required(VERSION 3.25)
+project(nhl13 LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+include(generated/rexglue.cmake)
+
+# Sources
+set(NHL13_SOURCES
+    src/main.cpp
+    src/nhl13_imports.cpp
+    src/nhl13_crash.cpp
+    src/nhl13_input_lock.cpp
+    src/nhl13_year.cpp
+    src/nhl13_teams.cpp
+    src/nhl13_watch.cpp
+    src/nhl13_dbtrace.cpp
+    src/nhl13_team_sites.cpp
+    src/nhl13_heapguard.cpp
+    src/nhl13_composite.cpp
+    src/nhl13_fencewait.cpp
+)
+
+if(WIN32)
+    add_executable(nhl13 WIN32 ${NHL13_SOURCES})
+else()
+    add_executable(nhl13 ${NHL13_SOURCES})
+endif()
+
+rexglue_setup_target(nhl13 GPU_PLUGINS xenos)
+
+if(WIN32)
+    target_link_libraries(nhl13 PRIVATE dbghelp)  # стек в отчёте о падении
+    # nhl13_snap.exe — слепок памяти игры снаружи (src/nhl13_snap.cpp), кладётся рядом с nhl13.exe
+    add_executable(nhl13_snap src/nhl13_snap.cpp)
+    target_link_libraries(nhl13_snap PRIVATE dbghelp)
+    set_target_properties(nhl13_snap PROPERTIES RUNTIME_OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:nhl13>")
+    add_dependencies(nhl13 nhl13_snap)
+endif()

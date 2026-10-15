@@ -1,0 +1,98 @@
+# Настройки запуска порта (cvar'ы ReXGlue). build.cmd копирует этот файл в папку
+# сборки как nhl13.toml, если там ещё нет своего. Приоритет (include/rex/cvar.h, Source):
+# правки из окна F4 и консоли > командная строка --имя=значение > REX_* > этот файл >
+# умолчания. Файл читается только при старте; «Save to config» в F4 перезаписывает его
+# целиком (без комментариев). Настройки графики — docs/graphics-settings.md.
+#
+# Сборка port-ffx: порт против своего SDK (D3D12 + Vulkan, FSR 1 / CAS при выводе) —
+# docs/sdk-build.md. Это копия port/out/build/win-amd64-release/nhl13.toml: те же игра,
+# сейвы и кэш шейдеров, свой лог; scripts\build_port.cmd кладёт её как nhl13.toml.
+# Vulkan и FSR/CAS — закомментированные блоки в конце файла.
+
+# Рендер: плагин rexgpu-xenos (D3D12 на Windows).
+gpu_plugin = "xenos"
+# Флаги по опыту NHL 12/14/Legacy и 3 on 3 (ресерч 07.10.2026): с путём RTV матч у
+# соседей рисовался чёрным; readback_resolve=full — формы игроков (и в Xenia для
+# NHL 13); EA-игры читают нулевую страницу; недопустимые fetch-константы — как у Legacy.
+render_target_path_d3d12 = "rov"
+# "full" (синхронное чтение, точно, но с остановками) — тормоза: видеокарта ~3%, ~25 кадров.
+# "some" — копия только при промахе кэша (первый resolve с этим адресом); ~60 кадров.
+# Шлемы, перчатки, щитки игра собирает рендером в текстуру и дочитывает процессором — на
+# время такой сборки порт сам ставит "full" (nhl_composite_readback = true по умолчанию;
+# false — выключить для сравнения). Разбор: docs/graphics-settings.md, раздел (е).
+readback_resolve = "some"
+protect_zero = false
+gpu_allow_invalid_fetch_constants = true
+
+# Ввод через XInput, а не SDL: геймпад у пользователя — DualSense через DS4Windows
+# (виртуальный Xbox 360). С SDL лог полон циклов «отключён/подключён», а после
+# подмены DualSense → Xbox 360 процесс упал с повреждением кучи (0xC0000374) —
+# похоже на гонку в InputSystem SDK при подключении устройств (известна по 3 on 3).
+input_backend = "xinput"
+
+# Файлы игры: распакованная установка с диска (tools/svod.py).
+game_data_root = "S:/Claude/megarohas_nhl13/game/extracted/disc"
+
+# Сейвы и кэш (в т. ч. раздел cache:) — локально, а не в «Документах» OneDrive.
+user_data_root = "S:/Claude/megarohas_nhl13/game/userdata"
+
+# update: (апдейт TU2) не подключаем: его patch.big рассчитан на пропатченный
+# default.xex, а порт собран с диска.
+# update_data_root = "S:/Claude/megarohas_nhl13/game/extracted/tu2"
+
+# Текущий сезон — его первый год (2026 = сезон 2026/27). Игра считает «сейчас» от
+# зашитого 2012: дата «Играть сейчас», год новой франшизы, номера сезонов, возраст
+# проспектов; порт сдвигает все такие места (src/nhl13_year.cpp). 2012 — как в
+# оригинале. Франшизу грузить с тем же season_year, с которым она создана.
+season_year = 2026
+
+# НХЛ во франшизе: 30 — как в оригинале, 32 — строки 30/31 базы тоже клубы НХЛ
+# (база от tools/nhl32.py). src/nhl13_teams.cpp, docs/teams.md.
+nhl_teams = 32
+
+# Лог каждого запуска (и из ярлыка) — сюда, перезаписывается при старте.
+log_file = "S:/Claude/megarohas_nhl13/port/out/game-ffx.log"
+
+# Сторож кучи гостя (src/nhl13_heapguard.cpp) — для разбора порчи памяти; здесь выключен ради скорости.
+nhl_heap_guard = false
+
+# Масштаб внутреннего разрешения (1–8, только с перезапуском): 2 = 2560×1440 вместо 1280×720.
+resolution_scale = 1
+
+# Анизотропная фильтрация: 5 = 16x (по умолчанию 3 = 4x); меняется и на лету (F4).
+anisotropic_override = 5
+
+# ─── Только в этой сборке: свой SDK (docs/sdk-build.md) ───────────────────────────────
+
+# Vulkan вместо D3D12. gpu_backend — патч 0003 к SDK (в ночной сборке выбора нет):
+# "any" (по умолчанию; это D3D12, раз он вкомпилирован) | "d3d12" | "vulkan"; только при
+# старте. Путь EDRAM на Vulkan — свой cvar (render_target_path_d3d12 там не действует):
+# "fsi" (fragment shader interlock — аналог rov; у NHL Legacy с любым другим значением матч
+# был чёрным) или "" (по умолчанию: хостовые render target'ы — аналог rtv). readback_resolve,
+# anisotropic_override, resolution_scale и остальные общие флаги действуют и на Vulkan.
+# Кэша пайплайнов Vulkan ещё нет — первый запуск с подвисаниями на компиляции шейдеров.
+# gpu_backend = "vulkan"
+# render_target_path_vulkan = "fsi"
+# Разрывы на Vulkan: по умолчанию immediate (как tearing на D3D12); false — mailbox без разрывов.
+# vulkan_allow_present_mode_immediate = false
+# resolution_scale на Vulkan — не выше 2: у Legacy с 3 буфер resolve > 4 ГБ, экипировка чёрная.
+
+# FSR 1 / CAS при выводе кадра — одинаково на D3D12 и Vulkan; всё только с перезапуском.
+# present_effect: "bilinear" (по умолчанию, как сейчас) | "cas" | "fsr" | "fsr2" | "fsr3".
+#   fsr — окно больше кадра игры: EASU (до 2× по оси за проход) + RCAS; окно не больше
+#         (кадр ×2 через resolution_scale на экране 1080p/1440p) — то же, что cas.
+#   cas — резкость CAS, масштаб до 2× по оси, дальше билинейно.
+#   fsr2/fsr3 — временные, без векторов движения игры смысла нет; здесь без рантайма
+#         FidelityFX: один проход EASU + RCAS (хуже, чем fsr) и WARN в логе.
+# present_effect = "fsr"
+# Резкость RCAS (fsr с апскейлом): 0.0–2.0 стопа, меньше — резче; по умолчанию 0.2.
+# present_fsr_sharpness_reduction = 0.2
+# Доп. резкость CAS (cas, fsr без апскейла): 0.0–1.0; по умолчанию 0.0.
+# present_cas_additional_sharpness = 0.0
+# Предел проходов EASU: 1–4, по умолчанию 4 (720p → 1080p/1440p — 1 проход, → 4K — 2).
+# present_fsr_max_upsampling_passes = 4
+# Режим качества — только для fsr2/fsr3: "auto" (по умолчанию) | "nativeaa" | "quality" |
+# "balanced" | "performance" | "ultra_performance".
+# present_fsr_quality_mode = "auto"
+# Дизеринг последнего прохода (против полос в тёмных градиентах), с fsr/cas тоже.
+# present_dither = true
