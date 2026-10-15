@@ -1,5 +1,6 @@
 #!/bin/bash
-# Папка для друзей: nhl-legacy-port/dist/NHL Legacy — порт без файлов игры (docs/legacy-port.md).
+# Папка для друзей: nhl-legacy-port/dist/NHL Legacy Remaster vX.Y.Z (версия — файл VERSION) — порт без файлов игры
+# (docs/legacy-port.md); exe с иконкой (tools/make_icon.py + tools/set_exe_icon.py) и лаунчер.
 #   [BUILD=папка] [AHL32=1] bash nhl-legacy-port/scripts/make_dist.sh [--mods]   # AHL32=1 — моды с базой «АХЛ на 32»
 # Берёт Release-сборку (out/build/win-amd64-release: свой SDK, D3D12 + Vulkan), DLL рантайма MSVC
 # (app-local, из VC Redist BuildTools), шаблоны dist-template/ (nhllegacy.toml — пути пустые:
@@ -8,12 +9,20 @@
 set -euo pipefail
 P=$(cd "$(dirname "$0")/.." && pwd)
 B="${BUILD:-$P/out/build/win-amd64-release}"   # BUILD=папка сборки (по умолчанию — рабочая)
-D="$P/dist/NHL Legacy"
+V=$(tr -d '
+ ' < "$P/../VERSION" 2>/dev/null || echo dev)
+D="$P/dist/NHL Legacy Remaster v$V"
 CRT="/c/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Redist/MSVC/14.44.35112/x64/Microsoft.VC143.CRT"
 [ -f "$B/nhllegacy.exe" ] || { echo "нет сборки $B/nhllegacy.exe — build.cmd"; exit 1; }
-rm -rf "$D"
+# та же версия уже собиралась — прежнюю папку отодвигаем рядом (не удаляем)
+[ -e "$D" ] && mv "$D" "$D.prev-$(date +%Y%m%d-%H%M)"
 mkdir -p "$D/game" "$D/userdata/cache/guest"
 cp "$B/nhllegacy.exe" "$B/nhllegacy_snap.exe" "$B/rexruntime.dll" "$B/rexgpu-xenos.dll" "$D/"
+L="$B/nhllegacy_launcher.exe"; [ -f "$L" ] || L="$P/out/launcher/nhllegacy_launcher.exe"
+[ -f "$L" ] && cp "$L" "$D/" || echo "нет лаунчера — nhl-legacy-port/launcher/build.cmd"
+ICO="$P/launcher/icon/nhllegacy.ico"
+if [ -f "$ICO" ]; then python "$P/../tools/set_exe_icon.py" "$D/nhllegacy.exe" "$ICO" --no-backup; else
+  echo "нет иконки — python tools/make_icon.py"; fi
 for dll in msvcp140.dll msvcp140_atomic_wait.dll vcruntime140.dll vcruntime140_1.dll; do
   cp "$CRT/$dll" "$D/"
 done

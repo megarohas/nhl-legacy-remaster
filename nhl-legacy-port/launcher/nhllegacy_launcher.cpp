@@ -33,6 +33,14 @@
 #include <string>
 #include <vector>
 
+// Версия проекта (файл VERSION) — build.cmd пишет nhl_version.h рядом с объектными файлами.
+#if __has_include("nhl_version.h")
+#include "nhl_version.h"
+#endif
+#ifndef NHL_VERSION
+#define NHL_VERSION L"dev"
+#endif
+
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "gdi32.lib")
 #pragma comment(lib, "comctl32.lib")
@@ -902,7 +910,7 @@ void Paint(HDC dc) {
   HGDIOBJ old = SelectObject(dc, g.font_title);
   SetTextColor(dc, kColHeaderText);
   RECT t = {S(20), S(8), client.right - S(20), S(40)};
-  DrawTextW(dc, L"NHL Legacy Remaster", -1, &t, DT_LEFT | DT_SINGLELINE | DT_NOPREFIX);
+  DrawTextW(dc, L"NHL Legacy Remaster  v" NHL_VERSION, -1, &t, DT_LEFT | DT_SINGLELINE | DT_NOPREFIX);
   SelectObject(dc, g.fonts[kFontNormal]);
   SetTextColor(dc, kColHeaderSub);
   RECT st = {S(20), S(38), client.right - S(20), S(58)};
@@ -1191,7 +1199,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
   wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
   wc.hbrBackground = g.br_bg;
   wc.lpszClassName = L"NhlLegacyLauncher";
-  wc.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
+  // Иконка из ресурсов exe (id 1, tools/make_icon.py → launcher/icon/nhllegacy.ico, build.cmd); нет — стандартная.
+  wc.hIcon = LoadIconW(inst, MAKEINTRESOURCEW(1));
+  if (!wc.hIcon) wc.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
+  wc.hIconSm = static_cast<HICON>(LoadImageW(inst, MAKEINTRESOURCEW(1), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
+                                             GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR));
   RegisterClassExW(&wc);
 
   const DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
@@ -1217,7 +1229,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
     x = GetSystemMetrics(SM_XVIRTUALSCREEN) - w - 200;
     y = GetSystemMetrics(SM_YVIRTUALSCREEN);
   }
-  HWND hwnd = CreateWindowExW(g.shot ? WS_EX_NOACTIVATE : 0, wc.lpszClassName, L"NHL Legacy — запуск", style, x, y,
+  HWND hwnd = CreateWindowExW(g.shot ? WS_EX_NOACTIVATE : 0, wc.lpszClassName, L"NHL Legacy Remaster v" NHL_VERSION L" — запуск", style, x, y,
                               w, h, nullptr, nullptr, inst, nullptr);
   if (!hwnd) return 1;
 

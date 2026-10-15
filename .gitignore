@@ -54,6 +54,7 @@ best_of_nhl/
 !/nhl-legacy-port/nhllegacy_*.json
 !/nhl-legacy-port/dist-template/
 !/nhl-legacy-port/launcher/
+/nhl-legacy-port/launcher/icon/
 !/nhl-legacy-port/nhllegacy.example.toml
 !/nhl-legacy-port/generated/
 /nhl-legacy-port/generated/*

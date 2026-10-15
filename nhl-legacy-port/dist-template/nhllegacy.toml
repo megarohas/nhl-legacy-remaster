@@ -76,3 +76,6 @@ present_effect = "bilinear"
 
 # Лог последнего запуска (рядом с exe) — пришлите его вместе с nhllegacy_crash.txt, если упало.
 log_file = "nhllegacy.log"
+
+# Новая франшиза и «Стань профи» — с настройками главного меню (правила, слайдеры, звук, видео), а не заводскими
+nhl_settings_from_profile = true

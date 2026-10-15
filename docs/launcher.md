@@ -67,3 +67,10 @@ MSVC из VS 2022 BuildTools, один файл `nhllegacy_launcher.cpp` → `nh
 С 12.10 — `nhl-legacy-port/out/build/win-amd64-release/nhllegacy_launcher.exe` рядом с его `nhllegacy.exe`. Ярлык
 «NHL Legacy» на рабочем столе пока ведёт на `nhllegacy.exe`; перенаправить его на лаунчер — по слову
 пользователя.
+
+## Иконка и версия (15.10.2026)
+
+- Иконка «NHL / LEGACY / REMASTER» — `python tools/make_icon.py` (шрифты из файлов игры пользователя →
+  `nhl-legacy-port/launcher/icon/nhllegacy.ico`, не в git). `build.cmd` лаунчера вшивает её ресурсом id 1, если файл
+  есть; в `nhllegacy.exe` — `python tools/set_exe_icon.py <exe>` (после сборки; `make_dist.sh` делает это сам).
+- Версия проекта из `VERSION` — в заголовке окна и шапке лаунчера (`build.cmd` пишет `nhl_version.h`).

@@ -1,4 +1,4 @@
-NHL Legacy Edition на ПК — свой порт (ReXGlue SDK), сборка megarohas
+NHL Legacy Remaster — NHL Legacy Edition на ПК (свой порт на ReXGlue SDK), сборка megarohas
 =====================================================================
 
 Что это: нативный порт NHL Legacy Edition (Xbox 360, 2015) на Windows — код игры
@@ -23,7 +23,9 @@ NHL Legacy Edition на ПК — свой порт (ReXGlue SDK), сборка m
        NHL Legacy\game\cache.big
        ...
    (или указать свою папку в nhllegacy.toml: game_data_root = "D:/Games/NHL Legacy").
-3. Запустить nhllegacy.exe. Первый запуск дольше: компилируются шейдеры.
+3. Запустить nhllegacy_launcher.exe — окно настроек (графика, разрешение, экран, лига, исправления), кнопка
+   «Играть». Можно и сразу nhllegacy.exe — тогда с настройками из nhllegacy.toml. Первый запуск дольше:
+   компилируются шейдеры.
 
 Управление
 ----------
