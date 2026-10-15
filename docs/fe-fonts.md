@@ -257,7 +257,7 @@ O C D Q квадратнее, чем у Bahnschrift, и не нужна разр
 ### Предел размера файла: в коде его нет
 
 Загрузчик шрифтов один и тот же в NHL 13 и Legacy (найден по строкам `Font File Buffer` и
-`FontsBuf` в образе, `legacy-port/strusers.py`):
+`FontsBuf` в образе, `legacy-port/analysis/strusers.py`):
 
 - Legacy `82826020` (NHL 13 — `82F605C0`) читает `fonts.txt` целиком в буфер `FontsBuf`
   (размер + 1). По строкам он собирает путь и для каждого файла вызывает `828251C0` (NHL 13 —

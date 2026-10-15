@@ -202,7 +202,7 @@ ffmpeg-мост держим в запасе.
   Калибровка на NHL 12 (на год старше NHL 13): 69 из 109 мест team32, 44 из 70 ручных врезок,
   18 из 23 подмен. Выборка найденных мест проверена глазами (`cmpwi 30`, `mulli 210`, MakeDate,
   «команда НХЛ?»). У 120 с лишним мест года число ровно «2012 → 2011» — выравнивание верное.
-- **Прогон NHL 13 → Legacy** (`legacy-port/xmatch-legacy.json`, вне git): пар функций 58 817
+- **Прогон NHL 13 → Legacy** (`legacy-port/analysis/xmatch-legacy.json`, вне git): пар функций 58 817
   (50 %, у NHL 12 — 30 %). Промежуточная точка (NHL 14 через `--via`) не понадобилась.
 
   | Источник адресов | Всего | Та же инструкция и число | Найдено, но другое | Не найдено |
@@ -216,21 +216,21 @@ ffmpeg-мост держим в запасе.
   | подмены скорости и кучи | 6 | 6 (байт в байт) | — | — |
 
 - **Списки мест для генератора** (`legacy-port/sites/legacy_team32_sites.json`, `legacy_ahl32_sites.json`,
-  скрипт `legacy-port/legacy_sites.py`): из 121 места team32 + ahl32 перенесено 107 — адрес Legacy,
+  скрипт `legacy-port/analysis/legacy_sites.py`): из 121 места team32 + ahl32 перенесено 107 — адрес Legacy,
   слово Legacy, новое число. `tools/team_hooks.py` (проверка `variant()` по образу Legacy) принимает
   все 107. Остальные 14 — в поле `left` с причиной. Генератор нужно только научить другому образу,
   выходным путям и префиксу имён (сейчас `IMAGE`, `HOOKS`, `OUT_*` и `Nhl13…` зашиты).
-- **Ключевые функции** (`legacy-port/keyfuncs-legacy.txt`): найдена 31 из 32 — приложение А.
+- **Ключевые функции** (`legacy-port/analysis/keyfuncs-legacy.txt`): найдена 31 из 32 — приложение А.
 - **Чужие точки опоры:** все адреса, которые перехватывает порт puckhead73 (`sub_82705510`,
   VP6 `8277ABB8`/`8277CC98`, `827F1C88` и др.), в нашем образе — начала функций: билд тот же.
-- **Год:** `legacy-port/yearscan-legacy.txt`.
-- **Схема базы:** `legacy-port/schema-diff-nhl13-legacy.txt` — 80 таблиц без изменений, 24
+- **Год:** `legacy-port/analysis/yearscan-legacy.txt`.
+- **Схема базы:** `legacy-port/analysis/schema-diff-nhl13-legacy.txt` — 80 таблиц без изменений, 24
   изменены, 32 ушли (карточки HUT `fcc_*`), 30 новых.
-- **Архивы целиком** (`legacy-port/samecmp-legacy.txt`): из 25 728 общих путей NHL 13 и Legacy
+- **Архивы целиком** (`legacy-port/analysis/samecmp-legacy.txt`): из 25 728 общих путей NHL 13 и Legacy
   17 233 (две трети) совпадают байт в байт: логотипы 1448 из 1695, баннеры 311 из 316, частицы — все,
   конструктор формы ~80 %; перерисованы в основном гетры клубов (512 из 552), шайбы (196 из 218),
-  лёд (185 из 411), тоннели. Сетки игроков — `legacy-port/modelcmp-legacy.txt` (61 из 77 те же).
-- **Форматы файлов** (`legacy-port/treecmp-legacy.txt`): сверена магия ключевых типов по
+  лёд (185 из 411), тоннели. Сетки игроков — `legacy-port/analysis/modelcmp-legacy.txt` (61 из 77 те же).
+- **Форматы файлов** (`legacy-port/analysis/treecmp-legacy.txt`): сверена магия ключевых типов по
   распакованным архивам Legacy. Совпадают:
   - TDB `DB\0\x08`;
   - вложенные `BIGF`;
@@ -334,6 +334,6 @@ ffmpeg-мост держим в запасе.
 | Путь | Что |
 |---|---|
 | `tools/xmatch.py` | сопоставление кода (в git) |
-| `legacy-port/` (вне git) | прототип: `images/legacy.bin`, `images/nhl12.bin`, `xmatch-*.json/log`, `keyfuncs-*.txt`, `yearscan-legacy.txt`, `schema-diff-nhl13-legacy.txt`, `treecmp-*.txt`, `codegen/` (пробный кодоген), `sites/` (списки мест Legacy), скрипты `keyfuncs.py`, `yearscan.py` (+ `yearscan_rows.tsv`), `yearnew.py`, `legacy_sites.py`, `treecmp.py`, `samecmp.py`, `modelcmp.py`, `findconst.py`, `strusers.py`, `newsites.py`, `dbg_resolve.py` |
+| `legacy-port/` (вне git) | прототип: `images/legacy.bin`, `images/nhl12.bin`, `codegen/` (пробный кодоген), `sites/` (списки мест Legacy); выводы и скрипты разведки — в `analysis/` (с 15.10.2026, раньше лежали в корне `legacy-port/`): `xmatch-*.json/log`, `keyfuncs-*.txt`, `yearscan-legacy.txt`, `schema-diff-nhl13-legacy.txt`, `treecmp-*.txt`, `keyfuncs.py`, `yearscan.py` (+ `yearscan_rows.tsv`), `yearnew.py`, `legacy_sites.py`, `treecmp.py`, `samecmp.py`, `modelcmp.py`, `findconst.py`, `strusers.py`, `newsites.py`, `dbg_resolve.py` |
 | `game/other/legacy/` | диск Legacy с приставки (xbox-fetch), архивы — `big/<архив>` |
 | `ref/nhl-legacy-recomp` | их проект (без лицензии — только читать) |
