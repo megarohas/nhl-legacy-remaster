@@ -19,9 +19,7 @@ $dirs = @(
     'legacy-port\dist',
     'legacy-port\codegen',
     'legacy-port\out\build\win-amd64-release',
-    'legacy-port-aigm\out\build\win-amd64-release',
     'port\generated',
-    'port\out',
     'ref\rexglue-sdk-custom\install'
 )
 $saves = @(
