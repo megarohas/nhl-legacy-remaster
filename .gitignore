@@ -22,6 +22,10 @@ _netrc
 __pycache__/
 *.pyc
 .venv/
+venv/
+
+# Логи прогонов, сборок и игры — только локально
+*.log
 
 # Чужие репозитории для справки (puckhead73 и др.)
 /ref/
@@ -33,6 +37,9 @@ __pycache__/
 
 # Экспериментальная копия порта под свою сборку SDK (Vulkan + FSR/CAS), docs/sdk-build.md
 /port-ffx/
+# Рабочие копии портов: франшиза NHL 13 (docs/franchise-seasons.md), чистая сборка Legacy (docs/legacy-port.md)
+/port-fr/
+/legacy-port-clean/
 # свой саундтрек пользователя (tools/music.py) — не в git
 best_of_nhl/
 # Порт NHL Legacy (docs/legacy-port.md): в git — только свой код и сборка проекта; кодоген (производное
