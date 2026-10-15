@@ -15,6 +15,7 @@
   python -m fb.jersey_mesh build [--out DIR]         # 30 сеток jersey_<вратарь>_0_<h>_<t>_<p>_<lod>.rx2
   python -m fb.jersey_mesh preview TEX.png OUT.png [--out DIR]   # Legacy Edge и пилот: спереди, сзади, ворот, руки вверх
   python -m fb.jersey_mesh kit --club C --kit home --legacy 1_A_V --slot 0_A_V --font-dir DIR   # комплект слота
+  python -m fb.jersey_mesh dress OUT.png [--name CROSBY --number 87 --letter C]   # «одетый» свитер (офлайн)
 
 Ассеты NHL 24 — только для личного использования: сетки и картинки — в game/work/ (не в git).
 """
@@ -118,6 +119,12 @@ def variant_map():
 # окружением (гармоническое продолжение сдвигов). Вершины-дубли по швам UV сдвигаются одинаково (сварка).
 NECK_KEEP = (0.035, 0.07)        # полоса ворота; шире — у вратаря в неё попадал верх плеча (+3 см к Edge)
 SIDE_DOT = 0.3                     # нормаль ближайшей точки — той же стороны ткани
+# Под воротом у Legacy — «рубашка» (rendering/jersey/shirt_<g>_<g>_<lod>, тёмная горловина под V-вырезом Edge). Ворот
+# не ниже её верха + SHIRT_MARGIN ни в одном секторе вокруг шеи (пользователь, 15.10, v2: «проглядывается чёрное
+# вокруг шеи» — ворот опустили на 1,7 см, верх рубашки сзади 1,704 м, край ворота стал 1,695).
+SHIRT_MARGIN = 0.005
+SHIRT_SECTORS = 12
+SHIRT = {0: "rendering/jersey/shirt_0_0_2.rx2", 1: "rendering/jersey/shirt_1_1_2.rx2"}
 MAX_D = 0.08                       # дальше — сдвиг не берётся, а продолжается от соседей (внутренние кромки)
 
 
@@ -188,7 +195,34 @@ def neck_ring(pos, tri):
     return P, neck, P[neck].mean(0)
 
 
-def morph_to(n24, src, t_neck=None):
+def shirt_lift(ring, shirt_pos, t):
+    """Подъём края горловины по секторам вокруг шеи, чтобы он был выше рубашки (+SHIRT_MARGIN) — после сдвига t.
+    -> (центр (x, z), подъём по секторам, м): у полевых нужен только с боков шеи (верх рубашки там 1,698 м, край
+    ворота NHL 24 — 1,690), сзади и спереди запас 0,3–2 см."""
+    c = shirt_pos[:, [0, 2]].mean(0)
+    r = ring + t
+    lift = np.zeros(SHIRT_SECTORS)
+    for k in range(SHIRT_SECTORS):
+        rs, ss = r[sector_of(r, c) == k], shirt_pos[sector_of(shirt_pos, c) == k]
+        if len(rs) and len(ss):
+            lift[k] = max(0.0, ss[:, 1].max() + SHIRT_MARGIN - rs[:, 1].max())
+    return c, lift
+
+
+def sector_of(p, c):
+    a = np.arctan2(p[:, 2] - c[1], p[:, 0] - c[0])
+    return ((a + np.pi) / (2 * np.pi) * SHIRT_SECTORS).astype(int) % SHIRT_SECTORS
+
+
+def lift_at(p, c, lift):
+    """Подъём в точках p — линейно по углу между серединами секторов (по кругу)."""
+    a = (np.arctan2(p[:, 2] - c[1], p[:, 0] - c[0]) + np.pi) / (2 * np.pi) * SHIRT_SECTORS - 0.5
+    k0 = np.floor(a).astype(int) % SHIRT_SECTORS
+    f = a - np.floor(a)
+    return lift[k0] * (1 - f) + lift[(k0 + 1) % SHIRT_SECTORS] * f
+
+
+def morph_to(n24, src, t_neck=None, shirt=None):
     """Сетка NHL 24 с телом по поверхности src (свитер Legacy того же варианта) и воротом NHL 24. -> (сетка, сводка).
 
     Тело: сдвиг к ближайшей точке src той же стороны; где её нет (внутренние кромки) или где сдвиг выворачивает
@@ -216,6 +250,14 @@ def morph_to(n24, src, t_neck=None):
         _, _, c_src = neck_ring(src["pos"], src["tri"])
         t_neck = c_src - P[neck].mean(0)
         t_neck[0] = 0.0                                # по x не двигаем: обе горловины по оси
+        if shirt is not None:                          # но не ниже верха рубашки Legacy: ворот целиком выше, без
+            c, lift = shirt_lift(P[neck], shirt, t_neck)   # волны по краю (подъём по секторам гнул бы его на 3 см)
+            t_neck[1] += lift.max()
+        t_neck = (t_neck, None)
+    t_vec, lift = t_neck
+    collar_t = np.repeat(t_vec[None], n, 0)
+    if lift is not None:
+        collar_t[:, 1] += lift_at(P, *lift)
     fn0 = np.cross(P[Tg[:, 1]] - P[Tg[:, 0]], P[Tg[:, 2]] - P[Tg[:, 0]])
     known = ok.copy()
     collar_in, collar_out = k > 0.999, k < 1e-3
@@ -223,7 +265,7 @@ def morph_to(n24, src, t_neck=None):
     for rounds in range(1, 9):
         d_full = harmonic(A, q - P, known)
         vals = d_full.copy()
-        vals[collar_in] = t_neck
+        vals[collar_in] = collar_t[collar_in]
         D = harmonic(A, vals, collar_in | collar_out)
         deg = np.asarray(A.sum(1)).ravel()[:, None]
         for _ in range(3):  # шум ближайшей точки на складках
@@ -260,7 +302,8 @@ def morph_to(n24, src, t_neck=None):
     shift = np.linalg.norm(D, axis=1)
     out["_t_neck"] = t_neck
     info = {"ok": float(known.mean()), "shift_mean_cm": float(shift.mean() * 100),
-            "neck_shift_y_cm": float(t_neck[1] * 100), "neck_shift_z_cm": float(t_neck[2] * 100),
+            "neck_shift_y_cm": float(t_vec[1] * 100), "neck_shift_z_cm": float(t_vec[2] * 100),
+            "neck_lift_max_cm": float(lift[1].max() * 100) if lift is not None else 0.0,
             "flip_rounds": rounds, "relax": relax, "flipped_left": int(flipped.sum())}
     return out, info
 
@@ -299,14 +342,18 @@ def strips(tris):
     return idx
 
 
-def build_one(n24, skin_src_rel, dst_rel, morph=True, t_neck=None):
+def build_one(n24, skin_src_rel, dst_rel, morph=True, t_neck=None, shirt_rel=None):
     """Сетка dst_rel (файл Legacy слота, его секции и шейдер) с развёрткой и воротом n24, телом по skin_src_rel
     (morph_to); кости — с skin_src_rel, у дублей по швам UV — одинаковые (по сваренным узлам)."""
     _, src = legacy(skin_src_rel)
     base = rw.Mesh.game(dst_rel)
     minfo = {}
     if morph:
-        n24, minfo = morph_to(n24, src, t_neck)
+        shirt = None
+        if shirt_rel:
+            sm = rw.Mesh.game(shirt_rel)
+            shirt = np.array([p[:3] for p in sm.pos], dtype=np.float64)
+        n24, minfo = morph_to(n24, src, t_neck, shirt)
     g, first = weld(n24["pos"])
     Tg = g[n24["tri"]]
     nodes = {"pos": n24["pos"][first], "nrm": node_normals(n24["pos"][first], Tg, len(first))}
@@ -364,7 +411,8 @@ def cmd_build(a):
         tn = None
         for lod, l24 in LODS.items():
             n24 = nhl24(N24.format(tuck=tuck, size=size, lod=l24))
-            data, info = build_one(n24, skater_rel(t, p, 2, STYLE_SRC), skater_rel(t, p, lod, STYLE_DST), t_neck=tn)
+            data, info = build_one(n24, skater_rel(t, p, 2, STYLE_SRC), skater_rel(t, p, lod, STYLE_DST), t_neck=tn,
+                                   shirt_rel=SHIRT[0])
             tn = info.pop("_t_neck")
             write(a.out, skater_rel(t, p, lod, STYLE_DST), data)
             n += 1
@@ -373,7 +421,8 @@ def cmd_build(a):
         tn = None
         for lod, l24 in LODS.items():
             n24 = nhl24(N24_GOALIE.format(lod=l24))
-            data, info = build_one(n24, goalie_rel(h, 2, STYLE_SRC), goalie_rel(h, lod, STYLE_DST), t_neck=tn)
+            data, info = build_one(n24, goalie_rel(h, 2, STYLE_SRC), goalie_rel(h, lod, STYLE_DST), t_neck=tn,
+                                   shirt_rel=SHIRT[1])
             tn = info.pop("_t_neck")
             write(a.out, goalie_rel(h, lod, STYLE_DST), data)
             n += 1
@@ -516,7 +565,10 @@ SLEEVE_ZONES = (2, 3)              # номера на рукавах (у EA —
 SLEEVE_UP_CM = 8.0                 # пользователь (15.10): у adidas номер — ближе к плечевому суставу
 # Фамилия (зона 0) — пользователь (15.10, после теста пилота): «слишком близко к номерам, слишком большие буквы,
 # слишком большое расстояние между буквами» → зона меньше (ширина, высота — доли размера EA) и выше на NAME_UP_CM.
-NAME_ZONE, NAME_SCALE, NAME_UP_CM = 0, (0.75, 0.8), 2.0  # разрядка — главное (игра, похоже, раскладывает буквы по ширине зоны)
+# По фото Кросби с матчей 2022–2025 (Getty, 15.10): номер ≈ 0,43 высоты спинки (≈ 32 см, правило НХЛ 12″) против 26,8 см
+# у EA, буквы фамилии ≈ 6 см (у EA 8,9), зазор до номера ≈ 4,5 см.
+NAME_ZONE, NAME_SCALE, NAME_UP_CM = 0, (0.75, 0.68), 3.0
+NUMBER_ZONE, NUMBER_SCALE = 1, (1.0, 1.12)        # выше вниз: верх зоны остаётся, растёт к низу спины
 
 
 def uv_jacobian(m, tri, size):
@@ -577,11 +629,22 @@ def name_map_cm(leg_png, leg_d, dst_d, size=256, sleeve_up_cm=SLEEVE_UP_CM, grid
         t2, b2, d2 = kit3d.project(p, nrm, dst_d)
         uvd = (b2[:, :, None] * dst_d["uv"][dst_d["tri"][t2]]).sum(1) * size
         X = np.stack([gx[ok], gy[ok], np.ones(ok.sum())], 1)
-        M, *_ = np.linalg.lstsq(X, uvd, rcond=None)       # 3×2: [x, y, 1] Legacy → (u, v) dst, пиксели
+        keep = d2 < 0.03                                  # дальше 3 см — точка ушла на чужую поверхность (ворот)
+        for _ in range(4):                                # 3×2: [x, y, 1] Legacy → (u, v) dst, пиксели; выбросы — прочь
+            M, *_ = np.linalg.lstsq(X[keep], uvd[keep], rcond=None)
+            res = np.linalg.norm(X @ M - uvd, axis=1)
+            new_keep = keep & (res < max(3.0, 3 * np.median(res[keep])))
+            if new_keep.sum() < 6 or (new_keep == keep).all():
+                break
+            keep = new_keep
         corners = np.array([[x0, y0, 1], [x1, y0, 1], [x0, y1, 1], [x1, y1, 1]], float)
         if z == NAME_ZONE:                              # меньше — от центра зоны
             cc = np.array([(x0 + x1) / 2.0, (y0 + y1) / 2.0])
             corners[:, :2] = cc + (corners[:, :2] - cc) * np.array(NAME_SCALE)
+        if z == NUMBER_ZONE:                            # выше: верх (к фамилии) на месте — у EA верх зоны — бо́льшие v
+            top = corners[:, 1].max()
+            cc = np.array([(x0 + x1) / 2.0, top])
+            corners[:, :2] = cc + (corners[:, :2] - cc) * np.array(NUMBER_SCALE)
         corners[:, :2] += off
         cd = corners @ M
         rx0, ry0 = int(round(cd[:, 0].min())), int(round(cd[:, 1].min()))
@@ -591,11 +654,12 @@ def name_map_cm(leg_png, leg_d, dst_d, size=256, sleeve_up_cm=SLEEVE_UP_CM, grid
         rects[z] = (rx0, ry0, rx1, ry1)
         cover = float((tid_d[ry0:ry1 + 1, rx0:rx1 + 1] >= 0).mean())
         Jl = uv_jacobian(leg_d, tl[len(tl) // 2], size)
-        res = np.abs(X @ M - uvd).max()
+        res = np.abs(X[keep] @ M - uvd[keep]).max()
         info[z] = {"legacy_px": (int(w), int(h)),
                    "cm": (round(float(w * np.linalg.norm(Jl[:, 0]) * 100), 1), round(float(h * np.linalg.norm(Jl[:, 1]) * 100), 1)),
                    "dst_px": (rx1 - rx0 + 1, ry1 - ry0 + 1), "scale": (round(float(M[0, 0]), 3), round(float(M[1, 1]), 3)),
                    "shear": (round(float(M[1, 0]), 3), round(float(M[0, 1]), 3)), "fit_err_px": round(float(res), 2),
+                   "points": f"{int(keep.sum())}/{len(keep)}",
                    "on_mesh": round(cover, 3), "dist_cm": round(float(d2.mean()) * 100, 2)}
     return out, rects, info
 
@@ -727,6 +791,133 @@ def cmd_kit(a):
     print(p)
 
 
+# ---------------------------------------------------------------- «одетый» свитер: фамилия, номер, буква (офлайн)
+
+# Атлас шрифта комплекта (512², раскладка EA — у NHL 24 та же ×2): строки (y0, y1, x-диапазон) и порядок знаков.
+FONT_ROWS = (("ABCDEFGHIJKLMNO", 1, 48, (0, 512)), ("PQRSTUVWXYZ", 49, 98, (0, 420)),
+             ("01234", 115, 238, (0, 420)), ("56789", 242, 367, (0, 420)), ("C", 83, 190, (420, 512)),
+             ("A", 195, 302, (420, 512)), ("0123456789", 379, 438, (0, 512)), ("0123456789", 450, 512, (0, 512)))
+LETTER_GAP = 0.06                  # разрядка фамилии — доля высоты букв (для картинки; как у игры — не разбиралось)
+
+
+def font_glyphs(font_png):
+    """Знаки атласа: {(строка, знак): RGBA} — нарезка по пустым столбцам внутри строки."""
+    a = np.asarray(Image.open(font_png).convert("RGBA"))
+    out = {}
+    for row, (chars, y0, y1, (xa, xb)) in enumerate(FONT_ROWS):
+        al = a[y0:y1, xa:xb, 3] > 40
+        cols = al.any(0)
+        segs, x = [], 0
+        while x < len(cols):
+            if cols[x]:
+                s0 = x
+                while x < len(cols) and cols[x]:
+                    x += 1
+                segs.append((s0, x))
+            else:
+                x += 1
+        segs = [s for s in segs if s[1] - s[0] > 3][:len(chars)]
+        for ch, (s0, s1) in zip(chars, segs):
+            g = a[y0:y1, xa + s0:xa + s1]
+            ys = np.nonzero(g[..., 3].any(1))[0]
+            out[(row, ch)] = g[ys.min():ys.max() + 1]
+    return out
+
+
+def text_image(glyphs, row, text, gap=LETTER_GAP):
+    """Строка знаков (строка атласа row; для букв — row=None: A–O из первой строки, P–Z из второй): высота — общая
+    (по самому высокому), разрядка — gap × высоты."""
+    gs = [glyphs[(row if row is not None else (0 if ch in FONT_ROWS[0][0] else 1), ch)] for ch in text]
+    h = max(g.shape[0] for g in gs)
+    sp = int(round(gap * h))
+    w = sum(g.shape[1] for g in gs) + sp * (len(gs) - 1)
+    img = np.zeros((h, w, 4), np.uint8)
+    x = 0
+    for g in gs:
+        y = h - g.shape[0]
+        img[y:y + g.shape[0], x:x + g.shape[1]] = g
+        x += g.shape[1] + sp
+    return img
+
+
+def stamp(tex, mesh, rect256, text_rgba, fill="height"):
+    """Нанести надпись в зону rect256 (из карты номеров 256²) текстуры tex (H×W×3, развёртка mesh): «вверх» — мировой
+    +y в касательной плоскости, «вправо» — для смотрящего на ткань; высота надписи — высота зоны (сантиметры по
+    якобиану развёртки), шире зоны — сжатие по ширине; надпись — по центру зоны."""
+    H, W = tex.shape[:2]
+    k = W / 256.0
+    x0, y0, x1, y1 = rect256
+    c = np.array([(x0 + x1 + 1) / 2.0, (y0 + y1 + 1) / 2.0])
+    tid, bar = kit3d.raster_uv(mesh, 256)
+    t = tid[int(c[1]), int(c[0])]
+    if t < 0:
+        return tex
+    Jm = uv_jacobian(mesh, t, 256)
+    n = kit3d._unit(np.cross(Jm[:, 0], Jm[:, 1]))
+    nv = kit3d._unit((bar[int(c[1]), int(c[0])][:, None] * mesh["nrm"][mesh["tri"][t]]).sum(0))
+    if (n * nv).sum() < 0:
+        n = -n
+    up = np.array([0.0, 1.0, 0.0]) - n * n[1]
+    up = up / np.linalg.norm(up)
+    right = np.cross(up, n)
+    corners = np.array([[x0, y0], [x1 + 1, y0], [x0, y1 + 1], [x1 + 1, y1 + 1]], float) - c
+    world = corners @ Jm.T
+    zw, zh = np.ptp(world @ right), np.ptp(world @ up)
+    th, tw = text_rgba.shape[:2]
+    sh = zh / th                                       # метров на пиксель надписи по высоте
+    sw = min(sh, zw / tw)                              # по ширине — не шире зоны
+    out = tex.astype(np.float64).copy()
+    ys, xs = np.mgrid[int(y0 * k):int((y1 + 1) * k), int(x0 * k):int((x1 + 1) * k)]
+    d = np.stack([(xs + 0.5) / k - c[0], (ys + 0.5) / k - c[1]], -1) @ Jm.T
+    X = (d @ right) / sw + tw / 2.0
+    Y = th / 2.0 - (d @ up) / sh
+    ok = (X >= 0) & (X < tw) & (Y >= 0) & (Y < th)
+    g = text_rgba[np.clip(Y.astype(int), 0, th - 1), np.clip(X.astype(int), 0, tw - 1)].astype(np.float64)
+    al = (g[..., 3:4] / 255.0) * ok[..., None]
+    out[ys, xs] = out[ys, xs] * (1 - al) + g[..., :3] * al
+    return out
+
+
+def cmd_dress(a):
+    """Свитер слота с фамилией, номером, буквой и номерами на рукавах — рендер с разных сторон (офлайн)."""
+    work = os.path.join(REPO, "game", "work", "nhl24", "adidas3d")
+    d = os.path.join(work, f"pack_{a.slot}")
+    bm = rw.Mesh.load(os.path.join(a.dst, *skater_rel(0, 1, 2, STYLE_DST).split("/")))
+    mesh = {"pos": np.array([p[:3] for p in bm.pos]), "uv": np.array(bm.uv), "tri": np.array(bm.tris),
+            "nrm": kit3d._unit(np.array(bm.nrm))}
+    tex = np.asarray(Image.open(os.path.join(d, "jersey_cm.png")).convert("RGB")).astype(np.float64)
+    nm = np.asarray(Image.open(os.path.join(d, "jersey_nm.png")).convert("RGB")).astype(np.float64)
+    zm = np.asarray(Image.open(os.path.join(d, "name_cm.png")).convert("RGBA"))
+    rects = {}
+    for z in sorted(set(zm[..., 2][zm[..., 2] < 255].tolist())):
+        ys, xs = np.nonzero(zm[..., 2] == z)
+        rects[z] = (xs.min(), ys.min(), xs.max(), ys.max())
+    gl = font_glyphs(os.path.join(d, "font_cm.png"))
+    tex = stamp(tex, mesh, rects[0], text_image(gl, None, a.name.upper()))
+    big = [gl[(2 if ch in "01234" else 3, ch)] for ch in a.number]
+    hb = max(g.shape[0] for g in big)
+    num = np.zeros((hb, sum(g.shape[1] for g in big) + int(0.05 * hb) * (len(big) - 1), 4), np.uint8)
+    x = 0
+    for g in big:
+        num[hb - g.shape[0]:, x:x + g.shape[1]] = g
+        x += g.shape[1] + int(0.05 * hb)
+    tex = stamp(tex, mesh, rects[1], num)
+    for z in SLEEVE_ZONES:
+        tex = stamp(tex, mesh, rects[z], text_image(gl, a.sleeve_row, a.number, 0.04))
+    if a.letter:
+        tex = stamp(tex, mesh, rects[5], gl[(4 if a.letter == "C" else 5, a.letter)])
+    ims = [kit3d.render_lit(mesh, tex, v, 360, nmap=nm) for v in ("back", "front", "left", "right")]
+    W = sum(im.size[0] + 8 for im in ims)
+    sheet = Image.new("RGB", (W, ims[0].size[1]), (24, 24, 28))
+    x = 0
+    for im in ims:
+        sheet.paste(im, (x, 0))
+        x += im.size[0] + 8
+    sheet.save(a.png)
+    Image.fromarray(np.clip(tex, 0, 255).astype(np.uint8)).save(os.path.splitext(a.png)[0] + "_tex.png")
+    print(a.png)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -746,8 +937,16 @@ def main():
     k.add_argument("--font-dir", required=True, help="папка шрифта NHL 24 из fb.kit_batch (out/kits/PIT_home)")
     k.add_argument("--dst", default=OUT)
     k.add_argument("--squeeze", type=float, default=DECAL_SQUEEZE, help="сжатие нашивок по ширине (1 — как есть)")
+    r = sub.add_parser("dress")
+    r.add_argument("png")
+    r.add_argument("--slot", default="0_23_0")
+    r.add_argument("--name", default="CROSBY")
+    r.add_argument("--number", default="87")
+    r.add_argument("--letter", default="C")
+    r.add_argument("--sleeve-row", type=int, default=7, help="строка малых цифр атласа (6 или 7)")
+    r.add_argument("--dst", default=OUT)
     a = ap.parse_args()
-    {"map": cmd_map, "build": cmd_build, "preview": cmd_preview, "kit": cmd_kit}[a.cmd](a)
+    {"map": cmd_map, "build": cmd_build, "preview": cmd_preview, "kit": cmd_kit, "dress": cmd_dress}[a.cmd](a)
 
 
 if __name__ == "__main__":
