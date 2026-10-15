@@ -24,7 +24,7 @@ NHL Legacy Remaster — NHL Legacy Edition на ПК (свой порт на ReX
        ...
    (или указать свою папку в nhllegacy.toml: game_data_root = "D:/Games/NHL Legacy").
 3. Запустить nhllegacy_launcher.exe — окно настроек (графика, разрешение, экран, лига, исправления), кнопка
-   «Играть». Можно и сразу nhllegacy.exe — тогда с настройками из nhllegacy.toml. Первый запуск дольше:
+   Play («Играть»). Язык окна — English / Русский в правом верхнем углу (по умолчанию английский). Можно и сразу nhllegacy.exe — тогда с настройками из nhllegacy.toml. Первый запуск дольше:
    компилируются шейдеры.
 
 Управление

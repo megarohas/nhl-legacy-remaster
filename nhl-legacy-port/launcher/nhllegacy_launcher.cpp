@@ -8,6 +8,7 @@
 // Сборка — build.cmd рядом (MSVC из BuildTools, статический CRT, без сторонних библиотек).
 // Отладка без показа окна пользователю: --shot=файл.png [--shot-hint=N] — окно рисуется за
 // пределами экрана без активации, снимок PrintWindow сохраняется в PNG, процесс выходит.
+// --lang=en|ru — язык поверх сохранённого; --shot-relang=en|ru — снимок после смены языка в окне.
 
 #ifndef UNICODE
 #define UNICODE
@@ -129,6 +130,15 @@ void ParseToml(const std::wstring& path, Cvars& out) {
   }
 }
 
+// ─── Язык интерфейса ──────────────────────────────────────────────────────────────────────
+// 0 — английский (по умолчанию), 1 — русский. Хранится в nhllegacy_launcher.toml ключом launcher_language;
+// игре не передаётся (его нет в ToCvars).
+
+int g_lang = 0;
+
+const wchar_t* T(const wchar_t* en, const wchar_t* ru) { return g_lang == 1 ? ru : en; }
+const char* T8(const char* en, const char* ru) { return g_lang == 1 ? ru : en; }
+
 // ─── Состояние окна и перевод в cvar'ы ─────────────────────────────────────────────────────
 
 struct State {
@@ -226,11 +236,11 @@ std::string Fmt2(double v) {
 }
 
 std::vector<Kv> ToCvars(const State& s) {
-  const char* kGfx = "Графика";
-  const char* kScreen = "Экран";
-  const char* kInput = "Управление";
-  const char* kLeague = "Сезон и лига";
-  const char* kFix = "Исправления";
+  const char* kGfx = T8("Graphics", "Графика");
+  const char* kScreen = T8("Display", "Экран");
+  const char* kInput = T8("Controls", "Управление");
+  const char* kLeague = T8("Season and league", "Сезон и лига");
+  const char* kFix = T8("Fixes", "Исправления");
   auto b = [](bool v) { return std::string(v ? "true" : "false"); };
   std::vector<Kv> kv;
   kv.push_back({"gpu_backend", s.render == 2 ? "vulkan" : "d3d12", true, kGfx});
@@ -275,10 +285,16 @@ std::vector<Kv> ToCvars(const State& s) {
 }
 
 bool WriteLauncherToml(const std::wstring& path, const std::vector<Kv>& kv) {
-  std::string text =
+  std::string text = T8(
+      "# NHL Legacy - launcher settings (nhllegacy_launcher.exe). Written by the launcher on Play.\n"
+      "# When the game starts, these values are passed to it as --name=value arguments and override\n"
+      "# nhllegacy.toml (which is not changed). Reset in the launcher = as in nhllegacy.toml.\n",
       "# NHL Legacy - настройки лаунчера (nhllegacy_launcher.exe). Файл пишет лаунчер при «Играть».\n"
       "# При запуске игры эти значения передаются ей аргументами --имя=значение и перекрывают\n"
-      "# nhllegacy.toml (он не меняется). «Сбросить» в лаунчере = как в nhllegacy.toml.\n";
+      "# nhllegacy.toml (он не меняется). «Сбросить» в лаунчере = как в nhllegacy.toml.\n");
+  // Язык окна — только для лаунчера, игре не передаётся.
+  text += T8("\n# Launcher language: en or ru\n", "\n# Язык лаунчера: en или ru\n");
+  text += std::string("launcher_language = \"") + (g_lang == 1 ? "ru" : "en") + "\"\n";
   const char* group = nullptr;
   for (const Kv& e : kv) {
     if (group == nullptr || std::strcmp(group, e.group) != 0) {
@@ -344,10 +360,81 @@ enum HintId {
   kHintSettingsProfile,
   kHintReset,
   kHintPlay,
+  kHintLanguage,
   kHintCount
 };
 
-const Hint kHints[kHintCount] = {
+const Hint kHintsEn[kHintCount] = {
+    {L"Renderer",
+     L"How the Xbox 360 GPU is emulated. D3D12 — accurate (ROV): the tested default. D3D12 — fast (RTV): "
+     L"lighter on the graphics card. Vulkan — if D3D12 misbehaves; it compiles shaders on the first launch, so "
+     L"it stutters at first."},
+    {L"Resolution",
+     L"Internal 3D resolution. ×1 — 1280×720, as on Xbox. ×2 — 2560×1440: noticeably sharper, about 4 times "
+     L"the GPU load. ×3 — 3840×2160 (4K): about 9 times the load, for benchmarking; best with the “D3D12 — fast "
+     L"(RTV)” renderer, on Vulkan equipment may turn black. Only whole multiples of 720p: the game can't render "
+     L"540p or 1080p internally. ×2 on Vulkan is experimental."},
+    {L"Frame output",
+     L"How the game frame is stretched to the screen. Standard — bilinear (soft). CAS — sharpening. "
+     L"FSR 1 — AMD upscaling with sharpening: best at ×1 on a 1080p or higher monitor."},
+    {L"Sharpness", L"Sharpening strength for CAS and FSR 1. Higher is crisper, but halos may appear on edges."},
+    {L"Anisotropic filtering",
+     L"Sharpness of the ice, markings and boards at camera angles. 16x costs almost nothing — leave it on."},
+    {L"Fullscreen",
+     L"Borderless window over the whole screen — lower latency. Unchecked — a window of the size set in "
+     L"“Window”; it can be resized with the mouse."},
+    {L"No tearing (V-Sync)",
+     L"Frames follow the monitor refresh: no tearing, but up to 1 frame of latency. Not needed with G-SYNC / "
+     L"FreeSync. Game speed doesn't change — it always runs at 60 fps, as on Xbox."},
+    {L"Window",
+     L"Window size when not fullscreen — for benchmarking. The game sees it as the console video mode, so 540p "
+     L"may really render less, not just shrink the picture — watch the GPU load. Internal 3D is set by "
+     L"“Resolution” (×1–×3). The usual value is 1280×720."},
+    {L"Keyboard as gamepad",
+     L"Play without a gamepad: Enter — Start, Space — A, Backspace — B, L — X, P — Y, WASD — stick, "
+     L"Shift+arrows — D-pad, Q/E — LT/RT, 1/3 — LB/RB, Tab — Back."},
+    {L"Vibration", L"Gamepad vibration."},
+    {L"Season",
+     L"Year of the current season: dates, player ages, franchise. 2015/16 — as on the disc. Load a franchise "
+     L"with the same season it was created with."},
+    {L"NHL with 32 teams",
+     L"Seattle and Vegas as NHL clubs in franchise mode (needs the 32-team database from the mod pack). Load a "
+     L"franchise with the same number of teams it was created with."},
+    {L"Seattle and Vegas in team select", L"Seattle and Vegas in the team list of a new Be a GM franchise."},
+    {L"AHL with 32 teams",
+     L"Farm clubs of Seattle and Vegas (Coachella Valley, Henderson), AHL divisions 8/8/8/8. Needs the "
+     L"“AHL 32” database. New franchises only: load one created with 30 AHL clubs without this box."},
+    {L"AI managers for Seattle and Vegas",
+     L"Computer-run Seattle and Vegas handle the off-season like everyone else: extensions, trades, free "
+     L"agents."},
+    {L"Free agents with 32 teams",
+     L"Free agent records with 32 teams without corruption (otherwise interest in Anaheim and Winnipeg and the "
+     L"list sorting go wrong)."},
+    {L"Fantasy draft with 32 teams",
+     L"Fantasy draft for 32 teams: correct pick order, no crash on the draft board."},
+    {L"Draft class without overage players",
+     L"In the first draft of a new franchise — only players aged 18–20; the game generates the rest itself."},
+    {L"New franchise finances",
+     L"Salary cap, floor and minimum salary of the first season, $ millions. 0 — as on the disc "
+     L"(2015/16: 71.4 / 52.8 / 0.575). After that they grow by the game's rules. Doesn't affect an existing "
+     L"franchise."},
+    {L"EXIT in the main menu",
+     L"The EXIT item of the main menu closes the game. Required with the menu mod: without it the item hangs."},
+    {L"Match sim guard",
+     L"If a team is short of players on the ice in a simulated match, the port adds them from the game roster — "
+     L"no hangs or crashes. Best left on."},
+    {L"Sim guard in Be a Pro",
+     L"Simming to the next shift in Be a Pro without a crash after a penalty. Best left on."},
+    {L"My settings for new careers",
+     L"A new franchise and Be a Pro start with the rules, sliders, audio and video from the main menu instead of "
+     L"the factory defaults. Careers already started keep their own settings — this doesn't change them."},
+    {L"Reset", L"Restore all settings as in nhllegacy.toml (as without the launcher)."},
+    {L"Play",
+     L"Save the settings to nhllegacy_launcher.toml and start the game. nhllegacy.toml is not changed."},
+    {L"Language", L"Launcher language: English or Russian. The game itself is not affected."},
+};
+
+const Hint kHintsRu[kHintCount] = {
     {L"Рендер",
      L"Как эмулируется видеочип Xbox 360. D3D12 — точный (ROV): проверенный вариант по умолчанию. "
      L"D3D12 — быстрый (RTV): меньше нагрузка на видеокарту. Vulkan — если D3D12 глючит; в первый запуск "
@@ -413,12 +500,17 @@ const Hint kHints[kHintCount] = {
     {L"Сбросить", L"Вернуть все настройки как в nhllegacy.toml (как без лаунчера)."},
     {L"Играть",
      L"Сохранить настройки в nhllegacy_launcher.toml и запустить игру. nhllegacy.toml не меняется."},
+    {L"Язык", L"Язык лаунчера: английский или русский. На саму игру не влияет."},
 };
 
-const wchar_t* kDefaultHintTitle = L"Подсказка";
-const wchar_t* kDefaultHintText =
-    L"Наведите мышь на настройку — здесь появится, что она делает. Все настройки действуют со "
-    L"следующего запуска игры.";
+const Hint& HintAt(int i) { return (g_lang == 1 ? kHintsRu : kHintsEn)[i]; }
+
+const wchar_t* DefaultHintTitle() { return T(L"Tip", L"Подсказка"); }
+const wchar_t* DefaultHintText() {
+  return T(L"Hover over a setting to see what it does. All settings take effect the next time the game starts.",
+           L"Наведите мышь на настройку — здесь появится, что она делает. Все настройки действуют со "
+           L"следующего запуска игры.");
+}
 
 // ─── Окно ──────────────────────────────────────────────────────────────────────────────────
 
@@ -452,7 +544,11 @@ enum ControlId {
   kIdReset,
   kIdPlay,
   kIdNote,
+  kIdLang,
 };
+
+// Смена языка: элементы пересоздаются после возврата из уведомления списка (не внутри него).
+constexpr UINT kMsgLanguage = WM_APP + 1;
 
 enum FontKind { kFontNormal, kFontGroup, kFontSmall, kFontCount };
 
@@ -496,6 +592,7 @@ struct App {
   HWND last_focus = nullptr;
   std::wstring dir, exe, toml, launcher_toml, exe_info;
   bool exe_found = false;
+  SYSTEMTIME exe_time{};  // время изменения nhllegacy.exe, местное
   State state;
   bool shot = false;
 } g;
@@ -597,14 +694,19 @@ void Layout() {
 void CreateControls() {
   // Левая колонка: графика, экран, управление.
   const int lx = 16, lw = 424, ix = 32, lab = 116, cx = ix + lab, cw = lx + lw - 16 - cx;
-  Group(L"Графика", lx, 76, lw, 194);
-  ComboRow(L"Рендер", kIdRender, ix, 100, lab, cw,
-           {L"D3D12 — точный (ROV)", L"D3D12 — быстрый (RTV)", L"Vulkan"}, kHintRender);
-  ComboRow(L"Разрешение", kIdScale, ix, 132, lab, cw, {L"×1 — 1280×720, как на Xbox", L"×2 — 2560×1440", L"×3 — 3840×2160 (4K)"},
+  Group(T(L"Graphics", L"Графика"), lx, 76, lw, 194);
+  ComboRow(T(L"Renderer", L"Рендер"), kIdRender, ix, 100, lab, cw,
+           {T(L"D3D12 — accurate (ROV)", L"D3D12 — точный (ROV)"), T(L"D3D12 — fast (RTV)", L"D3D12 — быстрый (RTV)"),
+            L"Vulkan"},
+           kHintRender);
+  ComboRow(T(L"Resolution", L"Разрешение"), kIdScale, ix, 132, lab, cw,
+           {T(L"×1 — 1280×720, as on Xbox", L"×1 — 1280×720, как на Xbox"), L"×2 — 2560×1440", L"×3 — 3840×2160 (4K)"},
            kHintScale);
-  ComboRow(L"Вывод кадра", kIdPresent, ix, 164, lab, cw,
-           {L"Обычный (билинейный)", L"CAS — резкость", L"FSR 1 — апскейл и резкость"}, kHintPresent);
-  Label(L"Резкость", ix, 196, lab, 26);
+  ComboRow(T(L"Frame output", L"Вывод кадра"), kIdPresent, ix, 164, lab, cw,
+           {T(L"Standard (bilinear)", L"Обычный (билинейный)"), T(L"CAS — sharpening", L"CAS — резкость"),
+            T(L"FSR 1 — upscaling and sharpening", L"FSR 1 — апскейл и резкость")},
+           kHintPresent);
+  Label(T(L"Sharpness", L"Резкость"), ix, 196, lab, 26);
   HWND tb = Add(TRACKBAR_CLASSW, L"", TBS_HORZ | TBS_NOTICKS | TBS_BOTH | WS_TABSTOP, cx - 6, 197, cw - 44, 26,
                 kIdSharp);
   SendMessageW(tb, TBM_SETRANGE, TRUE, MAKELPARAM(0, 100));
@@ -612,28 +714,30 @@ void CreateControls() {
   g.hint_of[tb] = kHintSharp;
   Add(L"STATIC", L"", SS_RIGHT | SS_CENTERIMAGE, cx + cw - 50, 197, 50, 24, kIdSharpValue);
   AddZone(ix, 196, lab + cw, 28, kHintSharp);
-  ComboRow(L"Анизотропия", kIdAniso, ix, 228, lab, cw, {L"Выкл.", L"2x", L"4x", L"8x", L"16x"}, kHintAniso);
+  ComboRow(T(L"Anisotropy", L"Анизотропия"), kIdAniso, ix, 228, lab, cw,
+           {T(L"Off", L"Выкл."), L"2x", L"4x", L"8x", L"16x"}, kHintAniso);
 
-  Group(L"Экран", lx, 282, lw, 106);
-  Check(L"Полный экран", kIdFullscreen, ix, 304, lw - 32, kHintFullscreen);
-  Check(L"Без разрывов кадра (V-Sync)", kIdVsync, ix, 330, lw - 32, kHintVsync);
-  ComboRow(L"Окно", kIdWindow, ix, 356, lab, cw,
-           {L"1280×720 — обычное", L"960×540", L"1920×1080", L"2560×1440", L"3840×2160 (4K)"}, kHintWindow);
+  Group(T(L"Display", L"Экран"), lx, 282, lw, 106);
+  Check(T(L"Fullscreen", L"Полный экран"), kIdFullscreen, ix, 304, lw - 32, kHintFullscreen);
+  Check(T(L"No tearing (V-Sync)", L"Без разрывов кадра (V-Sync)"), kIdVsync, ix, 330, lw - 32, kHintVsync);
+  ComboRow(T(L"Window", L"Окно"), kIdWindow, ix, 356, lab, cw,
+           {T(L"1280×720 — default", L"1280×720 — обычное"), L"960×540", L"1920×1080", L"2560×1440", L"3840×2160 (4K)"},
+           kHintWindow);
 
-  Group(L"Управление", lx, 400, lw, 118);
-  Check(L"Клавиатура как геймпад", kIdMnk, ix, 424, lw - 32, kHintMnk);
-  Check(L"Вибрация геймпада", kIdVibration, ix, 450, lw - 32, kHintVibration);
+  Group(T(L"Controls", L"Управление"), lx, 400, lw, 118);
+  Check(T(L"Keyboard as gamepad", L"Клавиатура как геймпад"), kIdMnk, ix, 424, lw - 32, kHintMnk);
+  Check(T(L"Gamepad vibration", L"Вибрация геймпада"), kIdVibration, ix, 450, lw - 32, kHintVibration);
 
   // Правая колонка: наши изменения.
   const int rx = 456, rw = 408, jx = rx + 16, sub = jx + 20, rcw = rw - 32;
-  Group(L"Сезон и лига", rx, 76, rw, 312);
-  ComboRow(L"Сезон", kIdSeason, jx, 100, 64, 190, {}, kHintSeason);
+  Group(T(L"Season and league", L"Сезон и лига"), rx, 76, rw, 312);
+  ComboRow(T(L"Season", L"Сезон"), kIdSeason, jx, 100, 64, 190, {}, kHintSeason);
   {
     HWND season = Item(kIdSeason);
     for (int y = 2015; y <= 2030; ++y) {
       wchar_t buf[48];
       if (y == 2015) {
-        std::swprintf(buf, 48, L"%d/%02d — как на диске", y, (y + 1) % 100);
+        std::swprintf(buf, 48, T(L"%d/%02d — as on the disc", L"%d/%02d — как на диске"), y, (y + 1) % 100);
       } else {
         std::swprintf(buf, 48, L"%d/%02d", y, (y + 1) % 100);
       }
@@ -641,33 +745,47 @@ void CreateControls() {
       SendMessageW(season, CB_SETITEMDATA, i, y);
     }
   }
-  Check(L"НХЛ на 32 команды: Сиэтл и Вегас", kIdNhl32, jx, 134, rcw, kHintNhl32);
-  Check(L"Сиэтл и Вегас в выборе команды «Стань GM»", kIdMenu32, sub, 160, rcw - 20, kHintMenu32);
-  Check(L"АХЛ на 32: Коачелла-Вэлли и Хендерсон", kIdAhl32, sub, 186, rcw - 20, kHintAhl32);
-  Check(L"ИИ-менеджеры Сиэтла и Вегаса", kIdAigm32, sub, 212, rcw - 20, kHintAigm32);
-  Check(L"Свободные агенты на 32 команды", kIdFa32, sub, 238, rcw - 20, kHintFa32);
-  Check(L"Фэнтези-драфт на 32 команды", kIdFd32, sub, 264, rcw - 20, kHintFd32);
-  Check(L"Класс драфта без переростков (18–20 лет)", kIdDraftAge, jx, 292, rcw, kHintDraftAge);
-  Label(L"Финансы новой франшизы, млн $ (0 — как на диске):", jx, 322, rcw, 22);
-  MoneyEdit(L"Потолок", kIdCap, jx, 348, 58, 58);
-  MoneyEdit(L"Порог", kIdFloor, jx + 128, 348, 46, 58);
-  MoneyEdit(L"Минимум", kIdMin, jx + 244, 348, 64, 58);
+  Check(T(L"NHL with 32 teams: Seattle and Vegas", L"НХЛ на 32 команды: Сиэтл и Вегас"), kIdNhl32, jx, 134, rcw,
+        kHintNhl32);
+  Check(T(L"Seattle and Vegas in Be a GM team select", L"Сиэтл и Вегас в выборе команды «Стань GM»"), kIdMenu32, sub,
+        160, rcw - 20, kHintMenu32);
+  Check(T(L"AHL with 32: Coachella Valley and Henderson", L"АХЛ на 32: Коачелла-Вэлли и Хендерсон"), kIdAhl32, sub,
+        186, rcw - 20, kHintAhl32);
+  Check(T(L"AI managers for Seattle and Vegas", L"ИИ-менеджеры Сиэтла и Вегаса"), kIdAigm32, sub, 212, rcw - 20,
+        kHintAigm32);
+  Check(T(L"Free agents with 32 teams", L"Свободные агенты на 32 команды"), kIdFa32, sub, 238, rcw - 20, kHintFa32);
+  Check(T(L"Fantasy draft with 32 teams", L"Фэнтези-драфт на 32 команды"), kIdFd32, sub, 264, rcw - 20, kHintFd32);
+  Check(T(L"Draft class without overage players (ages 18–20)", L"Класс драфта без переростков (18–20 лет)"),
+        kIdDraftAge, jx, 292, rcw, kHintDraftAge);
+  Label(T(L"New franchise finances, $ millions (0 — as on the disc):",
+          L"Финансы новой франшизы, млн $ (0 — как на диске):"),
+        jx, 322, rcw, 22);
+  MoneyEdit(T(L"Cap", L"Потолок"), kIdCap, jx, 348, 58, 58);
+  MoneyEdit(T(L"Floor", L"Порог"), kIdFloor, jx + 128, 348, 46, 58);
+  MoneyEdit(T(L"Minimum", L"Минимум"), kIdMin, jx + 244, 348, 64, 58);
   AddZone(jx, 322, rcw, 52, kHintMoney);
 
-  Group(L"Исправления", rx, 400, rw, 118);
-  Check(L"Пункт EXIT в главном меню", kIdMenuExit, jx, 420, rcw, kHintMenuExit);
-  Check(L"Страховка сима матча (неполная пятёрка)", kIdSimGuard, jx, 442, rcw, kHintSimGuard);
-  Check(L"Страховка сима в «Стань профи»", kIdSimGuardLive, jx, 464, rcw, kHintSimGuardLive);
-  Check(L"Мои настройки — в новую карьеру", kIdSettingsProfile, jx, 486, rcw, kHintSettingsProfile);
+  Group(T(L"Fixes", L"Исправления"), rx, 400, rw, 118);
+  Check(T(L"EXIT in the main menu", L"Пункт EXIT в главном меню"), kIdMenuExit, jx, 420, rcw, kHintMenuExit);
+  Check(T(L"Match sim guard (incomplete lineup)", L"Страховка сима матча (неполная пятёрка)"), kIdSimGuard, jx, 442,
+        rcw, kHintSimGuard);
+  Check(T(L"Sim guard in Be a Pro", L"Страховка сима в «Стань профи»"), kIdSimGuardLive, jx, 464, rcw,
+        kHintSimGuardLive);
+  Check(T(L"My settings for new careers", L"Мои настройки — в новую карьеру"), kIdSettingsProfile, jx, 486, rcw,
+        kHintSettingsProfile);
 
   // Кнопки.
-  HWND reset = Add(L"BUTTON", L"Сбросить", BS_PUSHBUTTON | WS_TABSTOP, 16, 602, 120, 34, kIdReset);
+  HWND reset = Add(L"BUTTON", T(L"Reset", L"Сбросить"), BS_PUSHBUTTON | WS_TABSTOP, 16, 602, 120, 34, kIdReset);
   g.hint_of[reset] = kHintReset;
   AddZone(16, 602, 120, 34, kHintReset);
-  HWND play = Add(L"BUTTON", L"Играть", BS_OWNERDRAW | WS_TABSTOP, 704, 602, 160, 34, kIdPlay);
+  HWND play = Add(L"BUTTON", T(L"Play", L"Играть"), BS_OWNERDRAW | WS_TABSTOP, 704, 602, 160, 34, kIdPlay);
   g.hint_of[play] = kHintPlay;
   AddZone(704, 602, 160, 34, kHintPlay);
   EnableWindow(play, g.exe_found);
+
+  // Язык — в шапке справа (названия языков не переводятся).
+  Combo(kIdLang, 734, 12, 130, {L"English", L"Русский"}, kHintLanguage);
+  AddZone(734, 12, 130, 24, kHintLanguage);
 }
 
 // ─── Состояние ⇄ элементы ──────────────────────────────────────────────────────────────────
@@ -684,8 +802,10 @@ std::wstring MoneyText(long long dollars) {
   std::wstring s = buf;
   while (!s.empty() && s.back() == L'0') s.pop_back();
   if (!s.empty() && s.back() == L'.') s.pop_back();
-  for (wchar_t& ch : s) {
-    if (ch == L'.') ch = L',';
+  if (g_lang == 1) {  // по-русски — десятичная запятая; ParseMoney понимает обе
+    for (wchar_t& ch : s) {
+      if (ch == L'.') ch = L',';
+    }
   }
   return s;
 }
@@ -767,6 +887,7 @@ void ToUi(const State& s) {
   SetCheck(kIdSimGuard, s.sim_guard);
   SetCheck(kIdSimGuardLive, s.sim_guard_live);
   SetCheck(kIdSettingsProfile, s.settings_profile);
+  SetComboSel(kIdLang, g_lang);
   UpdateEnabled();
 }
 
@@ -825,6 +946,32 @@ void LoadState() {
   ParseToml(g.toml, c);
   ParseToml(g.launcher_toml, c);  // свой файл поверх nhllegacy.toml
   g.state = FromCvars(c);
+  g_lang = Get(c, "launcher_language", "en") == "ru" ? 1 : 0;
+}
+
+std::wstring WindowTitle() { return std::wstring(L"NHL Legacy Remaster v" NHL_VERSION) + T(L" — launcher", L" — запуск"); }
+
+// Подписи вне элементов, зависящие от языка: строка о nhllegacy.exe в шапке и заголовок окна.
+void UpdateTexts() {
+  if (g.exe_found) {
+    const SYSTEMTIME& st = g.exe_time;
+    wchar_t buf[96];
+    if (g_lang == 1) {
+      std::swprintf(buf, 96, L"nhllegacy.exe от %02u.%02u.%04u %02u:%02u", st.wDay, st.wMonth, st.wYear, st.wHour,
+                    st.wMinute);
+    } else {
+      std::swprintf(buf, 96, L"nhllegacy.exe from %04u-%02u-%02u %02u:%02u", st.wYear, st.wMonth, st.wDay, st.wHour,
+                    st.wMinute);
+    }
+    g.exe_info = buf;
+  } else {
+    g.exe_info = T(L"nhllegacy.exe not found — put the launcher next to it",
+                   L"nhllegacy.exe не найден — положите лаунчер рядом с ним");
+  }
+  if (g.wnd) {
+    SetWindowTextW(g.wnd, WindowTitle().c_str());
+    InvalidateRect(g.wnd, nullptr, TRUE);
+  }
 }
 
 // ─── Запуск ───────────────────────────────────────────────────────────────────────────────
@@ -849,11 +996,13 @@ void ShowError(const wchar_t* text) { MessageBoxW(g.wnd, text, L"NHL Legacy", MB
 
 bool SaveState() {
   if (!FromUi()) {
-    ShowError(L"Финансы: введите число в миллионах долларов, например 104 или 76,9 (0 — как на диске).");
+    ShowError(T(L"Finances: enter a number in millions of dollars, e.g. 104 or 76.9 (0 — as on the disc).",
+                L"Финансы: введите число в миллионах долларов, например 104 или 76,9 (0 — как на диске)."));
     return false;
   }
   if (!WriteLauncherToml(g.launcher_toml, ToCvars(g.state))) {
-    ShowError(L"Не удалось записать nhllegacy_launcher.toml рядом с лаунчером.");
+    ShowError(T(L"Could not write nhllegacy_launcher.toml next to the launcher.",
+                L"Не удалось записать nhllegacy_launcher.toml рядом с лаунчером."));
     return false;
   }
   return true;
@@ -862,7 +1011,8 @@ bool SaveState() {
 void Play() {
   if (!g.exe_found) return;
   if (GameRunning()) {
-    ShowError(L"Игра уже запущена. Закройте её и нажмите «Играть» ещё раз.");
+    ShowError(T(L"The game is already running. Close it and press Play again.",
+                L"Игра уже запущена. Закройте её и нажмите «Играть» ещё раз."));
     return;
   }
   if (!SaveState()) return;
@@ -874,7 +1024,7 @@ void Play() {
   std::vector<wchar_t> buf(cmd.begin(), cmd.end());
   buf.push_back(L'\0');
   if (!CreateProcessW(g.exe.c_str(), buf.data(), nullptr, nullptr, FALSE, 0, nullptr, g.dir.c_str(), &si, &pi)) {
-    ShowError(L"Не удалось запустить nhllegacy.exe.");
+    ShowError(T(L"Could not start nhllegacy.exe.", L"Не удалось запустить nhllegacy.exe."));
     return;
   }
   CloseHandle(pi.hThread);
@@ -914,7 +1064,8 @@ void Paint(HDC dc) {
   SelectObject(dc, g.fonts[kFontNormal]);
   SetTextColor(dc, kColHeaderSub);
   RECT st = {S(20), S(38), client.right - S(20), S(58)};
-  DrawTextW(dc, L"Настройки перед запуском", -1, &st, DT_LEFT | DT_SINGLELINE | DT_NOPREFIX);
+  DrawTextW(dc, T(L"Settings before launch", L"Настройки перед запуском"), -1, &st,
+            DT_LEFT | DT_SINGLELINE | DT_NOPREFIX);
   RECT info = {S(300), S(38), client.right - S(20), S(58)};
   DrawTextW(dc, g.exe_info.c_str(), -1, &info, DT_RIGHT | DT_SINGLELINE | DT_NOPREFIX);
 
@@ -925,8 +1076,8 @@ void Paint(HDC dc) {
   FillSolid(dc, inner, kColHintBg);
   RECT bar = {hr.left + 1, hr.top + 1, hr.left + S(4), hr.bottom - 1};
   FillSolid(dc, bar, kColAccent);
-  const wchar_t* title = g.hint >= 0 ? kHints[g.hint].title : kDefaultHintTitle;
-  const wchar_t* text = g.hint >= 0 ? kHints[g.hint].text : kDefaultHintText;
+  const wchar_t* title = g.hint >= 0 ? HintAt(g.hint).title : DefaultHintTitle();
+  const wchar_t* text = g.hint >= 0 ? HintAt(g.hint).text : DefaultHintText();
   SelectObject(dc, g.font_hint_title);
   SetTextColor(dc, RGB(30, 30, 30));
   RECT tr = {hr.left + S(16), hr.top + S(7), hr.right - S(12), hr.top + S(26)};
@@ -940,8 +1091,10 @@ void Paint(HDC dc) {
   SelectObject(dc, g.fonts[kFontSmall]);
   SetTextColor(dc, kColGrayText);
   RECT fr = {S(150), S(602), S(690), S(636)};
-  DrawTextW(dc, L"Сохраняется в nhllegacy_launcher.toml · nhllegacy.toml не меняется", -1, &fr,
-            DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+  DrawTextW(dc,
+            T(L"Saved to nhllegacy_launcher.toml · nhllegacy.toml is not changed",
+              L"Сохраняется в nhllegacy_launcher.toml · nhllegacy.toml не меняется"),
+            -1, &fr, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   SelectObject(dc, old);
 }
 
@@ -964,7 +1117,7 @@ void DrawPlay(const DRAWITEMSTRUCT* di) {
   SetBkMode(dc, TRANSPARENT);
   SetTextColor(dc, RGB(255, 255, 255));
   HGDIOBJ of = SelectObject(dc, g.font_play);
-  DrawTextW(dc, L"▶  Играть", -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+  DrawTextW(dc, T(L"▶  Play", L"▶  Играть"), -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   SelectObject(dc, of);
   if ((di->itemState & ODS_FOCUS) && !(di->itemState & ODS_NOFOCUSRECT)) {
     RECT f = r;
@@ -1066,8 +1219,27 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         g.state = BaseState();
         ToUi(g.state);
       }
+      if (id == kIdLang && code == CBN_SELCHANGE && ComboSel(kIdLang) != g_lang) {
+        PostMessageW(hwnd, kMsgLanguage, static_cast<WPARAM>(ComboSel(kIdLang)), 0);
+      }
       if ((id == kIdPlay && code == BN_CLICKED) || id == IDOK) Play();
       if (id == IDCANCEL) PostMessageW(hwnd, WM_CLOSE, 0, 0);
+      return 0;
+    }
+    case kMsgLanguage: {
+      // Пересоздать элементы с подписями на новом языке; выбранное в них переносится через g.state.
+      FromUi();  // неверное число в финансах — останется прежнее значение
+      g_lang = wp == 1 ? 1 : 0;
+      for (const Ctl& c : g.ctls) DestroyWindow(c.hwnd);
+      g.ctls.clear();
+      g.zones.clear();
+      g.hint_of.clear();
+      g.last_focus = nullptr;
+      CreateControls();
+      Layout();
+      ToUi(g.state);
+      UpdateTexts();
+      SetFocus(Item(kIdLang));
       return 0;
     }
     case WM_CLOSE:
@@ -1157,7 +1329,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
   InitCommonControlsEx(&icc);
   g.inst = inst;
 
-  std::wstring shot_path;
+  std::wstring shot_path, lang_arg, relang_arg;
   int shot_hint = kHintNone;
   int argc = 0;
   LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
@@ -1165,6 +1337,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
     std::wstring a = argv[i];
     if (a.rfind(L"--shot=", 0) == 0) shot_path = a.substr(7);
     if (a.rfind(L"--shot-hint=", 0) == 0) shot_hint = _wtoi(a.c_str() + 12);
+    if (a.rfind(L"--lang=", 0) == 0) lang_arg = a.substr(7);  // en / ru поверх сохранённого
+    if (a.rfind(L"--shot-relang=", 0) == 0) relang_arg = a.substr(14);  // снимок после смены языка в окне
   }
   if (argv) LocalFree(argv);
   g.shot = !shot_path.empty();
@@ -1180,17 +1354,12 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
   g.exe_found = GetFileAttributesExW(g.exe.c_str(), GetFileExInfoStandard, &fa) != 0;
   if (g.exe_found) {
     FILETIME local;
-    SYSTEMTIME st;
     FileTimeToLocalFileTime(&fa.ftLastWriteTime, &local);
-    FileTimeToSystemTime(&local, &st);
-    wchar_t buf[96];
-    std::swprintf(buf, 96, L"nhllegacy.exe от %02u.%02u.%04u %02u:%02u", st.wDay, st.wMonth, st.wYear, st.wHour,
-                  st.wMinute);
-    g.exe_info = buf;
-  } else {
-    g.exe_info = L"nhllegacy.exe не найден — положите лаунчер рядом с ним";
+    FileTimeToSystemTime(&local, &g.exe_time);
   }
   LoadState();
+  if (lang_arg == L"en" || lang_arg == L"ru") g_lang = lang_arg == L"ru" ? 1 : 0;
+  UpdateTexts();
 
   g.br_bg = CreateSolidBrush(kColBg);
   WNDCLASSEXW wc{sizeof(wc)};
@@ -1229,14 +1398,15 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
     x = GetSystemMetrics(SM_XVIRTUALSCREEN) - w - 200;
     y = GetSystemMetrics(SM_YVIRTUALSCREEN);
   }
-  HWND hwnd = CreateWindowExW(g.shot ? WS_EX_NOACTIVATE : 0, wc.lpszClassName, L"NHL Legacy Remaster v" NHL_VERSION L" — запуск", style, x, y,
-                              w, h, nullptr, nullptr, inst, nullptr);
+  HWND hwnd = CreateWindowExW(g.shot ? WS_EX_NOACTIVATE : 0, wc.lpszClassName, WindowTitle().c_str(), style, x, y, w,
+                              h, nullptr, nullptr, inst, nullptr);
   if (!hwnd) return 1;
 
   if (g.shot) {
     if (shot_hint >= 0 && shot_hint < kHintCount) g.hint = shot_hint;
     ShowWindow(hwnd, SW_SHOWNOACTIVATE);
     UpdateWindow(hwnd);
+    if (relang_arg == L"en" || relang_arg == L"ru") PostMessageW(hwnd, kMsgLanguage, relang_arg == L"ru" ? 1 : 0, 0);
     PumpFor(400);
     const int rc = Shot(shot_path);
     DestroyWindow(hwnd);

@@ -18,6 +18,16 @@
 - Кнопка «Save to config» в окне F4 игры впишет переданные аргументы в `nhllegacy.toml` (так было и до
   лаунчера).
 
+## Язык (с 0.11.2, 15.10.2026)
+
+- Два языка окна — английский (по умолчанию) и русский, выбор в шапке справа. Смена — сразу, без перезапуска:
+  элементы пересоздаются с новыми подписями, выбранные значения сохраняются.
+- Выбор хранится в `nhllegacy_launcher.toml` ключом `launcher_language = "en"` / `"ru"`. Игре он не передаётся
+  (его нет среди аргументов `--имя=значение`), язык самой игры не меняется.
+- Все подписи, подсказки и сообщения — парами `T(L"English", L"Русский")` в коде, подсказки — таблицы
+  `kHintsEn` / `kHintsRu`. В английском десятичная точка в финансах (76.9), в русском — запятая; вводить можно
+  любую.
+
 ## Настройки → cvar'ы
 
 | Раздел | В окне | cvar'ы |
@@ -56,17 +66,17 @@ S:\Claude\megarohas_nhl13\nhl-legacy-port\launcher\build.cmd
 
 MSVC из VS 2022 BuildTools, один файл `nhllegacy_launcher.cpp` → `nhl-legacy-port/out/launcher/nhllegacy_launcher.exe`
 (не в git). Манифест Common Controls 6 — `#pragma comment(linker, …)` + `/MANIFEST:EMBED`, DPI — Per-Monitor V2
-из кода; файлов `.rc`/`.manifest`/иконки нет.
+из кода; `.rc` иконки `build.cmd` пишет сам при сборке (в git его нет).
 
 Снимок окна без показа пользователю (окно за пределами экрана, без активации, PrintWindow → PNG):
-`nhllegacy_launcher.exe --shot=путь.png [--shot-hint=N]` (N — номер подсказки, 0 = «Рендер»). Стенд —
-копия лаунчера в `nhl-legacy-port/out/launcher/test/` рядом с копией `nhllegacy.toml`.
+`nhllegacy_launcher.exe --shot=путь.png [--shot-hint=N] [--lang=en|ru] [--shot-relang=en|ru]` (N — номер
+подсказки, 0 = «Рендер»; `--lang` — язык поверх сохранённого, `--shot-relang` — снимок после смены языка в окне).
+Стенд — копия лаунчера в `nhl-legacy-port/out/launcher/test/` рядом с копией `nhllegacy.toml`.
 
 ## У пользователя
 
-С 12.10 — `nhl-legacy-port/out/build/win-amd64-release/nhllegacy_launcher.exe` рядом с его `nhllegacy.exe`. Ярлык
-«NHL Legacy» на рабочем столе пока ведёт на `nhllegacy.exe`; перенаправить его на лаунчер — по слову
-пользователя.
+С 12.10 — `nhl-legacy-port/out/build/win-amd64-release/nhllegacy_launcher.exe` рядом с его `nhllegacy.exe`; ярлык
+«NHL Legacy Remaster» на рабочем столе ведёт на лаунчер.
 
 ## Иконка и версия (15.10.2026)
 
