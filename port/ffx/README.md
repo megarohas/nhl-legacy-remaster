@@ -6,7 +6,7 @@
 `src/` у копий были старее или равны `port/src`, поэтому здесь сохранено только то, чего в `port/` нет:
 
 - `nhl13.ffx.toml` — настройки запуска варианта FFX;
-- `CMakeLists.txt`, `build.cmd` — сборка против своего SDK (`build.fr.cmd` — то же у `port-fr`);
+- `CMakeLists.txt`, `build.cmd` — сборка против своего SDK (`CMakeLists.fr.txt`, `build.fr.cmd` — то же у `port-fr`);
 - `scripts/build_port.cmd`, `scripts/codegen_check.*` — сборка и проверка кодогена NHL 13.
 
 Скрипты сборки самого SDK и патчи 0001–0006 — в `legacy-port/scripts/` (общие с NHL Legacy). Для повторного

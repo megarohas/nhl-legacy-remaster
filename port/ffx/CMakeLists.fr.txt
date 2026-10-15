@@ -1,0 +1,51 @@
+# nhl13 - ReXGlue Recompiled Project
+#
+# SDK boilerplate lives in generated/rexglue.cmake.
+
+cmake_minimum_required(VERSION 3.25)
+project(nhl13 LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+include(generated/rexglue.cmake)
+
+# Sources
+set(NHL13_SOURCES
+    src/main.cpp
+    src/nhl13_imports.cpp
+    src/nhl13_crash.cpp
+    src/nhl13_input_lock.cpp
+    src/nhl13_year.cpp
+    src/nhl13_teams.cpp
+    src/nhl13_watch.cpp
+    src/nhl13_dbtrace.cpp
+    src/nhl13_team_sites.cpp
+    src/nhl13_heapguard.cpp
+    src/nhl13_composite.cpp
+    src/nhl13_fencewait.cpp
+    src/nhl13_schedule.cpp
+    src/nhl13_pad.cpp
+    src/nhl13_fa.cpp
+    src/nhl13_draftclass.cpp
+)
+
+if(WIN32)
+    add_executable(nhl13 WIN32 ${NHL13_SOURCES})
+else()
+    add_executable(nhl13 ${NHL13_SOURCES})
+endif()
+
+rexglue_setup_target(nhl13 GPU_PLUGINS xenos)
+
+if(WIN32)
+    target_link_libraries(nhl13 PRIVATE dbghelp)  # стек в отчёте о падении
+    # PDB и в Release: код игры и так собирается с -gline-tables-only (generated/rexglue.cmake), clang++ -g
+    # при линковке даёт /debug — в nhl13_crash.txt видны имена функций игры (sub_XXXXXXXX), как у Legacy.
+    target_link_options(nhl13 PRIVATE -g)
+    # nhl13_snap.exe — слепок памяти игры снаружи (src/nhl13_snap.cpp), кладётся рядом с nhl13.exe
+    add_executable(nhl13_snap src/nhl13_snap.cpp)
+    target_link_libraries(nhl13_snap PRIVATE dbghelp)
+    set_target_properties(nhl13_snap PROPERTIES RUNTIME_OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:nhl13>")
+    add_dependencies(nhl13 nhl13_snap)
+endif()
