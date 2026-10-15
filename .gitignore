@@ -39,7 +39,7 @@ venv/
 /port-ffx/
 # Рабочие копии портов: франшиза NHL 13 (docs/franchise-seasons.md), чистая сборка Legacy (docs/legacy-port.md)
 /port-fr/
-/legacy-port-clean/
+/nhl-legacy-port-clean/
 # свой саундтрек пользователя (tools/music.py) — не в git
 best_of_nhl/
 # Порт NHL Legacy (docs/legacy-port.md): в git — только свой код и сборка проекта; кодоген (производное
