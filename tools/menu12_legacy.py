@@ -751,7 +751,7 @@ def cmd_mockup(args):
         b = shp.bounds
         return im.crop((0, 0, int(b[2] - b[0]), int(b[3] - b[1]))), b[0], b[1]
     font_path = p(P.out, 'fe/ion/fonts/eahelveticaneuehv-mod.ttf')
-    shot = os.path.join(os.path.dirname(GAME), 'legacy-port', 'out', 'shots', 'rel_02.png')
+    shot = os.path.join(os.path.dirname(GAME), 'nhl-legacy-port', 'out', 'shots', 'rel_02.png')
     W, H = 1280, 720
     canvas = Image.new('RGBA', (W, H), (12, 14, 18, 255))
     if os.path.exists(shot):

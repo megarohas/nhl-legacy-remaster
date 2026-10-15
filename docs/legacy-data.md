@@ -2,7 +2,7 @@
 
 08.10.2026, агент legacy-data и его помощники (fe, music, models, art). Всё, что в NHL 13 ставится
 файлами в `cache:` без правки кода игры, собрано для NHL Legacy Edition (Xbox 360, TitleID
-`454109EC`) и проверено в своём порту Legacy (`legacy-port/`, агент legacy-port, D3D12 ROV). Оценка и
+`454109EC`) и проверено в своём порту Legacy (`nhl-legacy-port/`, агент legacy-port, D3D12 ROV). Оценка и
 план — [legacy-port-feasibility.md](legacy-port-feasibility.md); порт — [legacy-port.md](legacy-port.md).
 
 ## Коротко
@@ -10,7 +10,7 @@
 | Мод | Чем собран | В игре Legacy |
 |---|---|---|
 | 32 команды в базе: SEA/VGK на 30/31, сборные — 222/223, 8/8/8/8, календари 32 × 84 | `tools/nhl32.py --game legacy` | ✔ Play Now: Kraken и Golden Knights в списке НХЛ, матч SEA–VGK |
-| АХЛ на 32 (CV/HSK на 224/225, 8/8/8/8, 32 × 72) — по просьбе legacy-port | `tools/nhl32.py --game legacy --ahl32` | база собрана; франшиза — с врезками legacy-port |
+| АХЛ на 32 (CV/HSK на 224/225, 8/8/8/8, 32 × 72) — по просьбе nhl-legacy-port | `tools/nhl32.py --game legacy --ahl32` | база собрана; франшиза — с врезками nhl-legacy-port |
 | Франшиза на 32: поля команды 6 бит и в заголовках таблиц базы; ведомости состава ≤ 100 млн | `tools/nhl32.py` (`widen_headers`), `tools/roster --payroll-max 100` | ✔ (legacy-port, база e9096f07) франшиза: VGK 22 игрока, ARZ 23 своих, пики 32 × 42 с owner 1…32, сим 19.09 → 11.10 без зависания; ведомости — с базы 84130656 (в CACHE с 23:05) |
 | Составы 2026/27 (рейтинги по статистике, свободные агенты, тон кожи, Liiga) | `tools/roster … --game legacy` | ✔ составы, звенья, номера, буквы, звёзды команд |
 | Портреты игроков 2026/27 (НХЛ, Liiga) | `tools/photos.py --game legacy` | ✔ Starting Lineups — наши фото (McCann, Barbashev…) |
@@ -21,8 +21,8 @@
 | Логотипы, лёд, шайба, баннер, прожекторы, форма SEA/VGK (арт 100/101) | `teamart.py`, `kitpaint.py`, `czkit.py --game legacy` (помощник art); превью формы в позе EA — `fepose.py` + `czkit.py fe` (legacy-fe, 09.10) | ✔ логотипы на выборе команд и заставке, форма в 3D, центр льда VGK; превью на Select Jerseys — манекен EA, все 6 форм ([uniforms.md](uniforms.md) §13) |
 | Фон меню | варианты на выбор (у Legacy своя тёмная арена) | не ставился — решает пользователь |
 | Главное меню NHL 12: фон с игроками 2026/27, плашка и кегли 34/25 | `tools/menu12_legacy.py` (помощник menu) | ✔ арена NHL 12, игроки сменяются, кольца в цвет клуба, плашка; вход/выход PLAY, Play Now, CUSTOMIZE (полный список — [fe-menu-legacy.md](fe-menu-legacy.md) §5) |
-| Главное меню: без синей подложки на входе; пункты без онлайна, EXIT, панель описаний про офлайн | `tools/menu12_legacy.py` (подложка), `tools/menuitems_legacy.py` (legacy-fe, 09.10) | ✔ синего нет ([fe-menu-legacy.md](fe-menu-legacy.md) §7); меню и EXIT проверены, EXIT — только с exe legacy-port (§8) |
-| Доски драфта на 32: три колонки 15 + 15 + 2 (Be a GM, фэнтези-драфт и его порядок, Live the Life) | `tools/draft32_legacy.py` + `tools/aptc.py` (legacy-fe, 11.10) | ✔ Entry Draft и фэнтези-драфт (exe legacy-port a1cb8f74), у пользователя с 11.10 16:36; в out — эти 3 ролика, Live the Life — нет ([fe-menu-legacy.md](fe-menu-legacy.md) §11) |
+| Главное меню: без синей подложки на входе; пункты без онлайна, EXIT, панель описаний про офлайн | `tools/menu12_legacy.py` (подложка), `tools/menuitems_legacy.py` (legacy-fe, 09.10) | ✔ синего нет ([fe-menu-legacy.md](fe-menu-legacy.md) §7); меню и EXIT проверены, EXIT — только с exe nhl-legacy-port (§8) |
+| Доски драфта на 32: три колонки 15 + 15 + 2 (Be a GM, фэнтези-драфт и его порядок, Live the Life) | `tools/draft32_legacy.py` + `tools/aptc.py` (legacy-fe, 11.10) | ✔ Entry Draft и фэнтези-драфт (exe nhl-legacy-port a1cb8f74), у пользователя с 11.10 16:36; в out — эти 3 ролика, Live the Life — нет ([fe-menu-legacy.md](fe-menu-legacy.md) §11) |
 | Год 2015 → 2026 в надписях: стартовый экран, юридический текст, титры, подсказка FA | `tools/year2026_legacy.py` (legacy-fe, 12.10) | в игре не проверялось, не поставлено; в out и out-ahl32 ([fe-menu-legacy.md](fe-menu-legacy.md) §12) |
 | Сканы голов NHL 24 игрокам с типовой головой: 178 в out-ahl32 (сканы EA не трогаются), headid = ID EA, строки `stockplayerheads` на местах доноров | `tools/scans24.py` (этап `scans24`, [heads-nhl24.md](heads-nhl24.md)) | пилот Cale Makar ✔ (пользователь, 12.10); массово — собрано, в `cache:` не ставилось |
 
@@ -37,7 +37,7 @@ bash tools/legacy_data/uninstall-legacy-data.sh          # снять (чужи�
 ```
 
 Папка `cache:` порта — строка «CACHE: …» в `game/work/status/legacy-port.md` (сейчас
-`legacy-port/userdata/cache/guest`) или переменная `CACHE`. Работает `tools/legacy_data/install_legacy_data.py`
+`nhl-legacy-port/userdata/cache/guest`) или переменная `CACHE`. Работает `tools/legacy_data/install_legacy_data.py`
 (2500 файлов — секунды). Список поставленного — `game/work/legacy-data/installed.txt`, прежние чужие файлы —
 `game/work/legacy-data/backup/`. Своя папка для них — `LEGACY_DATA_STATE`. Проверка на копии userdata ставится
 так: `CACHE=копия LEGACY_DATA_STATE=папка bash tools/legacy_data/install-legacy-data.sh`, и установку
@@ -52,7 +52,7 @@ bash tools/legacy_data/uninstall-legacy-data.sh          # снять (чужи�
 составы не из `nhlng.db`, а из `db/draft_roster.db`. У EA этот файл лежит в `cacheboot.big` (1,9 МБ): 10 таблиц,
 `exhibition*` и `stockteamsalaryextras`, составы на драфт 2015, строка `db/draft_roster.db` есть в образе exe. Пока
 файла не было в `cache:`, франшиза со старта драфта шла на составах 2015 (у Анахайма средний возраст 39).
-- **09.10 — полная копия нашей базы.** Проверено на копии `legacy-port/userdata-p2ed`, 15:56–16:00: франшиза
+- **09.10 — полная копия нашей базы.** Проверено на копии `nhl-legacy-port/userdata-p2ed`, 15:56–16:00: франшиза
   «NHL Entry Draft» за Анахайм — июнь 2026, средний возраст 24,7, в составе Terry и Vatrano. В логе
   `draft class 2026: real players 66 of 1289`, было `0 of 1492`.
 - **10.10 — только 10 таблиц EA-оригинала, с нашими данными** (`tools/legacy_data/draft_roster.py`). С полной копией
@@ -60,14 +60,14 @@ bash tools/legacy_data/uninstall-legacy-data.sh          # снять (чужи�
   Сейв при создании выходил больше буфера сохранения — 51 таблица при буфере на 49, порча кучи. Разбор —
   [legacy-port.md](legacy-port.md), «Старт «NHL Entry Draft»: две лишние таблицы…». В файле — те же 10 таблиц, что
   у EA, из нашей базы: блоки в прежнем порядке, каталог и `db_size` заново, CRC пересчитаны.
-  - Для `--ahl32` получается 838ca6a0 — байт в байт тот же файл, что legacy-port проверил в игре
+  - Для `--ahl32` получается 838ca6a0 — байт в байт тот же файл, что nhl-legacy-port проверил в игре
     (`draft_roster_min10.db`). Select Team как с полной копией, класс драфта тот же, сейв при создании — 49 таблиц,
     auto draft 2026 цел. Без `--ahl32` — 2c28ecaa.
 - **Где собирается.** `build-all.sh`: этапы `collect` (и `--ahl32`) и `fixdb` пишут `draft_roster.db` рядом с
   `nhlng.db`. Ставит его общая установка из `out/` (и накладка `--ahl32`), снимает `uninstall-legacy-data.sh`.
   Накладка NHL 24 своего `draft_roster.db` не кладёт: её правки этих 10 таблиц не касаются, этап `nhl24` это
   проверяет.
-- **Папка для друзей.** `legacy-port/scripts/make_dist.sh --mods` берёт `draft_roster.db` из `cache:`. Если его там
+- **Папка для друзей.** `nhl-legacy-port/scripts/make_dist.sh --mods` берёт `draft_roster.db` из `cache:`. Если его там
   нет, скрипт кладёт копию `nhlng.db` — это прежний вариант с двумя лишними таблицами.
 - **Откат.** Удалить `cache\guest\db\draft_roster.db` — старт драфта снова возьмёт составы 2015 с диска. Или вернуть
   прежние файлы из бэкапа установки (ниже, «У пользователя»).
@@ -151,7 +151,7 @@ bash tools/legacy_data/uninstall-legacy-data.sh          # снять (чужи�
 
 Вариант «АХЛ на 32» — накладка `game/work/legacy-data/out-ahl32/` (база с CV/HSK, их локализация и
 портреты): `install-legacy-data.sh --ahl32` ставит её поверх `out/`. Франшизе с ней нужен порт с врезками
-АХЛ на 32 (legacy-port их готовит); «Играть сейчас» и без них. У CV/HSK с 09.10.2026 сила как у соседей по
+АХЛ на 32 (nhl-legacy-port их готовит); «Играть сейчас» и без них. У CV/HSK с 09.10.2026 сила как у соседей по
 АХЛ (`tools/roster/ratings.py`, коммит 35cd8fe). У Legacy сохранённый OVR игроков АХЛ на ~9 ниже их
 атрибутов, а новые игроки строились по связи NHL 27 и выходили на 12 пунктов атрибутов слабее. Теперь
 атрибут полевых 77,0 при 76,7 у соседей, OVR 68,5 при 67,8. Изменены только строки игроков CV/HSK. С 09.10
@@ -188,7 +188,7 @@ equip, collect, retire, fixdb, utah, ahl, nhlattrs, useredits, tape, goaliegear,
 |---|---|---|
 | распакованные архивы | `game/extracted/big/<архив>/` | `game/other/legacy/big/<архив>/` (база, локализация, шрифты — `cacheboot`) |
 | работа инструментов | `game/work/<папка>/` | `game/work/legacy-data/<папка>/` |
-| cache: порта | `game/userdata/cache/guest/` | из статуса legacy-port (`NHL_LEGACY_CACHE`) |
+| cache: порта | `game/userdata/cache/guest/` | из статуса nhl-legacy-port (`NHL_LEGACY_CACHE`) |
 | лиги (строки) | НХЛ 0–31, АХЛ 32–61, SHL 62–73, Liiga 74–87, DEL 88–101, Extraliga 102–115, NLA 116–127, сборные 128–148, OHL/QMJHL/WHL 149–208, проспекты 209/210, легенды 211–213, Зимняя классика 214–217, Custom 218–247 | НХЛ 0–31, АХЛ 32–61, SHL 62–75, Liiga 76–90, DEL 91–104, Extraliga 105–118, NLA 119–130, Норвегия 131/132, сборные 133–153, CHL 154–213, проспекты 214/215, Зимняя классика 216–219, EASHL 220/221, Custom 222–251 |
 | свободный арт | 98–101 | 100–107 (98 — Vaasan Sport, 99 — KooKoo) |
 | рейтинги | `p_*`, `g_*`, `p_style`, `g_style` | `c_*`, `playerstyle` (шкала та же: − 36, 6 бит; стили те же) |
@@ -244,7 +244,7 @@ python tools/nhl32.py $L/db/nhlng.db $W/nhlng.db $L/fe/loc/nhl_eng_us.db $W/nhl_
   таблицы, плюс строка Матча звёзд 32/33 в тот же день, что у EA (31.01 и 25.01), home/away — 6 бит.
   Игровые дни — только существующие в сезоне 2026/27 (с 09.10.2026). В исходном календаре Legacy
   2015/16 есть 29.02.2016, в 2027 году такого дня нет: 7 игр этого дня игра не играла, у 14 клубов
-  было 83 игры (нашёл legacy-port). Теперь игры этого дня расходятся по остальным дням, 2 игры WHL того
+  было 83 игры (нашёл nhl-legacy-port). Теперь игры этого дня расходятся по остальным дням, 2 игры WHL того
   же дня переехали на 28.02;
 - схема: вместимость франшизы на 32 (`leaguegmdata`/`leaguestaffdata` 32, `leaguedraftpick` 1344,
   `leaguetempscheduletable` 3200), поля «команда НХЛ» −1…30 → 6 бит (у Legacy без
@@ -266,7 +266,7 @@ python tools/nhl32.py $L/db/nhlng.db $W/nhlng.db $L/fe/loc/nhl_eng_us.db $W/nhl_
   сделок, предложений, RFA и выкупов — 31 туда помещается. Сейвы франшизы, созданные на старой базе,
   хранят свою 5-битную раскладку, их нужно создавать заново. Проверка — заголовок против схемы по всем
   полям: расходятся только home/away календарей (в базе 6 бит, в схеме 5, как в NHL 13);
-- **`--ahl32`** (по просьбе legacy-port): Coachella Valley и Henderson — на Custom 02/03 = 224/225, арт
+- **`--ahl32`** (по просьбе nhl-legacy-port): Coachella Valley и Henderson — на Custom 02/03 = 224/225, арт
   102/103 (формы — копии Springfield/Providence у помощника art, [uniforms.md](uniforms.md) §12), арена —
   копия Cedar Park Center; АХЛ Legacy 2015/16 (30 клубов, 8/7/8/7) → 8/8/8/8: Texas — в Central, Lake Erie
   (Кливленд) — в North, как в нынешней АХЛ; `ahlschedule` — 32 × 72 (8 игр с соперником по дивизиону, 2 —
@@ -288,11 +288,11 @@ cd tools && python -m roster.equipment --game legacy apply ../game/work/legacy-d
 #        photos-all/fe → out/fe
 ```
 
-`--payroll-max 100`: контракты конвейера — заглушка по OVR, и ведомости клубов выходили 94–135 млн. Потолок 2026/27 — 104 млн, его ставит врезка legacy-port. Игра считает ведомость по составу НХЛ (`exhibitionrostertable`), это legacy-port сверил на экране Be a GM: у ANA «Cap Value $99.050M» — ровно сумма по 26 строкам состава. Со 2-го сезона игра поднимает потолок до самой дорогой ведомости, а клуб пользователя сверх потолка дальше не пускает. Поэтому у клубов дороже 100 млн контракты (по `proteam`) выше минималки 850 тыс. ужимаются одним коэффициентом до 100 млн: так получилось у 28 клубов, у ANA/VAN/CGY/SEA ведомость 94–99 млн. Настоящие кэп-хиты — CapWages: платный API или разбор страниц, решение за пользователем ([research-data-sources.md](research-data-sources.md) §2).
+`--payroll-max 100`: контракты конвейера — заглушка по OVR, и ведомости клубов выходили 94–135 млн. Потолок 2026/27 — 104 млн, его ставит врезка legacy-port. Игра считает ведомость по составу НХЛ (`exhibitionrostertable`), это nhl-legacy-port сверил на экране Be a GM: у ANA «Cap Value $99.050M» — ровно сумма по 26 строкам состава. Со 2-го сезона игра поднимает потолок до самой дорогой ведомости, а клуб пользователя сверх потолка дальше не пускает. Поэтому у клубов дороже 100 млн контракты (по `proteam`) выше минималки 850 тыс. ужимаются одним коэффициентом до 100 млн: так получилось у 28 клубов, у ANA/VAN/CGY/SEA ведомость 94–99 млн. Настоящие кэп-хиты — CapWages: платный API или разбор страниц, решение за пользователем ([research-data-sources.md](research-data-sources.md) §2).
 
 `--fa-only` (с 09.10.2026): в пуле свободных агентов (`exhibitionfreeagents`) остаются только 39 настоящих
 (`--fa`). Раньше там оставались ещё 35 свободных агентов Legacy 2015 года (Ehrhoff, Zidlicky, Visnovsky…),
-и к июню 2027 они были в топе хаба свободных агентов франшизы (нашёл legacy-port). Строки этих игроков
+и к июню 2027 они были в топе хаба свободных агентов франшизы (нашёл nhl-legacy-port). Строки этих игроков
 остаются в базе, как у игроков без клуба.
 
 **Сейвы франшизы читать без удалённых записей.** В базах игр (исходные NHL 13 и Legacy, наша) удалённых
@@ -379,19 +379,19 @@ Wikipedia), портреты у 1303, проверки OK.
   проверено по `game/work/nhl13-franchise/nhl32-wide3`. Поэтому новый расчёт длины даёт для NHL 13 те же записи.
 - **У пользователя** в `cache:` пока база 34dfe267 с этой ошибкой. Исправленная ставится полной установкой
   `install-legacy-data.sh --ahl32`: меняются только `db/nhlng.db` и `db/draft_roster.db`. Ставить её нужно до того, как
-  пользователь начнёт свою франшизу; решение — за координатором. Своих франшиз у пользователя нет (legacy-port), в
+  пользователь начнёт свою франшизу; решение — за координатором. Своих франшиз у пользователя нет (nhl-legacy-port), в
   его userdata — тестовые сейвы.
 - **Сейвы франшиз, начатых на прежней базе.** В сейве у таблицы своя раскладка, её чинит
   `fix_flagbit.py --save СЕЙВ КОПИЯ --meta META`. Запись становится на 4 байта длиннее, поля остаются на местах.
   Новый последний бит ставится так, как движок держит его во всех 37 таблицах сейва BE A GM10 со строками
-  (legacy-port): 1 у строк из списка удалённых и из запаса `[current, max)`, 0 у живых. Прежний бит 63 — настоящий
+  (nhl-legacy-port): 1 у строк из списка удалённых и из запаса `[current, max)`, 0 у живых. Прежний бит 63 — настоящий
   младший бит draftteam, список удалённых в заголовке не трогается. Пишется копия, на месте сейв не чинится.
-  - Проверено на копиях двух сейвов. У BE A GM10 (legacy-port) у 107 из 357 живых строк флаг был 1, после
+  - Проверено на копиях двух сейвов. У BE A GM10 (nhl-legacy-port) у 107 из 357 живых строк флаг был 1, после
     ремонта — у 0. Значения полей и остальные таблицы не изменились, суммы сейва сходятся.
-  - legacy-port проверил ту же раскладку в игре своим разовым скриптом на копии `userdata-p3`: сейв грузится, в пуле
+  - nhl-legacy-port проверил ту же раскладку в игре своим разовым скриптом на копии `userdata-p3`: сейв грузится, в пуле
     перед драфтом 357 разных, auto draft 2028 — 224 разных выбора из пула.
 - **Проверка в игре.** Копия `game/work/legacy-data/ud-rookie` — userdata пользователя без сейвов франшиз, с базой
-  59b03a68. legacy-port проверит на ней франшизу с двумя драфтами.
+  59b03a68. nhl-legacy-port проверит на ней франшизу с двумя драфтами.
 
 ## Ветераны НХЛ 2015 — без клуба (этап `retire`, 10.10.2026)
 
@@ -439,12 +439,12 @@ Wikipedia), портреты у 1303, проверки OK.
   в пуле, потому что Юта теперь применяется до меню.
 - Прежние базы — `game/work/legacy-data/backup-cache/out-before-retire-20261010-060759/`.
 - Отчёты — `game/work/legacy-data/roster/retire-veterans.json` и `roster-ahl32/retire-veterans.json`.
-- Копия для legacy-port — `game/work/legacy-data/ud-vet` (с Ютой). Пользователю — после теста и слова координатора.
+- Копия для nhl-legacy-port — `game/work/legacy-data/ud-vet` (с Ютой). Пользователю — после теста и слова координатора.
 - **ТЕСТ VET пройден** (legacy-port, 10.10). Во франшизе нет ни одного из 94 ветеранов, Galchenyuk нет.
 - **Находка теста: в клубах вне НХЛ остались старые игроки составов 2015.** Этап их не трогает: в 2015 году они не
   были в клубах НХЛ.
   - АХЛ (32 клуба): рождены в 1988 году или раньше — 185 из 792, 23 %. У 44 из них OVR не ниже 75, 157 стоят в
-    звеньях. 1 июля 37 таких выходят на рынок свободных агентов, например Heatley: 45 лет, OVR 80 (legacy-port).
+    звеньях. 1 июля 37 таких выходят на рынок свободных агентов, например Heatley: 45 лет, OVR 80 (nhl-legacy-port).
   - Лиги Европы со составами 2015 — доля таких игроков: DEL 61 %, NLA 52 %, SHL 46 %, Extraliga 41 %, Норвегия 44 %.
   - Liiga (наша) — 2 %, CHL — 0.
   - Без них в самом малом клубе АХЛ осталось бы 14 игроков, в лигах Европы — 6–9. Составы этих лиг пересобирает
@@ -515,7 +515,7 @@ Wikipedia), портреты у 1303, проверки OK.
 - Проверка на копии `cache:` пользователя (`tmp/check_utah.py`): `install --ahl32` изменил ровно базу и
   локализацию (md5 как в `out-ahl32`) и добавил ровно 66 файлов арта (md5 как в спецификации). `draft_roster.db`
   тот же (838ca6a0), остальное байт в байт как у пользователя.
-- Копия для legacy-port — `game/work/legacy-data/ud-uta` (ТЕСТ UTA).
+- Копия для nhl-legacy-port — `game/work/legacy-data/ud-uta` (ТЕСТ UTA).
 - **ТЕСТ UTA пройден** (legacy-port, 10.10, на `ud-vet`): меню, Delta Center, формы и шлемы дом/выезд, Тусон
   с логотипом и Tucson Arena; во франшизе Юта в Central, фарм — Tucson, старт Entry Draft — 49 таблиц.
 
@@ -625,7 +625,7 @@ Wikipedia), портреты у 1303, проверки OK.
   локализация 0900978d). Портретов: в `out/fe` +1298 файлов, в `out-ahl32/fe` +1382.
 - Накладка NHL 24 (пакет 511e90bd, пилот CHI) пересобрана: `out-nhl24` 5fb940cd / 0240fc4c, `out-nhl24-ahl32`
   77e65fb1 / 13a8ea7f.
-- Копия для legacy-port — `game/work/legacy-data/ud-ahl` (ТЕСТ AHL): userdata пользователя без сейвов франшиз,
+- Копия для nhl-legacy-port — `game/work/legacy-data/ud-ahl` (ТЕСТ AHL): userdata пользователя без сейвов франшиз,
   установка `--ahl32 --nhl24` (`tmp/make_ud.py`). Это Юта, ветераны, АХЛ 2026/27 и свободные агенты, накладка NHL 24 —
   пилот CHI, как у пользователя. Новых логотипов в копии нет: её сделали до этапа `logos`. По сравнению с userdata
   пользователя изменились база (77e65fb1), `draft_roster.db` (6e0b5b5f) и локализация (13a8ea7f). Портрет p13587
@@ -650,7 +650,7 @@ Wikipedia), портреты у 1303, проверки OK.
 
 **Причина.**
 - Игра показывает OVR, посчитанный из атрибутов `c_*`; поле overall она не читает. Точная формула — таблицы
-  `fe/resource_kernel/worth2.brk`, разобрал legacy-port (коммит 1c819e6, `tools/roster/ovrformula.py`: `game_ovr`).
+  `fe/resource_kernel/worth2.brk`, разобрал nhl-legacy-port (коммит 1c819e6, `tools/roster/ovrformula.py`: `game_ovr`).
   - У полевых сверено по 61 OVR из игры — все точно.
   - У вратарей формула из кода та же (таблица 13), но по игре не сверена.
   - До разбора (утро 11.10) пользовались регрессией overall ~ атрибуты по базе EA (`regression`, средняя ошибка 0,5–1,8).
@@ -760,7 +760,7 @@ Wikipedia), портреты у 1303, проверки OK.
 - `draft_roster.db` — 10 таблиц байт в байт как в базе; CRC баз и `draft_roster`; локализация как была.
 
 **У пользователя с 11.10, 05:41** (слово координатора «ставь»; игра закрыта, `nhllegacy.exe` нет).
-- Шаги: бэкап → `install-legacy-data.sh --ahl32 --nhl24` (`CACHE=legacy-port/userdata/cache/guest`, состояние —
+- Шаги: бэкап → `install-legacy-data.sh --ahl32 --nhl24` (`CACHE=nhl-legacy-port/userdata/cache/guest`, состояние —
   `game/work/legacy-data`) → сверка → `nhl24.py verify`. Скрипт — `tmp/user_install_full.py backup|install|check|rollback`.
 - В `cache:` заменено 17 файлов, добавлено 30 (формы SEA и VGK), убрано 0. Остальное, сейвы и userdata не тронуты.
 
@@ -806,10 +806,10 @@ Wikipedia), портреты у 1303, проверки OK.
 
 Поставлено по решению координатора: исправленная база (флаговый бит) и `draft_roster.db` из 10 таблиц, без накладки
 NHL 24.
-- Команда: `CACHE=legacy-port/userdata/cache/guest bash tools/legacy_data/install-legacy-data.sh --ahl32`. Игра
-  пользователя была закрыта: шла одна `nhllegacy.exe` — тест legacy-port под замком `game.lock` с другой
+- Команда: `CACHE=nhl-legacy-port/userdata/cache/guest bash tools/legacy_data/install-legacy-data.sh --ahl32`. Игра
+  пользователя была закрыта: шла одна `nhllegacy.exe` — тест nhl-legacy-port под замком `game.lock` с другой
   `user_data_root` (`ud-ab-plain`). Обновлено 2 файла из 2910.
-- Стоит в `cache:` пользователя (`legacy-port/userdata/cache/guest`):
+- Стоит в `cache:` пользователя (`nhl-legacy-port/userdata/cache/guest`):
 
   | файл | md5 | было |
   |---|---|---|
@@ -823,7 +823,7 @@ NHL 24.
   набор путей (2910, пересортирован). Появился `install-flags.txt` (`--ahl32`).
 - **Бэкап прежних файлов:** `game/work/legacy-data/backup-cache/user-20261010-051711/db/` (`nhlng.db`,
   `draft_roster.db`, оба 34dfe267; `md5.txt`).
-- **Откат** — при закрытой игре скопировать оба файла из бэкапа обратно в `legacy-port/userdata/cache/guest/db/`.
+- **Откат** — при закрытой игре скопировать оба файла из бэкапа обратно в `nhl-legacy-port/userdata/cache/guest/db/`.
   Установщик для этого не нужен: оба файла и так в `installed.txt`.
 - Сейвы франшиз в userdata пользователя — агентские, их не чинили. Ремонт сейвов, если понадобится, —
   `fix_flagbit.py --save` (раздел выше).
@@ -842,11 +842,11 @@ NHL 24.
   - three `1_6_6` (#13): «Third (NHL 24)»;
   - EA `1_6_0` и `1_6_1`: «Home (EA)» и «Away (EA)», `locstring` 6, `isdefault` 0.
 - **Установка.** Через `tmp/user_nhl24_install.py` (backup → install → check). Внутри — такая команда:
-  `CACHE=legacy-port/userdata/cache/guest LEGACY_DATA_WORK=…/w-user LEGACY_DATA_STATE=…/game/work/legacy-data
+  `CACHE=nhl-legacy-port/userdata/cache/guest LEGACY_DATA_WORK=…/w-user LEGACY_DATA_STATE=…/game/work/legacy-data
   bash tools/legacy_data/install-legacy-data.sh --ahl32 --nhl24`.
   `LEGACY_DATA_STATE` здесь обязателен: без него состояние установщика (installed.txt, флаги) легло бы в w-user, а не
   к прежней установке пользователя.
-- **Игра.** Игра пользователя была закрыта. Шёл только тест legacy-port с `user_data_root` = `ud-chi3b`.
+- **Игра.** Игра пользователя была закрыта. Шёл только тест nhl-legacy-port с `user_data_root` = `ud-chi3b`.
   `nhllegacy.toml` и exe не трогались.
 - **Что изменилось в `cache:` пользователя.** Заменены 2 файла, добавлен 171 файл пакета, остальное не тронуто:
 
@@ -870,7 +870,7 @@ NHL 24.
   - `md5.txt`, `snapshot.json` (размеры и время всех файлов `cache:` до установки) и `added.txt` (171 добавленный
     файл).
 - **Откат** (при закрытой игре) — той же командой, что проверена на копии:
-  `CACHE=legacy-port/userdata/cache/guest LEGACY_DATA_WORK=…/w-user LEGACY_DATA_STATE=…/game/work/legacy-data
+  `CACHE=nhl-legacy-port/userdata/cache/guest LEGACY_DATA_WORK=…/w-user LEGACY_DATA_STATE=…/game/work/legacy-data
   bash tools/legacy_data/uninstall-legacy-data.sh --nhl24`.
   - `LEGACY_DATA_WORK=w-user` обязателен. Снятие накладки — это полная переустановка без неё, и без этой переменной
     она возьмёт `game/work/legacy-data/out`, где уже Юта и ветераны.
@@ -888,7 +888,7 @@ NHL 24.
   - Исправление (раздел «Цвет шлема» ниже) проверено в ТЕСТ CHI3C.
   - **Поставлено в 08:59** (слово координатора 08:58). Изменился только `db/nhlng.db`: 9ad0695c → 6274f2ab; новых
     и пропавших файлов нет. installed.txt и install-flags не изменились.
-  - Игра пользователя была закрыта. Шёл только тест legacy-port с `user_data_root` = `userdata-ucheck`.
+  - Игра пользователя была закрыта. Шёл только тест nhl-legacy-port с `user_data_root` = `userdata-ucheck`.
   - `nhl24.py verify` — 171 файл, расхождений 0, база 6274f2ab.
   - Бэкап: `game/work/legacy-data/backup-cache/user-20261010-085918/` (`db/nhlng.db` 9ad0695c, `state/`).
   - Откат к состоянию 07:00 — вернуть этот файл (при закрытой игре).
@@ -925,7 +925,7 @@ NHL 24.
     `isdefault` 0. У SEA и VGK прежние формы по умолчанию — наши (czkit, `1_100_0`/`1`, `1_101_0`/`1`): у них подписи
     «Home (old)» и «Away (old)» (координатор 10.10). Отличие — по свитеру: есть в архивах EA — «(EA)», нет — «(old)»;
   - третья NHL 24 — «Third (NHL 24)», `locstring` 6, `isdefault` 0.
-- **По коду игры** (legacy-port): форму по умолчанию выбирает `sub_82AEAD20`. Среди форм клуба с `isdefault` ≠ 0 она
+- **По коду игры** (nhl-legacy-port): форму по умолчанию выбирает `sub_82AEAD20`. Среди форм клуба с `isdefault` ≠ 0 она
   берёт ту, у которой `locstring` 0 (дома) или 1 (в гостях); если такой нет — последнюю с `isdefault`. `islightcolor`
   загрузчик не читает. Поэтому с `locstring` 6 новые формы по умолчанию не находились (ТЕСТ CHI3).
 - Юту правила не касаются: это переименование Аризоны, формы у неё не из NHL 24.
@@ -1042,7 +1042,7 @@ BIGF `.big`), ставятся как есть. Пакет по умолчани
   - **Пример CHI.** home `1_6_14` и three `1_6_6` — чёрный (как строка 216 домашней `1_6_0`), away `1_6_15` —
     белый (как 217 выездной `1_6_1`). `1_6_3` и `1_6_4` закреплены белыми (как 241).
   - **ТЕСТ CHI3C пройден** (legacy-port, 10.10; копия `ud-chi3c`, база 6274f2ab; кадры —
-    `legacy-port/out/agent/chi3c/key/`). Новые формы: #11 и #13 — чёрный, #12 — белый. Формы EA: #6 — чёрный,
+    `nhl-legacy-port/out/agent/chi3c/key/`). Новые формы: #11 и #13 — чёрный, #12 — белый. Формы EA: #6 — чёрный,
     #7 — белый, #9 и #10 — белые, как были. Формы по умолчанию в Play Now — #11 дома, #12 в гостях. Промахов
     `cache:` нет.
   - У пользователя с 08:59 (раздел «У пользователя (10.10.2026, 07:00)»).
@@ -1079,7 +1079,7 @@ python tools/legacy_data/nhl24.py verify ПАПКА_CACHE                 # cach
 **Сейвы.** В сейвах франшизы (DYNASTY, 49 таблиц) таблицы `stockteamjerseys` нет, поэтому новые формы появятся и в
 уже начатых франшизах. В сейве составов она есть (`savegroups` allloaded, rosters, rosterupdate).
 
-**Папка для друзей.** `legacy-port/scripts/make_dist.sh --mods` копирует весь `cache:` пользователя. Со стоящей
+**Папка для друзей.** `nhl-legacy-port/scripts/make_dist.sh --mods` копирует весь `cache:` пользователя. Со стоящей
 накладкой туда попадут и файлы NHL 24 (только для личного использования), и база с новыми строками формы. Убрать одни
 текстуры нельзя: строки базы останутся, и новые формы будут без файлов. Решение координатора (09.10): dist пока не
 трогаем, пользователь соберёт его сам, когда всё будет отлажено. Тогда накладку NHL 24 надо учесть: список её путей —
@@ -1106,7 +1106,7 @@ python tools/legacy_data/nhl24.py verify ПАПКА_CACHE                 # cach
   дома и выезда шнуровки и так не было, спецформы `1_6_3`/`4`/`5` её сохранили. 7 подписей новых форм.
 - Проверка на копии (`check_nhl24.py`): установка `--ahl32 --nhl24` — 210 файлов, база и локализация как в манифесте и
   накладке, больше ничего не тронуто; `uninstall --nhl24` — `cache:` байт в байт как у пользователя.
-- Копия userdata для legacy-port — `game/work/legacy-data/ud-chi`, лист ожидаемых превью — `game/work/legacy-data/nhl24/chi-expected.png`.
+- Копия userdata для nhl-legacy-port — `game/work/legacy-data/ud-chi`, лист ожидаемых превью — `game/work/legacy-data/nhl24/chi-expected.png`.
 - ТЕСТ CHI (legacy-port, 09.10). В игре всё работает: меню на 18 форм с подписями, матчи во всех формах без
   промахов `cache:`, лёд, шайба, сохранение и загрузка составов (сейв: 722 строки, у CHI 18).
   Найдено и исправлено:
@@ -1118,7 +1118,7 @@ python tools/legacy_data/nhl24.py verify ПАПКА_CACHE                 # cach
   - у n90_four нет герба и в NHL 24: оставить, поставить герб декалью или убрать форму;
   - клюшки: замена моделей — только по решению пользователя.
 
-  Отдельно legacy-port разбирает падения GPU и «голубые лица» за долгую сессию: пакет это или порт (копии
+  Отдельно nhl-legacy-port разбирает падения GPU и «голубые лица» за долгую сессию: пакет это или порт (копии
   A/B: `ud-ab-plain` и `ud-ab-nhl24`).
 
 ## Что сделали помощники (подробно — в своих документах)
@@ -1152,7 +1152,7 @@ python tools/legacy_data/nhl24.py verify ПАПКА_CACHE                 # cach
 
 ## Проверка в игре
 
-Порт legacy-port (`legacy-port/codegen/out/build/win-amd64-relwithdebinfo/nhllegacy.exe`, D3D12 ROV),
+Порт nhl-legacy-port (`nhl-legacy-port/codegen/out/build/win-amd64-relwithdebinfo/nhllegacy.exe`, D3D12 ROV),
 по замку `game/work/status/game.lock`; снимки — `game/work/legacy-data/ingame/`:
 
 1. 20:13 — база nhl32: игра берёт `cache:\db\nhlng.db`, в Play Now в списке НХЛ — GOLDEN KNIGHTS и
@@ -1177,7 +1177,7 @@ python tools/legacy_data/nhl24.py verify ПАПКА_CACHE                 # cach
 
 Не проверено в игре: гетры и клюшки вблизи (повтор), край свитера сзади, клюшка на льду; табличка имени
 вратаря SEA на заставке была пустой (снимок посреди анимации? — посмотреть); база `--ahl32` и франшиза на
-32 (нужны врезки legacy-port); возраст (врезка года); фон меню (варианты не ставились).
+32 (нужны врезки nhl-legacy-port); возраст (врезка года); фон меню (варианты не ставились).
 
 ## Правки экипировки пользователя (этап useredits, 11.10.2026)
 

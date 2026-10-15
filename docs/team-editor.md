@@ -1,12 +1,12 @@
 # Редактор команд (Create a Team / Edit Team): как устроен и как дать ему любые команды
 
 Разбор 08.10.2026 по диску без TU2: скрипты меню (Apt из `boot.big` / `cache.big`; свой дизассемблер —
-`game/work/team-editor/scripts/aptdis.py`), восстановленный код порта (`port/generated/default`), исходная
+`game/work/team-editor/scripts/aptdis.py`), восстановленный код порта (`nhl-13-port/generated/default`), исходная
 база `game/extracted/big/cache/db/nhlng.db` и рабочая копия `game/work/nhl32-ahl32/nhlng.db` (только чтение).
 **Порт, база, `game/userdata` не менялись; в игре ничего не проверялось.**
 
 Пометки: **[код]** — прочитано в коде или скриптах; **[пред.]** — вывод по косвенным признакам, проверить.
-Адреса — PPC-образ (`sub_XXXXXXXX` в `port/generated/default`).
+Адреса — PPC-образ (`sub_XXXXXXXX` в `nhl-13-port/generated/default`).
 
 ## Коротко
 

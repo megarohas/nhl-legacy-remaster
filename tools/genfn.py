@@ -3,8 +3,8 @@
     python genfn.py GENDIR ADDR [ADDR ...]       # asm функции, которой принадлежит ADDR
     python genfn.py GENDIR ADDR --c              # целиком C++ этой функции
 
-GENDIR — папка сгенерированного кода ReXGlue (port/generated/default,
-legacy-port/generated/default…): файлы *_recomp.N.cpp с DEFINE_REX_FUNC(sub_XXXXXXXX) и
+GENDIR — папка сгенерированного кода ReXGlue (nhl-13-port/generated/default,
+nhl-legacy-port/generated/default…): файлы *_recomp.N.cpp с DEFINE_REX_FUNC(sub_XXXXXXXX) и
 комментарием с исходной инструкцией перед каждой строкой. Индекс начал функций кладётся во
 временную папку (%TEMP%/genfn, по пути GENDIR; пересоздаётся, если старше register.cpp) — в папки
 сгенерированного кода инструмент ничего не пишет.

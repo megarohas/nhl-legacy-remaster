@@ -3,7 +3,7 @@
 #   2. shallow-init only the submodules a Windows D3D12 + Vulkan build needs
 #   3. materialize git symlinks (Git for Windows checks them out as text files with
 #      the target path; libmspack's cabextract/mspack/*.c/*.h are such links)
-#   4. apply legacy-port\scripts\sdk-patches\*.patch (0001, 0002, ...) in name order (skipped if already applied)
+#   4. apply nhl-legacy-port\scripts\sdk-patches\*.patch (0001, 0002, ...) in name order (skipped if already applied)
 # Read-only towards GitHub: nothing is pushed anywhere.
 param(
     [Parameter(Mandatory = $true)][string]$SdkSrc,

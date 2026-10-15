@@ -240,7 +240,7 @@ def art_teams():
     tdb = _lib("tdb")
     from tdb_read import load_meta
     db = tdb.Tdb(open(os.path.join(BIG, "cacheboot", "db", "nhlng.db"), "rb").read(),
-                 load_meta(os.path.join(REPO, "legacy-port", "big", "cacheboot", "db", "nhlng-meta.xml")))
+                 load_meta(os.path.join(REPO, "nhl-legacy-port", "big", "cacheboot", "db", "nhlng-meta.xml")))
     a2 = {}
     for r in db.live_rows("exhibitionteams"):
         a2.setdefault(db.get("exhibitionteams", "artid", r), []).append(

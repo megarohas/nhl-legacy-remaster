@@ -1,6 +1,6 @@
 # Логотипы, арены и лёд: Seattle Kraken и Vegas Golden Knights
 
-Разбор от 08.10.2026 (файлы игры — диск без TU2, код — `port/generated`, логи — `port/out/*.log`).
+Разбор от 08.10.2026 (файлы игры — диск без TU2, код — `nhl-13-port/generated`, логи — `nhl-13-port/out/*.log`).
 Инструменты — [tools/teamart.py](../tools/teamart.py) (форматы, сборка) и
 [tools/newteams_art.py](../tools/newteams_art.py) (поля базы, по умолчанию dry-run). Всё собранное лежит
 в `game/work/logos/` (вне git), в `game/userdata` ничего не записано, живая `nhlng.db` не тронута.
@@ -302,7 +302,7 @@ Falcons, строка 56) и `alias 150 101` (Providence Bruins, строка 51
 
 1. Положить `out/` в `cache:`, выставить artid 98/99 (+ форма под 98/99) → «Играть сейчас»
    SEA — VGK: логотипы на выборе команд, табло, центр льда и шайба хозяина, прожекторы (если 45/46).
-2. В `port/out/game-release.log` строки `NtCreateFile FAILED` для этих путей должны пропасть.
+2. В `nhl-13-port/out/game-release.log` строки `NtCreateFile FAILED` для этих путей должны пропасть.
 3. Свободные `.rx2` в `cache:` — без chunklzx (так EA файлов в архивах нет); по коду потока это
    допустимо, в игре не проверено. Если не подхватятся — упаковать в `chunkzip` (deflate).
 4. `audioid` у SEA/VGK = 0 — это номер «Анахайма»: комментатор может называть клуб Ducks. Свободные

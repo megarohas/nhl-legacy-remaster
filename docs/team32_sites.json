@@ -1132,8 +1132,8 @@
    "new": "39600020",
    "class": "NHL_TEAMS",
    "func": "828BD8D8",
-   "what": "фильтр таблиц статистики игроков: команда < 30 — клуб НХЛ (без правки игроки SEA/VGK выпадают из лидеров НХЛ; найдено legacy-port по Legacy 82B26C40)",
-   "src": "legacy-port",
+   "what": "фильтр таблиц статистики игроков: команда < 30 — клуб НХЛ (без правки игроки SEA/VGK выпадают из лидеров НХЛ; найдено nhl-legacy-port по Legacy 82B26C40)",
+   "src": "nhl-legacy-port",
    "asm_old": "li r11, 30",
    "asm_new": "li r11, 32"
   },
@@ -1144,7 +1144,7 @@
    "class": "NHL_TEAMS",
    "func": "828BD8D8",
    "what": "то же во второй ветке 828BD8D8 (Legacy 82B27050)",
-   "src": "legacy-port",
+   "src": "nhl-legacy-port",
    "asm_old": "li r11, 30",
    "asm_new": "li r11, 32"
   }

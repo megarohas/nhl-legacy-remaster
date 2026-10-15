@@ -27,12 +27,12 @@ game_data_root = "S:/Claude/megarohas_nhl13/game/other/legacy/disc"
 
 # Сейвы, кэш шейдеров и раздел cache:\ (cache/guest — сюда же кладутся моды-данные).
 # Пусто — папка userdata рядом с exe. НЕ общая с NHL 13 (game/userdata).
-user_data_root = "S:/Claude/megarohas_nhl13/legacy-port/userdata"
+user_data_root = "S:/Claude/megarohas_nhl13/nhl-legacy-port/userdata"
 
 # update: (патч с диска $SystemUpdate — это обновление системы, не игры) не подключаем.
 
 # Лог каждого запуска — сюда, перезаписывается при старте.
-log_file = "S:/Claude/megarohas_nhl13/legacy-port/out/game.log"
+log_file = "S:/Claude/megarohas_nhl13/nhl-legacy-port/out/game.log"
 
 # Анизотропная фильтрация: 5 = 16x (по умолчанию 3 = 4x).
 anisotropic_override = 5

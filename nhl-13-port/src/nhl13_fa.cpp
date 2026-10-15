@@ -1,5 +1,5 @@
 // Свободные агенты франшизы на 32 команды (docs/franchise-seasons.md, «Свободные агенты»). Перенос
-// legacy-port/src/nhllegacy_fa.cpp (NHL Legacy 82B69EB8 / 82B640B0) на адреса NHL 13 (tools/xmatch.py).
+// nhl-legacy-port/src/nhllegacy_fa.cpp (NHL Legacy 82B69EB8 / 82B640B0) на адреса NHL 13 (tools/xmatch.py).
 //
 // Объект данных свободных агентов (r3): +4656 u16 — число записей, +4660 — записи по 116 байт (до 6000),
 // +0xB0FD1 — «загружено» (иначе 82920CE8), +0xB0FD3 и +0xB0FD4[номер] — флаги «изменено», +0xB2764 — число команд

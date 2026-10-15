@@ -100,7 +100,7 @@ KIT_TYPES = ('jersey', 'name', 'pant', 'sock', 'fe', 'helmet')   # файлы к
 DEFAULT_KITS = {'home': 0, 'away': 1}          # новые формы по умолчанию (правило 05:53): форма → islightcolor
 # ТЕСТ CHI3 (legacy-port, 10.10 06:22): игра ищет форму по умолчанию дома по isdefault + locstring 0, в гостях — по
 # isdefault + locstring 1 (у всех 222 команд EA строки по умолчанию — только loc 0 и 1, islightcolor любой); с locstring 6
-# новые формы по умолчанию не находились. По коду (legacy-port): sub_82AEAD20 среди форм с isdefault ≠ 0 берёт ту, у
+# новые формы по умолчанию не находились. По коду (nhl-legacy-port): sub_82AEAD20 среди форм с isdefault ≠ 0 берёт ту, у
 # которой locstring 0 (дома) или 1 (в гостях), иначе — последнюю с isdefault; islightcolor загрузчик не читает. Поэтому
 # новые home/away — locstring 0/1 (подпись стандартная Home/Away), прежние строки по умолчанию — locstring 6 с подписью
 # «Home (EA)» / «Away (EA)» (окончательное правило пользователя 10.10; ТЕСТ CHI3B)

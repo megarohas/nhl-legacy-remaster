@@ -65,13 +65,13 @@ from roster.dbview import FLAGS, fld  # noqa: E402
 
 W = os.environ.get('LEGACY_DATA_WORK', os.path.join(ROOT, 'game', 'work', 'legacy-data'))
 SCREENS = os.environ.get('CONTRACTS_SCREENS', os.path.join(ROOT, 'game', 'work', 'contracts', 'screens'))
-CACHE_META = os.path.join(ROOT, 'legacy-port', 'userdata', 'cache', 'guest', 'db', 'nhlng-meta.xml')
+CACHE_META = os.path.join(ROOT, 'nhl-legacy-port', 'userdata', 'cache', 'guest', 'db', 'nhlng-meta.xml')
 B, P, R, F = 'exhibitionplayerbiotable', 'exhibitionplayers', 'exhibitionrostertable', 'exhibitionfreeagents'
 T, SAI, GAI = 'exhibitionteams', 'exhibitionskaterai', 'exhibitiongoalieai'
 MAX_PER_TEAM = 40                # записей состава у клуба (roster/write.py): key = клуб × 40 + номер
 SKIP_GROUPS = ('Retained', 'Buyout', 'Buried')
 SEASON = 2026                    # 1-й сезон страниц (2026-27)
-CAP = 104_000_000                # потолок 2026/27 (врезка legacy-port nhl_salary_cap)
+CAP = 104_000_000                # потолок 2026/27 (врезка nhl-legacy-port nhl_salary_cap)
 UNIT = 5000
 FIELDS = ('contractstatus', 'contractdollars', 'contractlength', 'contractis2way', 'contractismultiyear',
           'contractneedsentrylevel', 'yearufa', 'extensiondollars', 'extensionlength', 'extensionis2way')

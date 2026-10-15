@@ -1,4 +1,4 @@
-// nhllegacy — хост порта NHL Legacy (по образцу порта NHL 13, port/src/nhl13_app.h).
+// nhllegacy — хост порта NHL Legacy (по образцу порта NHL 13, nhl-13-port/src/nhl13_app.h).
 
 #pragma once
 

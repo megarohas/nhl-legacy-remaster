@@ -1,8 +1,8 @@
 # Порт: тулчейн и генерация кода
 
-> **Порт NHL 13 заморожен (15.10.2026).** Сборки (`port/out`), копии `port-ffx/`, `port-fr/` и кодоген
-> `port/generated/default` удалены: файлов игры на диске нет с 09.10.2026, сборки не запускались. В git остаются
-> исходники и конфиги порта (`port/`), уникальные настройки и скрипты вариантов — `port/ffx/`, документация. Для
+> **Порт NHL 13 заморожен (15.10.2026).** Сборки (`nhl-13-port/out`), копии `port-ffx/`, `port-fr/` и кодоген
+> `nhl-13-port/generated/default` удалены: файлов игры на диске нет с 09.10.2026, сборки не запускались. В git остаются
+> исходники и конфиги порта (`nhl-13-port/`), уникальные настройки и скрипты вариантов — `nhl-13-port/ffx/`, документация. Для
 > повторного портирования — снять игру с приставки и сделать кодоген заново (ниже).
 
 ## Тулчейн (поставлен 07.10.2026, winget)
@@ -20,11 +20,11 @@
 (`init --project-name --xex-path --game-root --project-root`). На Windows по умолчанию
 рендер D3D12, Vulkan — опция `REXGLUE_USE_VULKAN` (её использует Legacy-порт).
 
-## Проект `port/`
+## Проект `nhl-13-port/`
 
 Создан `rexglue init`; в git — `CMakeLists.txt`, пресеты, `nhl13_manifest.toml`, `src/`,
-`generated/rexglue.cmake`. Сгенерированный код `port/generated/default/` (производное
-от кода игры) и сборка `port/out/` — только локально.
+`generated/rexglue.cmake`. Сгенерированный код `nhl-13-port/generated/default/` (производное
+от кода игры) и сборка `nhl-13-port/out/` — только локально.
 
 ```bash
 cd port
@@ -56,7 +56,7 @@ SDK nightly 0.10.0.24, RelWithDebInfo, D3D12 (RTX 3060). Что понадоби
 - отчёт о падении `nhl13_crash.txt` (dbghelp) — без него процесс умирал молча.
 
 Итог: звук, геймпад, вступительный ролик VP6 с правильными цветами и титульный экран
-«PRESS START». Запуск: `port/out/build/win-amd64-relwithdebinfo/nhl13.exe`
+«PRESS START». Запуск: `nhl-13-port/out/build/win-amd64-relwithdebinfo/nhl13.exe`
 (`--log_file=…` по желанию). Снимок окна: `PrintWindow` с флагом 2 (полное
 содержимое D3D12).
 
@@ -71,7 +71,7 @@ SDK nightly 0.10.0.24, RelWithDebInfo, D3D12 (RTX 3060). Что понадоби
 
 - **Ввод**: гонка в `InputSystem::RefreshDevices` SDK (падение
   `std::_Destroy_range<DeviceInfo>` или повреждение кучи 0xC0000374 при нажатии
-  кнопки в меню) — обход в `port/src/nhl13_input_lock.cpp`: XamInput* под общим
+  кнопки в меню) — обход в `nhl-13-port/src/nhl13_input_lock.cpp`: XamInput* под общим
   мьютексом, оригиналы из DLL рантайма через `GetProcAddress` (модуль — по имени DLL).
   Бэкенд ввода — XInput (`input_backend`): с SDL шторм подключений DualSense/DS4Windows.
 - **Видео и вертикальная синхронизация** (наблюдение пользователя 07.10.2026): ролики

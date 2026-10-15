@@ -1,14 +1,14 @@
 """Врезки сдвига года для порта: находит в образе константы-года и пишет [[midasm_hook]].
 
-    python year_hooks.py IMAGE > port/nhl13_year_hooks.toml      # TOML для ReXGlue
+    python year_hooks.py IMAGE > nhl-13-port/nhl13_year_hooks.toml      # TOML для ReXGlue
     python year_hooks.py IMAGE --report                          # таблица решений по всем местам
-    python year_hooks.py --game legacy LEGACY_IMAGE > legacy-port/nhllegacy_year_hooks.toml
+    python year_hooks.py --game legacy LEGACY_IMAGE > nhl-legacy-port/nhllegacy_year_hooks.toml
                                                                  # NHL Legacy: база 2015, свои KEEP/EXTRA
 
 Игра считает «сейчас» от зашитого 2012 (сезон 2012/13): дата «Играть сейчас»
 (MakeDate(2012, 8, 14)), год новой франшизы, «номер сезона = год − 2012», «год ≥ 2012 —
 сезон лиги, иначе история из базы», возраст проспектов 2012 − 18 = 1994 и т. д. Порт
-сдвигает всё это на delta = season_year − 2012 (port/src/nhl13_year.cpp):
+сдвигает всё это на delta = season_year − 2012 (nhl-13-port/src/nhl13_year.cpp):
 
 - li / subfic rD, …, Y и addi rD, rA, +Y — после инструкции rD += delta;
 - addi rD, rA, −Y — после инструкции rD −= delta;
@@ -65,7 +65,7 @@ EXTRA = {
     0x827D2F70: 'subfic 2030 — год драфта сгенерированного игрока (2012 + 18 − возраст)',
     0x8284EF78: 'cmplwi 2004 — «недавний драфт» (2012 − 8)',
     0x82985D00: 'cmplwi 2004 — то же в интерфейсе',
-    # Пики драфта (leaguedraftpick.year = год − 1900; найдено legacy-port по Legacy 115/121/2021, проверено
+    # Пики драфта (leaguedraftpick.year = год − 1900; найдено nhl-legacy-port по Legacy 115/121/2021, проверено
     # 09.10.2026 по сейву: без сдвига у франшизы 2026/27 пики 2013–2018, драфт 2027 их не находит — 82927720
     # пишет выбор в запись [n] за концом массива пиков: порча кучи, повторные выборы, падение).
     0x82807734: 'li r25, 112 — пики при создании лиги: 6 лет начиная с 2012 + 1 − 1900 (828076C8)',

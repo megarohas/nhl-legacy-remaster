@@ -26,7 +26,7 @@ import kitpaint as kp  # noqa: E402
 import fepose  # noqa: E402
 from tdb import Tdb, load_meta  # noqa: E402
 
-CACHE = os.path.join(ROOT, 'legacy-port', 'userdata', 'cache', 'guest')
+CACHE = os.path.join(ROOT, 'nhl-legacy-port', 'userdata', 'cache', 'guest')
 GALLERY = os.path.join(ROOT, 'game', 'work', 'nhl24', 'gallery')
 OUT = os.path.join(ROOT, 'game', 'work', 'kit-picker')
 

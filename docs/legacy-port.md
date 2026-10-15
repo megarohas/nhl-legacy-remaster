@@ -1,8 +1,8 @@
-# Свой порт NHL Legacy (legacy-port/)
+# Свой порт NHL Legacy (nhl-legacy-port/)
 
 Порт NHL Legacy Edition (Xbox 360, TitleID `454109EC`, 2015, база 2015/16) на нашем тулчейне —
 ReXGlue SDK 0.10.0.24 (ночной и своя сборка `ref/rexglue-sdk-custom` с Vulkan и FSR/CAS), по
-образцу порта NHL 13 (`port/`, `port-ffx/`). Начат 08.10.2026 по плану
+образцу порта NHL 13 (`nhl-13-port/`, `port-ffx/`). Начат 08.10.2026 по плану
 [legacy-port-feasibility.md](legacy-port-feasibility.md) (вариант «В»). Цель — чтобы друзья
 играли в Legacy с нашими изменениями: год, скорость, данные (составы, формы, шрифты…), а
 дальше — франшиза на 32 команды.
@@ -41,7 +41,7 @@ ReXGlue SDK 0.10.0.24 (ночной и своя сборка `ref/rexglue-sdk-cu
 
 ## Устройство
 
-`legacy-port/` — проект ReXGlue. В git: `CMakeLists.txt`, `CMakePresets.json`, `build.cmd`,
+`nhl-legacy-port/` — проект ReXGlue. В git: `CMakeLists.txt`, `CMakePresets.json`, `build.cmd`,
 `nhllegacy_manifest.toml`, `nhllegacy_*.toml` (ручные функции, врезки), `nhllegacy.example.toml`,
 `src/`, `scripts/`, `dist-template/`, `generated/rexglue.cmake`. Только локально: сгенерированный
 код `generated/default/` (производное от кода игры), сборка `out/`, сейвы и кэш `userdata/`,
@@ -61,39 +61,39 @@ ReXGlue SDK 0.10.0.24 (ночной и своя сборка `ref/rexglue-sdk-cu
 
 Отличия от NHL 13 по данным диска: `cache:` проверяется для каждого файла раньше архивов
 (`cache:\db\nhlng.db`, `cache:\fe\…`) — моды-данные кладутся в `userdata/cache/guest`
-без перепаковки. Папка данных — своя (`legacy-port/userdata`), не `game/userdata` NHL 13.
+без перепаковки. Папка данных — своя (`nhl-legacy-port/userdata`), не `game/userdata` NHL 13.
 
 ## Сборка
 
 ```bat
 :: Release — свой SDK (D3D12 + Vulkan, FSR 1 / CAS): out\build\win-amd64-release\nhllegacy.exe
-S:\Claude\megarohas_nhl13\legacy-port\build.cmd
+S:\Claude\megarohas_nhl13\nhl-legacy-port\build.cmd
 :: RelWithDebInfo — ночной SDK (только D3D12), с символами в отчёте о падении
-S:\Claude\megarohas_nhl13\legacy-port\build.cmd win-amd64-relwithdebinfo
+S:\Claude\megarohas_nhl13\nhl-legacy-port\build.cmd win-amd64-relwithdebinfo
 ```
 
-Свой SDK для Release собирается один раз — `legacy-port\scripts\sdk_build.cmd` (≈6 мин, [sdk-build.md](sdk-build.md)).
+Свой SDK для Release собирается один раз — `nhl-legacy-port\scripts\sdk_build.cmd` (≈6 мин, [sdk-build.md](sdk-build.md)).
 
 Сборка сама запускает кодоген (`rexglue codegen nhllegacy_manifest.toml`), если менялись
 манифест или `*.toml` врезок: ~18 мин при пониженном приоритете (анализ однопоточный), затем
 компиляция 368 файлов ~5 мин. Вручную кодоген не запускать: сборка всё равно прогонит его заново
 (отпечаток входов в `codegen.stamp` у ручного и встроенного запуска не сходится).
 
-**Новое дерево с нуля** (без `generated/default`, например `git archive HEAD legacy-port`): `generated/rexglue.cmake`
+**Новое дерево с нуля** (без `generated/default`, например `git archive HEAD nhl-legacy-port`): `generated/rexglue.cmake`
 подключает `generated/default/sources.cmake`, только если он уже есть при configure — иначе цели
 `nhllegacy_recomp` нет и код игры в первую сборку не попадает. Порядок: configure →
 `cmake --build out/build/win-amd64-release --target nhllegacy_codegen` → `build.cmd` (он сам делает configure
-заново и собирает всё). Так собрана сборка №5 (09.10, `legacy-port/out/agent/clean_build.cmd`, дерево
+заново и собирает всё). Так собрана сборка №5 (09.10, `nhl-legacy-port/out/agent/clean_build.cmd`, дерево
 `legacy-port-clean` = `main` 464c4ef, 12 потоков, обычный приоритет): кодоген 725 файлов за 12 мин 45 с, затем
 385 шагов за 3 мин 15 с, 0 ошибок. Раскладка функций по файлам у нового дерева своя (см. sdk-build.md, «Грабли»,
 п. 5), код тот же: размер exe совпал с прежним до байта.
 
 ## Запуск
 
-- **У себя:** ярлык «NHL Legacy» на рабочем столе → `legacy-port/out/build/win-amd64-release/nhllegacy.exe`
+- **У себя:** ярлык «NHL Legacy» на рабочем столе → `nhl-legacy-port/out/build/win-amd64-release/nhllegacy.exe`
   (Release, свой SDK). Настройки — `nhllegacy.toml` рядом с exe (шаблон `nhllegacy.example.toml`;
   `build.cmd` кладёт его, если своего нет): игра — `game/other/legacy/disc`, сейвы и `cache:` —
-  `legacy-port/userdata` (своя папка, не `game/userdata` NHL 13), лог — `legacy-port/out/game.log`.
+  `nhl-legacy-port/userdata` (своя папка, не `game/userdata` NHL 13), лог — `nhl-legacy-port/out/game.log`.
   **С 10.10 (05:55) под ярлыком — сборка №8:** exe 5f740c87, pdb 9ab1a78b. Код = 253729a:
   - очередь команд AI на 32 (4513934);
   - страховка сима матча `nhl_sim_guard` (по умолчанию вкл.), без ложного срабатывания на игроке с индексом 0;
@@ -101,7 +101,7 @@ S:\Claude\megarohas_nhl13\legacy-port\build.cmd win-amd64-relwithdebinfo
   - разведка драфта `nhl_drafttrace` (по умолчанию выкл.).
 
   DLL и snap — как у №5–№7, `nhllegacy.toml` (93020cf4) не менялся. Перед установкой проверено на копии его
-  userdata (`legacy-port/userdata-ucheck`, база 59b03a68 и `draft_roster.db` 838ca6a0):
+  userdata (`nhl-legacy-port/userdata-ucheck`, база 59b03a68 и `draft_roster.db` 838ca6a0):
   - новая франшиза за Сиэтл со старта «NHL Entry Draft», сейв при создании — 49 таблиц;
   - драфт 2026 — 224 выбора, 32 клуба;
   - неделя сима 23 → 30.06, сейв verify ok;
@@ -132,7 +132,7 @@ S:\Claude\megarohas_nhl13\legacy-port\build.cmd win-amd64-relwithdebinfo
   `nhl_menu_exit`, `nhl_aigm32`, `nhl_ahl_teams = 32`, `resolution_scale = 2` (ROV); в `cache:` — база
   legacy-data `--ahl32` 34dfe267 и меню legacy-fe. Прежнее (exe 120d4086, toml, DLL, db/loc) — в
   `out/build/win-amd64-release/backup-20261009-120d4086/`. Проверено на свежей копии итогового `cache:`
-  (`legacy-port/userdata-final2`, 07:23–07:38): главное меню без синей подложки и без онлайн-пунктов, Play Now
+  (`nhl-legacy-port/userdata-final2`, 07:23–07:38): главное меню без синей подложки и без онлайн-пунктов, Play Now
   DAL–VGK в 1440p (форма VGK на манекене, табло), новая франшиза (АХЛ 32, `AI GM: … +636 0, +630/+632 154,
   +641 100`), неделя предсезонки, сохранение, EXIT. Старые франшизы (АХЛ 30) с `nhl_ahl_teams = 32` не грузить —
   для АХЛ-32 нужна новая франшиза.
@@ -163,14 +163,14 @@ S:\Claude\megarohas_nhl13\legacy-port\build.cmd win-amd64-relwithdebinfo
   прежнее поведение, только по прямой просьбе пользователя.
 - Снимки — `PrintWindow` (фокус не нужен, окно может лежать под другими); `-Fit 1280x720` приводит снимок к одному
   размеру при любом окне. Свёрнутое окно не снимается (`MINIMIZED`) и не разворачивается.
-- **Ввод без клавиатуры вообще** — виртуальный геймпад порта, перенесён из NHL 13 (`port/src/nhl13_pad.cpp`,
+- **Ввод без клавиатуры вообще** — виртуальный геймпад порта, перенесён из NHL 13 (`nhl-13-port/src/nhl13_pad.cpp`,
   bfcd833): `src/nhllegacy_pad.cpp`, cvar `nhl_virtual_pad` (по умолчанию выкл.), врезки в
   `src/nhllegacy_input_lock.cpp` (после `XamInputGetState`, перед `XamInputGetKeystrokeEx`). Порт читает
   `nhllegacy_pad.txt` рядом с exe — строки «номер кнопки удержание_мс пауза_мс» (`A B X Y LB RB LT RT START BACK UP
   DOWN LEFT RIGHT LS RS`, сочетания через `+`) — и «жмёт» их пользователю 0 своего процесса; журнал
   `nhllegacy_pad.log`. В отличие от NHL 13 добавлены **стики до упора**: `LSL LSR LSU LSD` (левый) и `RSL RSR RSU RSD`
   (правый) — X_INPUT_STATE +8…+14 и события `VK_PAD_LTHUMB_*`/`RTHUMB_*`: без них не выбрать сторону и форму в «Играть
-  сейчас». Обёртка агента — `legacy-port/out/agent/p2pad.ps1` (`-Do start` убирает старый pad-файл в `.old`, иначе
+  сейчас». Обёртка агента — `nhl-legacy-port/out/agent/p2pad.ps1` (`-Do start` убирает старый pad-файл в `.old`, иначе
   команды прошлого запуска проиграются заново; `-Do seq -Steps "pad:A;wait:2;shot:x.png"`).
 - Самотест (09.10, 20:05–20:07): окно открылось неактивным, активным всё время оставалось окно пользователя; игра в
   фоне прошла заставку и PRESS START от виртуального геймпада; снимки в фоне — без потерь.
@@ -184,14 +184,14 @@ S:\Claude\megarohas_nhl13\legacy-port\build.cmd win-amd64-relwithdebinfo
   
   Повтор начинается с начала буфера (вбрасывание в центре). Удобно: `RIGHT@300…500` — приблизить, `RSR@1500` —
   обойти игрока сзади (фамилия и номер).
-- Сим франшизы геймпадом — `legacy-port/out/agent/simloop_pad.sh СЕКУНД ПАУЗА СНИМОК` (перенос `simloop.sh` с
+- Сим франшизы геймпадом — `nhl-legacy-port/out/agent/simloop_pad.sh СЕКУНД ПАУЗА СНИМОК` (перенос `simloop.sh` с
   клавиатуры). Распознавание экранов то же (`screen_kind.ps1`):
   - звонки и сообщения — `A`;
   - обмен и отказы — последний пункт;
   - «Please Confirm» календаря — `B` и стоп.
   
   Свёрнутое окно — ждёт, ничего не жмёт. Каталог снимков и журнал задаются через `SHOTS=` и `SIMLOG=`.
-- Проверка форм клуба в матче (пилот CHI, 09.10) — `legacy-port/out/agent/chi_form.ps1 -Form N -Steps K`:
+- Проверка форм клуба в матче (пилот CHI, 09.10) — `nhl-legacy-port/out/agent/chi_form.ps1 -Form N -Steps K`:
   1. «Играть сейчас», CHI дома, форма #N (K шагов карусели от #6), у соперника — тёмная;
   2. заставка арены целиком (пропуск A однажды совпал с падением GPU, см. ниже);
   3. пауза через 8 с после того, как пошли часы (`wait_stoppage.ps1 -WaitRun`: табло видно, часы сменились
@@ -236,14 +236,14 @@ S:\Claude\megarohas_nhl13\legacy-port\build.cmd win-amd64-relwithdebinfo
 ## Порча текстур в первом матче сессии (10.10.2026)
 
 **Симптом.** Примерно 2 из 14 первых матчей новой сессии (DAL–CHI, копия userdata пользователя
-`legacy-port/userdata-ucheck`). У судьи свитер в красную полоску и красные брюки в мелком узоре, у полевых шорты в
+`nhl-legacy-port/userdata-ucheck`). У судьи свитер в красную полоску и красные брюки в мелком узоре, у полевых шорты в
 оранжевом или бордовом узоре, перчатки оранжевые. Ещё бывают чужой узор на гетрах, визор с отливом, розовые коньки —
 это заглушка самой игры для отсутствующей текстуры. Порча зависит от ракурса: в одном матче с одних точек камеры
 судья и шорты красные, с других — чистые. Бывает и без накладки NHL 24. Все прогоны — на памяти GPU 8301 МГц
-(разгон пользователя, настройки GPU не трогаем). Кадры: `legacy-port/out/agent/ab3/ct04_sync/`, `ct11_pf/`,
+(разгон пользователя, настройки GPU не трогаем). Кадры: `nhl-legacy-port/out/agent/ab3/ct04_sync/`, `ct11_pf/`,
 увеличенные — `ab3/zoom/`.
 
-Серия — `legacy-port/out/agent/ab3.ps1`: первый матч новой сессии DAL–CHI (`chi_form.ps1 -Form 6 -Steps 0 -Quick`),
+Серия — `nhl-legacy-port/out/agent/ab3.ps1`: первый матч новой сессии DAL–CHI (`chi_form.ps1 -Form 6 -Steps 0 -Quick`),
 снимки повтора у стартового вбрасывания, журнал `ab3/batch.log`, папка прогона `ab3/ctNN_метка/`. Тестовые
 exe и DLL — в `legacy-port-clean/out/build/win-amd64-release/`.
 
@@ -265,22 +265,22 @@ exe и DLL — в `legacy-port-clean/out/build/win-amd64-release/`.
 пока страницы кто-то не запросит заново. Окно шире, чем кажется: запись CPU снимает защиту не только со своей
 страницы, а со всего блока 256 КБ вокруг (до страниц, записанных GPU).
 
-**Разведка и исправление** — патч SDK `legacy-port/scripts/sdk-patches/0006-texture-load-race.patch`
+**Разведка и исправление** — патч SDK `nhl-legacy-port/scripts/sdk-patches/0006-texture-load-race.patch`
 (`SharedMemory::AreRangePagesValid`, проверка в `MakeUpToDateAndWatch` под общей блокировкой), оба cvar по
 умолчанию выкл.:
 - `gpu_texture_load_race_trace` — WARN `Texture load race #N: base|mips of … texture at 0x… written by the CPU while
-  loading` (сводка — `legacy-port/out/agent/races.py`);
+  loading` (сводка — `nhl-legacy-port/out/agent/races.py`);
 - `gpu_texture_load_race_fix` — такая текстура остаётся устаревшей (слежение не ставится) и грузится заново при
   следующем использовании.
 
-Тестовая DLL с ним — `rexgpu-xenos.dll` EEDB3812 (копия — `legacy-port/out/agent/sdkdll/race/`; обычная — 8ec35aa1,
+Тестовая DLL с ним — `rexgpu-xenos.dll` EEDB3812 (копия — `nhl-legacy-port/out/agent/sdkdll/race/`; обычная — 8ec35aa1,
 `sdkdll/orig/`). ct21 (`--gpu_texture_load_race_trace=true`, исправление выкл.): матч чистый, гонки — у видеокадров
 меню (`k_8` 1280x720, linear) и у потоковых таблиц `k_32_32_32_32_FLOAT` 384x160 / 384x64 (linear) в матче; журнал
 упёрся в предел 400 строк.
 
-**Патчи SDK в репозитории** — `legacy-port/scripts/sdk-patches/`, все по порядку: 0001…0004 — сборка SDK с Vulkan и
+**Патчи SDK в репозитории** — `nhl-legacy-port/scripts/sdk-patches/`, все по порядку: 0001…0004 — сборка SDK с Vulkan и
 FSR 1 / CAS ([sdk-build.md](sdk-build.md), «Патчи к SDK»; исходная копия — `port-ffx/scripts/sdk-patches/`, не в git),
-0005 и 0006 — поверх них. Скрипты сборки SDK — рядом, в `legacy-port/scripts/` (`sdk_build.cmd`, `sdk_fetch.ps1`,
+0005 и 0006 — поверх них. Скрипты сборки SDK — рядом, в `nhl-legacy-port/scripts/` (`sdk_build.cmd`, `sdk_fetch.ps1`,
 `sdk_env.cmd`):
 
 | Патч | Файлы | Что |
@@ -289,23 +289,23 @@ FSR 1 / CAS ([sdk-build.md](sdk-build.md), «Патчи к SDK»; исходна
 | `0005-d3d12-memexport-trace` | `src/graphics/d3d12/command_processor.cpp` | cvar `d3d12_memexport_trace` (по умолчанию выкл.): журнал рисований с memexport |
 | `0006-texture-load-race` | `include/rex/graphics/shared_memory.h`, `src/graphics/shared_memory.cpp`, `src/graphics/pipeline/texture/cache.cpp` | журнал и исправление гонки загрузки текстур (выше) |
 
-SDK с нуля — `legacy-port\scripts\sdk_build.cmd`: клон `bd833a2` в `ref/rexglue-sdk-custom/src`, все шесть патчей
+SDK с нуля — `nhl-legacy-port\scripts\sdk_build.cmd`: клон `bd833a2` в `ref/rexglue-sdk-custom/src`, все шесть патчей
 по порядку (`sdk_fetch.ps1`; проверено 15.10.2026 — 0001…0006 ложатся на `bd833a2` чисто), configure, сборка, установка
 ([sdk-build.md](sdk-build.md)). В рабочем `ref/rexglue-sdk-custom` 0001…0005 стоят, а 0006 — в расширенном виде: поверх
 патча там ещё диагностика (cvar `gpu_texture_load_race_widen_us`, 10.10.2026), в патч не вынесенная. Поэтому
 `sdk_build.cmd` / `fetch` на этом дереве остановится на 0006; пересобрать его — `sdk_build.cmd build`. Наложить один
-патч вручную — `git -C ref/rexglue-sdk-custom/src apply S:/Claude/megarohas_nhl13/legacy-port/scripts/sdk-patches/0005-….patch`.
-Пересобрать только GPU-плагин — `legacy-port/scripts/sdk_gpu_build.cmd` (≈2 мин; DLL —
+патч вручную — `git -C ref/rexglue-sdk-custom/src apply S:/Claude/megarohas_nhl13/nhl-legacy-port/scripts/sdk-patches/0005-….patch`.
+Пересобрать только GPU-плагин — `nhl-legacy-port/scripts/sdk_gpu_build.cmd` (≈2 мин; DLL —
 `ref/rexglue-sdk-custom/src/out/win-amd64/Release/rexgpu-xenos.dll`, установка SDK не меняется).
 
 ## Для друзей
 
-`bash legacy-port/scripts/make_dist.sh [--mods]` собирает папку `legacy-port/dist/NHL Legacy`
+`bash nhl-legacy-port/scripts/make_dist.sh [--mods]` собирает папку `nhl-legacy-port/dist/NHL Legacy`
 (не в git): `nhllegacy.exe`, `rexruntime.dll`, `rexgpu-xenos.dll` (Release, свой SDK — D3D12 и
 Vulkan), `nhllegacy_snap.exe`, DLL рантайма MSVC (app-local: `msvcp140`, `msvcp140_atomic_wait`, `vcruntime140`,
 `vcruntime140_1` из VC Redist BuildTools — ставить VC++ Redistributable не нужно),
-`nhllegacy.toml` и `README.txt` из `legacy-port/dist-template/`, пустые `game\` и
-`userdata\cache\guest\`. С `--mods` — моды-данные из `legacy-port/userdata/cache/guest` (без
+`nhllegacy.toml` и `README.txt` из `nhl-legacy-port/dist-template/`, пустые `game\` и
+`userdata\cache\guest\`. С `--mods` — моды-данные из `nhl-legacy-port/userdata/cache/guest` (без
 кэша, который пишет сама игра: `*.ver`, `admanager_cache_images`, `highlights.sav`).
 
 Файлов игры в папке нет: друг кладёт свою копию NHL Legacy (default.xex и `*.big`, диск без TU,
@@ -341,7 +341,7 @@ SHA-256 `default.xex` = `d818eb15…c55624`) в `game\` рядом с exe. Пу�
 Аризона/Юта — Central), `nhlschedule`, `favoriteteamschedule` и `nhlfutureschedule` на 32 × 84
 (home/away 6 бит, Матч звёзд 32/33). Код — `nhl_teams = 32` в `nhllegacy.toml`:
 
-- `src/nhllegacy_teams.cpp` — подмены 22 функций и реализации врезок (перенос `port/src/nhl13_teams.cpp`
+- `src/nhllegacy_teams.cpp` — подмены 22 функций и реализации врезок (перенос `nhl-13-port/src/nhl13_teams.cpp`
   со смещениями Legacy);
 - `nhllegacy_team_hooks.toml` — 72 ручные врезки;
 - `nhllegacy_team_sites.toml` / `src/nhllegacy_team_sites.cpp` — 109 мест «30 → 32» одной инструкцией
@@ -435,7 +435,7 @@ Legacy (адрес в NHL 13 найти по тому же устройству:
 | BE A GM3 = `DYNASTY 20261008215235` | 84130656 (+ ведомости ≤ 100 млн) | полный цикл: регулярка 2026/27, Матч звёзд, дедлайн, плей-офф (Кубок — NYI, финал Запада COL–VGK), отставки, матч проспектов, драфт 2027 (порядок на 32, 7 раундов), продления, свободные агенты, предсезонка и регулярка 2027/28 до 27.10.2027 |
 | **BE A GM4** = `DYNASTY 20261008222931` | **fceb2d42** (финальная: без 29.02, чистый пул свободных агентов) | итоговая: создание → 9–10.10 → октябрь–январь → Матч звёзд 31.01 (сборные Eastern/Western) → сохранена 1.02.2027 |
 
-Сейвы лежат в `legacy-port/userdata/B13EBABEBABEBABE/454109EC/00000001/` (в папку для друзей не входят).
+Сейвы лежат в `nhl-legacy-port/userdata/B13EBABEBABEBABE/454109EC/00000001/` (в папку для друзей не входят).
 
 С 09.10 (03:00) в основном `cache:` — база legacy-data 958f4b6d (исправленная шкала атрибутов Liiga; в «Играть
 сейчас» европейские клубы на уровне соседей). Франшиза BE A GM4 создана на fceb2d42 и на ней остаётся — составы и
@@ -472,7 +472,7 @@ Legacy (адрес в NHL 13 найти по тому же устройству:
      выкл., поведение прежнее) — в запись 30 мест и интерес команд 0…29, команды 30/31 — в боковой таблице по
      адресу записи (с playerid), экран 82B640B0 (i-е место и интерес) берёт их оттуда; в базу боковая таблица
      не пишется (игра пересчитывает интерес: 82B6E120 → 82B69EB8). Проверено в отдельной копии userdata
-     (`legacy-port/userdata-fatest`, слот «FA TEST» = автосейв 5.06.2027): драфт, продления, фаза свободных
+     (`nhl-legacy-port/userdata-fatest`, слот «FA TEST» = автосейв 5.06.2027): драфт, продления, фаза свободных
      агентов до 17.07 без падений; в сейве interest0/1 — настоящие значения (96, 80, 95…), sortposition без
      мусора, подписания у других клубов идут. С 09.10 включено (`nhl_fa32 = true`) в рабочем `nhllegacy.toml`
      («добавлено 09.10, откат = false») и в `dist-template` — папка для друзей пересобрана и проверена до
@@ -593,7 +593,7 @@ ION_NHLSeries.GetTeamIDsForDivisionId (обёртка 832F9690 → vtable+108 �
 `NhlLegacyStackGrow400` / `NhlLegacyStackShrink400` на `stwu r1, -6160(r1)` @82A783E4 и `addi r1, r1, 6160`
 @82A786A4, при `nhl_teams = 32`). Других функций с 30 × 200-байтными записями на стеке сканер не нашёл.
 
-Проверено (09.10, 10:27–10:42, копия `legacy-port/userdata-m32` = CACHE пользователя, `--nhl_menu32=true`):
+Проверено (09.10, 10:27–10:42, копия `nhl-legacy-port/userdata-m32` = CACHE пользователя, `--nhl_menu32=true`):
 Select Team листает 32 клуба — Seattle Kraken и Vegas Golden Knights с логотипами и рейтингами; франшиза за
 Сиэтл создаётся (в логе `menu league 0 (nhl_menu32): 32 teams: 0 … 31`, `AI GM: … user team (+636) 0000001E`):
 хаб «Seattle Kraken», Contract Status (потолок 104 млн, ведомость 95,45 млн), Roster Moves (+ In the System),
@@ -612,12 +612,12 @@ SEA–VGK 13.10. Падений нет. Не проверено (пауза по
 
 ## Падение сима регулярки на 32: объекты команд AI-GM (09.10.2026)
 
-**Симптом.** Франшиза BE A GM5 за Сиэтл (копия `legacy-port/userdata-p2`, флаги как у пользователя: `nhl_aigm32`,
+**Симптом.** Франшиза BE A GM5 за Сиэтл (копия `nhl-legacy-port/userdata-p2`, флаги как у пользователя: `nhl_aigm32`,
 `nhl_fa32`, АХЛ 32, `nhl_menu32`), сим 19.09 → **18.10.2026**: в потоке сима access violation (чтение 0x701F0000),
 игра встала на «Simulating». Повтор с того же сейва дошёл до 31.10 без падения — падение вероятностное.
 
 **Разбор по слепку** (`dumps\nhllegacy_…_crash.dmp` рядом с exe, база гостя 0x100000000; разбор —
-`legacy-port/out/agent/dumpread.py`, `stackscan.py` поверх `tools/memscan.py DumpProc`):
+`nhl-legacy-port/out/agent/dumpread.py`, `stackscan.py` поверх `tools/memscan.py DumpProc`):
 1. Падает не причина, а отчёт: 825FADB8 снимает стек для отчёта EA 82E56838 (HTML «Callstack:») и уходит по цепочке
    кадров за верх стека потока (0x701F0000). Отчёт зовёт выделение 82E53E80 (куча 9) из 829A88E8, которое не прошло: в
    сохранённых регистрах кадра 82E53E80 — r30 = 0x02000000 (число элементов → 128 МБ), r29 = 0x275 (список),
@@ -647,7 +647,7 @@ SEA–VGK 13.10. Падений нет. Не проверено (пауза по
 новая франшиза за Анахайм (BE A GM6) 19.09 → 30.11.2026 и франшиза за Сиэтл с того же сейва, что падал (BE A GM5),
 19.09 → 30.11.2026 — без падений и зависаний (10-13-2 и 10-14-1), список прохода 82973050 за 30 мест в этих прогонах не
 вышел. До исправления: падение 18.10 (первый прогон), повтор до 31.10 без падения. Сим вёлся автонажимом
-(`legacy-port/out/agent/simloop.sh` + `screen_kind.ps1`): во время сима клавиши не жмутся, звонки и сообщения — «A»,
+(`nhl-legacy-port/out/agent/simloop.sh` + `screen_kind.ps1`): во время сима клавиши не жмутся, звонки и сообщения — «A»,
 предложения обменов и драфт отказов — отказ, экран GM Tracker после награды — «B».
 
 ## Счётчик AI-объекта +630 и очередь команд на 32 (09.10.2026)
@@ -709,7 +709,7 @@ Knights» 5-5-1, календарь VGK; флаги списков НХЛ и А�
   `legacy-port-clean/out/build/win-amd64-release/dumps/nhllegacy_20261009_210405_crash.dmp`.
 
 **Разбор.** Использовались стеки потоков по `nhllegacy_dump.flag` и сохранённые LR в стеке гостя
-(`legacy-port/out/agent/stackscan.py`). Объект симуляции матча (vtable 0x82038818, 8298D450 — подготовка, 82995C00 —
+(`nhl-legacy-port/out/agent/stackscan.py`). Объект симуляции матча (vtable 0x82038818, 8298D450 — подготовка, 82995C00 —
 ход матча) устроен так:
 - команда t — с +200 + 8740·t, в ней 20 записей состава матча по 392 байта с +900:
   - +0 — playerindex (0 — пустая запись);
@@ -798,7 +798,7 @@ created with N AHL teams, but nhl_ahl_teams = M - set nhl_ahl_teams = N …`. П
 sim guard #12 (start of game): sim AC446470 side 1 (teamid 31): on the ice 4 (bad 0), should be 5 - added 1 ...
 [FATAL] Call to invalid or unregistered function at guest address 0x00000000
 ```
-Клубы 30/31 ни при чём: в 08:16 играли не клубы НХЛ. Улики лежат в `legacy-port/out/agent/bap/`:
+Клубы 30/31 ни при чём: в 08:16 играли не клубы НХЛ. Улики лежат в `nhl-legacy-port/out/agent/bap/`:
 - `evidence/`: game.log, crash.txt, toml;
 - `dumps/`: оба слепка;
 - `f_*.txt`: листинги функций;
@@ -843,7 +843,7 @@ sim guard #12 (start of game): sim AC446470 side 1 (teamid 31): on the ice 4 (ba
 - Вбрасывание и события (8298A438, 82A5C4D0, 829937F8) не менялись.
 
 **Сборка** — дерево `legacy-port-clean` (свой SDK, D3D12 + Vulkan), код = main + исправление.
-- exe b75836f5, pdb 05cf2ddb; копия — `legacy-port/out/agent/bap/build-b75836f5/`.
+- exe b75836f5, pdb 05cf2ddb; копия — `nhl-legacy-port/out/agent/bap/build-b75836f5/`.
 - DLL как у пользователя: rexruntime bc66c205, rexgpu-xenos 8ec35aa1. Тестовая DLL гонок текстур, лежавшая в этом
   дереве, сохранена в `out/agent/sdkdll/race3`.
 - Подмены 82984668, 8298E678 и 829798C0 в pdb — наши.
@@ -910,7 +910,7 @@ Fantasy Draft = On.
 
 **Сборка** — дерево `legacy-port-clean`, свой SDK (D3D12 + Vulkan), код = b75836f5 + исправление.
 - Кодоген 10 мин: 6 файлов заново, все 20 врезок — на своих инструкциях.
-- exe a1cb8f74, pdb 18d7dbe4; копия — `legacy-port/out/agent/fd32/build-a1cb8f74/`.
+- exe a1cb8f74, pdb 18d7dbe4; копия — `nhl-legacy-port/out/agent/fd32/build-a1cb8f74/`.
 - DLL как у пользователя: bc66c205 / 8ec35aa1.
 - В pdb все 15 подмен — наши (`sub_…` ≠ `__imp__sub_…`).
 
@@ -976,7 +976,7 @@ Fantasy Draft = On.
 `tools/legacy_data/fix_flagbit.py`, базы out 10a2335d и out-ahl32 59b03a68). У `leaguerookiedata` теперь reclen 12,
 заголовок 95, `draftteam` остался в битах 58..63, флаг строки — бит 95.
 
-Идея ремонта проверена на старом сейве. Разовый скрипт `legacy-port/out/agent/rookiefix.py` (через `tdb.widen`,
+Идея ремонта проверена на старом сейве. Разовый скрипт `nhl-legacy-port/out/agent/rookiefix.py` (через `tdb.widen`,
 `draftteam` в 64..69) обработал копию `userdata-p3` — сейв BE A GM10 и cache `db/nhlng.db`:
 - у живых строк флаг 0, у строк списка удалённых и запаса [current, max) — 1;
 - сейв грузится без «damaged»;
@@ -986,7 +986,7 @@ Fantasy Draft = On.
 - сейв после драфта: verify ok, флаг 0 у всех 357 живых строк.
 
 **Ремонт сейва скриптом legacy-data — проверен в игре (10.10, 05:57–06:10).** `fix_flagbit.py --save` (9fb2d8e) сделал
-`beagm10.fixed` (3a6e12c2) из BE A GM10. Проверка на копии `legacy-port/userdata-savefix`: `cache:` с базой 59b03a68, как у
+`beagm10.fixed` (3a6e12c2) из BE A GM10. Проверка на копии `nhl-legacy-port/userdata-savefix`: `cache:` с базой 59b03a68, как у
 пользователя, сборка 5f740c87 с `--nhl_drafttrace=true`.
 - Сейв грузится, в логе `franchise save: 32 AHL teams, matches nhl_ahl_teams`.
 - Сим 22.04 → 23.06.2028: без падений, страховка сима не срабатывала.
@@ -1000,7 +1000,7 @@ Fantasy Draft = On.
 
 **ТЕСТ ROOKIE — новая франшиза на исправленной базе (10.10, 02:10–03:13), пройден.** Копия `game/work/legacy-data/ud-rookie`
 (база out-ahl32 59b03a68, `draft_roster.db` — её копия), сборка 5f740c87 с `--nhl_drafttrace=true`: новая франшиза
-за Сиэтл со старта «NHL Entry Draft». Скрипты проверки сейвов — `legacy-port/out/agent/rk_check.py`,
+за Сиэтл со старта «NHL Entry Draft». Скрипты проверки сейвов — `nhl-legacy-port/out/agent/rk_check.py`,
 `rk_draftees.py`, `rk_teams.py`.
 - Драфт 2026 (auto draft): пул 301 запись, все разные и свободны; 224 выбора, 224 разных, все из пула,
   7 раундов по 32. В сейве после драфта у `leaguerookiedata` 301 живая строка: флаг 0 у всех, у 1199 мёртвых — 1.
@@ -1027,8 +1027,8 @@ Fantasy Draft = On.
 Нашлось на ТЕСТ ROOKIE: франшиза со старта «NHL Entry Draft» упала через 2 минуты после создания, на симе
 19 → 20.06.2026. В отчёте порча кучи: free блока мелкого пула 82E58080 (← 82713890 ← 827A1680) снимает страницу
 со списка, а в шапке страницы (+8, следующая) лежит 0x72095000. Слепок
-`legacy-port/out/agent/rk/dumps/nhllegacy_20261010_021831_crash.dmp` (вынесен из кольца слепков) разобран
-скриптами `legacy-port/out/agent/dmp_ctx.py` (PPCContext потока по значению регистра), `dmp_mem.py`,
+`nhl-legacy-port/out/agent/rk/dumps/nhllegacy_20261010_021831_crash.dmp` (вынесен из кольца слепков) разобран
+скриптами `nhl-legacy-port/out/agent/dmp_ctx.py` (PPCContext потока по значению регистра), `dmp_mem.py`,
 `dmp_arr2.py`, `dmp_refs.py`, `dmp_find.py`. Шапка
 страницы 0xBF6EA000 и первые 0xB9C байт после неё затёрты чужими данными — записями по 24 байта. Повтор с того же
 сейва дошёл до драфта без падения.
@@ -1050,8 +1050,8 @@ Fantasy Draft = On.
 
 **Исправление (данные, legacy-data): в `draft_roster.db` — только 10 таблиц EA-оригинала, с нашими данными.**
 Это `exhibition*` (8 таблиц) и `stockteamsalaryextras`, они есть и в нашей базе. Проверено 10.10 (03:20–03:30) на
-копии `legacy-port/userdata-edtest` (база 59b03a68). Файлы собраны разовым скриптом
-`legacy-port/out/agent/tdb_drop.py` (копия базы TDB без указанных таблиц, каталог и CRC пересчитаны):
+копии `nhl-legacy-port/userdata-edtest` (база 59b03a68). Файлы собраны разовым скриптом
+`nhl-legacy-port/out/agent/tdb_drop.py` (копия базы TDB без указанных таблиц, каталог и CRC пересчитаны):
 - **10 таблиц** (838ca6a0, 1,29 МБ) — то, что нужно:
   - Select Team как с полной копией: Anaheim 3½/3/4½, 26 контрактов, 99,05 млн; Seattle 4/4/4½, 97,25 млн;
   - класс драфта тот же (`real players 66 of 1289`);
@@ -1075,13 +1075,13 @@ Fantasy Draft = On.
 сейв (`leaguerookiedata`). Реальных игроков даёт 82B5ECE8 (= 8291F160): запрос 82B34980 «isdraftable = 1 и
 draftyear ≤ год драфта», а isdraftable при создании получают все игроки клубов CHL без прав НХЛ; составы CHL в
 базе — 2015 года, и в класс шли игроки 1982–1999 г. р. (в франшизе без фильтра: класс 1369, из них 1223 — 27–45 лет
-к драфту 2027, вымышленных 146). Перенос решения NHL 13 (`port/src/nhl13_draftclass.cpp`, 7cd4988;
+к драфту 2027, вымышленных 146). Перенос решения NHL 13 (`nhl-13-port/src/nhl13_draftclass.cpp`, 7cd4988;
 docs/draft-pool.md): `src/nhllegacy_draftclass.cpp`, cvar `nhl_draftclass_age` (по умолчанию выкл.) — тот же
 82B5ECE8, но без тех, у кого draftyear ≤ год драфта − 3 (старше 20 к драфту); счётчики юниорских лиг — по
 оставшимся, и игра догенерирует класс по квотам. Адреса — `tools/xmatch.py` по NHL 13 (82B5ECE8 сверен по коду;
 отличие — запись игрока 82B387A8 берёт ещё r6 = 1).
 
-Проверено (копия `legacy-port/userdata-dc` = CACHE пользователя, exe с фильтром): новая франшиза (старт «Regular
+Проверено (копия `nhl-legacy-port/userdata-dc` = CACHE пользователя, exe с фильтром): новая франшиза (старт «Regular
 Season») — в логе `draft class 2027: real players 31 of 1254 (older than 20 at the draft, draftyear <= 2024: 1223
 skipped)`, в сейве `leaguerookiedata` 266, все 2007–09 г. р., старше 20 — 0, CHL по квотам WHL/OHL/QMJHL 40/40/40,
 остальные лиги 26/11/18/11/35/23/22. Драфт с таким классом проходит (франшиза со стартом «NHL Entry Draft», класс
@@ -1151,7 +1151,7 @@ skipped)`, в сейве `leaguerookiedata` 266, все 2007–09 г. р., ст�
 | «профи < 60» → 64 (11 мест `nhllegacy_ahl32_sites.json`) | сгенерированные врезки (`NhlLegacyAhl32()`) |
 | посев Calder Cup при 8/8/8/8: 4 лучших в дивизионе, без перехода 5-го места | врезка `NhlLegacyAhlNoCrossover` @82B6C838 (ветка 131 в 82B6BA58), см. ниже |
 
-Проверено в отдельной копии (`legacy-port/userdata-ahl32`: профиль + `cache` с накладкой `out-ahl32`; основной
+Проверено в отдельной копии (`nhl-legacy-port/userdata-ahl32`: профиль + `cache` с накладкой `out-ahl32`; основной
 `cache:` и BE A GM4 не тронуты): в логе `franchise AHL teams: 32`, `AHL list 30 -> 32 teams (+224/225)`,
 `AHL structure: 32 teams … divisions 8/8/8/8`, `team objects 30/31 outside +772`, `affiliates +2, teams 30/31 ->
 62 63`, `All-Star teams: not created`, `All-Star game: off`; в сейве 126 команд (АХЛ 32…63, CV 62, HSK 63,
@@ -1211,7 +1211,7 @@ Calder Cup — San Diego (финал SD – Utica 4–1). Сетка НХЛ (16 
 - **Сверка.** 59 OVR полевых со снимков игры на базах тех дней (`game/work/legacy-fe/shots/gm3`: звенья, состав,
   свободные агенты, контракты, статистика Be a GM; `game/work/legacy-data/ingame/t4-lineups-portraits.png`) и Фолиньо
   на базе пользователя — 61 из 61 точно (52 нападающих, 9 защитников); регрессия угадывала 4 из 61. Скрипты —
-  `legacy-port/analysis/ovr/` (`truth.py` — сверка, `brk.py`, `gdis.py` — листинг функции из кодогена).
+  `nhl-legacy-port/analysis/ovr/` (`truth.py` — сверка, `brk.py`, `gdis.py` — листинг функции из кодогена).
 - По базе EA Legacy формула совпадает с полем overall у 15 % полевых и в среднем на 1–2 выше: игра поле не использует.
   У топ-300 EA NHL 27 в наших составах OVR игры по медиане на 1 выше OVR NHL 27.
 - **Вратари** считаются тем же путём (таблица 13), но снимков с OVR вратаря нет. По базе пользователя игра должна
@@ -1253,10 +1253,10 @@ settings = profile settings (N of 656 bytes differed)`. Итого настро�
 франшизы (потолок, сделки, длина и т. п.) выбираются при создании, в этот блок не входят.
 
 Сборка `legacy-port-clean` (exe 01584ec5, pdb bd5a691a = a1cb8f74 + эта подмена), копия —
-`legacy-port/out/agent/defaults/build-01584ec5/`. В игре не проверено, пользователю не поставлено.
+`nhl-legacy-port/out/agent/defaults/build-01584ec5/`. В игре не проверено, пользователю не поставлено.
 
 **Отличия у пользователя** (`tools/legacy_settings.py diff`, копии сейвов 12.10 06:13 —
-`legacy-port/out/agent/defaults/saves/`). Заводские — блок франшизы, созданной сразу после запуска (DYNASTY
+`nhl-legacy-port/out/agent/defaults/saves/`). Заводские — блок франшизы, созданной сразу после запуска (DYNASTY
 20261008191202). Общие одинаковы в PROFILE, последней DYNASTY и BEAPRO:
 - громкость арены 50 → 100 %, меню 50 → 100 %, толпы 80 → 100 %, комментария 80 → 0 %;
 - ID 133 0 → 14 (без имени в таблице меню, рядом Brightness/Contrast — видимо, яркость).

@@ -211,7 +211,7 @@ def cmd_manifest(a):
             parts[fn[:-5]] = json.load(f)
     allx = [e for v in parts.values() for e in v]
     man = {"what": "NHL 24 → NHL Legacy: файлы для установки в cache: (pack/cache/...) и текстуры новых форм (pack/new/...)",
-           "install_root": "cache: Legacy — legacy-port/userdata/cache/guest/ (свободные несжатые RW4 перекрывают архивы)",
+           "install_root": "cache: Legacy — nhl-legacy-port/userdata/cache/guest/ (свободные несжатые RW4 перекрывают архивы)",
            "decisions": {"hastie": 0, "neck_shield": "-4 см", "v_insert": "цвет свитера под воротом",
                          "relief": "sm/nm — чистые карты Legacy (T=4)"},
            "counts": {k: len(v) for k, v in parts.items()}, "files": allx}

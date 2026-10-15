@@ -1,6 +1,6 @@
 # nhllegacy — свой порт NHL Legacy (Xbox 360, TitleID 454109EC) на ReXGlue SDK 0.10.0.24.
 #
-# Обвязка — по образцу порта NHL 13 (port/), см. docs/legacy-port.md. Шаблон SDK —
+# Обвязка — по образцу порта NHL 13 (nhl-13-port/), см. docs/legacy-port.md. Шаблон SDK —
 # generated/rexglue.cmake; сгенерированный код generated/default/ (производное от кода игры)
 # и сборка out/ — только локально.
 

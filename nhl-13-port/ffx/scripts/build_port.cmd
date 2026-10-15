@@ -1,6 +1,6 @@
 @echo off
 rem Build port-ffx against the custom SDK in ref\rexglue-sdk-custom\install\win-amd64
-rem (docs/sdk-build.md). Same toolchain and presets as port\build.cmd.
+rem (docs/sdk-build.md). Same toolchain and presets as nhl-13-port\build.cmd.
 rem   build_port.cmd [preset] [configure]     preset default: win-amd64-release
 rem   env: JOBS (8), KEEP_GOING=1 (ninja -k 0), NHLFFX_NORMALPRIO=1 keeps normal priority.
 rem The first build in a fresh tree runs codegen once: it only checks the fingerprint

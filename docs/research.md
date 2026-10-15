@@ -22,16 +22,16 @@
 
 - **Таблицы переходов** (проверено): автодетектор v0.10.0 и nightly перечитывает таблицы,
   у которых граница проверяется на копии индексного регистра. 9 таблиц —
-  `port/nhl13_switch_tables.toml`; совет мейнтейнеров в #170/#129/#177 — ручные
+  `nhl-13-port/nhl13_switch_tables.toml`; совет мейнтейнеров в #170/#129/#177 — ручные
   `[[switch_tables]]`. `max_jump_extension` в v0.10.0 только логируется; `parent` по сути
   не работает.
 - **setjmp/longjmp** `0x82C9D9B0` / `0x82C9BCB0` подтверждены (18 stfd/std, 64 lvx128);
   у NHL 12 та же раскладка CRT.
 - **XUsbcam***: `xboxkrnl_usbcam.cpp` закомментирован в сборке рантайма — заглушки в
-  `port/src/nhl13_imports.cpp`.
-- **cache:** — монтировать самим (`port/src/nhl13_app.h`).
+  `nhl-13-port/src/nhl13_imports.cpp`.
+- **cache:** — монтировать самим (`nhl-13-port/src/nhl13_app.h`).
 - **Флаги**: `render_target_path_d3d12=rov`, `readback_resolve=full`, `protect_zero=false`,
-  `gpu_allow_invalid_fetch_constants=true`, `vsync=true` (`port/nhl13.example.toml`).
+  `gpu_allow_invalid_fetch_constants=true`, `vsync=true` (`nhl-13-port/nhl13.example.toml`).
 - **SDK nightly 0.10.0.24**: PR #449 (VP6), `01ac2a3b` (перезапись файлов — сейвы),
   `ee20900e` (коды XAM content), `bd833a2a` (барьеры sync/lwsync/eieio).
 

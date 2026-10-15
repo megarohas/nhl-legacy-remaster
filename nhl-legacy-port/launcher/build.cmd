@@ -1,6 +1,6 @@
 @echo off
 rem Build the NHL Legacy launcher (docs/launcher.md): MSVC from VS 2022 BuildTools, static CRT,
-rem no third-party libraries. Output: legacy-port\out\launcher\nhllegacy_launcher.exe (not in git).
+rem no third-party libraries. Output: nhl-legacy-port\out\launcher\nhllegacy_launcher.exe (not in git).
 setlocal
 set "PATH=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer;%PATH%"
 call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" >nul || exit /b 1

@@ -1,5 +1,5 @@
 {
- "format": "sites[]: одна инструкция, тот же вид (cmpwi/cmplwi/li/addi/mulli), new = old с другим imm16; слова сверены по default.bin (база 0x82000000) — Legacy (прототип legacy-port/legacy_sites.py, адреса из xmatch); gate — функции src/nhllegacy_teams.cpp (NhlLegacy…)",
+ "format": "sites[]: одна инструкция, тот же вид (cmpwi/cmplwi/li/addi/mulli), new = old с другим imm16; слова сверены по default.bin (база 0x82000000) — Legacy (прототип nhl-legacy-port/legacy_sites.py, адреса из xmatch); gate — функции src/nhllegacy_teams.cpp (NhlLegacy…)",
  "mismatch": [],
  "manual": [
   "828EF198 (mLastYearPlayoffRun, «значение по месту прошлого сезона»): стековые A[30] @r1+544 и B[30] @r1+784 стоят вплотную, за B сохранённые регистры (r1+1032) — нужен кадр 1120→1136 (stwu 828EF1A0, addi r1 828EF6F4) и сдвиг B (828EF4D8 788→804, 828EF5D8/828EF630 784→800), а вместе с ним: 828EF1D0 li 240→248, 828EF1DC li 60→62, 828EF2E0/828EF400 cmpwi 30→32, 828EF444/828EF4D4 li 30→32, 828EF5BC li 30→32 (828EF5D4 оставить), 828EF684/828EF69C 30→32, 828EF6A4 60→62, читатель 828F6A60: 828F6A98 60→62. Только всё вместе (или переписать функцию)",
@@ -46,7 +46,7 @@
    "class": "ARRAY_SIZE",
    "func": "82958648",
    "what": "CTR обнуления stats+159 bytes[30] → [32] (бывшее 82758DB8 NHL 13; до +192 место есть)",
-   "src": "legacy-port 08.10 (analysis/team32)"
+   "src": "nhl-legacy-port 08.10 (analysis/team32)"
   },
   {
    "addr": "82969D88",
@@ -139,7 +139,7 @@
    "class": "NHL_TEAMS",
    "func": "829B19E0",
    "what": "сводка состава: team ≥ 30 → «не НХЛ» (бывшее 8278CEDC)",
-   "src": "legacy-port 08.10 (analysis/team32)"
+   "src": "nhl-legacy-port 08.10 (analysis/team32)"
   },
   {
    "addr": "829E3B00",
@@ -316,7 +316,7 @@
    "class": "DRAFT",
    "func": "82A356F0",
    "what": "второй путь создания leaguedraftpick (7 раундов × 30) → 32 (пара к 82A358B0)",
-   "src": "legacy-port 08.10 (analysis/team32)"
+   "src": "nhl-legacy-port 08.10 (analysis/team32)"
   },
   {
    "addr": "82A780F8",
@@ -441,7 +441,7 @@
    "class": "PRO_TEAMS",
    "func": "82AFC398",
    "what": "новая в Legacy проверка «номер < 60» перед поиском клуба-хозяина (= 8289B070) → 62",
-   "src": "legacy-port 08.10 (analysis/team32)"
+   "src": "nhl-legacy-port 08.10 (analysis/team32)"
   },
   {
    "addr": "82B0A738",
@@ -498,7 +498,7 @@
    "class": "NHL_TEAMS",
    "func": "82B26AC8",
    "what": "фильтр игроков таблиц статистики «НХЛ» = команда < 30 (ветка онлайн/сервера) → 32",
-   "src": "legacy-port 08.10 (analysis/team32)"
+   "src": "nhl-legacy-port 08.10 (analysis/team32)"
   },
   {
    "addr": "82B27050",
@@ -507,7 +507,7 @@
    "class": "NHL_TEAMS",
    "func": "82B26AC8",
    "what": "то же — ветка запроса к базе",
-   "src": "legacy-port 08.10 (analysis/team32)"
+   "src": "nhl-legacy-port 08.10 (analysis/team32)"
   },
   {
    "addr": "82B28734",
@@ -904,7 +904,7 @@
    "class": "NHL_TEAMS",
    "func": "82B664B8",
    "what": "leaguestaffdata.nextprocessdate для команд 0…29 при создании франшизы → 32",
-   "src": "legacy-port 08.10 (analysis/team32)"
+   "src": "nhl-legacy-port 08.10 (analysis/team32)"
   },
   {
    "addr": "82B699BC",
@@ -1163,7 +1163,7 @@
    "class": "NHL_TEAMS",
    "func": "82B97860",
    "what": "случайная команда НХЛ: маска [30] на r1+80 → [32]",
-   "src": "legacy-port 08.10 (analysis/team32)"
+   "src": "nhl-legacy-port 08.10 (analysis/team32)"
   },
   {
    "addr": "82B979DC",
@@ -1172,7 +1172,7 @@
    "class": "NHL_TEAMS",
    "func": "82B97860",
    "what": "то же: цикл по маске 30 → 32",
-   "src": "legacy-port 08.10 (analysis/team32)"
+   "src": "nhl-legacy-port 08.10 (analysis/team32)"
   },
   {
    "addr": "82B97A30",
@@ -1181,7 +1181,7 @@
    "class": "NHL_TEAMS",
    "func": "82B97860",
    "what": "то же: rand(30) → rand(32)",
-   "src": "legacy-port 08.10 (analysis/team32)"
+   "src": "nhl-legacy-port 08.10 (analysis/team32)"
   },
   {
    "addr": "82B98C44",
@@ -1238,7 +1238,7 @@
    "class": "ARRAY_SIZE",
    "func": "82BBC170",
    "what": "конструктор u32[30] менеджера ачивок → [32] (бывшее 82767DE4; выделение 82969D88 — в списке)",
-   "src": "legacy-port 08.10 (analysis/team32)"
+   "src": "nhl-legacy-port 08.10 (analysis/team32)"
   }
  ],
  "left": [

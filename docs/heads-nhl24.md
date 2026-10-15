@@ -206,7 +206,7 @@ P=game/work/photos-nhl24/venv/Scripts/python.exe
 bash tools/legacy_data/build-all.sh scans24 --ahl32          # match → build → apply (out и out-ahl32)
 bash tools/legacy_data/build-all.sh nhl24 --ahl32            # накладка NHL 24 из новых out/db
 bash tools/legacy_data/install-legacy-data.sh --ahl32 --nhl24   # установка, при закрытой игре
-$P tools/scans24.py save "legacy-port/userdata/B13EBABEBABEBABE/454109EC/00000001/ROSTER 20261011041455/ROSTER 20261011041455"
+$P tools/scans24.py save "nhl-legacy-port/userdata/B13EBABEBABEBABE/454109EC/00000001/ROSTER 20261011041455/ROSTER 20261011041455"
                                                              # без --write — только отчёт; с --write копия в backup-saves/scans24-*
 $P tools/scans24.py sheet --stars --helmets 3                # лист «типовая сейчас | NHL 24 | наш» (scans24/sheet-out-ahl32.png)
 ```

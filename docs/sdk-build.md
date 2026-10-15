@@ -3,11 +3,11 @@
 07.10.2026. Порт NHL 13 собран против своей сборки SDK — того же коммита, что и ночная
 `0.10.0.24-dev.gbd833a2`, но с Vulkan-бэкендом рядом с D3D12 и с FSR 1 / CAS при выводе
 кадра. Всё лежит отдельно: SDK — в `ref/rexglue-sdk-custom/`, порт — в копии `port-ffx/`
-(в `.gitignore`). `port/` и готовая ночная `ref/rexglue-sdk-0.10.0.24` не тронуты. Игра не
+(в `.gitignore`). `nhl-13-port/` и готовая ночная `ref/rexglue-sdk-0.10.0.24` не тронуты. Игра не
 запускалась: сборка проверена по логам, экспортам, флагам компиляции и строкам DLL;
 поведение в игре — на проверку.
 
-**Скрипты и патчи в git (с 15.10.2026) — `legacy-port/scripts/`:** `sdk_build.cmd`, `sdk_fetch.ps1`,
+**Скрипты и патчи в git (с 15.10.2026) — `nhl-legacy-port/scripts/`:** `sdk_build.cmd`, `sdk_fetch.ps1`,
 `sdk_env.cmd` (бывший `env.cmd`), `sdk_gpu_build.cmd` и `sdk-patches/0001…0006`. Они собирают тот же SDK в
 `ref/rexglue-sdk-custom/`; приоритет — `NHLLEG_NORMALPRIO=1` вместо `NHLFFX_NORMALPRIO=1`. Исходная копия —
 `port-ffx/scripts/` (не в git): там патчи 0001…0004 и скрипты порта NHL 13 `build_port.cmd`, `codegen_check.*`.
@@ -28,7 +28,7 @@
 # Git Bash; старую папку — переименовать, не удалять
 cd /s/Claude/megarohas_nhl13
 mv ref/rexglue-sdk-custom ref/rexglue-sdk-custom-damaged     # если она есть
-NHLLEG_NORMALPRIO=1 JOBS=12 cmd //c 'S:\Claude\megarohas_nhl13\legacy-port\scripts\sdk_build.cmd all' > sdk_rebuild.log 2>&1
+NHLLEG_NORMALPRIO=1 JOBS=12 cmd //c 'S:\Claude\megarohas_nhl13\nhl-legacy-port\scripts\sdk_build.cmd all' > sdk_rebuild.log 2>&1
 ```
 
 | Шаг (14:12:45 →) | Время | Что в логе |
@@ -57,9 +57,9 @@ NHLLEG_NORMALPRIO=1 JOBS=12 cmd //c 'S:\Claude\megarohas_nhl13\legacy-port\scrip
 Чтобы в следующий раз было ещё быстрее: `tools\backup_data.ps1` копирует `ref\rexglue-sdk-custom\install`
 на `D:\backup\megarohas_nhl13-data\` — после него восстановление = копия обратно (минута). На 09.10
 (14:20) копии SDK на D: ещё не было. Если пропадёт и `port-ffx/`, патчи есть в git —
-`legacy-port/scripts/sdk-patches/` (с 15.10.2026), и целиком в приложении ниже.
+`nhl-legacy-port/scripts/sdk-patches/` (с 15.10.2026), и целиком в приложении ниже.
 
-Ночная `ref/rexglue-sdk-0.10.0.24` (её берёт `port/` NHL 13 и пресет `win-amd64-relwithdebinfo`) после
+Ночная `ref/rexglue-sdk-0.10.0.24` (её берёт `nhl-13-port/` NHL 13 и пресет `win-amd64-relwithdebinfo`) после
 инцидента тоже неполная (129 файлов, нет `bin`/`lib`); цел её zip
 `ref/rexglue-sdk-0.10.0.24-dev.gbd833a2-win-amd64.zip` (`unzip -t` без ошибок) — распаковать его заново.
 
@@ -92,7 +92,7 @@ NHLLEG_NORMALPRIO=1 JOBS=12 cmd //c 'S:\Claude\megarohas_nhl13\legacy-port\scrip
    present_fsr_sharpness_reduction = 0.2
    present_cas_additional_sharpness = 0.0
    ```
-6. Четыре патча к SDK (`legacy-port/scripts/sdk-patches/`, исходно — `port-ffx/scripts/sdk-patches/`, полный дифф —
+6. Четыре патча к SDK (`nhl-legacy-port/scripts/sdk-patches/`, исходно — `port-ffx/scripts/sdk-patches/`, полный дифф —
    в приложении):
    FidelityFX без рантайма + общий `REX_HAS_FIDELITYFX_SDK`; установка без записи в реестр
    CMake; `gpu_backend`; исправление чтения `exp_adjust` в SPIR-V (на Vulkan).
@@ -109,9 +109,9 @@ NHLLEG_NORMALPRIO=1 JOBS=12 cmd //c 'S:\Claude\megarohas_nhl13\legacy-port\scrip
 | `ref/rexglue-sdk-custom/install/win-amd64/` | установка: раскладка как у ночного zip (`bin`, `lib`, `include`, `share/rexglue`, `lib/cmake/rexglue`) — только Release |
 | `ref/rexglue-sdk-custom/*.log` | логи: `clone`, `submodules`, `configure`, `build-release`, `codegen-check` (и `codegen-check-unseeded` — прогон без эталонного partition) |
 | `ref/rexglue-sdk-custom/cgcheck/` | рабочая папка проверки кодогена (можно удалить) |
-| `port-ffx/` | копия `port/` без `out/` (с `generated/`), снята 07.10 в 20:28 — вместе с незакоммиченной правкой `src/nhl13_teams.cpp` |
+| `port-ffx/` | копия `nhl-13-port/` без `out/` (с `generated/`), снята 07.10 в 20:28 — вместе с незакоммиченной правкой `src/nhl13_teams.cpp` |
 | `port-ffx/scripts/` | скрипты (ниже) и `sdk-patches/0001…0004.patch` |
-| `legacy-port/scripts/` | в git: `sdk_env.cmd`, `sdk_fetch.ps1`, `sdk_build.cmd`, `sdk_gpu_build.cmd`, `sdk-patches/0001…0006.patch` |
+| `nhl-legacy-port/scripts/` | в git: `sdk_env.cmd`, `sdk_fetch.ps1`, `sdk_build.cmd`, `sdk_gpu_build.cmd`, `sdk-patches/0001…0006.patch` |
 | `port-ffx/nhl13.ffx.toml` | шаблон `nhl13.toml` этой сборки |
 | `port-ffx/build.cmd` | заменён обёрткой над `scripts\build_port.cmd` (исходный собирал бы против ночной) |
 | `port-ffx/out/build/win-amd64-release/` | готовая сборка |
@@ -136,12 +136,12 @@ NHLLEG_NORMALPRIO=1 JOBS=12 cmd //c 'S:\Claude\megarohas_nhl13\legacy-port\scrip
 перезапускаются с приоритетом «ниже среднего» (`start /belownormal`; дочерние clang/ninja его
 наследуют), параллельность — `JOBS` (по умолчанию 8 из 12 потоков).
 
-Шаг 1 — скрипты из git (`legacy-port\scripts\`), шаги 2 и 3 — порт NHL 13, только в `port-ffx\scripts\`.
-Порт Legacy после шага 1 собирается своим `legacy-port\build.cmd` ([legacy-port.md](legacy-port.md), «Сборка»).
+Шаг 1 — скрипты из git (`nhl-legacy-port\scripts\`), шаги 2 и 3 — порт NHL 13, только в `port-ffx\scripts\`.
+Порт Legacy после шага 1 собирается своим `nhl-legacy-port\build.cmd` ([legacy-port.md](legacy-port.md), «Сборка»).
 
 ```bat
 :: 1. SDK: клон + сабмодули + патчи, configure, сборка Release, установка
-S:\Claude\megarohas_nhl13\legacy-port\scripts\sdk_build.cmd
+S:\Claude\megarohas_nhl13\nhl-legacy-port\scripts\sdk_build.cmd
 ::    по шагам: sdk_build.cmd fetch | configure | build   (build = сборка + установка)
 ::    RelWithDebInfo для пресета win-amd64-relwithdebinfo: set SDK_CONFIGS=Release RelWithDebInfo
 :: 2. Порт (пресет по умолчанию win-amd64-release), копирует nhl13.ffx.toml как nhl13.toml,
@@ -154,7 +154,7 @@ S:\Claude\megarohas_nhl13\port-ffx\scripts\codegen_check.cmd
 
 | Скрипт | Что делает |
 |---|---|
-| `sdk_env.cmd` (в `port-ffx` — `env.cmd`) | пути (`SDKC`, `SDK_SRC`, `SDK_BUILD`, `SDK_PREFIX`, `SDK_PIN`), `vcvars64`, LLVM, CMake, Ninja — как `port/build.cmd` |
+| `sdk_env.cmd` (в `port-ffx` — `env.cmd`) | пути (`SDKC`, `SDK_SRC`, `SDK_BUILD`, `SDK_PREFIX`, `SDK_PIN`), `vcvars64`, LLVM, CMake, Ninja — как `nhl-13-port/build.cmd` |
 | `sdk_fetch.ps1` | клон ветки `development`, `checkout bd833a2`, теги (для версии), shallow-сабмодули без `moltenvk`/`catch2`, «материализация» симлинков git, `git apply` патчей (уже применённые пропускает). Идемпотентен |
 | `sdk_build.cmd` | fetch → configure (те же переменные, что пресет `win-amd64` + опции ниже) → `cmake --build --config Release` → `cmake --install` |
 | `build_port.cmd` | `cmake --preset … -DCMAKE_PREFIX_PATH=<свой SDK> -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF`, сборка, `nhl13.toml` |
@@ -177,7 +177,7 @@ S:\Claude\megarohas_nhl13\port-ffx\scripts\codegen_check.cmd
 
 ## Патчи к SDK
 
-Все четыре — в `legacy-port/scripts/sdk-patches/` (в git; исходная копия — `port-ffx/scripts/sdk-patches/`),
+Все четыре — в `nhl-legacy-port/scripts/sdk-patches/` (в git; исходная копия — `port-ffx/scripts/sdk-patches/`),
 полный дифф — в приложении. `sdk_fetch.ps1` накладывает по порядку все патчи своей папки: в git это 0001…0006,
 следующие два — журнал memexport и гонка загрузки текстур ([legacy-port.md](legacy-port.md)), их cvar'ы по
 умолчанию выключены.
@@ -256,8 +256,8 @@ Vulkan покажет их симптомы (см. «Что проверить �
 ## Строки `nhl13.toml`
 
 `port-ffx/out/build/win-amd64-release/nhl13.toml` — копия
-`port/out/build/win-amd64-release/nhl13.toml` (игра, сейвы, кэш, `season_year`, `nhl_teams`,
-`readback_resolve = "some"`, ROV — как там), лог — `S:/Claude/megarohas_nhl13/port/out/game-ffx.log`.
+`nhl-13-port/out/build/win-amd64-release/nhl13.toml` (игра, сейвы, кэш, `season_year`, `nhl_teams`,
+`readback_resolve = "some"`, ROV — как там), лог — `S:/Claude/megarohas_nhl13/nhl-13-port/out/game-ffx.log`.
 В конце — закомментированные блоки:
 
 | Ключ | Значения (умолч.) | Когда | Смысл |
@@ -319,7 +319,7 @@ Vulkan покажет их симптомы (см. «Что проверить �
 ## Что проверить в игре
 
 1. **D3D12 с текущими настройками** (как есть, `present_effect` закомментирован): должно быть
-   неотличимо от `port/` Release — тот же коммит SDK, разница в clang 23 вместо CI и
+   неотличимо от `nhl-13-port/` Release — тот же коммит SDK, разница в clang 23 вместо CI и
    вкомпилированных FSR/Vulkan. Меню, матч, загрузка франшизы, сохранение. Презентер теперь
    при старте создаёт и корневые сигнатуры/пайплайны FSR/CAS; если они не создадутся, вывода
    не будет вовсе — в логе «D3D12Presenter: Failed to create … AMD FidelityFX …».
@@ -334,7 +334,7 @@ Vulkan покажет их симптомы (см. «Что проверить �
    перерисовку); переключение полноэкранного режима и Alt+Tab (пересоздание swap chain); F3/F4
    и консоль.
 4. **Vulkan + `resolution_scale = 2`** — формы и шлемы; ×3 на Vulkan не ставить.
-5. Лог (`port/out/game-ffx.log`): «Vulkan device properties and enabled features» (в списке
+5. Лог (`nhl-13-port/out/game-ffx.log`): «Vulkan device properties and enabled features» (в списке
    должен быть `fragmentShaderPixelInterlock`), WARN `VulkanRenderTargetCache` (откат с fsi на
    хостовые RT), «Vulkan draw resolution scaling is experimental», ошибки `VulkanProvider` /
    `VulkanPresenter`.

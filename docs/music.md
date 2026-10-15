@@ -48,7 +48,7 @@ ffmpeg — он у пользователя уже стоит (winget `Gyan.FFmp
 | `attribdb/music.vlt` | `boot.big` | | 720 | Attrib: числа с плавающей точкой — видимо, громкости категорий |
 | `fe/ion/artassets/eatrax[_thumbs]/e0…e15[_thumb].big` | `cache.big` | | 38 КБ / 3 КБ | обложки EA Trax (сцена 275×271 / 61×60) |
 
-Порт (лог `port/out/game-*.log`) спрашивает в `cache:` при запуске
+Порт (лог `nhl-13-port/out/game-*.log`) спрашивает в `cache:` при запуске
 `audio\music\music_samples.sbr`, `…musicboxdata.bin` и остальные мелкие файлы, а
 `music_samples.sbs` — когда начинает играть музыка главного меню.
 
@@ -116,7 +116,7 @@ VBR, joint stereo только MS (без intensity), длинные/корот�
 (`eatrax13_<N>_<Имя>_…` — таких ключей нет ни в одной из восьми баз `fe/loc/nhl_*.db`,
 там только старые `eatrax12_*` от NHL 12).
 
-Код (`port/generated`): `sub_829EA300` читает теги песни (Index, Title, Artist, Album,
+Код (`nhl-13-port/generated`): `sub_829EA300` читает теги песни (Index, Title, Artist, Album,
 loc_*, AssetID) в структуру; строку меню собирает `sub_8277FDF0` — берёт простой `Artist`,
 кроме двух зашитых случаев: при названии «Grace» и «Turn Your Back» исполнитель
 подменяется строками `eatraxArtist_Grace` / `eatraxArtist_TurnYourBack` (так своим песням
@@ -426,7 +426,7 @@ python tools/music.py --game legacy check --deep --compare "trax0=best_of_nhl/An
 ### Что проверить в игре
 
 1. Поставить содержимое `game/work/legacy-data/out` (только файлы из `files.txt`) в `cache:`
-   порта (`legacy-port/userdata/cache/guest`) при закрытой игре. В логе порта игра должна
+   порта (`nhl-legacy-port/userdata/cache/guest`) при закрытой игре. В логе порта игра должна
    открыть из `cache:` `audio\music\music_samples.sbr`, `…musicboxdata.bin`,
    `…graffitidata.bin`, а с музыкой меню — `music_samples.sbs`.
 2. Главное меню: играет песня из Best of NHL (не Vinyl Theatre/Panic! At The Disco…); если

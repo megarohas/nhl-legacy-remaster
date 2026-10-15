@@ -1,7 +1,7 @@
 @echo off
 rem Shared environment for the custom SDK scripts of the NHL Legacy port (docs/sdk-build.md). Use via "call".
 rem Any variable may be preset by the caller; it is not overwritten then.
-rem   PROJ        the port project (legacy-port)
+rem   PROJ        the port project (nhl-legacy-port)
 rem   SDKC        ref\rexglue-sdk-custom: SDK sources, build tree and install
 rem   SDK_SRC     rexglue-sdk clone at SDK_PIN + scripts\sdk-patches\*.patch
 rem   SDK_BUILD   SDK build tree (Ninja Multi-Config)

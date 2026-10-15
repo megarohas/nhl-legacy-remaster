@@ -31,8 +31,8 @@ venv/
 /ref/
 
 # Порт: сгенерированный код (производное от кода игры) и сборка — только локально
-/port/generated/default/
-/port/out/
+/nhl-13-port/generated/default/
+/nhl-13-port/out/
 /.claude/
 
 # Экспериментальная копия порта под свою сборку SDK (Vulkan + FSR/CAS), docs/sdk-build.md
@@ -44,17 +44,17 @@ venv/
 best_of_nhl/
 # Порт NHL Legacy (docs/legacy-port.md): в git — только свой код и сборка проекта; кодоген (производное
 # от кода игры), сборка, сейвы, образы и разведка прототипа (docs/legacy-port-feasibility.md) — только локально
-/legacy-port/*
-!/legacy-port/src/
-!/legacy-port/scripts/
-!/legacy-port/CMakeLists.txt
-!/legacy-port/CMakePresets.json
-!/legacy-port/build.cmd
-!/legacy-port/nhllegacy_*.toml
-!/legacy-port/nhllegacy_*.json
-!/legacy-port/dist-template/
-!/legacy-port/launcher/
-!/legacy-port/nhllegacy.example.toml
-!/legacy-port/generated/
-/legacy-port/generated/*
-!/legacy-port/generated/rexglue.cmake
+/nhl-legacy-port/*
+!/nhl-legacy-port/src/
+!/nhl-legacy-port/scripts/
+!/nhl-legacy-port/CMakeLists.txt
+!/nhl-legacy-port/CMakePresets.json
+!/nhl-legacy-port/build.cmd
+!/nhl-legacy-port/nhllegacy_*.toml
+!/nhl-legacy-port/nhllegacy_*.json
+!/nhl-legacy-port/dist-template/
+!/nhl-legacy-port/launcher/
+!/nhl-legacy-port/nhllegacy.example.toml
+!/nhl-legacy-port/generated/
+/nhl-legacy-port/generated/*
+!/nhl-legacy-port/generated/rexglue.cmake

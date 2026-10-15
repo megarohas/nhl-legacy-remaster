@@ -1,5 +1,5 @@
 {
- "format": "sites[]: одна инструкция, тот же вид (cmpwi/cmplwi/li/addi/mulli), new = old с другим imm16; слова сверены по default.bin (база 0x82000000) и по тексту сгенерированного кода; when = ahl32 — при nhl_ahl_teams = 32 (только вместе с nhl_teams = 32); team32 — новое слово того же места в team32_sites.json (32 НХЛ без ahl32); needs — без чего место включать нельзя; done — что из manual сделано в порту (08.10.2026) — Legacy (прототип legacy-port/legacy_sites.py, адреса из xmatch); gate — функции src/nhllegacy_teams.cpp (NhlLegacy…)",
+ "format": "sites[]: одна инструкция, тот же вид (cmpwi/cmplwi/li/addi/mulli), new = old с другим imm16; слова сверены по default.bin (база 0x82000000) и по тексту сгенерированного кода; when = ahl32 — при nhl_ahl_teams = 32 (только вместе с nhl_teams = 32); team32 — новое слово того же места в team32_sites.json (32 НХЛ без ahl32); needs — без чего место включать нельзя; done — что из manual сделано в порту (08.10.2026) — Legacy (прототип nhl-legacy-port/legacy_sites.py, адреса из xmatch); gate — функции src/nhllegacy_teams.cpp (NhlLegacy…)",
  "when": "ahl32",
  "layout": "НХЛ 0…31; АХЛ 32…63 (teamid 32…61 → номер = teamid, 220 → 62, 221 → 63); проспекты 64/65 (teamid 209/210); CHL 66…125 (teamid 149…208); всего 126, сборных нет",
  "mismatch": [],
@@ -109,7 +109,7 @@
    "class": "PRO_TEAMS",
    "func": "82AFC398",
    "what": "«номер < 60» → 64 при ahl32",
-   "src": "legacy-port 08.10"
+   "src": "nhl-legacy-port 08.10"
   },
   {
    "addr": "82B2D780",

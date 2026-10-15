@@ -1,5 +1,5 @@
 # Ручные врезки «НХЛ на 32 команды» для NHL Legacy (src/nhllegacy_teams.cpp; по образцу
-# port/nhl13_team_hooks.toml; разбор мест — legacy-port/analysis/team32/hooks_map.md (локально) и
+# nhl-13-port/nhl13_team_hooks.toml; разбор мест — nhl-legacy-port/analysis/team32/hooks_map.md (локально) и
 # docs/legacy-port.md). Места «30 → 32» одной инструкцией — nhllegacy_team_sites.toml (генератор
 # tools/team_hooks.py --game legacy по nhllegacy_team32_sites.json / nhllegacy_ahl32_sites.json).
 #

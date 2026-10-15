@@ -1,15 +1,15 @@
 """Врезки «30 команд НХЛ → N» (и «30 клубов АХЛ → 32») из списков мест (разбор — docs/teams.md, docs/ahl32.md).
 
-    python team_hooks.py SITES.json [SITES2.json ...]            # port/nhl13_team_sites.toml + port/src/nhl13_team_sites.cpp
+    python team_hooks.py SITES.json [SITES2.json ...]            # nhl-13-port/nhl13_team_sites.toml + nhl-13-port/src/nhl13_team_sites.cpp
     python team_hooks.py SITES.json [SITES2.json ...] --report   # только список: что будет сделано и что отброшено
-    python team_hooks.py ... --out-dir DIR                       # записать оба файла в DIR (для сверки, port/ не трогается)
-    python team_hooks.py --game legacy SITES.json ...            # порт NHL Legacy: legacy-port/nhllegacy_team_sites.toml
-                                                                 # + legacy-port/src/nhllegacy_team_sites.cpp (имена NhlLegacy…)
+    python team_hooks.py ... --out-dir DIR                       # записать оба файла в DIR (для сверки, nhl-13-port/ не трогается)
+    python team_hooks.py --game legacy SITES.json ...            # порт NHL Legacy: nhl-legacy-port/nhllegacy_team_sites.toml
+                                                                 # + nhl-legacy-port/src/nhllegacy_team_sites.cpp (имена NhlLegacy…)
 
 SITES.json — список {"addr", "old", "new", "class", "func", "what"[, "when"]}: одна инструкция, у которой
 меняется только непосредственное значение (cmpwi/cmplwi, li/addi, mulli). Старое слово сверяется с образом
 (game/extracted/xex/default.bin, база 0x82000000), места с уже существующими врезками
-(port/nhl13_team_hooks.toml) пропускаются. Каждое место — [[midasm_hook]] после инструкции:
+(nhl-13-port/nhl13_team_hooks.toml) пропускаются. Каждое место — [[midasm_hook]] после инструкции:
 сравнение пересчитывается с новым числом, результат li/addi/mulli заменяется.
 
 Условие места — поле "when" (у места или у всего файла): "team32" (по умолчанию) — при nhl_teams = 32
@@ -26,20 +26,20 @@ import argparse, json, os, re, struct, sys
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 IMAGE = os.path.join(ROOT, 'game', 'extracted', 'xex', 'default.bin')
 BASE = 0x82000000
-HOOKS = os.path.join(ROOT, 'port', 'nhl13_team_hooks.toml')
-OUT_TOML = os.path.join(ROOT, 'port', 'nhl13_team_sites.toml')
-OUT_CPP = os.path.join(ROOT, 'port', 'src', 'nhl13_team_sites.cpp')
+HOOKS = os.path.join(ROOT, 'nhl-13-port', 'nhl13_team_hooks.toml')
+OUT_TOML = os.path.join(ROOT, 'nhl-13-port', 'nhl13_team_sites.toml')
+OUT_CPP = os.path.join(ROOT, 'nhl-13-port', 'src', 'nhl13_team_sites.cpp')
 
 # Игра: образ, свои ручные врезки (места с ними пропускаются), куда писать и префикс имён в C++.
 PROFILES = {
     'nhl13': dict(image=IMAGE, hooks=HOOKS, out_toml=OUT_TOML, out_cpp=OUT_CPP, prefix='Nhl13',
-                  docs='docs/teams.md', toml_rel='port/nhl13_team_sites.toml'),
+                  docs='docs/teams.md', toml_rel='nhl-13-port/nhl13_team_sites.toml'),
     'legacy': dict(image=os.path.join(ROOT, 'game', 'other', 'legacy', 'xex', 'default.bin'),
-                   hooks=os.path.join(ROOT, 'legacy-port', 'nhllegacy_team_hooks.toml'),
-                   out_toml=os.path.join(ROOT, 'legacy-port', 'nhllegacy_team_sites.toml'),
-                   out_cpp=os.path.join(ROOT, 'legacy-port', 'src', 'nhllegacy_team_sites.cpp'),
+                   hooks=os.path.join(ROOT, 'nhl-legacy-port', 'nhllegacy_team_hooks.toml'),
+                   out_toml=os.path.join(ROOT, 'nhl-legacy-port', 'nhllegacy_team_sites.toml'),
+                   out_cpp=os.path.join(ROOT, 'nhl-legacy-port', 'src', 'nhllegacy_team_sites.cpp'),
                    prefix='NhlLegacy', docs='docs/legacy-port.md',
-                   toml_rel='legacy-port/nhllegacy_team_sites.toml'),
+                   toml_rel='nhl-legacy-port/nhllegacy_team_sites.toml'),
 }
 P = PROFILES['nhl13']
 
@@ -233,9 +233,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument('sites', nargs='+')
     ap.add_argument('--report', action='store_true')
-    ap.add_argument('--out-dir', help='куда записать .toml и .cpp вместо port/ (для сверки)')
+    ap.add_argument('--out-dir', help='куда записать .toml и .cpp вместо nhl-13-port/ (для сверки)')
     ap.add_argument('--game', choices=sorted(PROFILES), default='nhl13',
-                    help='игра: nhl13 (port/) или legacy (legacy-port/)')
+                    help='игра: nhl13 (nhl-13-port/) или legacy (nhl-legacy-port/)')
     a = ap.parse_args()
     global P
     P = PROFILES[a.game]

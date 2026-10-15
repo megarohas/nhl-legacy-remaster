@@ -309,7 +309,7 @@ All-Star и `legends` — в сводке `game/work/nhl24/catalog/kits_table.md
    (сборка czkit) и контейнером 3-значного арта (`--container 1_131_0`, см. docs/uniforms.md).
 3. **Центр льда**: `centerlogo_<art>_cm.rx2` (1024² DXT3, 11 уровней) — через библиотеку
    `teamart.Rw4.replace(mip_chain(PNG))`. Команды с PNG на входе нет — нужна обёртка на несколько строк.
-4. **Установка** — свободными файлами в `cache:` Legacy (`legacy-port/userdata/cache/guest/…`), архивы не
+4. **Установка** — свободными файлами в `cache:` Legacy (`nhl-legacy-port/userdata/cache/guest/…`), архивы не
    перепаковываются. По `game.lock` и не поверх игры пользователя.
 5. **Опционально**:
    - превью форм в меню (`fe/ion/artassets/jerseys/jersey_1_<art>_<fevariant>.big`) — через модель позы

@@ -18,7 +18,7 @@
 | диск (.big) | game/extracted/disc/ | game/other/legacy/disc/ |
 | образ default.xex | game/extracted/xex/default.bin | game/other/legacy/xex/default.bin |
 | работа инструментов | game/work/<папка>/ | game/work/legacy-data/<папка>/ |
-| cache: порта | game/userdata/cache/guest/ | строка «CACHE: …» статуса legacy-port или `NHL_LEGACY_CACHE` |
+| cache: порта | game/userdata/cache/guest/ | строка «CACHE: …» статуса nhl-legacy-port или `NHL_LEGACY_CACHE` |
 
 Константы, нужные одному инструменту, живут в нём по ключу профиля (MUSIC в music.py — вторые версии
 песен, слоты EA Trax; LOWER_NAMES в fefont.py — строчные имена файлов в cache: у Legacy; legacy_config

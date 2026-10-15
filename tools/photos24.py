@@ -468,7 +468,7 @@ def cmd_save(save, write, db_path=None):
     artid, у которых в базе cache: hasportrait = 1. Остальное в сейве не трогается; копия до правки —
     <work>/backup-saves/, после записи — проверка CRC."""
     from tdb import SaveFile
-    db_path = db_path or os.path.join(common.REPO, 'legacy-port', 'userdata', 'cache', 'guest', 'db', 'nhlng.db')
+    db_path = db_path or os.path.join(common.REPO, 'nhl-legacy-port', 'userdata', 'cache', 'guest', 'db', 'nhlng.db')
     meta = load_meta(os.path.join(os.path.dirname(db_path), 'nhlng-meta.xml'))
     db = Tdb(open(db_path, 'rb').read(), meta)
     t = 'exhibitionplayerbiotable'

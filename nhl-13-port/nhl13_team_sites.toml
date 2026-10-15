@@ -234,7 +234,7 @@ name = "Nhl13CmpS_32"
 registers = ["r11", "cr6"]
 after_instruction = true
 
-# NHL_TEAMS 828BD8D8: фильтр таблиц статистики игроков: команда < 30 — клуб НХЛ (без правки игроки SEA/VGK выпадают из лидеров НХЛ; найдено legacy-port по Legacy 82B26C40)
+# NHL_TEAMS 828BD8D8: фильтр таблиц статистики игроков: команда < 30 — клуб НХЛ (без правки игроки SEA/VGK выпадают из лидеров НХЛ; найдено nhl-legacy-port по Legacy 82B26C40)
 # li r11, 30 → 32
 [[midasm_hook]]
 address = 0x828BDA50

@@ -1,5 +1,5 @@
 // Класс первого драфта франшизы NHL Legacy без переростков (nhl_draftclass_age; docs/legacy-port.md, «Класс
-// драфта», по образцу порта NHL 13: port/src/nhl13_draftclass.cpp, 7cd4988, docs/draft-pool.md).
+// драфта», по образцу порта NHL 13: nhl-13-port/src/nhl13_draftclass.cpp, 7cd4988, docs/draft-pool.md).
 //
 // Класс первого драфта игра собирает один раз — при создании франшизы (82B790C0 = 82934FB0 NHL 13) — и сразу
 // пишет в сейв (leaguerookiedata). Реальных игроков даёт 82B5ECE8 (= 8291F160): 82B34980(список, год + 1) —

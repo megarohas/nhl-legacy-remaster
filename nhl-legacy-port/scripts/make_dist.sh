@@ -1,10 +1,10 @@
 #!/bin/bash
-# Папка для друзей: legacy-port/dist/NHL Legacy — порт без файлов игры (docs/legacy-port.md).
-#   [BUILD=папка] [AHL32=1] bash legacy-port/scripts/make_dist.sh [--mods]   # AHL32=1 — моды с базой «АХЛ на 32»
+# Папка для друзей: nhl-legacy-port/dist/NHL Legacy — порт без файлов игры (docs/legacy-port.md).
+#   [BUILD=папка] [AHL32=1] bash nhl-legacy-port/scripts/make_dist.sh [--mods]   # AHL32=1 — моды с базой «АХЛ на 32»
 # Берёт Release-сборку (out/build/win-amd64-release: свой SDK, D3D12 + Vulkan), DLL рантайма MSVC
 # (app-local, из VC Redist BuildTools), шаблоны dist-template/ (nhllegacy.toml — пути пустые:
 # game\ и userdata\ рядом с exe; README.txt). С --mods — ещё моды-данные из
-# legacy-port/userdata/cache/guest (только файлы игры-модов: без кэша, который пишет сама игра).
+# nhl-legacy-port/userdata/cache/guest (только файлы игры-модов: без кэша, который пишет сама игра).
 set -euo pipefail
 P=$(cd "$(dirname "$0")/.." && pwd)
 B="${BUILD:-$P/out/build/win-amd64-release}"   # BUILD=папка сборки (по умолчанию — рабочая)

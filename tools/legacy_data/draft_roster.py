@@ -5,7 +5,7 @@ exhibition* и stockteamsalaryextras), с нашими данными.
 «draft_roster.db»). До 10.10.2026 туда клалась полная копия nhlng.db, и тогда франшиза с этого старта получала ещё
 2 таблицы (stockintltourneyplayerstats, stockintltourneygoaliestats). Сейв при создании выходил больше буфера
 сохранения: 51 таблица при буфере на 49, порча кучи (legacy-port, docs/legacy-port.md, «Старт «NHL Entry Draft»: две
-лишние таблицы…»). legacy-port проверил вариант из 10 таблиц (draft_roster_min10.db, md5 838ca6a0). Здесь — та же
+лишние таблицы…»). nhl-legacy-port проверил вариант из 10 таблиц (draft_roster_min10.db, md5 838ca6a0). Здесь — та же
 сборка: блоки таблиц в прежнем порядке, каталог (порядок как в базе) и db_size заново, CRC — Tdb.fix().
 
     python tools/legacy_data/draft_roster.py nhlng.db draft_roster.db [--meta META]   # схема — рядом с nhlng.db

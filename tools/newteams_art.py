@@ -11,7 +11,7 @@
         [--game legacy]        # NHL Legacy (tools/gameprofile.py): SEA/VGK — арт 100/101, прожекторы 46/47, арены 187/188
 
 DB по умолчанию — game/userdata/cache/guest/db/nhlng.db (рядом nhlng-meta.xml); для Legacy — db/nhlng.db в cache:
-порта Legacy (gameprofile: строка «CACHE:» статуса legacy-port или NHL_LEGACY_CACHE), лучше указать явно — например
+порта Legacy (gameprofile: строка «CACHE:» статуса nhl-legacy-port или NHL_LEGACY_CACHE), лучше указать явно — например
 базу nhl32 legacy-data (game/work/legacy-data/nhl32/nhlng.db). База другой игры, чем --game, — отказ (check_db). Файлы арта под эти номера
 собирает tools/teamart.py (game/work/logos/out → game/userdata/cache/guest). Почему именно эти поля —
 docs/logos-arenas.md:

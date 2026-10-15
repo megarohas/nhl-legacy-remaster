@@ -1,4 +1,4 @@
-# Лаунчер NHL Legacy (legacy-port/launcher)
+# Лаунчер NHL Legacy (nhl-legacy-port/launcher)
 
 12.10.2026. Окно настроек перед запуском порта: графика и наши переключатели `nhl_*`, кнопки «Играть» и
 «Сбросить». Свой exe на C++/Win32 (`nhllegacy_launcher.exe`, ~250 КБ, статический CRT, без DLL и установки) —
@@ -51,19 +51,19 @@
 ## Сборка
 
 ```bat
-S:\Claude\megarohas_nhl13\legacy-port\launcher\build.cmd
+S:\Claude\megarohas_nhl13\nhl-legacy-port\launcher\build.cmd
 ```
 
-MSVC из VS 2022 BuildTools, один файл `nhllegacy_launcher.cpp` → `legacy-port/out/launcher/nhllegacy_launcher.exe`
+MSVC из VS 2022 BuildTools, один файл `nhllegacy_launcher.cpp` → `nhl-legacy-port/out/launcher/nhllegacy_launcher.exe`
 (не в git). Манифест Common Controls 6 — `#pragma comment(linker, …)` + `/MANIFEST:EMBED`, DPI — Per-Monitor V2
 из кода; файлов `.rc`/`.manifest`/иконки нет.
 
 Снимок окна без показа пользователю (окно за пределами экрана, без активации, PrintWindow → PNG):
 `nhllegacy_launcher.exe --shot=путь.png [--shot-hint=N]` (N — номер подсказки, 0 = «Рендер»). Стенд —
-копия лаунчера в `legacy-port/out/launcher/test/` рядом с копией `nhllegacy.toml`.
+копия лаунчера в `nhl-legacy-port/out/launcher/test/` рядом с копией `nhllegacy.toml`.
 
 ## У пользователя
 
-С 12.10 — `legacy-port/out/build/win-amd64-release/nhllegacy_launcher.exe` рядом с его `nhllegacy.exe`. Ярлык
+С 12.10 — `nhl-legacy-port/out/build/win-amd64-release/nhllegacy_launcher.exe` рядом с его `nhllegacy.exe`. Ярлык
 «NHL Legacy» на рабочем столе пока ведёт на `nhllegacy.exe`; перенаправить его на лаунчер — по слову
 пользователя.

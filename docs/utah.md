@@ -59,7 +59,7 @@
 
 ## 2. Что сейчас на месте ARI в базе (CACHE пользователя, только чтение)
 
-Базу брал из копии `legacy-port/userdata/cache/guest/db` → `game/work/utah/ref/cache-db`. Это вариант `--ahl32`, md5
+Базу брал из копии `nhl-legacy-port/userdata/cache/guest/db` → `game/work/utah/ref/cache-db`. Это вариант `--ahl32`, md5
 34dfe267. В `out/` legacy-data (958f4b6d) строки 22 и 55 те же.
 
 | Таблица | Что там |
@@ -303,8 +303,8 @@ UTAH_WORK=game/work/utah/dry bash tools/utah/build.sh logos kits   # сухой 
 2. Реклама: добавлять ли нашивки SME Steel и 1Password и наклейку Filevine на шлем?
 3. Арена: нейтральная «EA SPORTS Arena» (по умолчанию) или модель Аризоны с её 3D-«койотами»?
 4. Звук: 32 (без названия, как у SEA) или оставить 22 («Coyotes»)?
-5. Тусон: переносить ли его в Pacific в варианте `--ahl32` (нужна правка дерева АХЛ у legacy-port)?
+5. Тусон: переносить ли его в Pacific в варианте `--ahl32` (нужна правка дерева АХЛ у nhl-legacy-port)?
 6. Логотип Тусона: «Dusty» (как у АХЛ на 2026/27) или «Качина» (2025/26)?
 7. Шрифт: квадратный «как Mammoth Sans» устраивает? Цифры — на листе `ui_helmet_font.png`.
 
-В игре ничего не проверялось: игру тестирует legacy-port под `game.lock`, и ставить нужно вместе с базой.
+В игре ничего не проверялось: игру тестирует nhl-legacy-port под `game.lock`, и ставить нужно вместе с базой.

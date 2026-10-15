@@ -41,9 +41,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\backup_data.ps1
 ```
 
 - **Что:** `game\work`, `game\userdata` (сейвы и кэш NHL 13), `best_of_nhl`,
-  `legacy-port\userdata` (сейвы и CACHE Legacy), `legacy-port\dist`, `legacy-port\codegen`,
-  сборка `legacy-port\out\build\win-amd64-release`, `port\generated`, `ref\rexglue-sdk-custom\install`.
-  Папок `legacy-port-aigm\` и `port\out\` с 15.10.2026 нет — из списка убраны; прежние копии на D: остаются.
+  `nhl-legacy-port\userdata` (сейвы и CACHE Legacy), `nhl-legacy-port\dist`, `nhl-legacy-port\codegen`,
+  сборка `nhl-legacy-port\out\build\win-amd64-release`, `nhl-13-port\generated`, `ref\rexglue-sdk-custom\install`.
+  Папок `legacy-port-aigm\` и `nhl-13-port\out\` с 15.10.2026 нет — из списка убраны; прежние копии на D: остаются.
 - **Куда:** `D:\backup\megarohas_nhl13-data\` — те же относительные пути. Журналы лежат в `_logs\`,
   строка на каждый запуск — в `_logs\history.txt`.
 - **Как:**

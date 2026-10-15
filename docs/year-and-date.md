@@ -72,15 +72,15 @@
 = сезон 2026/27; 2012 — как в оригинале). [`tools/year_hooks.py`](../tools/year_hooks.py)
 находит в образе все `li`/`subfic`/`cmpwi`/`cmplwi` с 2011–2013 и `addi ±2011…2013`,
 отбрасывает совпадения из списка `KEEP` (с причинами), добавляет производные года
-(`EXTRA`) и пишет `port/nhl13_year_hooks.toml` — 262 врезки `[[midasm_hook]]` после
-инструкции. Код врезок — `port/src/nhl13_year.cpp`: результат `li`/`subfic`/`addi +Y`
+(`EXTRA`) и пишет `nhl-13-port/nhl13_year_hooks.toml` — 262 врезки `[[midasm_hook]]` после
+инструкции. Код врезок — `nhl-13-port/src/nhl13_year.cpp`: результат `li`/`subfic`/`addi +Y`
 больше на `season_year − 2012`, `addi −Y` — меньше, сравнения пересчитываются против
 `Y + сдвиг`. Генератор останавливается, если результат дальше делится на 4 (счёт
 високосных лет).
 
 ```bash
 python tools/year_hooks.py game/extracted/xex/default.bin --report   # решение по каждому месту
-python tools/year_hooks.py game/extracted/xex/default.bin > port/nhl13_year_hooks.toml
+python tools/year_hooks.py game/extracted/xex/default.bin > nhl-13-port/nhl13_year_hooks.toml
 ```
 
 Проверено 07.10.2026 с `season_year = 2026`: возраст игроков в «Играть сейчас» — от

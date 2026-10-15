@@ -12,7 +12,7 @@
 - нынешние логотипы, формы, портреты и сканы лиц из NHL 24, шрифт и главное меню NHL 12;
 - исправления франшизы, драфта и Be a Pro.
 
-Проект начинался с порта NHL 13 (`port/`), сейчас тот порт заморожен.
+Проект начинался с порта NHL 13 (`nhl-13-port/`), сейчас тот порт заморожен.
 
 ## Что нужно
 
@@ -36,23 +36,23 @@
    берёт их раньше архивов, поэтому мод убирается удалением файла. Сборка и установка набора —
    [docs/legacy-data.md](docs/legacy-data.md).
 4. Сейвы, управление и известные ограничения описаны в
-   [legacy-port/dist-template/README.txt](legacy-port/dist-template/README.txt).
+   [nhl-legacy-port/dist-template/README.txt](nhl-legacy-port/dist-template/README.txt).
 
 ## Быстрый старт: разработчику
 
 - **Тулчейн:** VS 2022 Build Tools, LLVM/Clang, CMake, Ninja, Vulkan SDK ([docs/port.md](docs/port.md)). Пути к ним
-  прописаны в `legacy-port/build.cmd`.
+  прописаны в `nhl-legacy-port/build.cmd`.
 - **ReXGlue SDK:** ночная сборка 0.10.0.24 в `ref/rexglue-sdk-0.10.0.24/` или своя, с Vulkan и FSR 1 / CAS, в
-  `ref/rexglue-sdk-custom/`. Свою собирает `legacy-port\scripts\sdk_build.cmd`: клонирует SDK, накладывает патчи из
-  [legacy-port/scripts/sdk-patches/](legacy-port/scripts/sdk-patches/), собирает и устанавливает
+  `ref/rexglue-sdk-custom/`. Свою собирает `nhl-legacy-port\scripts\sdk_build.cmd`: клонирует SDK, накладывает патчи из
+  [nhl-legacy-port/scripts/sdk-patches/](nhl-legacy-port/scripts/sdk-patches/), собирает и устанавливает
   ([docs/sdk-build.md](docs/sdk-build.md)).
 - **Игра для кодогена** — в `game/other/legacy/disc/` (`default.xex` и `*.big`).
-- **Сборка порта:** `legacy-port\build.cmd` (Release, свой SDK) или `legacy-port\build.cmd win-amd64-relwithdebinfo`
+- **Сборка порта:** `nhl-legacy-port\build.cmd` (Release, свой SDK) или `nhl-legacy-port\build.cmd win-amd64-relwithdebinfo`
   (ночной SDK, с символами). Первая сборка сама запускает кодоген ReXGlue (15–20 минут), потом идёт компиляция.
-  Результат — `legacy-port/out/build/<пресет>/nhllegacy.exe` ([docs/legacy-port.md](docs/legacy-port.md), раздел
+  Результат — `nhl-legacy-port/out/build/<пресет>/nhllegacy.exe` ([docs/legacy-port.md](docs/legacy-port.md), раздел
   «Сборка»).
-- **Лаунчер:** `legacy-port\launcher\build.cmd` (результат — в `legacy-port/out/launcher/`). **Папка для игры:**
-  `bash legacy-port/scripts/make_dist.sh [--mods]`.
+- **Лаунчер:** `nhl-legacy-port\launcher\build.cmd` (результат — в `nhl-legacy-port/out/launcher/`). **Папка для игры:**
+  `bash nhl-legacy-port/scripts/make_dist.sh [--mods]`.
 - **Моды-данные:** `bash tools/legacy_data/build-all.sh [ЭТАП…] [--ahl32]` собирает набор в
   `game/work/legacy-data/out`, а `bash tools/legacy_data/install-legacy-data.sh` ставит его при закрытой игре. Этапы
   перечислены в [tools/README.md](tools/README.md), подробности — в [docs/legacy-data.md](docs/legacy-data.md).
@@ -62,14 +62,14 @@
 
 | Путь | Что |
 |---|---|
-| [legacy-port/](legacy-port/) | порт NHL Legacy: `src/` (врезки и исправления), `nhllegacy_*.toml` (манифест, функции, врезки), `scripts/` (кодоген, папка для игры, патчи SDK), `dist-template/`; сгенерированный код и сборка — вне git |
-| [legacy-port/launcher/](legacy-port/launcher/) | лаунчер `nhllegacy_launcher.exe` (C++/Win32, один файл) |
+| [nhl-legacy-port/](nhl-legacy-port/) | порт NHL Legacy: `src/` (врезки и исправления), `nhllegacy_*.toml` (манифест, функции, врезки), `scripts/` (кодоген, папка для игры, патчи SDK), `dist-template/`; сгенерированный код и сборка — вне git |
+| [nhl-legacy-port/launcher/](nhl-legacy-port/launcher/) | лаунчер `nhllegacy_launcher.exe` (C++/Win32, один файл) |
 | [tools/legacy_data/](tools/legacy_data/) | конвейер модов-данных Legacy: `build-all.sh`, установщик, этапы |
 | [tools/roster/](tools/roster/) | составы 2026/27: API НХЛ, рейтинги, звенья, запись в базу |
 | [tools/fb/](tools/fb/) | разбор Frostbite NHL 24: формы, лица, портреты (только для личного использования) |
 | [tools/](tools/README.md) | остальные инструменты: форматы EA, формы, интерфейс, разведка кода — карта в [tools/README.md](tools/README.md) |
 | [docs/](docs/README.md) | документация (на русском), оглавление по темам — [docs/README.md](docs/README.md) |
-| [port/](port/) | порт NHL 13, с которого всё началось (заморожен) |
+| [nhl-13-port/](nhl-13-port/) | порт NHL 13, с которого всё началось (заморожен) |
 | `game/`, `ref/` | только локально, не в git: файлы игр и рабочие папки; чужие репозитории для справки |
 
 ## Версия

@@ -1,5 +1,5 @@
 // Сгенерировано tools/team_hooks.py — не править руками.
-// Врезки «30 команд НХЛ → 32» (port/nhl13_team_sites.toml); действуют при nhl_teams = 32.
+// Врезки «30 команд НХЛ → 32» (nhl-13-port/nhl13_team_sites.toml); действуют при nhl_teams = 32.
 // Варианты ahl32 (nhl_ahl_teams = 32, только вместе с nhl_teams = 32) — docs/ahl32.md.
 
 #include <cstdint>

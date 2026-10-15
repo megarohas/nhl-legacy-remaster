@@ -257,7 +257,7 @@ O C D Q квадратнее, чем у Bahnschrift, и не нужна разр
 ### Предел размера файла: в коде его нет
 
 Загрузчик шрифтов один и тот же в NHL 13 и Legacy (найден по строкам `Font File Buffer` и
-`FontsBuf` в образе, `legacy-port/analysis/strusers.py`):
+`FontsBuf` в образе, `nhl-legacy-port/analysis/strusers.py`):
 
 - Legacy `82826020` (NHL 13 — `82F605C0`) читает `fonts.txt` целиком в буфер `FontsBuf`
   (размер + 1). По строкам он собирает путь и для каждого файла вызывает `828251C0` (NHL 13 —
@@ -333,7 +333,7 @@ legacy-data своим скриптом, при закрытой игре; по�
 - Превью — `game/work/legacy-data/fe/preview/`: `compare_fonts.png` в четыре колонки (NHL 12 /
   NHL 13 с модом / Legacy / Legacy с модом) и `*_before_after.png` со всеми символами (красным —
   Ę ę из оригинала).
-- **В игре** (legacy-data, 08.10.2026 20:18–20:21, порт `legacy-port`, D3D12 ROV): три файла
+- **В игре** (legacy-data, 08.10.2026 20:18–20:21, порт `nhl-legacy-port`, D3D12 ROV): три файла
   подхватились — в логе нет `FAILED` для `cache:\fe\ion\fonts\EAHelveticaNeue…-Mod.ttf`, падений нет.
   Снимки — `game/work/legacy-data/ingame/` (`t1-orig-*` — оригинал, `t2-font-*` — с модом):
   - Play Now → Select Teams: заголовок, «COYOTES®», «DUCKS™», «VS», нижняя панель подсказок;

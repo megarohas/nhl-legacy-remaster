@@ -2,7 +2,7 @@
 
 *Documentation is in Russian.* Это рабочие записи по ходу разборов: в каждой есть дата и пометки, что проверено в игре.
 Здесь они собраны по темам, по одной строке на документ. Пометка **NHL 13, заморожено** значит, что документ только о
-порте NHL 13 (`port/`) и больше не обновляется. Для NHL Legacy верно то, что написано в остальных разделах.
+порте NHL 13 (`nhl-13-port/`) и больше не обновляется. Для NHL Legacy верно то, что написано в остальных разделах.
 
 С чего начать:
 - игроку — [legacy-port.md](legacy-port.md), раздел «Для друзей», и [launcher.md](launcher.md);
@@ -13,10 +13,10 @@
 
 ## Порт NHL Legacy
 
-- [legacy-port.md](legacy-port.md) — свой порт NHL Legacy (`legacy-port/`): что работает, устройство, сборка, запуск, папка для друзей, год, франшиза на 32 клуба и разбор её падений
+- [legacy-port.md](legacy-port.md) — свой порт NHL Legacy (`nhl-legacy-port/`): что работает, устройство, сборка, запуск, папка для друзей, год, франшиза на 32 клуба и разбор её падений
 - [launcher.md](launcher.md) — лаунчер `nhllegacy_launcher.exe`: перед запуском настраиваются графика и переключатели `nhl_*`
 - [graphics-settings.md](graphics-settings.md) — графика порта: cvar'ы SDK, апскейл, ROV/RTV, задержка ввода, источники настроек и их приоритет
-- [sdk-build.md](sdk-build.md) — своя сборка ReXGlue SDK (Vulkan, FSR 1 / CAS): скрипты `legacy-port/scripts/sdk_*`, патчи, восстановление с нуля
+- [sdk-build.md](sdk-build.md) — своя сборка ReXGlue SDK (Vulkan, FSR 1 / CAS): скрипты `nhl-legacy-port/scripts/sdk_*`, патчи, восстановление с нуля
 - [port.md](port.md) — тулчейн (VS 2022 Build Tools, LLVM, CMake, Ninja, Vulkan SDK, ReXGlue) и первая генерация кода (на NHL 13)
 - [performance.md](performance.md) — производительность: замеры GPU/CPU, FSI против хостовых RT, холостой спин потока рендера (замеры на NHL 13, выводы о SDK общие)
 - [legacy-port-feasibility.md](legacy-port-feasibility.md) — оценка 08.10.2026, с которой начался порт: что из NHL 13 переносится в Legacy и сколько это стоит
@@ -71,7 +71,7 @@
 
 ## NHL 13 — история
 
-С порта NHL 13 (`port/`) проект начался. Эти документы больше не обновляются.
+С порта NHL 13 (`nhl-13-port/`) проект начался. Эти документы больше не обновляются.
 
 - [briefing.md](briefing.md) — вводная 07.10.2026: цель, что известно о базе, план · NHL 13, заморожено
 - [year-and-date.md](year-and-date.md) — где хранятся год и даты; для Legacy см. раздел «Год» в legacy-port.md · NHL 13, заморожено

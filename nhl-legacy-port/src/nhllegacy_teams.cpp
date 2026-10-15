@@ -1,5 +1,5 @@
-// НХЛ на 32 команды во франшизе NHL Legacy — перенос порта NHL 13 (port/src/nhl13_teams.cpp,
-// docs/teams.md). Карта адресов NHL 13 → Legacy — legacy-port/analysis/team32 (локально), итог —
+// НХЛ на 32 команды во франшизе NHL Legacy — перенос порта NHL 13 (nhl-13-port/src/nhl13_teams.cpp,
+// docs/teams.md). Карта адресов NHL 13 → Legacy — nhl-legacy-port/analysis/team32 (локально), итог —
 // docs/legacy-port.md.
 //
 // База (tools/nhl32.py --game legacy, агент legacy-data): новые клубы Сиэтл и Вегас — строки 30/31

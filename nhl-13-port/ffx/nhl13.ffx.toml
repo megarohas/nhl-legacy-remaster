@@ -5,7 +5,7 @@
 # целиком (без комментариев). Настройки графики — docs/graphics-settings.md.
 #
 # Сборка port-ffx: порт против своего SDK (D3D12 + Vulkan, FSR 1 / CAS при выводе) —
-# docs/sdk-build.md. Это копия port/out/build/win-amd64-release/nhl13.toml: те же игра,
+# docs/sdk-build.md. Это копия nhl-13-port/out/build/win-amd64-release/nhl13.toml: те же игра,
 # сейвы и кэш шейдеров, свой лог; scripts\build_port.cmd кладёт её как nhl13.toml.
 # Vulkan и FSR/CAS — закомментированные блоки в конце файла.
 
@@ -51,7 +51,7 @@ season_year = 2026
 nhl_teams = 32
 
 # Лог каждого запуска (и из ярлыка) — сюда, перезаписывается при старте.
-log_file = "S:/Claude/megarohas_nhl13/port/out/game-ffx.log"
+log_file = "S:/Claude/megarohas_nhl13/nhl-13-port/out/game-ffx.log"
 
 # Сторож кучи гостя (src/nhl13_heapguard.cpp) — для разбора порчи памяти; здесь выключен ради скорости.
 nhl_heap_guard = false

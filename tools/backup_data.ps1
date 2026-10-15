@@ -15,15 +15,15 @@ $dirs = @(
     'game\work',
     'game\userdata',
     'best_of_nhl',
-    'legacy-port\userdata',
-    'legacy-port\dist',
-    'legacy-port\codegen',
-    'legacy-port\out\build\win-amd64-release',
-    'port\generated',
+    'nhl-legacy-port\userdata',
+    'nhl-legacy-port\dist',
+    'nhl-legacy-port\codegen',
+    'nhl-legacy-port\out\build\win-amd64-release',
+    'nhl-13-port\generated',
     'ref\rexglue-sdk-custom\install'
 )
 $saves = @(
-    'legacy-port\userdata\B13EBABEBABEBABE',
+    'nhl-legacy-port\userdata\B13EBABEBABEBABE',
     'game\userdata\B13EBABEBABEBABE'
 )
 $common = @('/E', '/XJ', '/R:1', '/W:1', '/NP', '/NFL', '/NDL', '/MT:8',

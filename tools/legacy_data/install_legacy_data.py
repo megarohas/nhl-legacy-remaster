@@ -285,7 +285,7 @@ def main():
     if len(sys.argv) < 2 or sys.argv[1] not in ('install', 'uninstall'):
         sys.exit(__doc__)
     if game_running():
-        # игра с другой папкой userdata (например, тестовая копия legacy-port) этот cache: не читает — можно
+        # игра с другой папкой userdata (например, тестовая копия nhl-legacy-port) этот cache: не читает — можно
         target = _norm(os.path.join(cache_dir(), os.pardir, os.pardir))      # CACHE = <user_data_root>/cache/guest
         roots = running_roots()
         if any(r is None or r == target for r in roots):

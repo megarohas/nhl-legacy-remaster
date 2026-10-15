@@ -737,7 +737,7 @@ def main():
     ap.add_argument('a')
     ap.add_argument('b')
     ap.add_argument('--addr', nargs='*', default=[])
-    ap.add_argument('--port', help='папка порта NHL 13 (port/): все адреса toml и src')
+    ap.add_argument('--port', help='папка порта NHL 13 (nhl-13-port/): все адреса toml и src')
     ap.add_argument('--sites', nargs='*', default=[], help='списки мест (docs/team32_sites.json …)')
     ap.add_argument('--json', help='куда записать сопоставление')
     ap.add_argument('--stats', action='store_true')

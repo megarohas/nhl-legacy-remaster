@@ -581,7 +581,7 @@ game.screens.pro.BeAProEntryDraft.prototype._OnHighlightThirdPanelRow = function
 # ---------------------------------------------------------------- экраны
 
 # 'out': True — доска идёт в out (в cache: при установке legacy-data). 11.10.2026 в игре проверены Entry Draft и
-# фэнтези-драфт с его порядком (падение фэнтези-драфта на 32 починено в exe legacy-port a1cb8f74); Live the Life — только
+# фэнтези-драфт с его порядком (падение фэнтези-драфта на 32 починено в exe nhl-legacy-port a1cb8f74); Live the Life — только
 # по коду, в out не идёт
 SCREENS = [
     {'rel': 'fe/ion/game/screens/dynasty/dm38_nhlentrydraft.big', 'what': 'Be a GM — NHL Entry Draft',

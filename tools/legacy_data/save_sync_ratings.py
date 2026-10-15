@@ -17,7 +17,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 sys.path.insert(0, os.path.join(ROOT, 'tools'))
 from tdb import SaveFile, Tdb, load_meta  # noqa: E402
 
-CACHE_DB = os.path.join(ROOT, 'legacy-port', 'userdata', 'cache', 'guest', 'db')
+CACHE_DB = os.path.join(ROOT, 'nhl-legacy-port', 'userdata', 'cache', 'guest', 'db')
 TABLES = ('exhibitionskaterai', 'exhibitiongoalieai', 'exhibitionplayerbiotable')
 BIO_FIELDS = ('hasportrait', 'artid')  # портрет fe: p<artid>, показывается при hasportrait = 1
 

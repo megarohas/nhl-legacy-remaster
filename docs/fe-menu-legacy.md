@@ -26,7 +26,7 @@
 
 ## 1. Что у Legacy вместо главного меню
 
-Снимок оригинала: `legacy-port/out/shots/rel_02.png`.
+Снимок оригинала: `nhl-legacy-port/out/shots/rel_02.png`.
 
 | Часть | NHL 12 | NHL 13 | NHL Legacy |
 |---|---|---|---|
@@ -338,7 +338,7 @@ NHL 12 проявлялась (`_alpha` 0 → 100 за `m_speedZoomIn` 90 кад
 - Подпись — `ltxt("XboxLiveMarketplace")`. В локализации у ключа `XboxLiveMarketPlace` (регистр игра не
   различает) текст «Xbox Live Marketplace» → «Exit». Правка через `locdb put` — своя строка в конце пула,
   чужие ключи с тем же текстом не трогаются. На экране — прописными.
-- Действие — в exe (агент legacy-port): обёртка `ShowMarketplaceUI` 0x832EFE28, регистрация в 0x833019C8
+- Действие — в exe (агент nhl-legacy-port): обёртка `ShowMarketplaceUI` 0x832EFE28, регистрация в 0x833019C8
   (natives GameSetup). При cvar `nhl_menu_exit = true` программа закрывается, как от крестика окна, в лог
   пишется «[nhllegacy] menu exit (ShowMarketplaceUI)».
 - **Без перехвата EXIT — ловушка** (проверено на сборке без него). Родная функция доходит до заглушки
@@ -355,7 +355,7 @@ NHL 12 проявлялась (`_alpha` 0 → 100 за `m_speedZoomIn` 90 кад
 - До правки онлайн-пункт (Community → View Player Hub) давал попап «You must be signed in to Xbox Live and
   the EA servers…».
 - Play Now → SEA–VGK → Select Jerseys → назад → главное меню — без сбоев.
-- EXIT с exe legacy-port (`--nhl_menu_exit=true`): «[nhllegacy] menu exit (ShowMarketplaceUI): closing like the
+- EXIT с exe nhl-legacy-port (`--nhl_menu_exit=true`): «[nhllegacy] menu exit (ShowMarketplaceUI): closing like the
   window close button» → «Window closing, shutting down…» → «Title terminated» за 0,2 с.
 
 **Панель описаний** внизу справа листает 5 страниц из exe (`TXT_OFFLINE_DYNAMIC_MSG_TITLE/BODY_0…4`).
@@ -426,7 +426,7 @@ bash game/work/legacy-fe/uninstall-legacy-fe.sh menufade   # откат: пре�
 `game/work/legacy-fe/franchise/dis/`). Жёстких 30, 29 или 31 нет. Списки команд дают родные функции exe:
 `ION_Team.GetIDs(лига, FILTER_…)`, `ION_NHLStats.GetStatTeamIDsByDivisionID`,
 `ION_NHLSeries.GetTeamIDsForDivisionId`, `GetActiveLeaguesForScreen`. Если где-то 30, правка в коде
-(legacy-port), не в Apt.
+(nhl-legacy-port), не в Apt.
 
 **В игре.** Копия userdata пользователя (`game/work/legacy-fe/userdata-gm`, BE A GM1 за Anaheim), рабочий exe.
 Сим 26.09 → 12.10.2026 прошёл без падений. Снимки — `game/work/legacy-fe/shots/gm3/`, сводный лист —
@@ -434,7 +434,7 @@ bash game/work/legacy-fe/uninstall-legacy-fe.sh menufade   # откат: пре�
 
 | Экран | Список команд | SEA/VGK |
 |---|---|---|
-| Select Team (создание франшизы) | 30 | нет: Vancouver → Toronto, St. Louis → San Jose (меню 829CCA18 legacy-port) |
+| Select Team (создание франшизы) | 30 | нет: Vancouver → Toronto, St. Louis → San Jose (меню 829CCA18 nhl-legacy-port) |
 | Team Standings | вся лига 32, 4 дивизиона по 8; АХЛ 32 | есть |
 | Player Stats — Season (LT/RT) | дивизионы, конференции, 32 команды | есть |
 | Team Reports (Coaching) | 32 | есть, данные заполнены |
@@ -443,7 +443,7 @@ bash game/work/legacy-fe/uninstall-legacy-fe.sh menufade   # откат: пре�
 | Roster Moves, Edit Lines | свой клуб и фарм | — |
 | Free Agents, Scouting Report, Offer Sheets | без списка команд | — |
 
-**Предсезонка без SEA и VGK** (код, передано legacy-port). К 03.10, концу предсезонки, у остальных клубов
+**Предсезонка без SEA и VGK** (код, передано nhl-legacy-port). К 03.10, концу предсезонки, у остальных клубов
 6–7 игр, у Seattle и Vegas 0. В Player Stats у них «No Stats Available». В регулярке их игры идут и
 учитываются: на 12.10 Seattle 3-0-0, Vegas 1-1-0, у игроков есть GP, в Team Reports заполнены голы и
 спецбригады.
@@ -542,7 +542,7 @@ python tools/draft32_legacy.py check              # ролики разбира�
 **Где «2015».** Искали везде:
 - локализация `fe/loc/NHL_ENG_US.db`;
 - все файлы распакованных архивов Legacy (29 295 файлов, записи BIGF разжаты: ролики Apt, базы, тексты);
-- образ exe `legacy-port/images/legacy.bin`;
+- образ exe `nhl-legacy-port/images/legacy.bin`;
 - текстуры заставок и юридических экранов: `bootflow/01_legal`, `03_pressstart`, `pressstart/*`, `ddpsplash`, `demo/bootflowlegal`, `nhlbootflowbackground`, загрузочные экраны;
 - видео `ealogo.vp6` и `attract_eng.vp6`.
 

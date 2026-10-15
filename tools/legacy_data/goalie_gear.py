@@ -35,7 +35,7 @@ from tdb import SaveFile, Tdb, load_meta  # noqa: E402
 
 SPEC = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'goalie_gear.json')
 W = os.environ.get('LEGACY_DATA_WORK', os.path.join(ROOT, 'game', 'work', 'legacy-data'))
-CACHE_META = os.path.join(ROOT, 'legacy-port', 'userdata', 'cache', 'guest', 'db', 'nhlng-meta.xml')
+CACHE_META = os.path.join(ROOT, 'nhl-legacy-port', 'userdata', 'cache', 'guest', 'db', 'nhlng-meta.xml')
 EQ, SG, T = 'exhibitiongoalieequipment', 'stockgoalieequipment', 'exhibitionteams'
 B, P, R = 'exhibitionplayerbiotable', 'exhibitionplayers', 'exhibitionrostertable'
 OWN = {'game_id', 'jerseytuck', 'sticktapecolor', 'keepcustomiftraded', 'keepcustomstickiftraded'}

@@ -14,7 +14,7 @@
 #     логических) и без активации окна (SDL_WINDOW_ACTIVATE_WHEN_SHOWN/RAISED = 0); -Fullscreen — на весь экран,
 #     только по прямой просьбе пользователя;
 #   - лучше всего — ввод вообще без клавиатуры: виртуальный геймпад порта (cvar nhl_virtual_pad, файл *_pad.txt
-#     рядом с exe; NHL 13 — port/src/nhl13_pad.cpp, Legacy — legacy-port/src/nhllegacy_pad.cpp): фокус не нужен;
+#     рядом с exe; NHL 13 — nhl-13-port/src/nhl13_pad.cpp, Legacy — nhl-legacy-port/src/nhllegacy_pad.cpp): фокус не нужен;
 #   - снимок — PrintWindow (флаги 3: клиентская часть, полное содержимое D3D12) из DPI-aware процесса; фокус для
 #     него не нужен и не трогается. -Fit 1280x720 — снимок приводится к этому размеру (пиксельные проверки не
 #     зависят от размера окна), -Half — вдвое меньше окна. Свёрнутое окно не снимается (MINIMIZED).
@@ -25,7 +25,7 @@
 #   -Do stop                                    закрыть: taskkill без /F, через 30 с — /F
 #   -Do info                                    pid, окно, размер, активно ли
 #   -Do seq    -Steps "wait:25;shot:a.png;key:Return Space;wait:6;shot:b.png"   шаги по очереди
-#   -Game legacy                                порт NHL Legacy (legacy-port/): процесс nhllegacy, свой exe и лог
+#   -Game legacy                                порт NHL Legacy (nhl-legacy-port/): процесс nhllegacy, свой exe и лог
 # Пример: powershell -ExecutionPolicy Bypass -File tools\gameshot.ps1 -Do shot -Out game\work\x.png
 param(
     [Parameter(Mandatory = $true)][ValidateSet('start', 'shot', 'key', 'stop', 'info', 'seq')][string]$Do,
@@ -33,7 +33,7 @@ param(
     [string]$Keys = '',
     [int]$HoldMs = 150,
     [int]$GapMs = 600,
-    [string]$Log = 'S:/Claude/megarohas_nhl13/port/out/gameshot.log',
+    [string]$Log = 'S:/Claude/megarohas_nhl13/nhl-13-port/out/gameshot.log',
     [string]$Exe = 'S:\Claude\megarohas_nhl13\port-ffx\out\build\win-amd64-release\nhl13.exe',
     [string[]]$Extra = @(),
     [ValidateSet('nhl13', 'legacy')][string]$Game = 'nhl13',
@@ -49,8 +49,8 @@ $ErrorActionPreference = 'Stop'
 $Proc = 'nhl13'
 if ($Game -eq 'legacy') {
     $Proc = 'nhllegacy'
-    if (-not $PSBoundParameters.ContainsKey('Exe')) { $Exe = 'S:\Claude\megarohas_nhl13\legacy-port\out\build\win-amd64-release\nhllegacy.exe' }
-    if (-not $PSBoundParameters.ContainsKey('Log')) { $Log = 'S:/Claude/megarohas_nhl13/legacy-port/out/gameshot.log' }
+    if (-not $PSBoundParameters.ContainsKey('Exe')) { $Exe = 'S:\Claude\megarohas_nhl13\nhl-legacy-port\out\build\win-amd64-release\nhllegacy.exe' }
+    if (-not $PSBoundParameters.ContainsKey('Log')) { $Log = 'S:/Claude/megarohas_nhl13/nhl-legacy-port/out/gameshot.log' }
 }
 Add-Type -AssemblyName System.Drawing
 Add-Type @"

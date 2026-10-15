@@ -12,7 +12,7 @@ What you get:
 - current logos, uniforms, portraits and face scans from NHL 24, plus the NHL 12 font and main menu;
 - fixes for franchise mode, the draft and Be a Pro.
 
-The project started as an NHL 13 port (`port/`). That port is now frozen.
+The project started as an NHL 13 port (`nhl-13-port/`). That port is now frozen.
 
 ## What you need
 
@@ -36,22 +36,22 @@ section) or get a ready-made `NHL Legacy` folder from someone in person.
    them before its own archives, so deleting a file removes that mod. Building and installing the set:
    [docs/legacy-data.md](docs/legacy-data.md).
 4. Saves, controls and known limitations are covered in
-   [legacy-port/dist-template/README.txt](legacy-port/dist-template/README.txt) (in Russian).
+   [nhl-legacy-port/dist-template/README.txt](nhl-legacy-port/dist-template/README.txt) (in Russian).
 
 ## Quick start: developers
 
 - **Toolchain:** VS 2022 Build Tools, LLVM/Clang, CMake, Ninja, Vulkan SDK ([docs/port.md](docs/port.md)). Their
-  paths are set in `legacy-port/build.cmd`.
+  paths are set in `nhl-legacy-port/build.cmd`.
 - **ReXGlue SDK:** the 0.10.0.24 nightly in `ref/rexglue-sdk-0.10.0.24/`, or our own build with Vulkan and FSR 1 / CAS
-  in `ref/rexglue-sdk-custom/`. `legacy-port\scripts\sdk_build.cmd` produces our own build: it clones the SDK, applies
-  the patches from [legacy-port/scripts/sdk-patches/](legacy-port/scripts/sdk-patches/), builds and installs it
+  in `ref/rexglue-sdk-custom/`. `nhl-legacy-port\scripts\sdk_build.cmd` produces our own build: it clones the SDK, applies
+  the patches from [nhl-legacy-port/scripts/sdk-patches/](nhl-legacy-port/scripts/sdk-patches/), builds and installs it
   ([docs/sdk-build.md](docs/sdk-build.md)).
 - **Game files for codegen** go in `game/other/legacy/disc/` (`default.xex` and `*.big`).
-- **Building the port:** `legacy-port\build.cmd` (Release, our SDK) or `legacy-port\build.cmd win-amd64-relwithdebinfo`
+- **Building the port:** `nhl-legacy-port\build.cmd` (Release, our SDK) or `nhl-legacy-port\build.cmd win-amd64-relwithdebinfo`
   (nightly SDK, with symbols). The first build runs ReXGlue codegen by itself (15–20 minutes), then compiles. Output:
-  `legacy-port/out/build/<preset>/nhllegacy.exe` ([docs/legacy-port.md](docs/legacy-port.md), section «Сборка»).
-- **Launcher:** `legacy-port\launcher\build.cmd` (output in `legacy-port/out/launcher/`). **Player folder:**
-  `bash legacy-port/scripts/make_dist.sh [--mods]`.
+  `nhl-legacy-port/out/build/<preset>/nhllegacy.exe` ([docs/legacy-port.md](docs/legacy-port.md), section «Сборка»).
+- **Launcher:** `nhl-legacy-port\launcher\build.cmd` (output in `nhl-legacy-port/out/launcher/`). **Player folder:**
+  `bash nhl-legacy-port/scripts/make_dist.sh [--mods]`.
 - **Data mods:** `bash tools/legacy_data/build-all.sh [STAGE…] [--ahl32]` builds the set into
   `game/work/legacy-data/out`, and `bash tools/legacy_data/install-legacy-data.sh` installs it while the game is closed.
   The stages are listed in [tools/README.md](tools/README.md), details are in [docs/legacy-data.md](docs/legacy-data.md).
@@ -61,14 +61,14 @@ section) or get a ready-made `NHL Legacy` folder from someone in person.
 
 | Path | What |
 |---|---|
-| [legacy-port/](legacy-port/) | the NHL Legacy port: `src/` (hooks and fixes), `nhllegacy_*.toml` (manifest, functions, hooks), `scripts/` (codegen, player folder, SDK patches), `dist-template/`; generated code and builds stay out of git |
-| [legacy-port/launcher/](legacy-port/launcher/) | the `nhllegacy_launcher.exe` launcher (C++/Win32, a single file) |
+| [nhl-legacy-port/](nhl-legacy-port/) | the NHL Legacy port: `src/` (hooks and fixes), `nhllegacy_*.toml` (manifest, functions, hooks), `scripts/` (codegen, player folder, SDK patches), `dist-template/`; generated code and builds stay out of git |
+| [nhl-legacy-port/launcher/](nhl-legacy-port/launcher/) | the `nhllegacy_launcher.exe` launcher (C++/Win32, a single file) |
 | [tools/legacy_data/](tools/legacy_data/) | the Legacy data-mod pipeline: `build-all.sh`, installer, stages |
 | [tools/roster/](tools/roster/) | 2026/27 rosters: NHL API, ratings, lines, writing the database |
 | [tools/fb/](tools/fb/) | Frostbite (NHL 24) readers: uniforms, faces, portraits (personal use only) |
 | [tools/](tools/README.md) | everything else: EA file formats, uniforms, UI, code research; map in [tools/README.md](tools/README.md) |
 | [docs/](docs/README.md) | documentation (in Russian), table of contents by topic in [docs/README.md](docs/README.md) |
-| [port/](port/) | the NHL 13 port where it all started (frozen) |
+| [nhl-13-port/](nhl-13-port/) | the NHL 13 port where it all started (frozen) |
 | `game/`, `ref/` | local only, not in git: game files and work folders; other people's repos for reference |
 
 ## Version

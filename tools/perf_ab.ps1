@@ -1,7 +1,7 @@
 ﻿# perf_ab.ps1 — запуск основной сборки (port-ffx) с одним вариантом настроек рендера и
 # параллельный пассивный замер tools/perfwatch.ps1. nhl13.toml НЕ меняется: вариант задаётся
 # аргументами командной строки (они сильнее nhl13.toml — docs/graphics-settings.md, «Источники и
-# приоритет»), лог каждого варианта пишется в свой файл port/out/perf-<вариант>.log.
+# приоритет»), лог каждого варианта пишется в свой файл nhl-13-port/out/perf-<вариант>.log.
 #
 # Варианты (подробно — docs/performance.md, «План A/B»):
 #   vk-fsi        как сейчас: Vulkan, EDRAM через fragment shader interlock (из nhl13.toml)
@@ -38,7 +38,7 @@ if (Get-Process -Name nhl13 -ErrorAction SilentlyContinue) {
 }
 if (-not (Test-Path $Exe)) { throw "Нет $Exe" }
 
-$log = "S:/Claude/megarohas_nhl13/port/out/perf-$Variant.log"
+$log = "S:/Claude/megarohas_nhl13/nhl-13-port/out/perf-$Variant.log"
 $gameArgs = @("--log_file=$log")
 switch ($Variant) {
     "vk-fsi" { }

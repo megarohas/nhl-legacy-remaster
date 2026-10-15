@@ -1,7 +1,7 @@
 # 3D-модели игроков: где лежат, формат сеток, голень и гетры, клюшка и обмотка, край свитера как в NHL 10
 
-Разбор 08.10.2026 по диску без TU2 (`game/extracted/disc/*.big`), логам порта (`port/out/game-release.log`) и
-восстановленному коду (`port/generated/default`). Инструменты — [tools/rw4mesh.py](../tools/rw4mesh.py) и
+Разбор 08.10.2026 по диску без TU2 (`game/extracted/disc/*.big`), логам порта (`nhl-13-port/out/game-release.log`) и
+восстановленному коду (`nhl-13-port/generated/default`). Инструменты — [tools/rw4mesh.py](../tools/rw4mesh.py) и
 [tools/sticktape.py](../tools/sticktape.py) (только стандартная библиотека; `teamart`, `kitpaint`, `czkit`,
 `playerhead` — как библиотеки). Всё собранное — в `game/work/models/` (вне git). Правленые гетры поставлены в `cache:`
 08.10.2026 в 12:16 (`install-models.sh`, при закрытой игре). Клюшки с лентой до носка (вариант «низ-2», §9):
@@ -480,14 +480,14 @@ TOR в гостях ещё в низкой посадке, толчке, мяг�
 `uninstall-jersey10.sh`. Поставлено 41 файл `rendering/jersey/jersey_0_*` (7 вариантов без изменений не пишутся); с
 пересборкой `_3` (§12) — 42 (добавился `jersey_0_0_2_1_1_3`: 3 веса).
 
-**Проверка в игре** (08.10.2026, основная сборка `port-ffx`, `--mnk_mode=true`, лог `port/out/uniform10-test1.log`):
+**Проверка в игре** (08.10.2026, основная сборка `port-ffx`, `--mnk_mode=true`, лог `nhl-13-port/out/uniform10-test1.log`):
 «Play Now», WSH — MTL, матч идёт без падений; в логе нет ни одного промаха `cache:` для `jersey_0_*` (игра берёт
 поставленные файлы; промахи остались только у вратарских свитеров, шнуровки, «рубашки» и шорт — их не ставили). В
 повторе (пауза → Instant Replay, свободная камера: WASD — цель, Shift+стрелки — приближение и высота, Q/E — назад и
 вперёд, Z — спрятать меню; **F — нажатие левого стика — фото**: открывает меню фото, выходить через «Cancel») игроки
 сзади в посадке катания и на ходу — нижний край спины висит прямо и отстаёт от шорт: `game/work/models/jersey10/shots/
 r14_crop22.png`, `r16_crop22.png` (№ 22 MTL). «До» — тот же матч со снятыми на время свитерами
-(`uninstall-jersey10.sh`, лог `port/out/uniform10-before.log`): `b16_1_crop22.png` — тот же игрок прямо сзади, край
+(`uninstall-jersey10.sh`, лог `nhl-13-port/out/uniform10-before.log`): `b16_1_crop22.png` — тот же игрок прямо сзади, край
 облегает зад. Ракурсы повторов разные (повтор каждый раз свой); точное сравнение в одном ракурсе — на листе превью.
 После снимков «до» свитера поставлены обратно (`install-jersey10.sh`, все 41 файл сверены с `out/`).
 
@@ -510,7 +510,7 @@ r14_crop22.png`, `r16_crop22.png` (№ 22 MTL). «До» — тот же мат�
 
 | Что | Legacy против NHL 13 |
 |---|---|
-| пути | те же; гетры `_0/_2/_3`, коньки, клюшки, часть шорт, `jerseytie`/`shirt` переехали в `renderboot.big` (`_4` гетр, остальные шорты — `cacherender`, свитера — `nocacherender`). Порт Legacy открывает их по одному через `cache:` (`legacy-port/out/smoke2.log`: промахи `cache:\rendering\sock\playersock_*`, `playerstick_*`, `goaliestick*`, `jersey_0_1_2_0_*`, `skeleton_bindpose_*`) — свободный файл в `cache:` перекроет и `renderboot` |
+| пути | те же; гетры `_0/_2/_3`, коньки, клюшки, часть шорт, `jerseytie`/`shirt` переехали в `renderboot.big` (`_4` гетр, остальные шорты — `cacherender`, свитера — `nocacherender`). Порт Legacy открывает их по одному через `cache:` (`nhl-legacy-port/out/smoke2.log`: промахи `cache:\rendering\sock\playersock_*`, `playerstick_*`, `goaliestick*`, `jersey_0_1_2_0_*`, `skeleton_bindpose_*`) — свободный файл в `cache:` перекроет и `renderboot` |
 | байт в байт | все 60 свитеров, `jerseytie` (8), `shirt` (4), клюшки и ленты (16), скелеты (2), гетры/коньки/шорты `_0` и `_2`, гетры `_4` (кроме `goaliesock_1_4`) |
 | другие (16 + `goalieskate_3`) | `_3` гетр, коньков и шорт и `goaliesock_1_4`: **те же вершины** (порядок, позиции, UV), другие индексы — у Legacy полосы (тип 6), у NHL 13 — список треугольников (тип 4, §12): те же 60 треугольников с тем же обходом у `playersock_0_3` |
 | новое | реквизит `rendering/prop/`: вратарская клюшка `goaliestick_{left,right}_0` + лента `goaliesticktape_{left,right}_0` (= `goaliestick_H_2`/`goaliesticktape_H_2` без костей: шаг вершины 20, те же позиции, UV, нормали; другие полосы) и клюшка на льду `droppedstick_0` (6 подсеток: у двух клюшек — древко с крюком, лента крюка = та же, что у `playersticktape_H_2`, набалдашник; левая — зеркало правой по y). `goaliestick_left_0` и его лента в том же матче грузились (тот же лог), `droppedstick_0` — нет (видимо, только когда клюшка остаётся на льду) |

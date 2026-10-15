@@ -21,7 +21,7 @@
 побочных эффектов, клип пункта не создаётся (правка 2 байта той же длины). Флаг isHidden хуже: при загрузке
 игра ставит курсор на TXT_HUT по имени (SetHighlightedMenuItem не проверяет видимость).
 EXIT — пункт {name: "XboxLiveMarketplace", screenID: null}: его ветка в MenuCallback уже есть и зовёт родную
-ION_GameSetup.ShowMarketplaceUI(контроллер) (больше её не зовёт ни один ролик fe). В порте legacy-port
+ION_GameSetup.ShowMarketplaceUI(контроллер) (больше её не зовёт ни один ролик fe). В порте nhl-legacy-port
 перехватывает её обёртку 0x832EFE28 и закрывает программу (cvar nhl_menu_exit = true). БЕЗ перехвата —
 ловушка: заглушка XamShowMarketplaceUI порта отвечает «успех», меню прячет список и ждёт закрытия магазина
 навсегда; поэтому файлы ставятся только вместе с exe legacy-port. Корень переписывается участком той же длины: копии байт

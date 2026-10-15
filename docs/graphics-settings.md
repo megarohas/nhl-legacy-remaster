@@ -1,7 +1,7 @@
 # Графика порта: что настраивается и как выносить в лаунчер
 
 Ресерч 07.10.2026. Только чтение: исходники и бинарники SDK, данные игры (`game/extracted`),
-логи `port/out/*.log`, соседние рекомпилы, интернет. Игра и сборка не запускались — всё
+логи `nhl-13-port/out/*.log`, соседние рекомпилы, интернет. Игра и сборка не запускались — всё
 ниже выведено из кода и требует проверки в игре.
 
 **Версии.** Порт собран на nightly `0.10.0.24-dev.gbd833a2` (`ref/rexglue-sdk-0.10.0.24`), а
@@ -16,7 +16,7 @@
 ## Главное
 
 1. **Приоритет источников в коде обратный** тому, что написано в вики SDK и в шапке
-   `port/nhl13.example.toml`: командная строка > переменные `REX_*` > `nhl13.toml` > умолчания;
+   `nhl-13-port/nhl13.example.toml`: командная строка > переменные `REX_*` > `nhl13.toml` > умолчания;
    правки из консоли и окна F4 сильнее всего.
 2. **Горячей перезагрузки `nhl13.toml` нет**: файл читается только при старте. «На лету» — только
    встроенная консоль (`` ` ``/Ё), окно F4 или код порта. Lifecycle cvar'а — лишь метка.
@@ -72,7 +72,7 @@
 текущего (`include/rex/cvar.h:144-150`, `core/cvar.cpp:83-85`). В nightly DLL те же строки:
 «Env: {} ignored, already set on the command line», «Config: {} ignored, already set by a
 higher-priority source». Вики (`ref/rexglue-sdk.wiki/CVar-System.md:133`) и комментарий
-`port/nhl13.example.toml:2-3` («конфиг сильнее аргументов») устарели.
+`nhl-13-port/nhl13.example.toml:2-3` («конфиг сильнее аргументов») устарели.
 
 Что важно для лаунчера:
 - ключи TOML плоские; вложенная таблица склеивается через `_` (`core/cvar.cpp:97-99`):
@@ -174,7 +174,7 @@ ImGui хочет мышь (`ui/rex_app.cpp:253-256`).
 ### Данные через `cache:` (без кода)
 
 Игра сначала ищет файлы в `cache:` (= `game/userdata/cache/guest/`), потом в `.big` — так уже
-работают `db/nhlng.db` и локализация ([modding.md](modding.md)). По логам `port/out/game*.log`
+работают `db/nhlng.db` и локализация ([modding.md](modding.md)). По логам `nhl-13-port/out/game*.log`
 так же ищутся `scrape\default.scrape`, `scrape\scenedef.lua`, `AttribDB\renddb.vlt/.bin`,
 `shaders\*.fxo` (в т. ч. `fxaa.fxo`, `postfx.fxo`, `ssao.fxo`),
 `rendering\colorcube\colorcube_stadium.xml`; отдельно — `d:\startup.ini` (корень игры).
@@ -221,7 +221,7 @@ in startup.ini»). Дешёвый тест: `game/extracted/disc/startup.ini` с
 
 | Что | Как | Сложность | Польза |
 |---|---|---|---|
-| **Убрать постоянный тост-диалог** | `CreateAchievementNotificationDialog()` → `nullptr` (заготовка закомментирована в `port/src/nhl13_app.h:78`); тосты, если нужны, создавать по событию и удалять | ~5 строк | Кадр выводится сразу из потока GPU: −(0…1) обновления монитора задержки, работает VRR, меньше рывков. Подробно — (г) |
+| **Убрать постоянный тост-диалог** | `CreateAchievementNotificationDialog()` → `nullptr` (заготовка закомментирована в `nhl-13-port/src/nhl13_app.h:78`); тосты, если нужны, создавать по событию и удалять | ~5 строк | Кадр выводится сразу из потока GPU: −(0…1) обновления монитора задержки, работает VRR, меньше рывков. Подробно — (г) |
 | Клавиша полноэкранного режима | `rex::ui::RegisterBind("bind_fullscreen", "F11", …)` → `SetFlagByName("fullscreen", …)` (колбэк в nightly уже есть) | ~10 строк | Удобство; Alt+Enter от DXGI SDK отключил (`ui/d3d12/d3d12_presenter.cpp:427-431`) |
 | FPS игры в F3 | `SetGuestFrameStats(…)` + счётчик `VdSwap` (импорт перехватывается, как `XamInput*` в `nhl13_input_lock.cpp`) | малая | Честный FPS игры (внешние счётчики считают Present'ы презентера — см. (г)) |
 | Видеорежим гостя всегда 1280×720 | своя `__imp__VdQueryVideoMode` (как заглушки в `nhl13_imports.cpp`) | малая | Свободно задавать размер окна и `resolution` |
@@ -450,7 +450,7 @@ NHL Legacy (≤ 3 МБ синхронно, нужен патч SDK): у нас �
 
 **Проверка в игре.** Матч или франшиза с разными командами и брендами шлемов; шлемы, перчатки и
 щитки вратарей вблизи (повтор, заставка перед вбрасыванием), в D3D12 и в Vulkan. В логе
-(`port/out/game-release.log`, `port/out/game-ffx.log`) при загрузке — до 6 строк
+(`nhl-13-port/out/game-release.log`, `nhl-13-port/out/game-ffx.log`) при загрузке — до 6 строк
 `[nhl13] composite readback #N: resolve …, texture … at 0x… WxH fmt 6; readback_resolve 'some' -> full`
 и `… fenced after N ms, readback_resolve back to 'some'`; один и тот же адрес у разных N — та самая
 переиспользуемая TargetTexture. Для сравнения — в консоли `nhl_composite_readback false` и
@@ -467,7 +467,7 @@ NHL Legacy (≤ 3 МБ синхронно, нужен патч SDK): у нас �
   nightly `bd833a2` на GitHub ([релизы](https://github.com/rexglue/rexglue-sdk/releases),
   [сравнение с v0.10.0](https://github.com/rexglue/rexglue-sdk/compare/v0.10.0...bd833a2)).
 - Игра: `game/extracted/big/boot/scrape/default.scrape`, `game/extracted/big/boot/attribdb/`,
-  строки `game/extracted/xex/default.bin`; логи `port/out/game.log`, `port/out/game-release.log`.
+  строки `game/extracted/xex/default.bin`; логи `nhl-13-port/out/game.log`, `nhl-13-port/out/game-release.log`.
 - NHL Legacy recomp: `ref/nhl-legacy-recomp/src/nhllegacy_app.h`,
   `renderer/core/nhl_settings.h`, `docs/fidelityfx-enablement-notes.md`,
   `docs/engine-settings-editor-plan.md`.
