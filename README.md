@@ -43,8 +43,9 @@ section) or get a ready-made `NHL Legacy` folder from someone in person.
 - **Toolchain:** VS 2022 Build Tools, LLVM/Clang, CMake, Ninja, Vulkan SDK ([docs/port.md](docs/port.md)). Their
   paths are set in `legacy-port/build.cmd`.
 - **ReXGlue SDK:** the 0.10.0.24 nightly in `ref/rexglue-sdk-0.10.0.24/`, or our own build with Vulkan and FSR 1 / CAS
-  in `ref/rexglue-sdk-custom/` ([docs/sdk-build.md](docs/sdk-build.md)). The SDK patches live in
-  [legacy-port/scripts/sdk-patches/](legacy-port/scripts/sdk-patches/).
+  in `ref/rexglue-sdk-custom/`. `legacy-port\scripts\sdk_build.cmd` produces our own build: it clones the SDK, applies
+  the patches from [legacy-port/scripts/sdk-patches/](legacy-port/scripts/sdk-patches/), builds and installs it
+  ([docs/sdk-build.md](docs/sdk-build.md)).
 - **Game files for codegen** go in `game/other/legacy/disc/` (`default.xex` and `*.big`).
 - **Building the port:** `legacy-port\build.cmd` (Release, our SDK) or `legacy-port\build.cmd win-amd64-relwithdebinfo`
   (nightly SDK, with symbols). The first build runs ReXGlue codegen by itself (15–20 minutes), then compiles. Output:

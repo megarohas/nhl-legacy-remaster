@@ -72,6 +72,8 @@ S:\Claude\megarohas_nhl13\legacy-port\build.cmd
 S:\Claude\megarohas_nhl13\legacy-port\build.cmd win-amd64-relwithdebinfo
 ```
 
+Свой SDK для Release собирается один раз — `legacy-port\scripts\sdk_build.cmd` (≈6 мин, [sdk-build.md](sdk-build.md)).
+
 Сборка сама запускает кодоген (`rexglue codegen nhllegacy_manifest.toml`), если менялись
 манифест или `*.toml` врезок: ~18 мин при пониженном приоритете (анализ однопоточный), затем
 компиляция 368 файлов ~5 мин. Вручную кодоген не запускать: сборка всё равно прогонит его заново
@@ -277,8 +279,9 @@ exe и DLL — в `legacy-port-clean/out/build/win-amd64-release/`.
 упёрся в предел 400 строк.
 
 **Патчи SDK в репозитории** — `legacy-port/scripts/sdk-patches/`, все по порядку: 0001…0004 — сборка SDK с Vulkan и
-FSR 1 / CAS ([sdk-build.md](sdk-build.md), «Патчи к SDK»; копия из `port-ffx/scripts/sdk-patches/`, которой нет в git),
-0005 и 0006 — поверх них:
+FSR 1 / CAS ([sdk-build.md](sdk-build.md), «Патчи к SDK»; исходная копия — `port-ffx/scripts/sdk-patches/`, не в git),
+0005 и 0006 — поверх них. Скрипты сборки SDK — рядом, в `legacy-port/scripts/` (`sdk_build.cmd`, `sdk_fetch.ps1`,
+`sdk_env.cmd`):
 
 | Патч | Файлы | Что |
 |---|---|---|
@@ -286,9 +289,13 @@ FSR 1 / CAS ([sdk-build.md](sdk-build.md), «Патчи к SDK»; копия и�
 | `0005-d3d12-memexport-trace` | `src/graphics/d3d12/command_processor.cpp` | cvar `d3d12_memexport_trace` (по умолчанию выкл.): журнал рисований с memexport |
 | `0006-texture-load-race` | `include/rex/graphics/shared_memory.h`, `src/graphics/shared_memory.cpp`, `src/graphics/pipeline/texture/cache.cpp` | журнал и исправление гонки загрузки текстур (выше) |
 
-Наложить: на чистый клон SDK (`bd833a2`) — все шесть по порядку; на `ref/rexglue-sdk-custom`, где 0001…0004 уже
-стоят, — только `git -C ref/rexglue-sdk-custom/src apply S:/Claude/megarohas_nhl13/legacy-port/scripts/sdk-patches/0005-….patch`
-(и 0006). Пересобрать только GPU-плагин — `legacy-port/scripts/sdk_gpu_build.cmd` (≈2 мин; DLL —
+SDK с нуля — `legacy-port\scripts\sdk_build.cmd`: клон `bd833a2` в `ref/rexglue-sdk-custom/src`, все шесть патчей
+по порядку (`sdk_fetch.ps1`; проверено 15.10.2026 — 0001…0006 ложатся на `bd833a2` чисто), configure, сборка, установка
+([sdk-build.md](sdk-build.md)). В рабочем `ref/rexglue-sdk-custom` 0001…0005 стоят, а 0006 — в расширенном виде: поверх
+патча там ещё диагностика (cvar `gpu_texture_load_race_widen_us`, 10.10.2026), в патч не вынесенная. Поэтому
+`sdk_build.cmd` / `fetch` на этом дереве остановится на 0006; пересобрать его — `sdk_build.cmd build`. Наложить один
+патч вручную — `git -C ref/rexglue-sdk-custom/src apply S:/Claude/megarohas_nhl13/legacy-port/scripts/sdk-patches/0005-….patch`.
+Пересобрать только GPU-плагин — `legacy-port/scripts/sdk_gpu_build.cmd` (≈2 мин; DLL —
 `ref/rexglue-sdk-custom/src/out/win-amd64/Release/rexgpu-xenos.dll`, установка SDK не меняется).
 
 ## Для друзей

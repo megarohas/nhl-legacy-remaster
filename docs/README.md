@@ -16,7 +16,7 @@
 - [legacy-port.md](legacy-port.md) — свой порт NHL Legacy (`legacy-port/`): что работает, устройство, сборка, запуск, папка для друзей, год, франшиза на 32 клуба и разбор её падений
 - [launcher.md](launcher.md) — лаунчер `nhllegacy_launcher.exe`: перед запуском настраиваются графика и переключатели `nhl_*`
 - [graphics-settings.md](graphics-settings.md) — графика порта: cvar'ы SDK, апскейл, ROV/RTV, задержка ввода, источники настроек и их приоритет
-- [sdk-build.md](sdk-build.md) — своя сборка ReXGlue SDK (Vulkan, FSR 1 / CAS): патчи 0001…0004, восстановление с нуля
+- [sdk-build.md](sdk-build.md) — своя сборка ReXGlue SDK (Vulkan, FSR 1 / CAS): скрипты `legacy-port/scripts/sdk_*`, патчи, восстановление с нуля
 - [port.md](port.md) — тулчейн (VS 2022 Build Tools, LLVM, CMake, Ninja, Vulkan SDK, ReXGlue) и первая генерация кода (на NHL 13)
 - [performance.md](performance.md) — производительность: замеры GPU/CPU, FSI против хостовых RT, холостой спин потока рендера (замеры на NHL 13, выводы о SDK общие)
 - [legacy-port-feasibility.md](legacy-port-feasibility.md) — оценка 08.10.2026, с которой начался порт: что из NHL 13 переносится в Legacy и сколько это стоит

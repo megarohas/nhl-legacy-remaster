@@ -43,8 +43,9 @@
 - **Тулчейн:** VS 2022 Build Tools, LLVM/Clang, CMake, Ninja, Vulkan SDK ([docs/port.md](docs/port.md)). Пути к ним
   прописаны в `legacy-port/build.cmd`.
 - **ReXGlue SDK:** ночная сборка 0.10.0.24 в `ref/rexglue-sdk-0.10.0.24/` или своя, с Vulkan и FSR 1 / CAS, в
-  `ref/rexglue-sdk-custom/` ([docs/sdk-build.md](docs/sdk-build.md)). Патчи к SDK лежат в
-  [legacy-port/scripts/sdk-patches/](legacy-port/scripts/sdk-patches/).
+  `ref/rexglue-sdk-custom/`. Свою собирает `legacy-port\scripts\sdk_build.cmd`: клонирует SDK, накладывает патчи из
+  [legacy-port/scripts/sdk-patches/](legacy-port/scripts/sdk-patches/), собирает и устанавливает
+  ([docs/sdk-build.md](docs/sdk-build.md)).
 - **Игра для кодогена** — в `game/other/legacy/disc/` (`default.xex` и `*.big`).
 - **Сборка порта:** `legacy-port\build.cmd` (Release, свой SDK) или `legacy-port\build.cmd win-amd64-relwithdebinfo`
   (ночной SDK, с символами). Первая сборка сама запускает кодоген ReXGlue (15–20 минут), потом идёт компиляция.
