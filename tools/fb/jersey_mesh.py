@@ -590,6 +590,24 @@ def cmd_preview(a):
 
 # ---------------------------------------------------------------- комплект в развёртке NHL 24
 
+def unpack_kit(kit, outdir):
+    """kitpaint unpack комплекта Legacy S_A_V в outdir: файлы — из cache: пользователя, если они там есть (формы,
+    поставленные нашими модами: CHI 1_6_14/15, MIN 1_14_4, SEA 1_100_*, VGK 1_101_*), иначе — из архивов игры."""
+    import subprocess
+    code = (
+        "import os, sys\n"
+        f"sys.path.insert(0, {os.path.join(REPO, 'tools')!r})\n"
+        "import teamart as ta, kitpaint as kp\n"
+        "ta.set_game('legacy')\n"
+        "orig = kp.profile_source\n"
+        "def src(rel, prof=None):\n"
+        f"    p = os.path.join({CACHE!r}, *rel.split('/'))\n"
+        "    return kp._unchunk(open(p, 'rb').read()) if os.path.exists(p) else orig(rel, prof)\n"
+        "kp.profile_source = src\n"
+        f"kp.unpack(kp.Kit.parse({kit!r}), {outdir!r})\n")
+    subprocess.run([sys.executable, "-c", code], check=True, capture_output=True)
+
+
 EXTRACT = os.path.join(REPO, "game", "work", "nhl24", "extract")
 KITS_OUT = os.path.join(REPO, "game", "work", "nhl24", "out", "kits")
 LEG_SM = 16                        # блик ткани Legacy (медиана jersey_sm комплектов EA ≈ 16 из 255)
@@ -633,6 +651,8 @@ def name_map(leg_png, leg_d, dst_d, size=256):
 
 
 FRONT_ZONES = (5, 7)               # зоны на груди: буква капитана и вторая (у EA — у ворота с двух сторон)
+ZONE_MIN_PX = 20                   # меньше — сор карты (у DET пиксели 8, 9, 10, 250, 254 по краям зон)
+ZONE_SHAPED = 0.85                 # заполнение рамки ниже — зона непрямоугольная (дуга фамилии у DET)
 LETTER_SCALE = 0.72                # буквы C/A (пользователь, 16.10: «литеры капитанов и ассистентов поменьше»)
 LETTER_OUT_CM = 3.0                # и «чуть ближе к плечевому суставу» — вбок, от середины груди
 ZONE_NECK_CLEAR = 0.04            # точки зоны ближе к краю горловины dst — на полосе ворота
@@ -684,10 +704,40 @@ def name_map_cm(leg_png, leg_d, dst_d, size=256, sleeve_up_cm=SLEEVE_UP_CM, grid
         T = LT[t[ok]]
         return ok, (bb[:, :, None] * LP[T]).sum(1), kit3d._unit((bb[:, :, None] * LN[T]).sum(1)), t[ok]
 
-    for z in sorted(set(src[..., 2][src[..., 2] < 255].tolist())):
+    tid_dd, bar_dd = kit3d.raster_uv(dst_d, size)
+    zones = [z for z in sorted(set(src[..., 2][src[..., 2] < 255].tolist())) if (src[..., 2] == z).sum() >= ZONE_MIN_PX]
+    for z in zones:
         ys, xs = np.nonzero(src[..., 2] == z)
         x0, x1, y0, y1 = xs.min(), xs.max() + 1, ys.min(), ys.max() + 1
         w, h = x1 - x0, y1 - y0
+        fill = len(ys) / float(w * h)
+        if fill < ZONE_SHAPED:
+            # фамилия дугой (у DET: подкова над номером, номер — с выемкой): форма зоны переносится обратно —
+            # тексель dst → точка свитера dst → ближайшая точка Legacy → её UV → тексель зоны Legacy
+            ok, p, nrm, tl = on_leg(xs + 0.5, ys + 0.5)
+            t2, b2, _ = kit3d.project(p[::3], nrm[::3], dst_d)
+            uvd = (b2[:, :, None] * dst_d["uv"][dst_d["tri"][t2]]).sum(1) * size
+            wx0, wy0 = np.floor(uvd.min(0)).astype(int) - 4
+            wx1, wy1 = np.ceil(uvd.max(0)).astype(int) + 4
+            wx0, wy0, wx1, wy1 = max(wx0, 0), max(wy0, 0), min(wx1, size - 1), min(wy1, size - 1)
+            gy, gx = np.mgrid[wy0:wy1 + 1, wx0:wx1 + 1]
+            on = tid_dd[gy, gx] >= 0
+            gy, gx = gy[on], gx[on]
+            T = dst_d["tri"][tid_dd[gy, gx]]
+            bb = bar_dd[gy, gx]
+            q = (bb[:, :, None] * dst_d["pos"][T]).sum(1)
+            qn = kit3d._unit((bb[:, :, None] * dst_d["nrm"][T]).sum(1))
+            t3, b3, d3 = kit3d.project(q, qn, leg_d)
+            uvl = (b3[:, :, None] * leg_d["uv"][leg_d["tri"][t3]]).sum(1) * size
+            lx = np.clip(uvl[:, 0].astype(int), 0, size - 1)
+            ly = np.clip(uvl[:, 1].astype(int), 0, size - 1)
+            hit = (src[ly, lx, 2] == z) & (d3 < 0.03)
+            out[gy[hit], gx[hit]] = (255, 255, z, 255)
+            if hit.any():
+                rects[z] = (int(gx[hit].min()), int(gy[hit].min()), int(gx[hit].max()), int(gy[hit].max()))
+            info[z] = {"legacy_px": (int(w), int(h)), "shaped": round(fill, 2), "dst_px_count": int(hit.sum()),
+                       "legacy_px_count": int(len(ys)), "on_mesh": 1.0}
+            continue
         off = np.zeros(2)
         if z in SLEEVE_ZONES and sleeve_up_cm:
             # вдоль руки — ось u зоны (у EA так у обоих рукавов); к плечу — туда, где |x| меньше
@@ -877,8 +927,7 @@ def cmd_kit(a):
     unpack = lambda kit: os.path.join(work, f"kit_{kit}")  # noqa: E731
     for kit in ((a.slot, a.legacy) if pack else (a.legacy,)):
         if not os.path.exists(os.path.join(unpack(kit), "kit.json")):
-            subprocess.run([sys.executable, os.path.join(REPO, "tools", "kitpaint.py"), "--game", "legacy", "unpack",
-                            kit, unpack(kit)], check=True, capture_output=True)
+            unpack_kit(kit, unpack(kit))
     # свитер: цвет и рельеф NHL 24 (2048 → 1024), нашивки — сжатые по ширине (squeeze_decals; если у комплекта нет
     # основы без нашивок — как есть); блик — ровный, как ткань Legacy
     from .fonts import normal_map
@@ -983,6 +1032,12 @@ def font_glyphs(font_png):
     for row, (chars, y0, y1, (xa, xb)) in enumerate(FONT_ROWS):
         al = a[y0:y1, xa:xb, 3] > 40
         cols = al.any(0)
+        if row in FONT_SLOTS and cols.mean() > 0.9:
+            # у части клубов NHL 24 буквы на непрозрачной подложке (PHI: чёрные на белом — фамилия на белой кокетке):
+            # клетки — по отличию цвета от подложки (медиана полосы)
+            band = a[y0:y1, xa:xb, :3].astype(np.int32)
+            bgc = np.median(band.reshape(-1, 3), axis=0)
+            cols = (np.abs(band - bgc).sum(-1) > 120).any(0)
         segs, x = [], 0
         while x < len(cols):
             if cols[x]:
@@ -996,8 +1051,9 @@ def font_glyphs(font_png):
         if row in FONT_SLOTS:                          # буквы — по центрам клеток EA (между ними бывают ' . -)
             pick = []
             for cx in FONT_SLOTS[row]:
-                best = min(segs, key=lambda sg: abs((sg[0] + sg[1]) / 2 - cx))
-                pick.append(best if abs((best[0] + best[1]) / 2 - cx) <= 12 else None)
+                best = min(segs, key=lambda sg: abs((sg[0] + sg[1]) / 2 - cx)) if segs else None
+                ok_ = best is not None and abs((best[0] + best[1]) / 2 - cx) <= 12 and best[1] - best[0] <= 40
+                pick.append(best if ok_ else (max(cx - 14, 0), min(cx + 14, xb - xa)))   # не выделилась — окно клетки
             segs = pick
         for ch, sg in zip(chars, segs):
             if sg is None:
@@ -1005,6 +1061,9 @@ def font_glyphs(font_png):
             s0, s1 = sg
             g = a[y0:y1, xa + s0:xa + s1]
             ys = np.nonzero(g[..., 3].any(1))[0]
+            if g[..., 3].min() > 150:                  # непрозрачная подложка — строки по цвету знака
+                bgc = np.median(g[..., :3].reshape(-1, 3), axis=0)
+                ys = np.nonzero((np.abs(g[..., :3].astype(np.int32) - bgc).sum(-1) > 120).any(1))[0]
             out[(row, ch)] = g[ys.min():ys.max() + 1]
     return out
 
