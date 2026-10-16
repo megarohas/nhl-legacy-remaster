@@ -118,12 +118,18 @@ def variant_map():
 # (до NECK_KEEP[0] от края горловины, переход к NECK_KEEP[1]) сохраняет форму NHL 24 и сдвигается целиком вместе с
 # окружением (гармоническое продолжение сдвигов). Вершины-дубли по швам UV сдвигаются одинаково (сварка).
 NECK_KEEP_BACK = (0.015, 0.035)   # сзади (пользователь, 15.10: «горб» между воротом и фамилией)
+# вратарь (16.10: «логотип adidas слишком высоко, в перегибе формы») — верх спины под воротом по NHL 24 шире
+NECK_KEEP_BACK_GOALIE = (0.05, 0.09)  # логотип (≈4 см ниже края горловины) — целиком с воротом
+# и весь ворот вратаря ниже ещё на GOALIE_NECK_DROP: логотип adidas был на 1,637 м — на перегибе спины Legacy (выше 1,60
+# она резко уходит к шее; Reebok у EA — на 1,566)
+GOALIE_NECK_DROP = 0.02
 NECK_KEEP = (0.035, 0.07)        # полоса ворота; шире — у вратаря в неё попадал верх плеча (+3 см к Edge)
 SIDE_DOT = 0.3                     # нормаль ближайшей точки — той же стороны ткани
 # Под воротом у Legacy — «рубашка» (rendering/jersey/shirt_<g>_<g>_<lod>, тёмная горловина под V-вырезом Edge). Ворот
 # не ниже её верха + SHIRT_MARGIN ни в одном секторе вокруг шеи (пользователь, 15.10, v2: «проглядывается чёрное
 # вокруг шеи» — ворот опустили на 1,7 см, верх рубашки сзади 1,704 м, край ворота стал 1,695).
 SHIRT_MARGIN = 0.005
+SHIRT_MARGIN_BACK = 0.002          # край ворота над верхом рубашки (по секторам; v5 — +5 мм всем воротом сразу)
 SHIRT_CLEAR = 0.003                # свитер снаружи рубашки не меньше чем на 3 мм (иначе она проступает сквозь спину)
 # Вратари (пользователь, 15.10, v3): тёмное над воротом у них — защита горла, она и должна быть видна; поднятый над
 # ней ворот вытягивал шею свитера вверх («сверху треугольные»), маска проваливалась в него → ворот не поднимаем.
@@ -214,6 +220,20 @@ def shirt_lift(ring, shirt_pos, t):
     return c, lift
 
 
+def shirt_need(ring, shirt_pos, t, margin=None):
+    """Сдвиг по y по секторам вокруг шеи, при котором край горловины (после t) — на margin выше верха рубашки
+    (отрицательный — ниже можно опустить). -> (центр (x, z), сдвиги по секторам, м)."""
+    margin = SHIRT_MARGIN_BACK if margin is None else margin
+    c = shirt_pos[:, [0, 2]].mean(0)
+    r = ring + t
+    need = np.zeros(SHIRT_SECTORS)
+    for k in range(SHIRT_SECTORS):
+        rs, ss = r[sector_of(r, c) == k], shirt_pos[sector_of(shirt_pos, c) == k]
+        if len(rs) and len(ss):
+            need[k] = ss[:, 1].max() + margin - rs[:, 1].max()
+    return c, need
+
+
 def sector_of(p, c):
     a = np.arctan2(p[:, 2] - c[1], p[:, 0] - c[0])
     return ((a + np.pi) / (2 * np.pi) * SHIRT_SECTORS).astype(int) % SHIRT_SECTORS
@@ -227,7 +247,7 @@ def lift_at(p, c, lift):
     return lift[k0] * (1 - f) + lift[(k0 + 1) % SHIRT_SECTORS] * f
 
 
-def morph_to(n24, src, t_neck=None, shirt=None, lift_shirt=True):
+def morph_to(n24, src, t_neck=None, shirt=None, lift_shirt=True, keep_back=None):
     """Сетка NHL 24 с телом по поверхности src (свитер Legacy того же варианта) и воротом NHL 24. -> (сетка, сводка).
 
     Тело: сдвиг к ближайшей точке src той же стороны; где её нет (внутренние кромки) или где сдвиг выворачивает
@@ -251,18 +271,35 @@ def morph_to(n24, src, t_neck=None, shirt=None, lift_shirt=True):
     dn = cKDTree(P[neck]).query(P)[0]
     # сзади — только сама полоса ворота: верх спины (логотип adidas над фамилией) — по спине Edge, иначе «горб»
     back = np.clip((-P[:, 2] - 0.02) / 0.04, 0, 1)    # 0 — спереди/сбоку, 1 — сзади (z < −0,06)
-    k0 = NECK_KEEP[0] * (1 - back) + NECK_KEEP_BACK[0] * back
-    k1 = NECK_KEEP[1] * (1 - back) + NECK_KEEP_BACK[1] * back
+    kb = NECK_KEEP_BACK if keep_back is None else keep_back
+    k0 = NECK_KEEP[0] * (1 - back) + kb[0] * back
+    k1 = NECK_KEEP[1] * (1 - back) + kb[1] * back
     s = np.clip((dn - k0) / (k1 - k0), 0, 1)
     k = 1.0 - s * s * (3 - 2 * s)
     if t_neck is None:                                 # у дальних детализаций — сдвиг ближней (ворот не «прыгает»)
         _, _, c_src = neck_ring(src["pos"], src["tri"])
         t_neck = c_src - P[neck].mean(0)
         t_neck[0] = 0.0                                # по x не двигаем: обе горловины по оси
-        if shirt is not None and lift_shirt:           # но не ниже верха рубашки Legacy: ворот целиком выше, без
-            c, lift = shirt_lift(P[neck], shirt["pos"], t_neck)  # волны по краю (по секторам гнул бы его на 3 см)
-            t_neck[1] += lift.max()
-        t_neck = (t_neck, None)
+        if not lift_shirt:                             # вратарь
+            t_neck[1] -= GOALIE_NECK_DROP
+        lift = None
+        if shirt is not None and lift_shirt:
+            # Полевые (пользователь, 16.10, v5: «чёрный воротник за горбом» — задняя часть ворота стояла торчком на
+            # 3–4 см выше горловины Edge): высота ворота по секторам вокруг шеи — край на SHIRT_MARGIN_BACK выше
+            # верха рубашки сзади и с боков, спереди (там рубашку закрывает ткань груди) — как у боков; без
+            # общего сдвига к горловине Legacy; гладко по кругу.
+            t_neck[1] = 0.0
+            c, need = shirt_need(P[neck], shirt["pos"], t_neck)
+            ring = P[neck]
+            zc = np.array([ring[sector_of(ring, c) == k][:, 2].mean() if (sector_of(ring, c) == k).any() else 0.0
+                           for k in range(SHIRT_SECTORS)])
+            front = zc > 0.03
+            side = need[~front].max() if (~front).any() else 0.0
+            need[front] = need[~front][np.argsort(-zc[~front])[:2]].mean() if (~front).sum() >= 2 else side
+            sm = (np.roll(need, 1) + 2 * need + np.roll(need, -1)) / 4.0
+            need = np.maximum(sm, need)                # сглаживание не опускает ниже нужного
+            lift = (c, need)
+        t_neck = (t_neck, lift)
     t_vec, lift = t_neck
     collar_t = np.repeat(t_vec[None], n, 0)
     if lift is not None:
@@ -332,7 +369,7 @@ def morph_to(n24, src, t_neck=None, shirt=None, lift_shirt=True):
     out["_t_neck"] = t_neck
     info = {"ok": float(known.mean()), "shift_mean_cm": float(shift.mean() * 100),
             "neck_shift_y_cm": float(t_vec[1] * 100), "neck_shift_z_cm": float(t_vec[2] * 100),
-            "neck_lift_max_cm": float(lift[1].max() * 100) if lift is not None else 0.0,
+            "neck_lift_cm": [round(float(v) * 100, 1) for v in lift[1]] if lift is not None else None,
             "flip_rounds": rounds, "relax": relax, "flipped_left": int(flipped.sum()), "shirt_pushed": pushed}
     return out, info
 
@@ -383,7 +420,9 @@ def build_one(n24, skin_src_rel, dst_rel, morph=True, t_neck=None, shirt_rel=Non
             sm = rw.Mesh.game(shirt_rel)
             shirt = {"pos": np.array([p[:3] for p in sm.pos], dtype=np.float64), "tri": np.array(sm.tris),
                      "nrm": kit3d._unit(np.array(sm.nrm, dtype=np.float64))}
-        n24, minfo = morph_to(n24, src, t_neck, shirt, LIFT_OVER_SHIRT[1 if "/jersey_1_" in dst_rel else 0])
+        goalie = "/jersey_1_" in dst_rel
+        n24, minfo = morph_to(n24, src, t_neck, shirt, LIFT_OVER_SHIRT[1 if goalie else 0],
+                              NECK_KEEP_BACK_GOALIE if goalie else None)
     g, first = weld(n24["pos"])
     Tg = g[n24["tri"]]
     nodes = {"pos": n24["pos"][first], "nrm": node_normals(n24["pos"][first], Tg, len(first))}
@@ -413,7 +452,8 @@ def build_one(n24, skin_src_rel, dst_rel, morph=True, t_neck=None, shirt_rel=Non
     return data, {"nv": chk.nv, "tris": len(chk.tris), "against_nrm": int(flip.sum()),
                   "skin_d_mean_cm": round(float(dist.mean()) * 100, 2),
                   "skin_d95_cm": round(float(np.percentile(dist, 95)) * 100, 2),
-                  **{k: (v if k.startswith("_") else round(v, 3)) for k, v in minfo.items()}}
+                  **{k: (round(v, 3) if isinstance(v, float) and not k.startswith("_") else v)
+                     for k, v in minfo.items()}}
 
 
 def write(out_dir, rel, data):
@@ -1026,6 +1066,37 @@ def cmd_dress(a):
     print(a.png)
 
 
+# ---------------------------------------------------------------- «рубашка» полевых: ниже сзади
+
+# Под воротом adidas сзади (опущен, чтобы не стоял торчком, — пользователь, 16.10) в посадке катания проглядывала
+# тёмная «рубашка» Legacy (shirt_0_0_*: у Edge её сзади закрывает высокий ворот — 0 пикселей во всех позах). Задняя
+# половина рубашки выше SHIRT_LOW_Y опускается на SHIRT_LOW_CM у верха (плавно по высоте и к бокам); перед (V-вырез
+# Edge) и бока — как были. Сетка общая для всех стилей.
+SHIRT_LOW_CM, SHIRT_LOW_Y = 1.5, (1.63, 1.70)
+SHIRT_SKATER = ("rendering/jersey/shirt_0_0_0.rx2", "rendering/jersey/shirt_0_0_2.rx2")
+
+
+def shirt_lowered(rel):
+    m = rw.Mesh.game(rel)
+    P = np.array([p[:3] for p in m.pos])
+    cz = P[:, 2].mean()
+    old = [list(p) for p in m.pos]
+    for i, p in enumerate(P):
+        back = np.clip((cz - p[2] - 0.02) / 0.04, 0, 1)          # 0 — спереди/сбоку, 1 — сзади
+        t = np.clip((p[1] - SHIRT_LOW_Y[0]) / (SHIRT_LOW_Y[1] - SHIRT_LOW_Y[0]), 0, 1)
+        dy = SHIRT_LOW_CM / 100.0 * back * t * t * (3 - 2 * t)
+        if dy > 0:
+            m.set_pos(i, [p[0], p[1] - dy, p[2]])
+    rw.update_frames(m, old)
+    return m.bytes()
+
+
+def cmd_shirt(a):
+    for rel in SHIRT_SKATER:
+        write(a.out, rel, shirt_lowered(rel))
+        print(rel)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -1058,8 +1129,11 @@ def main():
     r.add_argument("--letter", default="C")
     r.add_argument("--sleeve-row", type=int, default=7, help="строка малых цифр атласа (6 или 7)")
     r.add_argument("--dst", default=OUT)
+    sh = sub.add_parser("shirt")
+    sh.add_argument("--out", default=OUT)
     a = ap.parse_args()
-    {"map": cmd_map, "build": cmd_build, "preview": cmd_preview, "kit": cmd_kit, "dress": cmd_dress}[a.cmd](a)
+    {"map": cmd_map, "build": cmd_build, "preview": cmd_preview, "kit": cmd_kit, "dress": cmd_dress,
+     "shirt": cmd_shirt}[a.cmd](a)
 
 
 if __name__ == "__main__":
