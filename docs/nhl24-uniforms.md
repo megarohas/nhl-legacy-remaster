@@ -583,6 +583,6 @@ python -m fb.jersey_mesh kit --club pittsburgh --kit home --legacy 1_23_0 --slot
   (`kit --letter-down 3`). Фамилия: PIT `--name-scale 0.85 0.82 --name-up 1.27` (крупнее, низ на месте), WSH
   `--name-scale 0.85 0.82 --name-up -0.5` (крупнее и ниже).
 - Комплект WSH — `kit --club washington --kit home --legacy 1_29_0 --slot 0_29_0` (шрифт — из распаковки NHL 24).
-- На время тестов слоты `0_23_0` и `0_29_0` — основные домашние (`stockteamjerseys.isdefault`: 1 у них, 0 у `1_23_0`,
-  `1_29_0`) в `nhlng.db` пользователя и в его сейве ROSTER; копии до правки —
-  `game/work/legacy-data/backup-saves/adidas-default-*`. Вернуть — эти копии на место (игра закрыта).
+- Попытка сделать тестовые слоты основными (16.10) — отменена по просьбе пользователя: флаг `isdefault` у слота
+  стиля 0 игра не берёт как домашнюю (у него `locstring` 3 — берётся выездная Edge), а смена `style` у домашней строки
+  тоже не нужна. `nhlng.db` и сейв ROSTER возвращены байт в байт; тестовые формы выбираются вручную (2006/07).
