@@ -17,6 +17,7 @@
   python -m fb.jersey_mesh kit --club C --kit home --legacy 1_A_V --slot 0_A_V --font-dir DIR   # комплект слота
   python -m fb.jersey_mesh dress OUT.png [--name CROSBY --number 87 --letter C]   # «одетый» свитер (офлайн)
   python -m fb.jersey_mesh batch [--clubs PIT,WSH]  # свитера home/away всех клубов: слои и листы превью
+  python -m fb.jersey_mesh pack [--out DIR]         # пакет NHL 24: установленный + adidas отдельными формами
 
 Ассеты NHL 24 — только для личного использования: сетки и картинки — в game/work/ (не в git).
 """
@@ -1276,6 +1277,163 @@ def cmd_batch(a):
         f.write("\n".join(log) + "\n")
 
 
+# ---------------------------------------------------------------- пакет NHL 24: adidas отдельными формами
+
+# коды клубов fb (batch_plan.json) → коды реестра tools/legacy_data/nhl24_kits.json
+REG_CODE = {"LA": "LAK", "NJ": "NJD", "SJ": "SJS", "TB": "TBL"}
+PACK_OUT = os.path.join(REPO, "game", "work", "nhl24", "out", "pack-adidas")
+PACK_BASE = os.path.join(REPO, "game", "work", "legacy-data", "nhl24", "pack-installed-f86ca9dd")
+# файлы, общие для всех форм adidas (сетки и «рубашка»), — тип other пакета NHL 24 с пояснением
+ADIDAS_OTHER_NOTE = {
+    "rendering/jersey/jersey_": "сетка свитера adidas NHL 24 в слоте стиля 0 (fb.jersey_mesh build, тело по Edge)",
+    "rendering/jersey/shirt_0_0_": "«рубашка» полевых ниже сзади (fb.jersey_mesh shirt) — не видна под воротом adidas",
+    "rendering/pant/pant_0_0_": "шорты стиля 0 = шорты Edge (pant_0_1_*): у свитеров adidas — шорты основных форм",
+    "rendering/sock/": "карты гетр стиля 0 = карты Edge (sock_1_*, playersock_*_1_am), имя растра переписано"}
+
+
+def kit_template(new_tag):
+    """Шаблон kitpaint для нового номера стиля 0: комплект стиля 0 той же длины номера (нет такой — 0_23_0 и
+    контейнер kitpaint по умолчанию: у трёхзначного арта — 1_131_0)."""
+    s_, a_, v_ = new_tag.split("_")
+    for tag in (f"0_{a_}_0", "0_6_0" if len(new_tag) == 5 else "0_23_0"):
+        if len(tag) == len(new_tag) and any(os.path.exists(os.path.join(REPO, "game", "other", "legacy", "big", arc,
+                                                                        "rendering", "jersey", f"texlib_{tag}.rx2"))
+                                            for arc in ("nocacherender",)):
+            return tag
+    return "0_23_0"
+
+
+def fe_preview(d, mesh, size=256):
+    """Превью формы для меню (fe, 256² 8888): грудь свитера без номеров на прозрачном фоне."""
+    tex = np.asarray(Image.open(os.path.join(d, "jersey_cm.png")).convert("RGB")).astype(np.float64)
+    nm = np.asarray(Image.open(os.path.join(d, "jersey_nm.png")).convert("RGB")).astype(np.float64)
+    bg = (255, 0, 255)
+    im = np.asarray(kit3d.render_lit(mesh, tex, "front", 512, nmap=nm, bg=bg)).astype(np.int32)
+    alpha = (np.abs(im - np.array(bg)).sum(-1) > 30).astype(np.uint8) * 255
+    rgba = np.dstack([im.astype(np.uint8), alpha])
+    ys, xs = np.nonzero(alpha)
+    crop = Image.fromarray(rgba[ys.min():ys.max() + 1, xs.min():xs.max() + 1])
+    k = min(232 / crop.size[0], 200 / crop.size[1])
+    crop = crop.resize((max(1, int(crop.size[0] * k)), max(1, int(crop.size[1] * k))), Image.LANCZOS)
+    out = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    out.alpha_composite(crop, ((size - crop.size[0]) // 2, size - crop.size[1] - 12))
+    out.save(os.path.join(d, "fe.png"))
+
+
+def helmet_copy(src_tag_art, src_v, art, v, dst_root):
+    """Наклейка на шлем формы стиля 0 — копия наклейки формы-образца (logo/texlib_<арт>_1_<вариант>, из cache: или
+    архивов), растры переименованы (имена той же длины; другой длины — без наклейки). -> путь в cache: или None."""
+    src = f"rendering/logo/texlib_{src_tag_art}_1_{src_v}.rx2"
+    dst = f"rendering/logo/texlib_{art}_0_{v}.rx2"
+    a, b = f"logo_{src_tag_art}_1_{src_v}_", f"logo_{art}_0_{v}_"
+    if len(a) != len(b):
+        return None
+    for root in (CACHE, os.path.join(REPO, "game", "other", "legacy", "big", "cacherender")):
+        p = os.path.join(root, *src.split("/"))
+        if os.path.exists(p):
+            data = open(p, "rb").read()
+            if data[:8] in (b"chunklzx", b"chunkzip"):
+                data = rw.unchunk_any(data)
+            data = data.replace(a.encode(), b.encode())
+            q = os.path.join(dst_root, *dst.split("/"))
+            os.makedirs(os.path.dirname(q), exist_ok=True)
+            open(q, "wb").write(data)
+            return dst
+    return None
+
+
+def cmd_pack(a):
+    """Пакет NHL 24 (tools/legacy_data/nhl24.py build) = установленный пакет + свитера adidas home/away всех клубов
+    отдельными формами («Home (adidas)», «Away (adidas)», стиль 0, номера — реестр nhl24_kits.json), сетки свитера,
+    «рубашка», шорты и карты гетр стиля 0 (тип other)."""
+    import hashlib
+    import json
+    import shutil
+    import subprocess
+    work = os.path.join(REPO, "game", "work", "nhl24", "adidas3d")
+    reg = json.load(open(os.path.join(REPO, "tools", "legacy_data", "nhl24_kits.json"), encoding="utf-8"))
+    regmap = {(k["club"], k["kit"]): k for k in reg["kits"]}
+    plan = json.load(open(os.path.join(work, "batch_plan.json"), encoding="utf-8"))
+    out = a.out
+    if os.path.exists(out):
+        sys.exit(f"{out} уже есть — уберите или укажите --out")
+    shutil.copytree(os.path.join(PACK_BASE, "cache"), os.path.join(out, "cache"))
+    man = json.load(open(os.path.join(PACK_BASE, "manifest.json"), encoding="utf-8"))
+    cache = os.path.join(out, "cache")
+    bm = rw.Mesh.load(os.path.join(OUT, *skater_rel(0, 1, 2, STYLE_DST).split("/")))
+    mesh = {"pos": np.array([p[:3] for p in bm.pos]), "uv": np.array(bm.uv), "tri": np.array(bm.tris),
+            "nrm": kit3d._unit(np.array(bm.nrm))}
+
+    def add_file(rel, typ, note, club=None, kit=None):
+        path = os.path.join(cache, *rel.split("/"))
+        e = {"file": rel, "type": typ, "md5": hashlib.md5(open(path, "rb").read()).hexdigest(),
+             "size": os.path.getsize(path), "action": "add", "note": note}
+        if club:
+            e.update(club=club, kit=kit)
+        man["files"].append(e)
+
+    log = []
+    for o in plan:
+        if not o["club"]:
+            continue
+        code = REG_CODE.get(o["abbr"], o["abbr"])
+        kit = "ad_" + o["kit"]
+        r = regmap.get((code, kit))
+        d = os.path.join(work, "batch", f'{o["abbr"]}_{o["kit"]}')
+        if r is None or not os.path.exists(os.path.join(d, "jersey_cm.png")):
+            log.append(f"{code} {kit}: нет в реестре или нет слоёв — пропуск")
+            continue
+        new = f'0_{r["art"]}_{r["variant"]}'
+        tpl = kit_template(new)
+        tdir = os.path.join(work, f"kit_{tpl}")
+        if not os.path.exists(os.path.join(tdir, "kit.json")):
+            unpack_kit(tpl, tdir)
+        shutil.copy2(os.path.join(tdir, "kit.json"), os.path.join(d, "kit.json"))
+        fe_preview(d, mesh)
+        cmd = [sys.executable, os.path.join(REPO, "tools", "kitpaint.py"), "--game", "legacy", "pack", d, new, cache]
+        rr = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        if rr.returncode:
+            log.append(f"{code} {kit} {new}: kitpaint pack — ОШИБКА {rr.stderr[-300:]}")
+            continue
+        made = {"jersey": f"rendering/jersey/texlib_{new}.rx2", "name": f"rendering/jersey/name_{new}_cm.rx2",
+                "pant": f"rendering/pant/texlib_{new}.rx2", "sock": f"rendering/sock/sock_{new}_cm.rx2",
+                "fe": f"fe/ion/artassets/jerseys/jersey_{new}.big"}
+        notes = {"jersey": f"свитер adidas NHL 24 на своей сетке (развёртка NHL 24) и шрифт; NHL 24 adidas/{o['kit']}",
+                 "name": "карта номера и фамилии в развёртке NHL 24 (fb.jersey_mesh name_map_cm)",
+                 "pant": f"шорты — как у формы Legacy {o['legacy']}", "sock": f"гетры — как у формы Legacy {o['legacy']}",
+                 "fe": "превью: грудь свитера adidas"}
+        for typ, rel in made.items():
+            add_file(rel, typ, notes[typ], code, kit)
+        hs = o["legacy"].split("_")
+        h = helmet_copy(hs[1], hs[2], r["art"], r["variant"], cache)
+        if h:
+            add_file(h, "helmet", f"наклейка на шлем — как у формы Legacy {o['legacy']}", code, kit)
+        man["kits"].append({"club": code, "kit": kit, "variant": r["variant"], "islightcolor": 0 if o["kit"] == "home" else 1,
+                            "helmet": o["kit"]})
+        log.append(f"{code} {kit} {new}: ok (шаблон {tpl}{', наклейка на шлем' if h else ', без наклейки'})")
+        print(log[-1], flush=True)
+    # общие файлы adidas: сетки, рубашка, шорты и карты гетр стиля 0
+    for rel in sorted(set(x.strip().split()[0] for f in ("installed-20261015-173513.txt", "installed-pantsock-20261015-193450.txt")
+                          for x in open(os.path.join(OUT, f), encoding="utf-8") if x.strip())
+                      | {"rendering/jersey/shirt_0_0_0.rx2", "rendering/jersey/shirt_0_0_2.rx2"}):
+        import re
+        if not re.fullmatch(r"rendering/(jersey/jersey_[01]_0_\d_\d_\d_\d\.rx2|jersey/shirt_0_0_\d\.rx2|"
+                            r"pant/pant_0_0_\d_\d\.rx2|sock/sock_0_(nm|rm|sm)\.rx2|sock/playersock_\d_0_am\.rx2)", rel):
+            continue                                   # комплекты слота 0_23_0 / 0_29_0 (тест) — не общие файлы
+        q = os.path.join(cache, *rel.split("/"))
+        os.makedirs(os.path.dirname(q), exist_ok=True)
+        shutil.copy2(os.path.join(OUT, *rel.split("/")), q)
+        note = next(v for k, v in ADIDAS_OTHER_NOTE.items() if rel.startswith(k))
+        add_file(rel, "other", note)
+    man["note"] = (man.get("note", "") + " Свитера adidas NHL 24 на своей сетке (стиль 0) — отдельными формами "
+                   "«Home (adidas)» / «Away (adidas)» у 31 клуба (docs/nhl24-uniforms.md §14).")
+    with open(os.path.join(out, "manifest.json"), "w", encoding="utf-8", newline="\n") as f:
+        json.dump(man, f, ensure_ascii=False, indent=1)
+    with open(os.path.join(out, "pack-adidas.log"), "w", encoding="utf-8") as f:
+        f.write("\n".join(log) + "\n")
+    print(f"{out}: форм {len(man['kits'])}, файлов {len(man['files'])}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -1310,12 +1468,14 @@ def main():
     r.add_argument("--dst", default=OUT)
     sh = sub.add_parser("shirt")
     sh.add_argument("--out", default=OUT)
+    pk = sub.add_parser("pack")
+    pk.add_argument("--out", default=PACK_OUT)
     bt = sub.add_parser("batch")
     bt.add_argument("--clubs", default=None, help="коды через запятую (PIT,WSH); по умолчанию — все из batch_plan.json")
     bt.add_argument("--dst", default=OUT)
     a = ap.parse_args()
     {"map": cmd_map, "build": cmd_build, "preview": cmd_preview, "kit": cmd_kit, "dress": cmd_dress,
-     "shirt": cmd_shirt, "batch": cmd_batch}[a.cmd](a)
+     "shirt": cmd_shirt, "batch": cmd_batch, "pack": cmd_pack}[a.cmd](a)
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@
     python tools/legacy_data/nhl24.py build [ПАКЕТ]                  # этап build-all nhl24 → out-nhl24 (+ out-nhl24-ahl32)
     python tools/legacy_data/nhl24.py verify CACHE                   # cache: после установки — как в манифесте и out-nhl24
     python tools/legacy_data/nhl24.py show                           # что в реестре новых форм
+    python tools/legacy_data/nhl24.py save СЕЙВ [--write]            # новые строки форм и шлемов — в сейв ROSTER
 
 Пакет готовит агент nhl24 (tools/fb/pack.py): ПАКЕТ/manifest.json и ПАКЕТ/cache/<путь в cache:>, по умолчанию
 game/work/nhl24/out/pack (или переменная NHL24_PACK). Формат манифеста — docs/legacy-data.md, «Пакет NHL 24».
@@ -66,21 +67,22 @@ CODES = ['ANA', 'WPG', 'BOS', 'BUF', 'CGY', 'CAR', 'CHI', 'COL', 'CBJ', 'DAL', '
 CLUBS = {c: (i, i) for i, c in enumerate(CODES)}
 CLUBS.update(SEA=(30, 100), VGK=(31, 101))
 
-# файлы комплекта стиля 1 (s = 1): обязательные у новой формы и наклейка на шлем (по ней helmetlogo = 1)
-KIT_FILES = {'jersey': 'rendering/jersey/texlib_1_{a}_{v}.rx2', 'name': 'rendering/jersey/name_1_{a}_{v}_cm.rx2',
-             'pant': 'rendering/pant/texlib_1_{a}_{v}.rx2', 'sock': 'rendering/sock/sock_1_{a}_{v}_cm.rx2',
-             'fe': 'fe/ion/artassets/jerseys/jersey_1_{a}_{f}.big'}
-HELMET = 'rendering/logo/texlib_{a}_1_{v}.rx2'
+# файлы комплекта стиля s (у формы NHL 24 «А» — 1; свитера adidas на сетке NHL 24 — 0, слот ретро-сеток,
+# docs/nhl24-uniforms.md §14): обязательные у новой формы и наклейка на шлем (по ней helmetlogo = 1)
+KIT_FILES = {'jersey': 'rendering/jersey/texlib_{s}_{a}_{v}.rx2', 'name': 'rendering/jersey/name_{s}_{a}_{v}_cm.rx2',
+             'pant': 'rendering/pant/texlib_{s}_{a}_{v}.rx2', 'sock': 'rendering/sock/sock_{s}_{a}_{v}_cm.rx2',
+             'fe': 'fe/ion/artassets/jerseys/jersey_{s}_{a}_{f}.big'}
+HELMET = 'rendering/logo/texlib_{a}_{s}_{v}.rx2'
 ARCHIVE = {'rendering/jersey/': 'nocacherender', 'rendering/': 'cacherender', 'fe/': 'cache'}
 
 # типы файлов пакета: путь в cache: (полное совпадение)
 TYPES = {
-    'jersey': r'rendering/jersey/texlib_1_\d+_\d+\.rx2',          # свитер и шрифт номеров
-    'name': r'rendering/jersey/name_1_\d+_\d+_cm\.rx2',            # карта номера и фамилии
-    'pant': r'rendering/pant/texlib_1_\d+_\d+\.rx2',              # шорты
-    'sock': r'rendering/sock/sock_1_\d+_\d+_cm\.rx2',              # гетры
-    'fe': r'fe/ion/artassets/jerseys/jersey_1_\d+_\d+\.big',       # превью формы в меню
-    'helmet': r'rendering/logo/texlib_\d+_1_\d+\.rx2',            # наклейка на шлем (логотип или спонсор)
+    'jersey': r'rendering/jersey/texlib_[01]_\d+_\d+\.rx2',       # свитер и шрифт номеров
+    'name': r'rendering/jersey/name_[01]_\d+_\d+_cm\.rx2',         # карта номера и фамилии
+    'pant': r'rendering/pant/texlib_[01]_\d+_\d+\.rx2',           # шорты
+    'sock': r'rendering/sock/sock_[01]_\d+_\d+_cm\.rx2',           # гетры
+    'fe': r'fe/ion/artassets/jerseys/jersey_[01]_\d+_\d+\.big',    # превью формы в меню
+    'helmet': r'rendering/logo/texlib_\d+_[01]_\d+\.rx2',         # наклейка на шлем (логотип или спонсор)
     'center': r'rendering/icesurface/centerlogo_\d+_cm\.rx2',      # центр льда
     'ice': r'rendering/icesurface/[a-z0-9_]+\.rx2',               # логотипы и реклама на льду
     'puck': r'rendering/puck/[a-z0-9_]+\.rx2',                    # шайба
@@ -94,6 +96,7 @@ TYPES = {
 # нет (тест DAL25). Новые формы NHL 24 — все с locstring 6 и своей подписью, чтобы в меню отличались от EA (правило
 # 10.10). «label» в манифесте главнее этих:
 LABELS = {'home': 'Home (NHL 24)', 'away': 'Away (NHL 24)', 'three': 'Third (NHL 24)',
+          'ad_home': 'Home (adidas)', 'ad_away': 'Away (adidas)',     # свитер adidas NHL 24 на своей сетке (стиль 0)
           'rr22': 'Reverse Retro 2022', 'rr23': 'Reverse Retro 2023', 'n90_home': '1990s Home',
           'n90_away': '1990s Away', 'n90_three': '1990s Alternate'}
 KIT_TYPES = ('jersey', 'name', 'pant', 'sock', 'fe', 'helmet')   # файлы комплекта: только новых номеров (правило 05:50)
@@ -159,17 +162,26 @@ def file_taken(rel):
     return os.path.exists(os.path.join(REF, arc, *rel.split('/'))) or os.path.exists(os.path.join(OUT, *rel.split('/')))
 
 
-def variant_free(art, v, rows, reg):
-    if any(r['style'] == 1 and r['teamartid'] == art and v in (r['variant'], r['fevariant']) for r in rows):
+def variant_free(art, v, rows, reg, style=1, helm=()):
+    """helm — (era, variant) строк шлема клуба: у EA бывают строки шлема вариантов без формы (BUF 0_3_3, CAR 0_5_2) —
+    такой номер новой форме не годится (add_helmets: «у варианта уже есть строка шлема»)."""
+    if (style - 1 if style == 1 else 0, v) in helm or (style == 1 and (1, v) in helm):
         return False
-    if any(k['art'] == art and v in (k['variant'], k['fevariant']) for k in reg['kits']):
+    if any(r['style'] == style and r['teamartid'] == art and v in (r['variant'], r['fevariant']) for r in rows):
         return False
-    names = [p.format(a=art, v=v, f=v) for p in KIT_FILES.values()] + [HELMET.format(a=art, v=v)]
+    if any(k.get('style', 1) == style and k['art'] == art and v in (k['variant'], k['fevariant']) for k in reg['kits']):
+        return False
+    names = [p.format(s=style, a=art, v=v, f=v) for p in KIT_FILES.values()] + [HELMET.format(s=style, a=art, v=v)]
     return not any(file_taken(n) for n in names)
 
 
 def cmd_alloc(args):
     write = '--write' in args
+    style = 1
+    if '--style' in args:                            # --style 0 — свитера adidas на сетке NHL 24 (слот стиля 0)
+        i = args.index('--style')
+        style = int(args[i + 1])
+        args = args[:i] + args[i + 2:]
     args = [a for a in args if a != '--write']
     if len(args) < 2:
         sys.exit(__doc__)
@@ -185,15 +197,17 @@ def cmd_alloc(args):
         if any(k['club'] == code and k['kit'] == kit for k in reg['kits']):
             print(f'{code} {kit}: уже в реестре')
             continue
-        v = next((v for v in range(32) if variant_free(art, v, rows, reg)), None)
+        helm = {(x[0], x[1]) for x in club_equipment(db, eq_low(db), team) if x[2] == EQ_HELMET}
+        v = next((v for v in range(32) if variant_free(art, v, rows, reg, style, helm)), None)
         if v is None or ji > 31:
             sys.exit(f'{code} {kit}: нет свободного варианта (0…31) или jerseyindex > 31')
-        k = dict(club=code, kit=kit, teamid=team, style=1, art=art, variant=v, fevariant=v, jerseyindex=ji,
+        k = dict(club=code, kit=kit, teamid=team, style=style, art=art, variant=v, fevariant=v, jerseyindex=ji,
                  locstring=6)
         reg['kits'].append(k)
         added.append(k)
         ji += 1
-        print(f'{code} {kit}: 1_{art}_{v} (fevariant {v}), jerseyindex {k["jerseyindex"]}, locstring {k["locstring"]}')
+        print(f'{code} {kit}: {style}_{art}_{v} (fevariant {v}), jerseyindex {k["jerseyindex"]}, '
+              f'locstring {k["locstring"]}')
     if write and added:
         save_registry(reg)
         print(f'записано в {REGISTRY}: +{len(added)}')
@@ -231,7 +245,8 @@ def cmd_order(args):
         if (k['jerseyindex'], k['locstring']) != (ji + i, 6):
             changed += 1
         k['jerseyindex'], k['locstring'] = ji + i, 6
-        print(f"{code} {k['kit']}: 1_{k['art']}_{k['variant']}, jerseyindex {k['jerseyindex']}, locstring 6")
+        print(f"{code} {k['kit']}: {k.get('style', 1)}_{k['art']}_{k['variant']}, jerseyindex {k['jerseyindex']}, "
+              f"locstring 6")
     if write and changed:
         save_registry(reg)
         print(f'записано в {REGISTRY}: изменено {changed}')
@@ -241,7 +256,8 @@ def cmd_order(args):
 
 def cmd_show(args):
     for k in load_registry()['kits']:
-        print(f"{k['club']:4} {k['kit']:12} 1_{k['art']}_{k['variant']} fe{k['fevariant']} ji{k['jerseyindex']} "
+        print(f"{k['club']:4} {k['kit']:12} {k.get('style', 1)}_{k['art']}_{k['variant']} fe{k['fevariant']} "
+              f"ji{k['jerseyindex']} "
               f"loc{k['locstring']}")
 
 
@@ -307,7 +323,7 @@ def check_manifest(pack, man, reg):
             bad.append(f'новая форма {key}: islightcolor {k.get("islightcolor")!r} — дом должен быть тёмным (0), '
                        f'выезд светлым (1): они становятся формами по умолчанию (правило 10.10)')
         for kind, pat in KIT_FILES.items():
-            rel = pat.format(a=r['art'], v=r['variant'], f=r['fevariant'])
+            rel = pat.format(s=r.get('style', 1), a=r['art'], v=r['variant'], f=r['fevariant'])
             if rel not in files:
                 bad.append(f'новая форма {key}: в пакете нет {kind} {rel}')
     return bad, files
@@ -324,7 +340,9 @@ def build_db(base, man, reg, files):
     regmap = {(k['club'], k['kit']): k for k in reg['kits']}
     new = [regmap[(k['club'], k['kit'])] | {'islightcolor': k['islightcolor'], 'label': k.get('label'),
                                              'helmet': k.get('helmet')} for k in man.get('kits', [])]
-    new.sort(key=lambda k: (CLUBS[k['club']][0], k['jerseyindex']))     # строки — по клубу и порядку в меню
+    # строки — по клубу и порядку в меню; свитера adidas (ad_*, 16.10) — после всех прежних форм пакета: строки уже
+    # поставленных форм (и их шлемов) остаются на своих местах — так их хранит и сейв ROSTER (nhl24.py save)
+    new.sort(key=lambda k: (k['kit'].startswith('ad_'), CLUBS[k['club']][0], k['jerseyindex']))
     # jerseyindex у клуба — подряд 0…N−1, как у всех 224 команд EA (с дырой игра не проверялась): форма из реестра
     # может не попасть в пакет, только если за ней в реестре нет форм этого клуба, которые в пакет попали
     for code in sorted({k['club'] for k in new}):
@@ -342,21 +360,28 @@ def build_db(base, man, reg, files):
         for i, k in enumerate(new):
             team, art = check_club(db, k['club'])
             mine = [r for r in rows if r['teamid'] == team]
+            st = k.get('style', 1)
             if any(r['jerseyindex'] == k['jerseyindex'] for r in mine) or \
-                    any(r['style'] == 1 and r['teamartid'] == art and r['variant'] == k['variant'] for r in rows):
-                sys.exit(f'{k["club"]} {k["kit"]}: jerseyindex {k["jerseyindex"]} или 1_{art}_{k["variant"]} '
+                    any(r['style'] == st and r['teamartid'] == art and r['variant'] == k['variant'] for r in rows):
+                sys.exit(f'{k["club"]} {k["kit"]}: jerseyindex {k["jerseyindex"]} или {st}_{art}_{k["variant"]} '
                          f'уже заняты в {db_path}')
             home = next((r for r in mine if r['style'] == 1 and r['locstring'] == 0), mine[0])
             db.put_record(T, n + i, db.record(T, home['row']))
-            helmet = HELMET.format(a=art, v=k['variant']) in files
-            for f, v in (('teamid', team), ('teamartid', art), ('style', 1), ('variant', k['variant']),
+            helmet = HELMET.format(s=st, a=art, v=k['variant']) in files
+            for f, v in (('teamid', team), ('teamartid', art), ('style', st), ('variant', k['variant']),
                          ('fevariant', k['fevariant']), ('jerseyindex', k['jerseyindex']),
                          ('locstring', final_loc(k)), ('isdefault', 0), ('islockable', 0), ('hastie', 0),
                          ('helmetlogo', int(helmet)), ('helmetnumbers', 1), ('islightcolor', k['islightcolor'])):
                 db.set(T, f, n + i, v)
-            added.append(f"{k['club']} {k['kit']} 1_{art}_{k['variant']} ji{k['jerseyindex']} "
+            added.append(f"{k['club']} {k['kit']} {st}_{art}_{k['variant']} ji{k['jerseyindex']} "
                          f"loc{final_loc(k)} light{k['islightcolor']} helmetlogo{int(helmet)} (строка {n + i})")
-    helmets = add_helmets(db, rows, new)
+    first = [k for k in new if not k['kit'].startswith('ad_')]
+    later = [k for k in new if k['kit'].startswith('ad_')]
+    helmets = add_helmets(db, rows, first)
+    if later:                                         # шлемы adidas — вторым проходом, после строк прежних форм
+        ad_keys = {(CLUBS[k['club']][0], k.get('style', 1), k['variant']) for k in later}
+        rows_mid = [r for r in rows_of(db) if (r['teamid'], r['style'], r['variant']) not in ad_keys]
+        helmets += add_helmets(db, rows_mid, later)
     defaults, old_labels = set_defaults(db, rows, new, n_before)
     import draft_roster                               # накладка не должна менять таблицы draft_roster.db (он — из out)
     base_db = open_db(base)[1]
@@ -511,15 +536,19 @@ def add_helmets(db, rows, new):
         helm = [x for x in recs if x[2] == EQ_HELMET]
         if not helm:
             sys.exit(f'{code}: у клуба нет строк шлема ({EQ}, equipment {EQ_HELMET}) — цвет новых форм не задать')
-        if any(x[3] != -1 for x in helm):
-            sys.exit(f'{code}: строки шлема с брендом {sorted({x[3] for x in helm})} — модель выбора их не учитывает')
+        # строки шлема под бренд каски игрока (у CGY — бренд 4): модель сверяется по каждому такому бренду и по «любому
+        # другому» (gen; у клубов без них — 0, как раньше); новые строки — бренд −1 («любой»)
+        brands = sorted({x[3] for x in helm if x[3] != -1})
+        gen = next(b for b in range(64) if b not in brands)
+        BR = brands + [gen]
         mine = [r for r in rows if r['teamid'] == team]
         kits = sorted({(r['style'], r['variant']) for r in mine})
 
-        def key(style, variant):
-            return style, variant, EQ_HELMET, 0
+        def key(style, variant, brand=gen):
+            return style, variant, EQ_HELMET, brand
 
         pre = {kv: eq_lookup(recs, key(*kv)) for kv in kits}
+        pre_b = {(kv, b): eq_lookup(recs, key(*kv, b)) for kv in kits for b in BR}
         era1 = 1 if any(x[0] == 1 for x in helm) else -1          # какие строки шлема берут формы стиля 1
         club = []                                          # (запись-образец, era, variant, описание, зоны шлема)
         for k in [k for k in new if k['club'] == code]:
@@ -528,23 +557,25 @@ def add_helmets(db, rows, new):
             if sk is None:
                 sys.exit(f"{code} {k['kit']}: у клуба нет {'домашней' if like == 'home' else 'выездной'} формы стиля 1 "
                          f'(locstring {0 if like == "home" else 1}) — не с чего взять цвет шлема')
-            if any(x[0] == era1 and x[1] == k['variant'] for x in helm):
+            st = k.get('style', 1)
+            era_k = era1 if st == 1 else 0                 # у EA шлемы форм стиля 0 — era 0 (в базе 1)
+            if any(x[0] == era_k and x[1] == k['variant'] for x in helm):
                 sys.exit(f"{code} {k['kit']}: у варианта {k['variant']} уже есть строка шлема — не тот номер?")
             src = pre[(1, sk['variant'])]
             zones = explicit.get((code, k['kit']))
             if zones is None:
-                club.append((src, era1, k['variant'],
-                             f"{code} {k['kit']} 1_{art}_{k['variant']}: шлем как у "
+                club.append((src, era_k, k['variant'],
+                             f"{code} {k['kit']} {st}_{art}_{k['variant']}: шлем как у "
                              f"{'домашней' if like == 'home' else 'выездной'} 1_{art}_{sk['variant']} — {_shade(src[5])} "
                              f"(строка {src[4]})", src[5]))
             else:
-                club.append((src, era1, k['variant'],
-                             f"{code} {k['kit']} 1_{art}_{k['variant']}: каска {zones[:3]} — {os.path.basename(HELMETS)}",
-                             zones))
+                club.append((src, era_k, k['variant'],
+                             f"{code} {k['kit']} {st}_{art}_{k['variant']}: каска {zones[:3]} — "
+                             f"{os.path.basename(HELMETS)}", zones))
         for _ in range(len(kits) + 1):
             extra = [(era, v, EQ_HELMET, -1, None, zones) for src, era, v, _, zones in club]
             post_recs = club_equipment(db, low, team, extra)
-            moved = [kv for kv in kits if eq_lookup(post_recs, key(*kv))[5] != pre[kv][5]]
+            moved = [kv for kv in kits if any(eq_lookup(post_recs, key(*kv, b))[5] != pre_b[(kv, b)][5] for b in BR)]
             if not moved:
                 break
             for s, v in moved:
@@ -553,12 +584,15 @@ def add_helmets(db, rows, new):
                              f'закреплён', pre[(s, v)][5]))
         else:
             sys.exit(f'{code}: шлемы прежних форм не удаётся сохранить — модель не сошлась')
-        for src, era, v, _, zones in club[:len([k for k in new if k['club'] == code])]:
-            got = eq_lookup(post_recs, key(1, v))
-            if got[5] != zones:
-                sys.exit(f'{code} 1_{art}_{v}: по модели шлем не тот (строка {got[4]})')
+        mine_new = [k for k in new if k['club'] == code]
+        for (src, era, v, _, zones), k in zip(club[:len(mine_new)], mine_new):
+            for b in BR:
+                got = eq_lookup(post_recs, key(k.get('style', 1), v, b))
+                if got[5] != zones:
+                    sys.exit(f'{code} {k.get("style", 1)}_{art}_{v}: по модели шлем не тот (строка {got[4]}, бренд {b})')
+        new_keys = {(k.get('style', 1), k['variant']) for k in mine_new}
         for kv in kits:                                     # прежние формы клуба — шлем как был
-            if kv[1] not in {k['variant'] for k in new if k['club'] == code} and                     eq_lookup(post_recs, key(*kv))[5] != pre[kv][5]:
+            if kv not in new_keys and any(eq_lookup(post_recs, key(*kv, b))[5] != pre_b[(kv, b)][5] for b in BR):
                 sys.exit(f'{code} {kv[0]}_{art}_{kv[1]}: по модели у прежней формы сменился шлем')
         adds += club
         done += [d for _, _, _, d, _ in club]
@@ -580,7 +614,7 @@ def build_loc(base, new, extra=None):
     """Подписи новых форм с locstring 6 (ключ Vintage_1_<арт>_<вариант>) и прежних форм по умолчанию, ставших
     locstring 6 (extra), в локализации накладки. → (байты | None, {ключ: текст}); подписей нет — None (локализация
     накладкой не ставится)."""
-    want = {f"Vintage_1_{k['art']}_{k['variant']}": label_of(k['kit'], k.get('label'))
+    want = {f"Vintage_{k.get('style', 1)}_{k['art']}_{k['variant']}": label_of(k['kit'], k.get('label'))
             for k in new if final_loc(k) == 6}
     want = {key: text for key, text in want.items() if text}
     want.update(extra or {})
@@ -732,10 +766,71 @@ def cmd_verify(args):
     sys.exit(1 if bad or not key else 0)
 
 
+def cmd_save(args):
+    """save СЕЙВ [--write] — новые строки форм и шлемов поставленной накладки (stockteamjerseys и stockteamequipmenttable
+    базы cache: db/nhlng.db) в сейв ROSTER: у сейва эти таблицы свои, игра берёт формы из него (ТЕСТ DAL25). Прежние
+    живые записи сейва должны совпадать с базой запись в запись (иначе — стоп: сейв правили иначе); новые дописываются
+    в конец (таблица расширяется). Копия до правки — game/work/legacy-data/backup-saves/<сейв>-<время>/."""
+    write = '--write' in args
+    args = [a for a in args if a != '--write']
+    if not args:
+        sys.exit(__doc__)
+    from install_legacy_data import cache_dir
+    from tdb import SaveFile
+    save = os.path.abspath(args[0])
+    cache = cache_dir()
+    meta = load_meta(os.path.join(cache, 'db', 'nhlng-meta.xml'))
+    db = Tdb(open(os.path.join(cache, 'db', 'nhlng.db'), 'rb').read(), meta)
+    raw = open(save, 'rb').read()
+    sf = SaveFile(raw, meta)
+    sv = sf.db
+    total = 0
+    for t in (T, EQ):
+        if t not in sv.by_name:
+            print(f'{t}: в сейве нет — пропуск')
+            continue
+        src = [bytes(db.record(t, r)) for r in db.live_rows(t)]
+        live = sv.live_rows(t)
+        dst = [bytes(sv.record(t, r)) for r in live]
+        if live != list(range(len(live))):
+            sys.exit(f'{t}: в сейве удалённые записи — дописывать в такой сейв не берусь')
+        if dst != src[:len(dst)]:
+            bad = next(i for i, (a, b) in enumerate(zip(dst, src)) if a != b) if len(dst) <= len(src) else len(src)
+            sys.exit(f'{t}: запись {bad} сейва не как в базе cache: — сейв правили иначе (или база не та)')
+        extra = src[len(dst):]
+        print(f'{t}: в сейве {len(dst)}, в базе {len(src)} — дописать {len(extra)}')
+        if extra:
+            sv.resize(t, len(src))
+            for i, rec in enumerate(extra):
+                sv.put_record(t, len(dst) + i, rec)
+            total += len(extra)
+    if not write or not total:
+        print('без --write ничего не записано' if total else 'сейв уже совпадает с базой')
+        return
+    out = sf.bytes(fix=True)
+    bdir = os.path.join(W, 'backup-saves', f'{os.path.basename(save)}-{time.strftime("%Y%m%d-%H%M%S")}')
+    os.makedirs(bdir, exist_ok=True)
+    bak = os.path.join(bdir, os.path.basename(save) + '.bak')
+    open(bak, 'wb').write(raw)
+    open(save, 'wb').write(out)
+    bad = SaveFile(open(save, 'rb').read(), meta).verify()
+    if bad:
+        open(save, 'wb').write(raw)
+        sys.exit(f'проверка не прошла, сейв возвращён: {bad}')
+    chk = SaveFile(open(save, 'rb').read(), meta).db
+    for t in (T, EQ):
+        if t in chk.by_name and [bytes(chk.record(t, r)) for r in chk.live_rows(t)] != \
+                [bytes(db.record(t, r)) for r in db.live_rows(t)]:
+            open(save, 'wb').write(raw)
+            sys.exit(f'{t}: после записи сейв не как база — сейв возвращён')
+    print(f'записано: +{total} строк; CRC и обёртка — OK; копия до правки — {bak}')
+
+
 def main():
     sys.stdout.reconfigure(encoding='utf-8')
     sys.stderr.reconfigure(encoding='utf-8')         # сообщения sys.exit
-    cmds = {'alloc': cmd_alloc, 'order': cmd_order, 'build': cmd_build, 'verify': cmd_verify, 'show': cmd_show}
+    cmds = {'alloc': cmd_alloc, 'order': cmd_order, 'build': cmd_build, 'verify': cmd_verify, 'show': cmd_show,
+            'save': cmd_save}
     if len(sys.argv) < 2 or sys.argv[1] not in cmds:
         sys.exit(__doc__)
     cmds[sys.argv[1]](sys.argv[2:])

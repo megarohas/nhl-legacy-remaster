@@ -20,7 +20,7 @@
    "art": 6,
    "variant": 7,
    "fevariant": 7,
-   "jerseyindex": 13,
+   "jerseyindex": 15,
    "locstring": 6
   },
   {
@@ -31,7 +31,7 @@
    "art": 6,
    "variant": 8,
    "fevariant": 8,
-   "jerseyindex": 14,
+   "jerseyindex": 16,
    "locstring": 6
   },
   {
@@ -42,7 +42,7 @@
    "art": 6,
    "variant": 9,
    "fevariant": 9,
-   "jerseyindex": 15,
+   "jerseyindex": 17,
    "locstring": 6
   },
   {
@@ -53,7 +53,7 @@
    "art": 6,
    "variant": 10,
    "fevariant": 10,
-   "jerseyindex": 16,
+   "jerseyindex": 18,
    "locstring": 6
   },
   {
@@ -64,7 +64,7 @@
    "art": 6,
    "variant": 11,
    "fevariant": 11,
-   "jerseyindex": 17,
+   "jerseyindex": 19,
    "locstring": 6
   },
   {
@@ -75,7 +75,7 @@
    "art": 6,
    "variant": 12,
    "fevariant": 12,
-   "jerseyindex": 18,
+   "jerseyindex": 20,
    "locstring": 6
   },
   {
@@ -86,7 +86,7 @@
    "art": 6,
    "variant": 13,
    "fevariant": 13,
-   "jerseyindex": 19,
+   "jerseyindex": 21,
    "locstring": 6
   },
   {
@@ -185,7 +185,7 @@
    "art": 0,
    "variant": 6,
    "fevariant": 6,
-   "jerseyindex": 9,
+   "jerseyindex": 12,
    "locstring": 6
   },
   {
@@ -196,7 +196,7 @@
    "art": 0,
    "variant": 7,
    "fevariant": 7,
-   "jerseyindex": 10,
+   "jerseyindex": 13,
    "locstring": 6
   },
   {
@@ -207,7 +207,7 @@
    "art": 1,
    "variant": 6,
    "fevariant": 6,
-   "jerseyindex": 4,
+   "jerseyindex": 7,
    "locstring": 6
   },
   {
@@ -218,7 +218,7 @@
    "art": 1,
    "variant": 7,
    "fevariant": 7,
-   "jerseyindex": 5,
+   "jerseyindex": 8,
    "locstring": 6
   },
   {
@@ -229,7 +229,7 @@
    "art": 3,
    "variant": 8,
    "fevariant": 8,
-   "jerseyindex": 7,
+   "jerseyindex": 10,
    "locstring": 6
   },
   {
@@ -240,7 +240,7 @@
    "art": 3,
    "variant": 9,
    "fevariant": 9,
-   "jerseyindex": 8,
+   "jerseyindex": 11,
    "locstring": 6
   },
   {
@@ -251,7 +251,7 @@
    "art": 9,
    "variant": 6,
    "fevariant": 6,
-   "jerseyindex": 13,
+   "jerseyindex": 16,
    "locstring": 6
   },
   {
@@ -262,7 +262,7 @@
    "art": 9,
    "variant": 7,
    "fevariant": 7,
-   "jerseyindex": 14,
+   "jerseyindex": 17,
    "locstring": 6
   },
   {
@@ -273,7 +273,7 @@
    "art": 15,
    "variant": 3,
    "fevariant": 3,
-   "jerseyindex": 6,
+   "jerseyindex": 9,
    "locstring": 6
   },
   {
@@ -284,7 +284,7 @@
    "art": 15,
    "variant": 4,
    "fevariant": 4,
-   "jerseyindex": 7,
+   "jerseyindex": 10,
    "locstring": 6
   },
   {
@@ -295,7 +295,7 @@
    "art": 17,
    "variant": 5,
    "fevariant": 5,
-   "jerseyindex": 10,
+   "jerseyindex": 13,
    "locstring": 6
   },
   {
@@ -306,7 +306,7 @@
    "art": 17,
    "variant": 6,
    "fevariant": 6,
-   "jerseyindex": 11,
+   "jerseyindex": 14,
    "locstring": 6
   },
   {
@@ -317,7 +317,7 @@
    "art": 2,
    "variant": 4,
    "fevariant": 4,
-   "jerseyindex": 8,
+   "jerseyindex": 10,
    "locstring": 6
   },
   {
@@ -328,7 +328,7 @@
    "art": 2,
    "variant": 5,
    "fevariant": 5,
-   "jerseyindex": 9,
+   "jerseyindex": 11,
    "locstring": 6
   },
   {
@@ -339,7 +339,7 @@
    "art": 2,
    "variant": 6,
    "fevariant": 6,
-   "jerseyindex": 10,
+   "jerseyindex": 12,
    "locstring": 6
   },
   {
@@ -350,7 +350,7 @@
    "art": 4,
    "variant": 4,
    "fevariant": 4,
-   "jerseyindex": 9,
+   "jerseyindex": 11,
    "locstring": 6
   },
   {
@@ -361,7 +361,7 @@
    "art": 4,
    "variant": 5,
    "fevariant": 5,
-   "jerseyindex": 10,
+   "jerseyindex": 12,
    "locstring": 6
   },
   {
@@ -372,7 +372,7 @@
    "art": 4,
    "variant": 6,
    "fevariant": 6,
-   "jerseyindex": 11,
+   "jerseyindex": 13,
    "locstring": 6
   },
   {
@@ -383,7 +383,7 @@
    "art": 5,
    "variant": 5,
    "fevariant": 5,
-   "jerseyindex": 9,
+   "jerseyindex": 11,
    "locstring": 6
   },
   {
@@ -394,7 +394,7 @@
    "art": 5,
    "variant": 6,
    "fevariant": 6,
-   "jerseyindex": 10,
+   "jerseyindex": 12,
    "locstring": 6
   },
   {
@@ -405,7 +405,7 @@
    "art": 5,
    "variant": 7,
    "fevariant": 7,
-   "jerseyindex": 11,
+   "jerseyindex": 13,
    "locstring": 6
   },
   {
@@ -416,7 +416,7 @@
    "art": 7,
    "variant": 3,
    "fevariant": 3,
-   "jerseyindex": 8,
+   "jerseyindex": 10,
    "locstring": 6
   },
   {
@@ -427,7 +427,7 @@
    "art": 7,
    "variant": 4,
    "fevariant": 4,
-   "jerseyindex": 9,
+   "jerseyindex": 11,
    "locstring": 6
   },
   {
@@ -438,7 +438,7 @@
    "art": 7,
    "variant": 5,
    "fevariant": 5,
-   "jerseyindex": 10,
+   "jerseyindex": 12,
    "locstring": 6
   },
   {
@@ -449,7 +449,7 @@
    "art": 8,
    "variant": 3,
    "fevariant": 3,
-   "jerseyindex": 6,
+   "jerseyindex": 8,
    "locstring": 6
   },
   {
@@ -460,7 +460,7 @@
    "art": 8,
    "variant": 4,
    "fevariant": 4,
-   "jerseyindex": 7,
+   "jerseyindex": 9,
    "locstring": 6
   },
   {
@@ -471,7 +471,7 @@
    "art": 8,
    "variant": 5,
    "fevariant": 5,
-   "jerseyindex": 8,
+   "jerseyindex": 10,
    "locstring": 6
   },
   {
@@ -482,7 +482,7 @@
    "art": 10,
    "variant": 4,
    "fevariant": 4,
-   "jerseyindex": 7,
+   "jerseyindex": 9,
    "locstring": 6
   },
   {
@@ -493,7 +493,7 @@
    "art": 10,
    "variant": 5,
    "fevariant": 5,
-   "jerseyindex": 8,
+   "jerseyindex": 10,
    "locstring": 6
   },
   {
@@ -504,7 +504,7 @@
    "art": 10,
    "variant": 6,
    "fevariant": 6,
-   "jerseyindex": 9,
+   "jerseyindex": 11,
    "locstring": 6
   },
   {
@@ -515,7 +515,7 @@
    "art": 11,
    "variant": 5,
    "fevariant": 5,
-   "jerseyindex": 8,
+   "jerseyindex": 10,
    "locstring": 6
   },
   {
@@ -526,7 +526,7 @@
    "art": 11,
    "variant": 6,
    "fevariant": 6,
-   "jerseyindex": 9,
+   "jerseyindex": 11,
    "locstring": 6
   },
   {
@@ -537,40 +537,40 @@
    "art": 11,
    "variant": 7,
    "fevariant": 7,
+   "jerseyindex": 12,
+   "locstring": 6
+  },
+  {
+   "club": "FLA",
+   "kit": "home",
+   "teamid": 12,
+   "style": 1,
+   "art": 12,
+   "variant": 5,
+   "fevariant": 5,
+   "jerseyindex": 9,
+   "locstring": 6
+  },
+  {
+   "club": "FLA",
+   "kit": "away",
+   "teamid": 12,
+   "style": 1,
+   "art": 12,
+   "variant": 6,
+   "fevariant": 6,
    "jerseyindex": 10,
    "locstring": 6
   },
   {
    "club": "FLA",
-   "kit": "home",
-   "teamid": 12,
-   "style": 1,
-   "art": 12,
-   "variant": 5,
-   "fevariant": 5,
-   "jerseyindex": 7,
-   "locstring": 6
-  },
-  {
-   "club": "FLA",
-   "kit": "away",
-   "teamid": 12,
-   "style": 1,
-   "art": 12,
-   "variant": 6,
-   "fevariant": 6,
-   "jerseyindex": 8,
-   "locstring": 6
-  },
-  {
-   "club": "FLA",
    "kit": "three",
    "teamid": 12,
    "style": 1,
    "art": 12,
    "variant": 7,
    "fevariant": 7,
-   "jerseyindex": 9,
+   "jerseyindex": 11,
    "locstring": 6
   },
   {
@@ -581,7 +581,7 @@
    "art": 13,
    "variant": 7,
    "fevariant": 7,
-   "jerseyindex": 12,
+   "jerseyindex": 14,
    "locstring": 6
   },
   {
@@ -592,7 +592,7 @@
    "art": 13,
    "variant": 8,
    "fevariant": 8,
-   "jerseyindex": 13,
+   "jerseyindex": 15,
    "locstring": 6
   },
   {
@@ -603,7 +603,7 @@
    "art": 13,
    "variant": 9,
    "fevariant": 9,
-   "jerseyindex": 14,
+   "jerseyindex": 16,
    "locstring": 6
   },
   {
@@ -625,7 +625,7 @@
    "art": 14,
    "variant": 5,
    "fevariant": 5,
-   "jerseyindex": 8,
+   "jerseyindex": 10,
    "locstring": 6
   },
   {
@@ -636,7 +636,7 @@
    "art": 14,
    "variant": 6,
    "fevariant": 6,
-   "jerseyindex": 9,
+   "jerseyindex": 11,
    "locstring": 6
   },
   {
@@ -647,7 +647,7 @@
    "art": 16,
    "variant": 5,
    "fevariant": 5,
-   "jerseyindex": 8,
+   "jerseyindex": 10,
    "locstring": 6
   },
   {
@@ -658,7 +658,7 @@
    "art": 16,
    "variant": 6,
    "fevariant": 6,
-   "jerseyindex": 9,
+   "jerseyindex": 11,
    "locstring": 6
   },
   {
@@ -669,7 +669,7 @@
    "art": 16,
    "variant": 7,
    "fevariant": 7,
-   "jerseyindex": 10,
+   "jerseyindex": 12,
    "locstring": 6
   },
   {
@@ -680,7 +680,7 @@
    "art": 18,
    "variant": 6,
    "fevariant": 6,
-   "jerseyindex": 10,
+   "jerseyindex": 12,
    "locstring": 6
   },
   {
@@ -691,7 +691,7 @@
    "art": 18,
    "variant": 7,
    "fevariant": 7,
-   "jerseyindex": 11,
+   "jerseyindex": 13,
    "locstring": 6
   },
   {
@@ -702,7 +702,7 @@
    "art": 18,
    "variant": 8,
    "fevariant": 8,
-   "jerseyindex": 12,
+   "jerseyindex": 14,
    "locstring": 6
   },
   {
@@ -713,7 +713,7 @@
    "art": 19,
    "variant": 5,
    "fevariant": 5,
-   "jerseyindex": 10,
+   "jerseyindex": 12,
    "locstring": 6
   },
   {
@@ -722,67 +722,67 @@
    "teamid": 19,
    "style": 1,
    "art": 19,
+   "variant": 6,
+   "fevariant": 6,
+   "jerseyindex": 13,
+   "locstring": 6
+  },
+  {
+   "club": "NYR",
+   "kit": "three",
+   "teamid": 19,
+   "style": 1,
+   "art": 19,
+   "variant": 7,
+   "fevariant": 7,
+   "jerseyindex": 14,
+   "locstring": 6
+  },
+  {
+   "club": "OTT",
+   "kit": "home",
+   "teamid": 20,
+   "style": 1,
+   "art": 20,
+   "variant": 5,
+   "fevariant": 5,
+   "jerseyindex": 10,
+   "locstring": 6
+  },
+  {
+   "club": "OTT",
+   "kit": "away",
+   "teamid": 20,
+   "style": 1,
+   "art": 20,
    "variant": 6,
    "fevariant": 6,
    "jerseyindex": 11,
    "locstring": 6
   },
   {
-   "club": "NYR",
+   "club": "OTT",
    "kit": "three",
-   "teamid": 19,
+   "teamid": 20,
    "style": 1,
-   "art": 19,
+   "art": 20,
    "variant": 7,
    "fevariant": 7,
    "jerseyindex": 12,
    "locstring": 6
   },
   {
-   "club": "OTT",
+   "club": "PHI",
    "kit": "home",
-   "teamid": 20,
+   "teamid": 21,
    "style": 1,
-   "art": 20,
-   "variant": 5,
-   "fevariant": 5,
-   "jerseyindex": 8,
-   "locstring": 6
-  },
-  {
-   "club": "OTT",
-   "kit": "away",
-   "teamid": 20,
-   "style": 1,
-   "art": 20,
+   "art": 21,
    "variant": 6,
    "fevariant": 6,
    "jerseyindex": 9,
    "locstring": 6
   },
   {
-   "club": "OTT",
-   "kit": "three",
-   "teamid": 20,
-   "style": 1,
-   "art": 20,
-   "variant": 7,
-   "fevariant": 7,
-   "jerseyindex": 10,
-   "locstring": 6
-  },
-  {
-   "club": "PHI",
-   "kit": "home",
-   "teamid": 21,
-   "style": 1,
-   "art": 21,
-   "variant": 6,
-   "fevariant": 6,
-   "jerseyindex": 7,
-   "locstring": 6
-  },
-  {
    "club": "PHI",
    "kit": "away",
    "teamid": 21,
@@ -790,7 +790,7 @@
    "art": 21,
    "variant": 7,
    "fevariant": 7,
-   "jerseyindex": 8,
+   "jerseyindex": 10,
    "locstring": 6
   },
   {
@@ -801,7 +801,7 @@
    "art": 21,
    "variant": 8,
    "fevariant": 8,
-   "jerseyindex": 9,
+   "jerseyindex": 11,
    "locstring": 6
   },
   {
@@ -812,7 +812,7 @@
    "art": 23,
    "variant": 7,
    "fevariant": 7,
-   "jerseyindex": 10,
+   "jerseyindex": 12,
    "locstring": 6
   },
   {
@@ -823,7 +823,7 @@
    "art": 23,
    "variant": 8,
    "fevariant": 8,
-   "jerseyindex": 11,
+   "jerseyindex": 13,
    "locstring": 6
   },
   {
@@ -834,7 +834,7 @@
    "art": 23,
    "variant": 9,
    "fevariant": 9,
-   "jerseyindex": 12,
+   "jerseyindex": 14,
    "locstring": 6
   },
   {
@@ -845,7 +845,7 @@
    "art": 24,
    "variant": 5,
    "fevariant": 5,
-   "jerseyindex": 9,
+   "jerseyindex": 11,
    "locstring": 6
   },
   {
@@ -856,7 +856,7 @@
    "art": 24,
    "variant": 6,
    "fevariant": 6,
-   "jerseyindex": 10,
+   "jerseyindex": 12,
    "locstring": 6
   },
   {
@@ -867,7 +867,7 @@
    "art": 24,
    "variant": 7,
    "fevariant": 7,
-   "jerseyindex": 11,
+   "jerseyindex": 13,
    "locstring": 6
   },
   {
@@ -878,76 +878,76 @@
    "art": 25,
    "variant": 6,
    "fevariant": 6,
-   "jerseyindex": 9,
-   "locstring": 6
-  },
-  {
-   "club": "SJS",
-   "kit": "away",
-   "teamid": 25,
-   "style": 1,
-   "art": 25,
-   "variant": 7,
-   "fevariant": 7,
-   "jerseyindex": 10,
-   "locstring": 6
-  },
-  {
-   "club": "SJS",
-   "kit": "three",
-   "teamid": 25,
-   "style": 1,
-   "art": 25,
-   "variant": 8,
-   "fevariant": 8,
    "jerseyindex": 11,
    "locstring": 6
   },
   {
-   "club": "TBL",
-   "kit": "home",
-   "teamid": 26,
-   "style": 1,
-   "art": 26,
-   "variant": 6,
-   "fevariant": 6,
-   "jerseyindex": 7,
-   "locstring": 6
-  },
-  {
-   "club": "TBL",
+   "club": "SJS",
    "kit": "away",
-   "teamid": 26,
+   "teamid": 25,
    "style": 1,
-   "art": 26,
-   "variant": 7,
-   "fevariant": 7,
-   "jerseyindex": 8,
-   "locstring": 6
-  },
-  {
-   "club": "TBL",
-   "kit": "three",
-   "teamid": 26,
-   "style": 1,
-   "art": 26,
-   "variant": 8,
-   "fevariant": 8,
-   "jerseyindex": 9,
-   "locstring": 6
-  },
-  {
-   "club": "TOR",
-   "kit": "home",
-   "teamid": 27,
-   "style": 1,
-   "art": 27,
+   "art": 25,
    "variant": 7,
    "fevariant": 7,
    "jerseyindex": 12,
    "locstring": 6
   },
   {
+   "club": "SJS",
+   "kit": "three",
+   "teamid": 25,
+   "style": 1,
+   "art": 25,
+   "variant": 8,
+   "fevariant": 8,
+   "jerseyindex": 13,
+   "locstring": 6
+  },
+  {
+   "club": "TBL",
+   "kit": "home",
+   "teamid": 26,
+   "style": 1,
+   "art": 26,
+   "variant": 6,
+   "fevariant": 6,
+   "jerseyindex": 9,
+   "locstring": 6
+  },
+  {
+   "club": "TBL",
+   "kit": "away",
+   "teamid": 26,
+   "style": 1,
+   "art": 26,
+   "variant": 7,
+   "fevariant": 7,
+   "jerseyindex": 10,
+   "locstring": 6
+  },
+  {
+   "club": "TBL",
+   "kit": "three",
+   "teamid": 26,
+   "style": 1,
+   "art": 26,
+   "variant": 8,
+   "fevariant": 8,
+   "jerseyindex": 11,
+   "locstring": 6
+  },
+  {
+   "club": "TOR",
+   "kit": "home",
+   "teamid": 27,
+   "style": 1,
+   "art": 27,
+   "variant": 7,
+   "fevariant": 7,
+   "jerseyindex": 14,
+   "locstring": 6
+  },
+  {
    "club": "TOR",
    "kit": "away",
    "teamid": 27,
@@ -955,7 +955,7 @@
    "art": 27,
    "variant": 8,
    "fevariant": 8,
-   "jerseyindex": 13,
+   "jerseyindex": 15,
    "locstring": 6
   },
   {
@@ -966,7 +966,7 @@
    "art": 27,
    "variant": 9,
    "fevariant": 9,
-   "jerseyindex": 14,
+   "jerseyindex": 16,
    "locstring": 6
   },
   {
@@ -977,7 +977,7 @@
    "art": 28,
    "variant": 5,
    "fevariant": 5,
-   "jerseyindex": 12,
+   "jerseyindex": 14,
    "locstring": 6
   },
   {
@@ -988,7 +988,7 @@
    "art": 28,
    "variant": 6,
    "fevariant": 6,
-   "jerseyindex": 13,
+   "jerseyindex": 15,
    "locstring": 6
   },
   {
@@ -999,7 +999,7 @@
    "art": 28,
    "variant": 7,
    "fevariant": 7,
-   "jerseyindex": 14,
+   "jerseyindex": 16,
    "locstring": 6
   },
   {
@@ -1010,7 +1010,7 @@
    "art": 29,
    "variant": 6,
    "fevariant": 6,
-   "jerseyindex": 7,
+   "jerseyindex": 9,
    "locstring": 6
   },
   {
@@ -1021,7 +1021,7 @@
    "art": 29,
    "variant": 7,
    "fevariant": 7,
-   "jerseyindex": 8,
+   "jerseyindex": 10,
    "locstring": 6
   },
   {
@@ -1032,7 +1032,7 @@
    "art": 29,
    "variant": 8,
    "fevariant": 8,
-   "jerseyindex": 9,
+   "jerseyindex": 11,
    "locstring": 6
   },
   {
@@ -1065,7 +1065,7 @@
    "art": 100,
    "variant": 5,
    "fevariant": 5,
-   "jerseyindex": 5,
+   "jerseyindex": 7,
    "locstring": 6
   },
   {
@@ -1099,6 +1099,688 @@
    "variant": 5,
    "fevariant": 5,
    "jerseyindex": 5,
+   "locstring": 6
+  },
+  {
+   "club": "ANA",
+   "kit": "ad_home",
+   "teamid": 0,
+   "style": 0,
+   "art": 0,
+   "variant": 4,
+   "fevariant": 4,
+   "jerseyindex": 9,
+   "locstring": 6
+  },
+  {
+   "club": "ANA",
+   "kit": "ad_away",
+   "teamid": 0,
+   "style": 0,
+   "art": 0,
+   "variant": 5,
+   "fevariant": 5,
+   "jerseyindex": 10,
+   "locstring": 6
+  },
+  {
+   "club": "WPG",
+   "kit": "ad_home",
+   "teamid": 1,
+   "style": 0,
+   "art": 1,
+   "variant": 5,
+   "fevariant": 5,
+   "jerseyindex": 4,
+   "locstring": 6
+  },
+  {
+   "club": "WPG",
+   "kit": "ad_away",
+   "teamid": 1,
+   "style": 0,
+   "art": 1,
+   "variant": 6,
+   "fevariant": 6,
+   "jerseyindex": 5,
+   "locstring": 6
+  },
+  {
+   "club": "BOS",
+   "kit": "ad_home",
+   "teamid": 2,
+   "style": 0,
+   "art": 2,
+   "variant": 4,
+   "fevariant": 4,
+   "jerseyindex": 8,
+   "locstring": 6
+  },
+  {
+   "club": "BOS",
+   "kit": "ad_away",
+   "teamid": 2,
+   "style": 0,
+   "art": 2,
+   "variant": 5,
+   "fevariant": 5,
+   "jerseyindex": 9,
+   "locstring": 6
+  },
+  {
+   "club": "BUF",
+   "kit": "ad_away",
+   "teamid": 3,
+   "style": 0,
+   "art": 3,
+   "variant": 4,
+   "fevariant": 4,
+   "jerseyindex": 8,
+   "locstring": 6
+  },
+  {
+   "club": "CGY",
+   "kit": "ad_home",
+   "teamid": 4,
+   "style": 0,
+   "art": 4,
+   "variant": 6,
+   "fevariant": 6,
+   "jerseyindex": 9,
+   "locstring": 6
+  },
+  {
+   "club": "CGY",
+   "kit": "ad_away",
+   "teamid": 4,
+   "style": 0,
+   "art": 4,
+   "variant": 7,
+   "fevariant": 7,
+   "jerseyindex": 10,
+   "locstring": 6
+  },
+  {
+   "club": "CAR",
+   "kit": "ad_away",
+   "teamid": 5,
+   "style": 0,
+   "art": 5,
+   "variant": 5,
+   "fevariant": 5,
+   "jerseyindex": 10,
+   "locstring": 6
+  },
+  {
+   "club": "CHI",
+   "kit": "ad_home",
+   "teamid": 6,
+   "style": 0,
+   "art": 6,
+   "variant": 5,
+   "fevariant": 5,
+   "jerseyindex": 13,
+   "locstring": 6
+  },
+  {
+   "club": "CHI",
+   "kit": "ad_away",
+   "teamid": 6,
+   "style": 0,
+   "art": 6,
+   "variant": 6,
+   "fevariant": 6,
+   "jerseyindex": 14,
+   "locstring": 6
+  },
+  {
+   "club": "COL",
+   "kit": "ad_home",
+   "teamid": 7,
+   "style": 0,
+   "art": 7,
+   "variant": 5,
+   "fevariant": 5,
+   "jerseyindex": 8,
+   "locstring": 6
+  },
+  {
+   "club": "COL",
+   "kit": "ad_away",
+   "teamid": 7,
+   "style": 0,
+   "art": 7,
+   "variant": 6,
+   "fevariant": 6,
+   "jerseyindex": 9,
+   "locstring": 6
+  },
+  {
+   "club": "CBJ",
+   "kit": "ad_home",
+   "teamid": 8,
+   "style": 0,
+   "art": 8,
+   "variant": 3,
+   "fevariant": 3,
+   "jerseyindex": 6,
+   "locstring": 6
+  },
+  {
+   "club": "CBJ",
+   "kit": "ad_away",
+   "teamid": 8,
+   "style": 0,
+   "art": 8,
+   "variant": 4,
+   "fevariant": 4,
+   "jerseyindex": 7,
+   "locstring": 6
+  },
+  {
+   "club": "DAL",
+   "kit": "ad_home",
+   "teamid": 9,
+   "style": 0,
+   "art": 9,
+   "variant": 2,
+   "fevariant": 2,
+   "jerseyindex": 13,
+   "locstring": 6
+  },
+  {
+   "club": "DAL",
+   "kit": "ad_away",
+   "teamid": 9,
+   "style": 0,
+   "art": 9,
+   "variant": 10,
+   "fevariant": 10,
+   "jerseyindex": 14,
+   "locstring": 6
+  },
+  {
+   "club": "DET",
+   "kit": "ad_home",
+   "teamid": 10,
+   "style": 0,
+   "art": 10,
+   "variant": 2,
+   "fevariant": 2,
+   "jerseyindex": 7,
+   "locstring": 6
+  },
+  {
+   "club": "DET",
+   "kit": "ad_away",
+   "teamid": 10,
+   "style": 0,
+   "art": 10,
+   "variant": 4,
+   "fevariant": 4,
+   "jerseyindex": 8,
+   "locstring": 6
+  },
+  {
+   "club": "EDM",
+   "kit": "ad_home",
+   "teamid": 11,
+   "style": 0,
+   "art": 11,
+   "variant": 5,
+   "fevariant": 5,
+   "jerseyindex": 8,
+   "locstring": 6
+  },
+  {
+   "club": "EDM",
+   "kit": "ad_away",
+   "teamid": 11,
+   "style": 0,
+   "art": 11,
+   "variant": 6,
+   "fevariant": 6,
+   "jerseyindex": 9,
+   "locstring": 6
+  },
+  {
+   "club": "FLA",
+   "kit": "ad_home",
+   "teamid": 12,
+   "style": 0,
+   "art": 12,
+   "variant": 5,
+   "fevariant": 5,
+   "jerseyindex": 7,
+   "locstring": 6
+  },
+  {
+   "club": "FLA",
+   "kit": "ad_away",
+   "teamid": 12,
+   "style": 0,
+   "art": 12,
+   "variant": 6,
+   "fevariant": 6,
+   "jerseyindex": 8,
+   "locstring": 6
+  },
+  {
+   "club": "LAK",
+   "kit": "ad_home",
+   "teamid": 13,
+   "style": 0,
+   "art": 13,
+   "variant": 7,
+   "fevariant": 7,
+   "jerseyindex": 12,
+   "locstring": 6
+  },
+  {
+   "club": "LAK",
+   "kit": "ad_away",
+   "teamid": 13,
+   "style": 0,
+   "art": 13,
+   "variant": 8,
+   "fevariant": 8,
+   "jerseyindex": 13,
+   "locstring": 6
+  },
+  {
+   "club": "MIN",
+   "kit": "ad_home",
+   "teamid": 14,
+   "style": 0,
+   "art": 14,
+   "variant": 3,
+   "fevariant": 3,
+   "jerseyindex": 8,
+   "locstring": 6
+  },
+  {
+   "club": "MIN",
+   "kit": "ad_away",
+   "teamid": 14,
+   "style": 0,
+   "art": 14,
+   "variant": 4,
+   "fevariant": 4,
+   "jerseyindex": 9,
+   "locstring": 6
+  },
+  {
+   "club": "MTL",
+   "kit": "ad_home",
+   "teamid": 15,
+   "style": 0,
+   "art": 15,
+   "variant": 4,
+   "fevariant": 4,
+   "jerseyindex": 6,
+   "locstring": 6
+  },
+  {
+   "club": "MTL",
+   "kit": "ad_away",
+   "teamid": 15,
+   "style": 0,
+   "art": 15,
+   "variant": 5,
+   "fevariant": 5,
+   "jerseyindex": 7,
+   "locstring": 6
+  },
+  {
+   "club": "NSH",
+   "kit": "ad_home",
+   "teamid": 16,
+   "style": 0,
+   "art": 16,
+   "variant": 5,
+   "fevariant": 5,
+   "jerseyindex": 8,
+   "locstring": 6
+  },
+  {
+   "club": "NSH",
+   "kit": "ad_away",
+   "teamid": 16,
+   "style": 0,
+   "art": 16,
+   "variant": 6,
+   "fevariant": 6,
+   "jerseyindex": 9,
+   "locstring": 6
+  },
+  {
+   "club": "NJD",
+   "kit": "ad_home",
+   "teamid": 17,
+   "style": 0,
+   "art": 17,
+   "variant": 7,
+   "fevariant": 7,
+   "jerseyindex": 10,
+   "locstring": 6
+  },
+  {
+   "club": "NJD",
+   "kit": "ad_away",
+   "teamid": 17,
+   "style": 0,
+   "art": 17,
+   "variant": 8,
+   "fevariant": 8,
+   "jerseyindex": 11,
+   "locstring": 6
+  },
+  {
+   "club": "NYI",
+   "kit": "ad_home",
+   "teamid": 18,
+   "style": 0,
+   "art": 18,
+   "variant": 5,
+   "fevariant": 5,
+   "jerseyindex": 10,
+   "locstring": 6
+  },
+  {
+   "club": "NYI",
+   "kit": "ad_away",
+   "teamid": 18,
+   "style": 0,
+   "art": 18,
+   "variant": 6,
+   "fevariant": 6,
+   "jerseyindex": 11,
+   "locstring": 6
+  },
+  {
+   "club": "NYR",
+   "kit": "ad_home",
+   "teamid": 19,
+   "style": 0,
+   "art": 19,
+   "variant": 5,
+   "fevariant": 5,
+   "jerseyindex": 10,
+   "locstring": 6
+  },
+  {
+   "club": "NYR",
+   "kit": "ad_away",
+   "teamid": 19,
+   "style": 0,
+   "art": 19,
+   "variant": 6,
+   "fevariant": 6,
+   "jerseyindex": 11,
+   "locstring": 6
+  },
+  {
+   "club": "OTT",
+   "kit": "ad_home",
+   "teamid": 20,
+   "style": 0,
+   "art": 20,
+   "variant": 4,
+   "fevariant": 4,
+   "jerseyindex": 8,
+   "locstring": 6
+  },
+  {
+   "club": "OTT",
+   "kit": "ad_away",
+   "teamid": 20,
+   "style": 0,
+   "art": 20,
+   "variant": 5,
+   "fevariant": 5,
+   "jerseyindex": 9,
+   "locstring": 6
+  },
+  {
+   "club": "PHI",
+   "kit": "ad_home",
+   "teamid": 21,
+   "style": 0,
+   "art": 21,
+   "variant": 5,
+   "fevariant": 5,
+   "jerseyindex": 7,
+   "locstring": 6
+  },
+  {
+   "club": "PHI",
+   "kit": "ad_away",
+   "teamid": 21,
+   "style": 0,
+   "art": 21,
+   "variant": 6,
+   "fevariant": 6,
+   "jerseyindex": 8,
+   "locstring": 6
+  },
+  {
+   "club": "PIT",
+   "kit": "ad_home",
+   "teamid": 23,
+   "style": 0,
+   "art": 23,
+   "variant": 2,
+   "fevariant": 2,
+   "jerseyindex": 10,
+   "locstring": 6
+  },
+  {
+   "club": "PIT",
+   "kit": "ad_away",
+   "teamid": 23,
+   "style": 0,
+   "art": 23,
+   "variant": 5,
+   "fevariant": 5,
+   "jerseyindex": 11,
+   "locstring": 6
+  },
+  {
+   "club": "STL",
+   "kit": "ad_home",
+   "teamid": 24,
+   "style": 0,
+   "art": 24,
+   "variant": 2,
+   "fevariant": 2,
+   "jerseyindex": 9,
+   "locstring": 6
+  },
+  {
+   "club": "STL",
+   "kit": "ad_away",
+   "teamid": 24,
+   "style": 0,
+   "art": 24,
+   "variant": 5,
+   "fevariant": 5,
+   "jerseyindex": 10,
+   "locstring": 6
+  },
+  {
+   "club": "SJS",
+   "kit": "ad_home",
+   "teamid": 25,
+   "style": 0,
+   "art": 25,
+   "variant": 3,
+   "fevariant": 3,
+   "jerseyindex": 9,
+   "locstring": 6
+  },
+  {
+   "club": "SJS",
+   "kit": "ad_away",
+   "teamid": 25,
+   "style": 0,
+   "art": 25,
+   "variant": 4,
+   "fevariant": 4,
+   "jerseyindex": 10,
+   "locstring": 6
+  },
+  {
+   "club": "TBL",
+   "kit": "ad_home",
+   "teamid": 26,
+   "style": 0,
+   "art": 26,
+   "variant": 2,
+   "fevariant": 2,
+   "jerseyindex": 7,
+   "locstring": 6
+  },
+  {
+   "club": "TBL",
+   "kit": "ad_away",
+   "teamid": 26,
+   "style": 0,
+   "art": 26,
+   "variant": 5,
+   "fevariant": 5,
+   "jerseyindex": 8,
+   "locstring": 6
+  },
+  {
+   "club": "TOR",
+   "kit": "ad_home",
+   "teamid": 27,
+   "style": 0,
+   "art": 27,
+   "variant": 6,
+   "fevariant": 6,
+   "jerseyindex": 12,
+   "locstring": 6
+  },
+  {
+   "club": "TOR",
+   "kit": "ad_away",
+   "teamid": 27,
+   "style": 0,
+   "art": 27,
+   "variant": 7,
+   "fevariant": 7,
+   "jerseyindex": 13,
+   "locstring": 6
+  },
+  {
+   "club": "VAN",
+   "kit": "ad_home",
+   "teamid": 28,
+   "style": 0,
+   "art": 28,
+   "variant": 7,
+   "fevariant": 7,
+   "jerseyindex": 12,
+   "locstring": 6
+  },
+  {
+   "club": "VAN",
+   "kit": "ad_away",
+   "teamid": 28,
+   "style": 0,
+   "art": 28,
+   "variant": 8,
+   "fevariant": 8,
+   "jerseyindex": 13,
+   "locstring": 6
+  },
+  {
+   "club": "WSH",
+   "kit": "ad_home",
+   "teamid": 29,
+   "style": 0,
+   "art": 29,
+   "variant": 3,
+   "fevariant": 3,
+   "jerseyindex": 7,
+   "locstring": 6
+  },
+  {
+   "club": "WSH",
+   "kit": "ad_away",
+   "teamid": 29,
+   "style": 0,
+   "art": 29,
+   "variant": 4,
+   "fevariant": 4,
+   "jerseyindex": 8,
+   "locstring": 6
+  },
+  {
+   "club": "SEA",
+   "kit": "ad_home",
+   "teamid": 30,
+   "style": 0,
+   "art": 100,
+   "variant": 0,
+   "fevariant": 0,
+   "jerseyindex": 5,
+   "locstring": 6
+  },
+  {
+   "club": "SEA",
+   "kit": "ad_away",
+   "teamid": 30,
+   "style": 0,
+   "art": 100,
+   "variant": 1,
+   "fevariant": 1,
+   "jerseyindex": 6,
+   "locstring": 6
+  },
+  {
+   "club": "VGK",
+   "kit": "ad_home",
+   "teamid": 31,
+   "style": 0,
+   "art": 101,
+   "variant": 0,
+   "fevariant": 0,
+   "jerseyindex": 6,
+   "locstring": 6
+  },
+  {
+   "club": "VGK",
+   "kit": "ad_away",
+   "teamid": 31,
+   "style": 0,
+   "art": 101,
+   "variant": 1,
+   "fevariant": 1,
+   "jerseyindex": 7,
+   "locstring": 6
+  },
+  {
+   "club": "BUF",
+   "kit": "ad_home",
+   "teamid": 3,
+   "style": 0,
+   "art": 3,
+   "variant": 5,
+   "fevariant": 5,
+   "jerseyindex": 7,
+   "locstring": 6
+  },
+  {
+   "club": "CAR",
+   "kit": "ad_home",
+   "teamid": 5,
+   "style": 0,
+   "art": 5,
+   "variant": 6,
+   "fevariant": 6,
+   "jerseyindex": 9,
    "locstring": 6
   }
  ]
