@@ -117,12 +117,17 @@ def variant_map():
 # Legacy). Поэтому тело свитера садится на поверхность Edge того же варианта (ближайшая точка той же стороны), а ворот
 # (до NECK_KEEP[0] от края горловины, переход к NECK_KEEP[1]) сохраняет форму NHL 24 и сдвигается целиком вместе с
 # окружением (гармоническое продолжение сдвигов). Вершины-дубли по швам UV сдвигаются одинаково (сварка).
+NECK_KEEP_BACK = (0.015, 0.035)   # сзади (пользователь, 15.10: «горб» между воротом и фамилией)
 NECK_KEEP = (0.035, 0.07)        # полоса ворота; шире — у вратаря в неё попадал верх плеча (+3 см к Edge)
 SIDE_DOT = 0.3                     # нормаль ближайшей точки — той же стороны ткани
 # Под воротом у Legacy — «рубашка» (rendering/jersey/shirt_<g>_<g>_<lod>, тёмная горловина под V-вырезом Edge). Ворот
 # не ниже её верха + SHIRT_MARGIN ни в одном секторе вокруг шеи (пользователь, 15.10, v2: «проглядывается чёрное
 # вокруг шеи» — ворот опустили на 1,7 см, верх рубашки сзади 1,704 м, край ворота стал 1,695).
 SHIRT_MARGIN = 0.005
+SHIRT_CLEAR = 0.003                # свитер снаружи рубашки не меньше чем на 3 мм (иначе она проступает сквозь спину)
+# Вратари (пользователь, 15.10, v3): тёмное над воротом у них — защита горла, она и должна быть видна; поднятый над
+# ней ворот вытягивал шею свитера вверх («сверху треугольные»), маска проваливалась в него → ворот не поднимаем.
+LIFT_OVER_SHIRT = {0: True, 1: False}
 SHIRT_SECTORS = 12
 SHIRT = {0: "rendering/jersey/shirt_0_0_2.rx2", 1: "rendering/jersey/shirt_1_1_2.rx2"}
 MAX_D = 0.08                       # дальше — сдвиг не берётся, а продолжается от соседей (внутренние кромки)
@@ -222,7 +227,7 @@ def lift_at(p, c, lift):
     return lift[k0] * (1 - f) + lift[(k0 + 1) % SHIRT_SECTORS] * f
 
 
-def morph_to(n24, src, t_neck=None, shirt=None):
+def morph_to(n24, src, t_neck=None, shirt=None, lift_shirt=True):
     """Сетка NHL 24 с телом по поверхности src (свитер Legacy того же варианта) и воротом NHL 24. -> (сетка, сводка).
 
     Тело: сдвиг к ближайшей точке src той же стороны; где её нет (внутренние кромки) или где сдвиг выворачивает
@@ -244,14 +249,18 @@ def morph_to(n24, src, t_neck=None, shirt=None):
     bnd = boundary_nodes(Tg)
     neck = bnd[(P[bnd, 1] > 1.45) & (np.abs(P[bnd, 0]) < 0.2)]
     dn = cKDTree(P[neck]).query(P)[0]
-    s = np.clip((dn - NECK_KEEP[0]) / (NECK_KEEP[1] - NECK_KEEP[0]), 0, 1)
+    # сзади — только сама полоса ворота: верх спины (логотип adidas над фамилией) — по спине Edge, иначе «горб»
+    back = np.clip((-P[:, 2] - 0.02) / 0.04, 0, 1)    # 0 — спереди/сбоку, 1 — сзади (z < −0,06)
+    k0 = NECK_KEEP[0] * (1 - back) + NECK_KEEP_BACK[0] * back
+    k1 = NECK_KEEP[1] * (1 - back) + NECK_KEEP_BACK[1] * back
+    s = np.clip((dn - k0) / (k1 - k0), 0, 1)
     k = 1.0 - s * s * (3 - 2 * s)
     if t_neck is None:                                 # у дальних детализаций — сдвиг ближней (ворот не «прыгает»)
         _, _, c_src = neck_ring(src["pos"], src["tri"])
         t_neck = c_src - P[neck].mean(0)
         t_neck[0] = 0.0                                # по x не двигаем: обе горловины по оси
-        if shirt is not None:                          # но не ниже верха рубашки Legacy: ворот целиком выше, без
-            c, lift = shirt_lift(P[neck], shirt, t_neck)   # волны по краю (подъём по секторам гнул бы его на 3 см)
+        if shirt is not None and lift_shirt:           # но не ниже верха рубашки Legacy: ворот целиком выше, без
+            c, lift = shirt_lift(P[neck], shirt["pos"], t_neck)  # волны по краю (по секторам гнул бы его на 3 см)
             t_neck[1] += lift.max()
         t_neck = (t_neck, None)
     t_vec, lift = t_neck
@@ -267,6 +276,10 @@ def morph_to(n24, src, t_neck=None, shirt=None):
         vals = d_full.copy()
         vals[collar_in] = collar_t[collar_in]
         D = harmonic(A, vals, collar_in | collar_out)
+        # вглубь и вбок ворот идёт вслед за телом (спина Edge), по высоте — целиком: иначе верх спины под воротом
+        # сохранял форму NHL 24 (на 2 см сзади Edge) и с подъёмом торчал «горбом» (пользователь, 15.10)
+        D_body = harmonic(A, d_full, collar_out)
+        D[:, 0], D[:, 2] = D_body[:, 0], D_body[:, 2]
         deg = np.asarray(A.sum(1)).ravel()[:, None]
         for _ in range(3):  # шум ближайшей точки на складках
             D = 0.5 * D + 0.5 * (A @ D) / np.maximum(deg, 1)
@@ -293,6 +306,22 @@ def morph_to(n24, src, t_neck=None, shirt=None):
         P2 = P + D
         fn1 = np.cross(P2[Tg[:, 1]] - P2[Tg[:, 0]], P2[Tg[:, 2]] - P2[Tg[:, 0]])
         flipped = (fn0 * fn1).sum(1) <= 0
+    pushed = 0
+    if shirt is not None:                              # свитер — снаружи рубашки не меньше SHIRT_CLEAR
+        for _ in range(3):
+            near = np.nonzero(cKDTree(shirt["pos"]).query(P2)[0] < 0.06)[0]
+            if not len(near):
+                break
+            ts, bs, _ = kit3d.project(P2[near], np.zeros((len(near), 3)), shirt, min_dot=-2.0)
+            Ts = shirt["tri"][ts]
+            qs = (bs[:, :, None] * shirt["pos"][Ts]).sum(1)
+            ns = kit3d._unit((bs[:, :, None] * shirt["nrm"][Ts]).sum(1))
+            sd = ((P2[near] - qs) * ns).sum(1)
+            fix = sd < SHIRT_CLEAR
+            if not fix.any():
+                break
+            P2[near[fix]] += (SHIRT_CLEAR - sd[fix])[:, None] * ns[fix]
+            pushed += int(fix.sum())
     N1 = node_normals(P2, Tg, n)
     out = dict(n24)
     out["pos"] = P2[g]
@@ -304,7 +333,7 @@ def morph_to(n24, src, t_neck=None, shirt=None):
     info = {"ok": float(known.mean()), "shift_mean_cm": float(shift.mean() * 100),
             "neck_shift_y_cm": float(t_vec[1] * 100), "neck_shift_z_cm": float(t_vec[2] * 100),
             "neck_lift_max_cm": float(lift[1].max() * 100) if lift is not None else 0.0,
-            "flip_rounds": rounds, "relax": relax, "flipped_left": int(flipped.sum())}
+            "flip_rounds": rounds, "relax": relax, "flipped_left": int(flipped.sum()), "shirt_pushed": pushed}
     return out, info
 
 
@@ -352,8 +381,9 @@ def build_one(n24, skin_src_rel, dst_rel, morph=True, t_neck=None, shirt_rel=Non
         shirt = None
         if shirt_rel:
             sm = rw.Mesh.game(shirt_rel)
-            shirt = np.array([p[:3] for p in sm.pos], dtype=np.float64)
-        n24, minfo = morph_to(n24, src, t_neck, shirt)
+            shirt = {"pos": np.array([p[:3] for p in sm.pos], dtype=np.float64), "tri": np.array(sm.tris),
+                     "nrm": kit3d._unit(np.array(sm.nrm, dtype=np.float64))}
+        n24, minfo = morph_to(n24, src, t_neck, shirt, LIFT_OVER_SHIRT[1 if "/jersey_1_" in dst_rel else 0])
     g, first = weld(n24["pos"])
     Tg = g[n24["tri"]]
     nodes = {"pos": n24["pos"][first], "nrm": node_normals(n24["pos"][first], Tg, len(first))}
@@ -561,6 +591,9 @@ def name_map(leg_png, leg_d, dst_d, size=256):
     return out, rects, up_ok
 
 
+FRONT_ZONES = (5, 7)               # зоны на груди: буква капитана и вторая (у EA — у ворота с двух сторон)
+LETTER_SCALE = 0.72                # буквы C/A (пользователь, 16.10: «литеры капитанов и ассистентов поменьше»)
+LETTER_OUT_CM = 3.0                # и «чуть ближе к плечевому суставу» — вбок, от середины груди
 ZONE_NECK_CLEAR = 0.04            # точки зоны ближе к краю горловины dst — на полосе ворота
 SLEEVE_ZONES = (2, 3)              # номера на рукавах (у EA — у локтя: центр на |x| 0,40 м при плече 0,21 и локте 0,43)
 SLEEVE_UP_CM = 8.0                 # пользователь (15.10): у adidas номер — ближе к плечевому суставу
@@ -582,7 +615,8 @@ def uv_jacobian(m, tri, size):
     return E @ np.linalg.inv(D)
 
 
-def name_map_cm(leg_png, leg_d, dst_d, size=256, sleeve_up_cm=SLEEVE_UP_CM, grid=5):
+def name_map_cm(leg_png, leg_d, dst_d, size=256, sleeve_up_cm=SLEEVE_UP_CM, grid=5, name_scale=None, name_up_cm=None,
+                letter_down_cm=0.0):
     """Карта мест номера/фамилии в развёртке dst с размерами зон в сантиметрах — как у Legacy.
 
     Сетка grid×grid точек внутри зоны Legacy (у рукавов — сдвинутая вдоль руки к плечу на sleeve_up_cm) → точки
@@ -621,13 +655,28 @@ def name_map_cm(leg_png, leg_d, dst_d, size=256, sleeve_up_cm=SLEEVE_UP_CM, grid
             Jl = uv_jacobian(leg_d, tc[0], size)
             du = 1.0 if abs((pc[0] + Jl[:, 0])[0]) < abs(pc[0][0]) else -1.0
             off = np.array([du * sleeve_up_cm / 100.0 / np.linalg.norm(Jl[:, 0]), 0.0])
-        if z == NAME_ZONE and NAME_UP_CM:
+        nup = NAME_UP_CM if name_up_cm is None else name_up_cm
+        if z in FRONT_ZONES and LETTER_OUT_CM:
+            # к плечу — вдоль u зоны, туда, где |x| больше
+            cx, cy = np.array([(x0 + x1) / 2.0]), np.array([(y0 + y1) / 2.0])
+            _, pc, _, tc = on_leg(cx, cy)
+            Jl = uv_jacobian(leg_d, tc[0], size)
+            du = 1.0 if abs((pc[0] + Jl[:, 0])[0]) > abs(pc[0][0]) else -1.0
+            off = off + np.array([du * LETTER_OUT_CM / 100.0 / np.linalg.norm(Jl[:, 0]), 0.0])
+        if z in FRONT_ZONES and letter_down_cm:
+            # буква капитана (и вторая зона груди) — ниже по свитеру на letter_down_cm (у WSH — под полосой ключицы)
+            cx, cy = np.array([(x0 + x1) / 2.0]), np.array([(y0 + y1) / 2.0])
+            _, pc, _, tc = on_leg(cx, cy)
+            Jl = uv_jacobian(leg_d, tc[0], size)
+            dv = 1.0 if (pc[0] + Jl[:, 1])[1] < pc[0][1] else -1.0
+            off = off + np.array([0.0, dv * letter_down_cm / 100.0 / np.linalg.norm(Jl[:, 1])])
+        if z == NAME_ZONE and nup:
             # вверх по свитеру — вдоль v зоны, туда, где y точки свитера больше
             cx, cy = np.array([(x0 + x1) / 2.0]), np.array([(y0 + y1) / 2.0])
             _, pc, _, tc = on_leg(cx, cy)
             Jl = uv_jacobian(leg_d, tc[0], size)
             dv = 1.0 if (pc[0] + Jl[:, 1])[1] > pc[0][1] else -1.0
-            off = np.array([0.0, dv * NAME_UP_CM / 100.0 / np.linalg.norm(Jl[:, 1])])
+            off = np.array([0.0, dv * nup / 100.0 / np.linalg.norm(Jl[:, 1])])
         gx0, gy0 = np.meshgrid(np.linspace(x0 + 0.5, x1 - 0.5, grid), np.linspace(y0 + 0.5, y1 - 0.5, grid))
         down = 0
         while True:
@@ -659,7 +708,10 @@ def name_map_cm(leg_png, leg_d, dst_d, size=256, sleeve_up_cm=SLEEVE_UP_CM, grid
         corners = np.array([[x0, y0, 1], [x1, y0, 1], [x0, y1, 1], [x1, y1, 1]], float)
         if z == NAME_ZONE:                              # меньше — от центра зоны
             cc = np.array([(x0 + x1) / 2.0, (y0 + y1) / 2.0])
-            corners[:, :2] = cc + (corners[:, :2] - cc) * np.array(NAME_SCALE)
+            corners[:, :2] = cc + (corners[:, :2] - cc) * np.array(NAME_SCALE if name_scale is None else name_scale)
+        if z in FRONT_ZONES:                            # буквы — меньше, от середины
+            cc = np.array([(x0 + x1) / 2.0, (y0 + y1) / 2.0])
+            corners[:, :2] = cc + (corners[:, :2] - cc) * LETTER_SCALE
         if z == NUMBER_ZONE:                            # выше: верх (к фамилии) на месте — у EA верх зоны — бо́льшие v
             top = corners[:, 1].max()
             cc = np.array([(x0 + x1) / 2.0, top])
@@ -772,7 +824,9 @@ def cmd_kit(a):
     bm = rw.Mesh.load(built)
     dst = {"pos": np.array([p[:3] for p in bm.pos]), "uv": np.array(bm.uv), "tri": np.array(bm.tris),
            "nrm": kit3d._unit(np.array(bm.nrm))}
-    nmap, rects, zinfo = name_map_cm(os.path.join(unpack(a.legacy), "name_cm.png"), leg, dst)
+    nmap, rects, zinfo = name_map_cm(os.path.join(unpack(a.legacy), "name_cm.png"), leg, dst,
+                                     name_scale=tuple(a.name_scale) if a.name_scale else None,
+                                     name_up_cm=a.name_up, letter_down_cm=a.letter_down)
     Image.fromarray(nmap).save(os.path.join(d, "name_cm.png"))
     print("зоны номеров (x0, y0, x1, y1 из 256):", rects)
     for z, v in zinfo.items():
@@ -907,9 +961,16 @@ def stamp(tex, mesh, rect256, text_rgba, fill="height"):
     up = np.array([0.0, 1.0, 0.0]) - n * n[1]
     up = up / np.linalg.norm(up)
     right = np.cross(up, n)
-    corners = np.array([[x0, y0], [x1 + 1, y0], [x0, y1 + 1], [x1 + 1, y1 + 1]], float) - c
-    world = corners @ Jm.T
-    zw, zh = np.ptp(world @ right), np.ptp(world @ up)
+    # размеры зоны вдоль «вверх» и «вправо» — по линиям через середину (рамка с наклоном к развёртке завышала
+    # высоту, и верх букв срезался краем зоны)
+    pinv = np.linalg.pinv(Jm)
+    half = np.array([(x1 + 1 - x0) / 2.0, (y1 + 1 - y0) / 2.0])
+
+    def chord(dir3):
+        dpx = pinv @ dir3
+        t = min(half[i] / abs(dpx[i]) for i in range(2) if abs(dpx[i]) > 1e-12)
+        return 2 * t * np.linalg.norm(Jm @ dpx)
+    zw, zh = chord(right), chord(up)
     th, tw = text_rgba.shape[:2]
     sh = zh / th                                       # метров на пиксель надписи по высоте
     sw = min(sh, zw / tw)                              # по ширине — не шире зоны
@@ -985,6 +1046,10 @@ def main():
                    help="папка шрифта NHL 24 из fb.kit_batch (out/kits/PIT_home); нет — из распаковки NHL 24")
     k.add_argument("--dst", default=OUT)
     k.add_argument("--squeeze", type=float, default=DECAL_SQUEEZE, help="сжатие нашивок по ширине (1 — как есть)")
+    k.add_argument("--name-scale", type=float, nargs=2, default=None, metavar=("W", "H"),
+                   help=f"фамилия: доли ширины и высоты зоны EA (по умолчанию {NAME_SCALE})")
+    k.add_argument("--name-up", type=float, default=None, help=f"фамилия выше зоны EA, см (по умолчанию {NAME_UP_CM})")
+    k.add_argument("--letter-down", type=float, default=0.0, help="буква капитана ниже, см")
     r = sub.add_parser("dress")
     r.add_argument("png")
     r.add_argument("--slot", default="0_23_0")
