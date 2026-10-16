@@ -16,6 +16,7 @@
   python -m fb.jersey_mesh preview TEX.png OUT.png [--out DIR]   # Legacy Edge и пилот: спереди, сзади, ворот, руки вверх
   python -m fb.jersey_mesh kit --club C --kit home --legacy 1_A_V --slot 0_A_V --font-dir DIR   # комплект слота
   python -m fb.jersey_mesh dress OUT.png [--name CROSBY --number 87 --letter C]   # «одетый» свитер (офлайн)
+  python -m fb.jersey_mesh batch [--clubs PIT,WSH]  # свитера home/away всех клубов: слои и листы превью
 
 Ассеты NHL 24 — только для личного использования: сетки и картинки — в game/work/ (не в git).
 """
@@ -794,6 +795,42 @@ DECAL_DIFF = 60                    # порог «нашивка ≠ основ�
 DECAL_MIN_PX = 40                  # меньше — шум сжатия, не нашивка (2048²)
 
 
+# Зона герба на груди в развёртке NHL 24 (u0, u1, v0, v1) — рамка гербов 44 комплектов с base-слоями (+ запас).
+CREST_ZONE = (0.37, 0.635, 0.61, 0.86)
+
+
+def pseudo_base(color, normal, thr=90):
+    """Основа без герба для комплектов NHL 24 без base-слоёв (BOS, BUF, CGY, CAR, EDM, OTT, PHI, SJ, VAN): в зоне груди
+    герб — крупнейшая область, отличная от цвета ткани в той же строке (медиана краёв зоны); на его месте — ткань
+    зеркально с краёв той же строки (полосы поперёк и фактура рельефа сохраняются). -> (основа, рельеф основы, маска)."""
+    from scipy import ndimage
+    H = color.shape[0]
+    x0, x1, y0, y1 = (int(CREST_ZONE[0] * H), int(CREST_ZONE[1] * H), int(CREST_ZONE[2] * H), int(CREST_ZONE[3] * H))
+    reg = color[y0:y1, x0:x1].astype(np.int32)
+    e = max(4, int(0.06 * (x1 - x0)))
+    bg = np.median(np.concatenate([reg[:, :e], reg[:, -e:]], 1), axis=1)
+    diff = np.abs(reg - bg[:, None, :]).sum(-1) > thr
+    diff = ndimage.binary_closing(diff, iterations=3)
+    lab, n = ndimage.label(ndimage.binary_dilation(diff, iterations=6))
+    base, base_n = color.copy(), normal.copy()
+    hole = np.zeros(color.shape[:2], bool)
+    if n == 0:
+        return base, base_n, hole
+    sizes = ndimage.sum(diff, lab, range(1, n + 1))
+    m = ndimage.binary_fill_holes(lab == (int(np.argmax(sizes)) + 1)) & ndimage.binary_dilation(diff, iterations=3)
+    m = ndimage.binary_dilation(ndimage.binary_fill_holes(m), iterations=3)
+    hole[y0:y1, x0:x1] = m
+    for y in np.nonzero(hole.any(1))[0]:
+        xs = np.nonzero(hole[y])[0]
+        L, R = xs.min(), xs.max()
+        mid = (L + R) / 2.0
+        for x in xs:
+            src = 2 * L - x - 2 if x < mid else 2 * R - x + 2
+            src = int(np.clip(src, 0, H - 1))
+            base[y, x], base_n[y, x] = color[y, src], normal[y, src]
+    return base, base_n, hole
+
+
 def squeeze_decals(color, base, layers, f=DECAL_SQUEEZE):
     """Нашивки (связные участки color ≠ base, с заливкой дыр) — на основу, сжатые по u в f раз от своей середины.
     layers — [(готовый слой, слой основы)] той же раскладки (цвет, рельеф): правка одна на все. -> (слои, сводка)."""
@@ -834,10 +871,11 @@ def cmd_kit(a):
     import shutil
     import subprocess
     work = os.path.join(REPO, "game", "work", "nhl24", "adidas3d")
-    d = os.path.join(work, f"pack_{a.slot}")
+    pack = not getattr(a, "no_pack", False)
+    d = getattr(a, "pack_dir", None) or os.path.join(work, f"pack_{a.slot}")
     os.makedirs(d, exist_ok=True)
     unpack = lambda kit: os.path.join(work, f"kit_{kit}")  # noqa: E731
-    for kit in (a.slot, a.legacy):
+    for kit in ((a.slot, a.legacy) if pack else (a.legacy,)):
         if not os.path.exists(os.path.join(unpack(kit), "kit.json")):
             subprocess.run([sys.executable, os.path.join(REPO, "tools", "kitpaint.py"), "--game", "legacy", "unpack",
                             kit, unpack(kit)], check=True, capture_output=True)
@@ -846,8 +884,12 @@ def cmd_kit(a):
     from .fonts import normal_map
     rgb = lambda p: np.asarray(Image.open(p).convert("RGB"))  # noqa: E731
     color, normal = rgb(n24_tex(a.club, a.kit, "color")), rgb(n24_tex(a.club, a.kit, "normal"))
-    if os.path.exists(n24_tex(a.club, a.kit, "base_color")) and a.squeeze < 1.0:
-        base, base_n = rgb(n24_tex(a.club, a.kit, "base_color")), rgb(n24_tex(a.club, a.kit, "base_normal"))
+    if a.squeeze < 1.0:
+        if os.path.exists(n24_tex(a.club, a.kit, "base_color")):
+            base, base_n = rgb(n24_tex(a.club, a.kit, "base_color")), rgb(n24_tex(a.club, a.kit, "base_normal"))
+        else:                                          # нет base-слоёв — основа без герба своя (только герб)
+            base, base_n, hole = pseudo_base(color, normal)
+            print(f"основа без base-слоёв: герб {int(hole.sum())} px закрашен тканью с краёв")
         (color, normal), dinfo = squeeze_decals(color, base, [(color, base), (normal, base_n)], a.squeeze)
         print(f"нашивок сжато по ширине ×{a.squeeze}: {len(dinfo)} — {dinfo}")
     Image.fromarray(color).resize((1024, 1024), Image.LANCZOS).convert("RGBA").save(os.path.join(d, "jersey_cm.png"))
@@ -892,6 +934,8 @@ def cmd_kit(a):
         print("шрифт — из распаковки NHL 24:", fp + "color.png")
     for f in ("pant_cm", "pant_nm", "pant_sm", "sock_cm"):
         shutil.copy2(os.path.join(unpack(a.legacy), f + ".png"), os.path.join(d, f + ".png"))
+    if not pack:                                       # только слои (превью пакета) — без сборки в игру
+        return zinfo
     for f in ("fe.png", "kit.json"):
         shutil.copy2(os.path.join(unpack(a.slot), f), os.path.join(d, f))
     r = subprocess.run([sys.executable, os.path.join(REPO, "tools", "kitpaint.py"), "--game", "legacy", "pack", d,
@@ -1029,7 +1073,7 @@ def stamp(tex, mesh, rect256, text_rgba, fill="height"):
 def cmd_dress(a):
     """Свитер слота с фамилией, номером, буквой и номерами на рукавах — рендер с разных сторон (офлайн)."""
     work = os.path.join(REPO, "game", "work", "nhl24", "adidas3d")
-    d = os.path.join(work, f"pack_{a.slot}")
+    d = getattr(a, "pack_dir", None) or os.path.join(work, f"pack_{a.slot}")
     bm = rw.Mesh.load(os.path.join(a.dst, *skater_rel(0, 1, 2, STYLE_DST).split("/")))
     mesh = {"pos": np.array([p[:3] for p in bm.pos]), "uv": np.array(bm.uv), "tri": np.array(bm.tris),
             "nrm": kit3d._unit(np.array(bm.nrm))}
@@ -1054,7 +1098,8 @@ def cmd_dress(a):
         tex = stamp(tex, mesh, rects[z], text_image(gl, a.sleeve_row, a.number, 0.04))
     if a.letter:
         tex = stamp(tex, mesh, rects[5], gl[(4 if a.letter == "C" else 5, a.letter)])
-    ims = [kit3d.render_lit(mesh, tex, v, 360, nmap=nm) for v in ("back", "front", "left", "right")]
+    views = getattr(a, "views", None) or ("back", "front", "left", "right")
+    ims = [kit3d.render_lit(mesh, tex, v, getattr(a, "width", 360), nmap=nm) for v in views]
     W = sum(im.size[0] + 8 for im in ims)
     sheet = Image.new("RGB", (W, ims[0].size[1]), (24, 24, 28))
     x = 0
@@ -1062,7 +1107,8 @@ def cmd_dress(a):
         sheet.paste(im, (x, 0))
         x += im.size[0] + 8
     sheet.save(a.png)
-    Image.fromarray(np.clip(tex, 0, 255).astype(np.uint8)).save(os.path.splitext(a.png)[0] + "_tex.png")
+    if not getattr(a, "no_tex", False):
+        Image.fromarray(np.clip(tex, 0, 255).astype(np.uint8)).save(os.path.splitext(a.png)[0] + "_tex.png")
     print(a.png)
 
 
@@ -1095,6 +1141,80 @@ def cmd_shirt(a):
     for rel in SHIRT_SKATER:
         write(a.out, rel, shirt_lowered(rel))
         print(rel)
+
+
+# ---------------------------------------------------------------- пакет: свитера всех клубов (превью)
+
+STARS = {"ANA": ("ZEGRAS", "11"), "WPG": ("SCHEIFELE", "55"), "BOS": ("PASTRNAK", "88"), "BUF": ("DAHLIN", "26"),
+         "CGY": ("HUBERDEAU", "10"), "CAR": ("AHO", "20"), "CHI": ("BEDARD", "98"), "COL": ("MACKINNON", "29"),
+         "CBJ": ("WERENSKI", "8"), "DAL": ("ROBERTSON", "21"), "DET": ("LARKIN", "71"), "EDM": ("MCDAVID", "97"),
+         "FLA": ("BARKOV", "16"), "LA": ("KOPITAR", "11"), "MIN": ("KAPRIZOV", "97"), "MTL": ("SUZUKI", "14"),
+         "NSH": ("FORSBERG", "9"), "NJ": ("HUGHES", "86"), "NYI": ("BARZAL", "13"), "NYR": ("PANARIN", "10"),
+         "OTT": ("TKACHUK", "7"), "PHI": ("COUTURIER", "14"), "PIT": ("CROSBY", "87"), "STL": ("KYROU", "25"),
+         "SJ": ("CELEBRINI", "71"), "TB": ("KUCHEROV", "86"), "TOR": ("MATTHEWS", "34"), "VAN": ("PETTERSSON", "40"),
+         "WSH": ("OVECHKIN", "8"), "SEA": ("BENIERS", "10"), "VGK": ("EICHEL", "9")}
+# настройки клубов после тестов пользователя (как у kit): зоны фамилии и буквы
+CLUB_KIT = {"PIT": {"name_scale": (0.85, 0.82), "name_up": 1.27},
+            "WSH": {"name_scale": (0.85, 0.82), "name_up": -0.5, "letter_down": 3.0}}
+BATCH_NAME = {"name_scale": (0.85, 0.82), "name_up": 0.4}     # остальные — середина PIT и WSH
+
+
+def cmd_batch(a):
+    """Свитера adidas home/away всех клубов (batch_plan.json): слои в batch/<КОД>_<комплект>/, рендер «одетого» свитера
+    и листы превью batch_sheet_N.png (спина, грудь, бок)."""
+    import contextlib
+    import io
+    import json
+    import types
+    work = os.path.join(REPO, "game", "work", "nhl24", "adidas3d")
+    plan = json.load(open(os.path.join(work, "batch_plan.json"), encoding="utf-8"))
+    only = set(a.clubs.split(",")) if a.clubs else None
+    tiles, log = [], []
+    for o in plan:
+        if not o["club"] or (only and o["abbr"] not in only):
+            continue
+        code = f'{o["abbr"]}_{o["kit"]}'
+        d = os.path.join(work, "batch", code)
+        cfg = dict(BATCH_NAME, **CLUB_KIT.get(o["abbr"], {}))
+        k = types.SimpleNamespace(club=o["club"], kit=o["kit"], legacy=o["legacy"], slot=None, dst=a.dst,
+                                  font_dir=os.path.join(REPO, "game", "work", "nhl24", "out", "kits", code),
+                                  squeeze=DECAL_SQUEEZE, name_scale=cfg["name_scale"], name_up=cfg["name_up"],
+                                  letter_down=cfg.get("letter_down", 0.0), no_pack=True, pack_dir=d)
+        try:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                zinfo = cmd_kit(k)
+            name, num = STARS.get(o["abbr"], ("PLAYER", "19"))
+            png = os.path.join(d, "dress.png")
+            r = types.SimpleNamespace(png=png, slot=None, name=name, number=num, letter="C", sleeve_row=6, dst=a.dst,
+                                      pack_dir=d, views=("back", "front", "left"), width=200, no_tex=True)
+            with contextlib.redirect_stdout(buf):
+                cmd_dress(r)
+            bad = [z for z, v in zinfo.items() if v.get("on_mesh", 1) < 0.98 or v.get("fit_err_px", 0) > 4]
+            note = "основа своя" if "основа без base" in buf.getvalue() else ""
+            log.append(f"{code}: ok" + (f", {note}" if note else "") + (f", зоны под вопросом {bad}" if bad else ""))
+            tiles.append((code, png))
+        except Exception as e:  # noqa: BLE001
+            log.append(f"{code}: ОШИБКА {e!r}")
+        print(log[-1], flush=True)
+    font = label_font(14)
+    per, cols = 18, 3
+    for si in range(0, len(tiles), per):
+        part = tiles[si:si + per]
+        ims = [(c, Image.open(p)) for c, p in part]
+        tw, th = ims[0][1].size
+        rows = (len(ims) + cols - 1) // cols
+        sheet = Image.new("RGB", (cols * (tw + 8) + 8, rows * (th + 26) + 8), (24, 24, 28))
+        dr = ImageDraw.Draw(sheet)
+        for i, (c, im) in enumerate(ims):
+            x, y = 8 + (i % cols) * (tw + 8), 8 + (i // cols) * (th + 26)
+            dr.text((x, y), c, fill=(235, 235, 235), font=font)
+            sheet.paste(im, (x, y + 20))
+        out = os.path.join(work, f"batch_sheet_{si // per + 1}.png")
+        sheet.save(out)
+        print(out)
+    with open(os.path.join(work, "batch_log.txt"), "w", encoding="utf-8") as f:
+        f.write("\n".join(log) + "\n")
 
 
 def main():
@@ -1131,9 +1251,12 @@ def main():
     r.add_argument("--dst", default=OUT)
     sh = sub.add_parser("shirt")
     sh.add_argument("--out", default=OUT)
+    bt = sub.add_parser("batch")
+    bt.add_argument("--clubs", default=None, help="коды через запятую (PIT,WSH); по умолчанию — все из batch_plan.json")
+    bt.add_argument("--dst", default=OUT)
     a = ap.parse_args()
     {"map": cmd_map, "build": cmd_build, "preview": cmd_preview, "kit": cmd_kit, "dress": cmd_dress,
-     "shirt": cmd_shirt}[a.cmd](a)
+     "shirt": cmd_shirt, "batch": cmd_batch}[a.cmd](a)
 
 
 if __name__ == "__main__":
