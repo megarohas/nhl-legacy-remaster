@@ -516,7 +516,11 @@ _VRCACHE = {}
 
 def _view_raster(mesh, view, width, height, frame):
     """Растеризация вида (z-буфер): треугольник и барицентры на пиксель; кешируется — от текстур не зависит."""
-    key = (id(mesh), len(mesh["tri"]), view, width, height, tuple(frame))
+    # ключ — и по содержимому позиций: id() временного словаря (повороты в скриптах) переиспользуется после сборки
+    # мусора, и кеш отдавал растр другого вида
+    pos = mesh["pos"]
+    key = (id(mesh), len(mesh["tri"]), view, width, height, tuple(frame), len(pos), float(pos[:, 0].sum()),
+           float(pos[:, 1].sum()), float(pos[:, 2].sum()), float((pos[:, 0] * pos[:, 2]).sum()))
     if key in _VRCACHE:
         return _VRCACHE[key]
     x0, x1, y0, y1 = frame

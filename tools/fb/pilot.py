@@ -94,7 +94,7 @@ def _kits_for(code):
         out.append((label, "adidas", kit, r["variant"] if r else None, True))
     for r in reg:
         lab = r["kit"]
-        if lab in MAIN_KITS:
+        if lab in MAIN_KITS or lab.startswith(("ad_", "edge_")):  # ad_* — свитера adidas на своей сетке (fb.jersey_mesh), edge_* — Edge с передом ворота NHL 24 (fb.edge_kit)
             continue
         fam, kit = ("nineties", lab[4:]) if lab.startswith("n90_") else ("adidas", {"rr22": "twentytwo",
                                                                                      "rr23": "twentythree"}[lab])
