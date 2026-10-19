@@ -339,10 +339,12 @@ def build_db(base, man, reg, files):
     tie = []
     regmap = {(k['club'], k['kit']): k for k in reg['kits']}
     new = [regmap[(k['club'], k['kit'])] | {'islightcolor': k['islightcolor'], 'label': k.get('label'),
-                                             'helmet': k.get('helmet')} for k in man.get('kits', [])]
+                                             'helmet': k.get('helmet'), 'phase': k.get('phase')}
+           for k in man.get('kits', [])]
     # строки — по клубу и порядку в меню; свитера adidas (ad_*, 16.10) — после всех прежних форм пакета: строки уже
     # поставленных форм (и их шлемов) остаются на своих местах — так их хранит и сейв ROSTER (nhl24.py save)
-    new.sort(key=lambda k: (k['kit'].startswith('ad_'), CLUBS[k['club']][0], k['jerseyindex']))
+    # очередь (phase_of): поле phase манифеста — ещё позже adidas (19.10: формы Edge MIN — 2), сейв дописывается только в конец
+    new.sort(key=lambda k: (phase_of(k), CLUBS[k['club']][0], k['jerseyindex']))
     # jerseyindex у клуба — подряд 0…N−1, как у всех 224 команд EA (с дырой игра не проверялась): форма из реестра
     # может не попасть в пакет, только если за ней в реестре нет форм этого клуба, которые в пакет попали
     for code in sorted({k['club'] for k in new}):
@@ -375,13 +377,12 @@ def build_db(base, man, reg, files):
                 db.set(T, f, n + i, v)
             added.append(f"{k['club']} {k['kit']} {st}_{art}_{k['variant']} ji{k['jerseyindex']} "
                          f"loc{final_loc(k)} light{k['islightcolor']} helmetlogo{int(helmet)} (строка {n + i})")
-    first = [k for k in new if not k['kit'].startswith('ad_')]
-    later = [k for k in new if k['kit'].startswith('ad_')]
-    helmets = add_helmets(db, rows, first)
-    if later:                                         # шлемы adidas — вторым проходом, после строк прежних форм
-        ad_keys = {(CLUBS[k['club']][0], k.get('style', 1), k['variant']) for k in later}
-        rows_mid = [r for r in rows_of(db) if (r['teamid'], r['style'], r['variant']) not in ad_keys]
-        helmets += add_helmets(db, rows_mid, later)
+    helmets = []
+    for ph in sorted({phase_of(k) for k in new}):     # шлемы — по очередям: adidas после прежних, дальше — следующие
+        kits = [k for k in new if phase_of(k) == ph]
+        later_keys = {(CLUBS[k['club']][0], k.get('style', 1), k['variant']) for k in new if phase_of(k) >= ph}
+        rows_mid = [r for r in rows_of(db) if (r['teamid'], r['style'], r['variant']) not in later_keys]
+        helmets += add_helmets(db, rows_mid, kits)
     defaults, old_labels = set_defaults(db, rows, new, n_before)
     import draft_roster                               # накладка не должна менять таблицы draft_roster.db (он — из out)
     base_db = open_db(base)[1]
@@ -399,6 +400,11 @@ def build_db(base, man, reg, files):
         rep.update(loc_base_md5=md5(os.path.join(base, *LOC.split('/'))), loc_md5=hashlib.md5(loc).hexdigest(),
                    labels=labels)
     return (out, loc), rep
+
+
+def phase_of(k):
+    """Очередь строк новой формы: 0 — прежние формы пакета, 1 — свитера adidas (ad_*), дальше — поле phase манифеста."""
+    return k['phase'] if k.get('phase') is not None else int(k['kit'].startswith('ad_'))
 
 
 def final_loc(k):
