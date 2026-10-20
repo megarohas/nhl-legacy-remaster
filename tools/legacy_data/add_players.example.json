@@ -1,0 +1,40 @@
+{
+  "players": [
+    {
+      "first": "Alex",
+      "last": "Example",
+      "birth": "2006-03-14",
+      "birth_city": "Yaroslavl",
+      "birth_country": "RUS",
+      "nationality": "RUS",
+      "pos": "RW",
+      "shoots": "L",
+      "height": "6-1",
+      "weight_lb": 190,
+      "team": "MTL",
+      "number": 93,
+      "ovr": 78,
+      "style": "sniper",
+      "attributes": {"wristaccuracy": 88, "wristshotpower": 84, "speed": 86},
+      "draft": {"year": 2024, "round": 1, "overall": 5, "team": "MTL"},
+      "nhl_gp": 60,
+      "debut": 2025,
+      "contract": {"cap": 975000, "years": 3, "two_way": false},
+      "lines": null
+    },
+    {
+      "first": "Sam",
+      "last": "Sample",
+      "birth": "2004-11-02",
+      "birth_city": "Kitchener",
+      "birth_country": "CAN",
+      "birth_state": "ON",
+      "pos": "G",
+      "shoots": "L",
+      "height_cm": 191,
+      "weight_kg": 86,
+      "team": "FA",
+      "ovr": 70
+    }
+  ]
+}

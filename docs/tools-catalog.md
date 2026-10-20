@@ -20,7 +20,7 @@
 | **Составы других лиг** | `roster/league.py` (только Liiga) | roster-expansion.md | — CHL, сборные, SHL, DEL, NL, Extraliga, КХЛ |
 | **Фото игроков** | `photos.py` (НХЛ), `python tools/roster photos` (не из НХЛ), `roster.ht_photos` (АХЛ), `photos24.py` (из NHL 24), `playerhead.py` (формат) | [player-photos.md](player-photos.md), [player-photos-nhl24.md](player-photos-nhl24.md) | И; `photos24` — П (привязан к NHL 24) |
 | **Логотипы** НХЛ и АХЛ | `logos/fetch_nhl.py`, `logos/build.py`, этап `logos`; `teamart.py` (арт ⇄ PNG) | [logos-2026.md](logos-2026.md), [logos-arenas.md](logos-arenas.md) | И (лиги вне НХЛ/АХЛ — нет) |
-| **Новый игрок** | — (рядом: `roster/write.py` доноры, `ratings`, `ovrformula`, `playerhead compose`, `heads24`) | — | — |
+| **Новый игрок** (и правка своего) | `legacy_data/add_players.py db БАЗА СПЕКИ`, этап `players` | [add-players.md](add-players.md) | И — база набора; в сохранённый ROSTER не пишет |
 | **Новые клубы и лиги** (32 клуба, АХЛ на 32, Юта) | `nhl32.py` (этап `base`), `newteams_art.py`, `tools/utah/*` + этап `utah` | [ahl32.md](ahl32.md), [utah.md](utah.md), legacy-data.md | П — по случаю (SEA/VGK, UTA), общего «клуб по профилю» нет |
 | **Формы** | `python -m kitport …` (подход C, MIN), `fb.kit_batch`/`fb.pilot` (подход A, 32 клуба), `fb.jersey_mesh` (B), `legacy_data/nhl24.py alloc/order/build/save`, `kitpaint.py`, `czkit.py`, `fepose.py` | [kitport.md](kitport.md), [nhl24-uniforms.md](nhl24-uniforms.md), [uniforms.md](uniforms.md) | И для MIN; другие клубы подходом C — П (профиль клуба не вынесен) |
 | **Головы** | `heads24.py` (типовые по фото), `scans24.py` (сканы NHL 24) | [heads-nhl24.md](heads-nhl24.md) | П — под NHL 24; для NHL 27 — чек-лист |
@@ -60,7 +60,7 @@
 | 5 | ✔ 20.10: `tdb.py tables`, `dump --where/--fields/--csv`, `diff A B` (по ключу, значения с rangelow); осталось «всё о клубе» | десяток разовых выгрузок (`tmp/dbdiff.py`, `*_dump.py`) | S–M |
 | 6 | Импорт контрактов из открытого формата (`contracts.py import`), адаптер сайта — локально | `game/work/contracts/parse_pp.py`, `ingest.py` | M (нужно решение) |
 | 7 | Правила: `legacy_settings.py set-rule/copy-rules`, таблица ID 9…27 | `legacy_settings.py`, `nhllegacy_settings.cpp` | S–M |
-| 8 | Новый игрок: `python tools/roster add-player SPEC.json` (донор, био, атрибуты под OVR, номер, звено, портрет, голова, сейв) | `roster/write.py`, `ratings`, `ovrformula`, `photos.py`, `playerhead`, `heads24` | M–L |
+| 8 | ✔ 20.10: `legacy_data/add_players.py` и этап `players` ([add-players.md](add-players.md)): донор, био, атрибуты под OVR игры, клуб, номер, звенья, портрет, правка только указанных полей; осталось: сохранённый ROSTER, доноры из запасных клубов | `roster/write.py`, `ratings`, `ovrformula`, `photos.py`, `playerhead`, `heads24` | M–L |
 | 9 | Клуб по профилю: `club.py replace/add PROFILE.json` (база, локализация, арт, арена); общие модули из `tools/utah` | `utah/make_spec.py`, `legacy_data/utah.py`, `nhl32.NEW_TEAMS`, `newteams_art.py` | L |
 | 10 | Настройки лиг в файле (дивизионы, число игр для `nhl32`); `tools/brk.py show/set` (rookiegen, worth2, salarydata) | `nhl32.py`, `nhl-legacy-port/analysis/ovr/brk.py` | M–L |
 | 11 | kitport: профиль клуба вместо таблиц MIN; `kitport check` (листы слота, вратаря, LOD, гетр, превью); выбор kitpicker → реестр | `fb/edge_kit.py`, `game/work/nhl24/edgekit/*_check.py` | M–L |

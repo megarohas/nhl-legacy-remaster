@@ -48,6 +48,7 @@
 
 - [roster-pipeline.md](roster-pipeline.md) — конвейер `tools/roster`: составы НХЛ 2026/27 → `nhlng.db` (игроки, звенья, номера, рейтинги)
 - [roster-expansion.md](roster-expansion.md) — что добавлено в конвейер: рейтинги по статистике, свободные агенты, тон кожи, европейские лиги, фото не из НХЛ
+- [add-players.md](add-players.md) — **свои игроки** в базе Legacy по спекам JSON (`tools/legacy_data/add_players.py`, этап `players`): новые и правка, клуб, звенья, OVR, портрет
 - [draft-pool.md](draft-pool.md) — пул драфта франшизы: откуда берётся класс, почему в нём составы CHL 2012 года, пенсия ветеранов
 
 Контракты 2026/27 и точная формула OVR описаны в разделах больших документов: в [legacy-data.md](legacy-data.md) —

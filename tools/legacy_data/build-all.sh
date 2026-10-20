@@ -4,8 +4,8 @@
 #   bash tools/legacy_data/build-all.sh [ЭТАП…] [--ahl32]
 #   LEGACY_DATA_WORK=папка bash tools/legacy_data/build-all.sh …   # сухой прогон: всё (и out) — в эту папку;
 #        входы, которые этапом не пересобираются (например, составы без сети), — положить туда заранее
-#        этапы: base roster photos equip collect retire fixdb utah ahl nhlattrs useredits tape contracts goaliegear photos24 heads
-#        scans24 fonts
+#        этапы: base roster photos equip collect retire fixdb utah ahl nhlattrs useredits tape players contracts goaliegear photos24
+#        heads scans24 fonts
 #        music models art logos menu nhl24
 #        (без этапов — все по порядку;
 #        --ahl32 — ещё вариант «АХЛ на 32», накладка game/work/legacy-data/out-ahl32; nhl24 — накладка out-nhl24
@@ -28,7 +28,7 @@ L=game/other/legacy/big/cacheboot
 AHL32=0
 stages=()
 for a in "$@"; do [ "$a" = "--ahl32" ] && AHL32=1 || stages+=("$a"); done
-[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah ahl nhlattrs useredits tape contracts goaliegear photos24
+[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah ahl nhlattrs useredits tape players contracts goaliegear photos24
                                   heads scans24 fonts music models art logos menu nhl24)
 want() { for s in "${stages[@]}"; do [ "$s" = "$1" ] && return 0; done; return 1; }
 say() { echo "== $(date +%H:%M:%S) $*"; }
@@ -175,6 +175,25 @@ if want tape; then
     for F in nhlng.db draft_roster.db; do [ -f $B/db/$F ] && python $T/tape_players.py db $B/db/$F; done
     [ -f $B/fe/loc/NHL_ENG_US.db ] && python $T/tape_players.py loc $B/fe/loc/NHL_ENG_US.db
   done
+fi
+if want players; then
+  # свои игроки по спекам JSON (tools/legacy_data/add_players.py, docs/add-players.md): новые — в строки игроков без клуба,
+  # уже добавленные — правка только указанных полей; клуб, номер, звенья (запас / места игрока / по рейтингу), портрет.
+  # Спеки — game/work/legacy-data/add-players/*.json (ADD_PLAYERS_DIR=папка); нет — этап пропущен. После tape, до
+  # contracts (настоящий контракт со страниц клуба главнее) и photos24/heads (портрет и голова NHL 24, если игрок там
+  # есть). Повтор ничего не меняет; draft_roster.db — заново
+  AP=${ADD_PLAYERS_DIR:-$W/add-players}
+  if ls $AP/*.json >/dev/null 2>&1; then
+    say "свои игроки (add_players.py)"
+    for B in $O $W/out-ahl32; do
+      if [ -f $B/db/nhlng.db ]; then
+        python $T/add_players.py db $B/db/nhlng.db $AP
+        python $T/draft_roster.py $B/db/nhlng.db $B/db/draft_roster.db
+      fi
+    done
+  else
+    say "свои игроки: нет $AP/*.json — этап пропущен"
+  fi
 fi
 if want contracts; then
   # настоящие контракты клубов НХЛ 2026/27 (docs/legacy-data.md, «Контракты 2026/27»): страницы клубов от пользователя,
