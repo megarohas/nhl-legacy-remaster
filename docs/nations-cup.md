@@ -70,6 +70,22 @@
   0x82047F18 слот 21); подпись — 829CF498 по таблице 0x839D4E14[event] без проверки границ (0 WC, 1 WJC, 2 Olympics,
   3 World Cup, 4 Canada Cup); год = 1900 + year. В сейв франшизы таблицы не попадают.
 
+## Режим турнира игры (прогон на копии userdata-natcup, 20.10)
+
+- **PLAY → TOURNAMENTS → TOURNAMENT MODE → EA SPORTS WORLD TOURNAMENT** (рядом — Mastercard Memorial Cup, Playoff
+  Mode, Battle for the Cup). Команд 8 или 16 (по умолчанию сборные: на 8 — A: CAN, SWE, RUS, GER; B: USA, FIN, CZE,
+  SVK), кругов 1–7, плей-офф Single Knockout / до 2/3/4 побед / Authentic, тай-брейки круга и плей-офф, OT-поражение;
+  две группы, круг внутри группы, затем все 8 — в четвертьфинал крест-накрест (A1–B4, A2–B3, B1–A4, B2–A3). Команду
+  можно заменить любой из любой лиги (кнопка X), людьми — любые. **Составы сборных — стоковые, старые.**
+- **Сейв `TOURNAMENT <UTC>`** (3,6 МБ, ZlibV4, «TournamentFile», 31 таблица `league*`, хвост 91 868 байт не разобран):
+  `leagueteams` (index 0–7, teamid сборной, league 8, context 0 → 4 в плей-офф), `leaguescheduletable` (home/away —
+  индексы команд, month/day с нуля, round 0 круг / 2 четвертьфинал), результаты — `leaguegamestats`, таблица —
+  `leagueteamplayoffsstats` (reg_w…), статистика игроков — `leagueplayerplayoffsstats` (team = индекс + 1; полевые:
+  f14 GP, f06 G, f07 A, f05 PIM, f11 +/- (+512), f12 PPG, f15 GWG; вратари: f02 броски, f03 пропущено, f13 победы),
+  составы — `leaguerostertable` (194 игрока), `leaguestates` type 0 — дата, 1/2 — фаза. Группа отдельным полем не
+  хранится. Разбор — `game/work/natcup-research/tourn_db.py` (только чтение).
+- Лог порта в турнире: «team stats table broken (8 records)» — ложное срабатывание проверки `nhllegacy_teams.cpp`.
+
 ## План встраивания (по образцу Матча звёзд + Мемориального кубка)
 
 1. Своя задача (тип 0/1, хук на 82B4C3A0) в августе: собрать сборные, составы (драфт), расписание.
