@@ -108,13 +108,19 @@
 ## Frostbite NHL 24: `fb/` и перенос в Legacy
 
 Разбор своего дампа NHL 24 (PS4) — только для личного использования. Выгрузки лежат в `game/work/nhl24/`,
-подробности — в [docs/nhl24-uniforms.md](../docs/nhl24-uniforms.md).
+подробности — в [docs/frostbite-sources.md](../docs/frostbite-sources.md) (чтение дампа, новый источник — NHL 27 PS5)
+и [docs/nhl24-uniforms.md](../docs/nhl24-uniforms.md).
 
+- `source.py` — какой дамп читается: NHL 24 по умолчанию, другой — переменными `FB_GAME`, `FB_DATA`, `FB_PLATFORM` …
+  (`python -m fb.source` — что видят инструменты)
+- `probe.py` — первое знакомство с дампом: дерево, подписи, оглавления, блоки CAS, пробная распаковка, чанк из TOC
 - `scan.py`, `toc.py`, `cas.py`, `bundle.py`, `dbobject.py` — чтение CAS, оглавлений и манифестов бандлов
 - `catalog.py`, `orphans.py`, `verify.py` — сводка ресурсов, привязка бесхозных чанков, сверка sha1
 - `extract.py`, `texture.py`, `meshset.py`, `lfs.py` — текстуры в PNG, сетки, legacy-файлы движка (базы, xml)
 - `heads.py` — головы-сканы NHL 24
 - `kit3d.py`, `kit_hybrid.py`, `kit_fix.py`, `kit_batch.py`, `kit_models.py`, `sleeve.py`, `relief.py`, `kit_rules.toml` — перенос свитеров на развёртку Legacy и правила нашивок
+- `jersey_mesh.py`, `edge_kit.py` — сетка adidas в слоте стиля 0 и свитер Edge с передом ворота NHL 24 (MIN)
+- `../kitport/` — **точка входа переноса форм**: `python -m kitport doctor | status | snapshot | build | diff | install | rollback | sheet | uvmap | params` (из `tools/`), руководство — [docs/kitport.md](../docs/kitport.md)
 - `fonts.py`, `helmet.py`, `ice.py`, `stick_map.toml` — шрифты номеров, наклейки на шлем, центр льда, клюшки
 - `gallery.py` — галерея всех комплектов NHL 24
 - `pack.py`, `pilot.py` — упаковка в формат Legacy, пилот одного клуба

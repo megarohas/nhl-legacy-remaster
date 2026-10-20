@@ -30,7 +30,8 @@
 ## Формы, экипировка, логотипы
 
 - [uniforms.md](uniforms.md) — как устроены формы (свитер, номера, гамаши, гетры, наклейка на шлем), как игра выбирает форму, конструктор `cz*`, формы SEA/VGK
-- [nhl24-uniforms.md](nhl24-uniforms.md) — формы NHL 24 → Legacy: модели свитеров, воротники, текстуры, правила переноса
+- [kitport.md](kitport.md) — **руководство по переносу форм** из новых EA NHL в Legacy и инструмент `tools/kitport`: подходы, устройство формы Legacy (развёртка, текстуры, номера, база), порядок работ, каталог параметров, проверки, установка и откат, грабли
+- [nhl24-uniforms.md](nhl24-uniforms.md) — формы NHL 24 → Legacy: модели свитеров, воротники, текстуры, правила переноса; журнал установок (§15.1)
 - [nhl24-textures.md](nhl24-textures.md) — перенос текстур NHL 24 в Legacy: план по категориям
 - [player-models.md](player-models.md) — 3D-модели игроков: формат RW4, гетры и голень, обмотка до носка крюка, нижний край свитера как в NHL 10
 - [player-equipment.md](player-equipment.md) — экипировка по фото (обмотка, гетры, свитер, визор): поля базы и охват
@@ -62,6 +63,7 @@
 
 ## Исследования и форматы
 
+- [frostbite-sources.md](frostbite-sources.md) — дампы Frostbite: как читается NHL 24 (PS4), допущения форматов, выбор источника (`fb.source`), первое знакомство с новым дампом NHL 27 PS5 (`fb.probe`)
 - [game-files.md](game-files.md) — что внутри игр (NHL 13, NHL 12, NHL 10, Legacy): архивы, база, распаковка
 - [xbox-transfer.md](xbox-transfer.md) — как снять файлы и сейвы с приставки (FTP Aurora)
 - [save-editing.md](save-editing.md) — устройство сейва франшизы и его правка: TDB, CRC, STFS
