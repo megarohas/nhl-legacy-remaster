@@ -163,13 +163,13 @@ bool IsNation(uint32_t id) {
 }
 
 // Имена таблиц и полей база ищет по хешу (CRC-32, отражённая таблица, начальное 0, буквы — заглавные). Поле строки
-// курсора — 827B3008/827B3030(курсор, номер таблицы, номер поля, 1, &значение, 0); номер поля — место поля среди полей
-// таблицы по возрастанию хеша имени (juniorteam = 11, как у оригинала; juniorleague = 6), номер таблицы — по
-// дескриптору 827B5D40(база+8, хеш таблицы).
+// курсора — 827B3008/827B3030(курсор, номер таблицы, номер поля, 1, &значение, 0); номер поля — порядок полей таблицы
+// в схеме nhlng-meta.xml (juniorteam = 11, как у оригинала; leagueteams: index 0, shortname 44, audioid 47 — как у
+// 82A10640), номер таблицы — по дескриптору 827B5D40(база+8, хеш таблицы).
 constexpr uint32_t kTablePlayerBio = 0xF97F5A5Au;     // leagueplayerbiotable
 constexpr uint32_t kFieldJuniorLeague = 0x1A86215Au;  // juniorleague (для условия запроса)
 constexpr uint32_t kColJuniorTeam = 11;
-constexpr uint32_t kColJuniorLeague = 6;
+constexpr uint32_t kColJuniorLeague = 7;
 constexpr uint32_t kJuniorLock = 0x83DA3A00u;         // критическая секция цикла (как у оригинала)
 
 uint32_t TableIndex(PPCContext& ctx, uint8_t* base, uint32_t db, uint32_t hash) {
@@ -188,15 +188,15 @@ constexpr uint32_t kTableSkaterAi = 0xE5C10816u;   // leagueskaterai
 constexpr uint32_t kTableGoalieAi = 0xEA50C5DAu;   // leaguegoalieai
 constexpr uint32_t kTableTeams = 0xC7BCD146u;      // leagueteams
 constexpr uint32_t kFieldMonth = 0xBFC025ABu;
-// номера полей — место среди полей таблицы по хешу имени (как juniorteam = 11 у leagueplayerbiotable)
+// номера полей — порядок в схеме nhlng-meta.xml (см. выше)
 namespace col {
-constexpr uint32_t kSchStatus = 0, kSchHome = 1, kSchLeague = 2, kSchDay = 3, kSchIndex = 4, kSchAway = 5, kSchMonth = 6,
+constexpr uint32_t kSchIndex = 0, kSchStatus = 1, kSchHome = 2, kSchLeague = 3, kSchDay = 4, kSchAway = 5, kSchMonth = 6,
                    kSchRound = 7;
-constexpr uint32_t kGsOt = 0, kGsShootout = 2, kGsScoreAway = 6, kGsIndex = 13, kGsScoreHome = 17;
-constexpr uint32_t kBioIndex = 60, kBioCountry = 42, kBioPosition = 85, kBioTeam = 79, kBioInjury = 30, kBioJersey = 58;
-constexpr uint32_t kSkIndex = 100, kSkOverall = 88, kSkStyle = 25;
-constexpr uint32_t kGkIndex = 91, kGkOverall = 80, kGkStyle = 20;
-constexpr uint32_t kTmIndex = 35, kTmTeamId = 1;
+constexpr uint32_t kGsIndex = 0, kGsOt = 1, kGsShootout = 3, kGsScoreAway = 7, kGsScoreHome = 17;
+constexpr uint32_t kBioIndex = 0, kBioCountry = 42, kBioPosition = 84, kBioTeam = 78, kBioInjury = 29, kBioJersey = 58;
+constexpr uint32_t kSkIndex = 0, kSkOverall = 92, kSkStyle = 25;
+constexpr uint32_t kGkIndex = 0, kGkOverall = 87, kGkStyle = 21;
+constexpr uint32_t kTmIndex = 0, kTmTeamId = 3;
 }  // namespace col
 
 // Строки таблицы (все или с условием «поле == значение»): fn(get, put) на каждую строку; get(номер поля) → значение,
