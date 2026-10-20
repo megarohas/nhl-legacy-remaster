@@ -1379,6 +1379,72 @@ FOLD_MED, FOLD_SIGMA = 9, 3.0      # складки: медиана (убира�
 SEAM_GAIN = 1.0                    # сила швов NHL 24
 
 
+# Кокетка у NHL 24 (обе формы MIN) — сетчатая ткань: решётка ямок (шаг ~7 текселей 2048, ≈ 5–6 мм), только в рельефе,
+# цвет ровный; внутри обода (полоса у шеи) ямок нет (пользователь, 19.10: «у погон решётчатая текстура, перенести»).
+# Сила — как у NHL 24 (СКО наклона ямок ≈ 50 из 127, у плетения Edge — 6). Здесь — квадратная решётка с шагом
+# PERF_CELL текселей карты 1024 (у Edge тексель ≈ 1,5–2 мм: шаг ≈ 6–8 мм; мельче 1024 не передаст), по решётке развёртки
+# (на острове — island_weave: без шва через край острова).
+PERF = True
+PERF_CELL = (4, 4)                 # ячейка ямки (строки, столбцы), текселей
+PERF_SIGMA = 0.85                  # радиус ямки (гаусс), текселей
+PERF_RMS = 40.0                    # СКО наклона (xy карты, из 127,5)
+PERF_SM = 6                        # блеск в ямке ниже на столько
+SM_BASE = 18                       # блеск ткани: как у основных форм MIN (1_14_3/1_14_4: 16–18); прежний блеск Edge T=4
+#                                    (медиана 30: V-вырез с молнией, реглан, сетка боков, Reebok) больше не берётся —
+#                                    в игре он давал старые швы бликами (пользователь, 19.10)
+
+
+def perf_tile(ss=8):
+    """Ячейка ямки PERF_CELL (по кругу): наклон (xy, как у плетения; СКО — PERF_RMS) и глубина 0…1."""
+    cy, cx = PERF_CELL
+    yy, xx = np.mgrid[0:cy * ss, 0:cx * ss]
+    fy, fx = (yy + 0.5) / ss, (xx + 0.5) / ss
+    h = np.zeros(fy.shape)
+    for oy in (-cy, 0, cy):
+        for ox in (-cx, 0, cx):
+            h -= np.exp(-((fy - cy / 2 - oy) ** 2 + (fx - cx / 2 - ox) ** 2) / (2 * PERF_SIGMA ** 2))
+    gy, gx = np.gradient(h, 1.0 / ss)
+    tile = np.stack([-gx, gy], -1).reshape(cy, ss, cx, ss, 2).mean((1, 3))
+    tile *= PERF_RMS / np.sqrt((tile ** 2).sum(-1).mean())
+    depth = ((h.max() - h) / (h.max() - h.min())).reshape(cy, ss, cx, ss).mean((1, 3))
+    return tile, depth
+
+
+def perf_mask(G, yk):
+    """Тексели сетчатой ткани: кокетка (yoke_field > 0), вне полосы у шеи (за ободом), вне вставки и шнуровки."""
+    P, N, m, D, B = G["P"], G["N"], G["m"], G["D"], G["B"]
+    F = yoke_field(G, yk)
+    R, _, _ = ring_field(G)
+    x, y = P[..., 0], P[..., 1]
+    ys_h, hs_h = (np.array(v) for v in zip(*INSERT_HW))
+    hw = np.interp(y, ys_h, hs_h, left=-1.0, right=-1.0)
+    front = (N[..., 2] > 0.2) & (P[..., 2] > 0.03)
+    ins = front & (np.abs(x) < hw + 0.004)
+    lace = front & (np.abs(x) < YOKE_LACE_X) & (y < YOKE_LACE_Y)
+    out_band = np.isfinite(R) & (D > R + 0.002)
+    return m & ~B & (F > 0.001) & out_band & ~ins & ~lace & (y > 1.45)
+
+
+def perf_without_patches(pm, col, thr=40.0, max_hole=15000):
+    """Маска сетки pm без нашивок (у NHL 24 на них ямок нет): тексели не цвета ткани кокетки (медиана по pm), закрытые и с
+    залитыми дырами (внутри круглой нашивки — тот же зелёный; дыры больше max_hole — не нашивка), с запасом.
+    -> (маска, сколько текселей убрано)."""
+    from scipy import ndimage as ndi
+    base = np.median(col[pm], axis=0)
+    off = pm & (np.linalg.norm(col - base, axis=-1) > thr)
+    off = ndi.binary_closing(off, iterations=2)
+    holes = ndi.binary_fill_holes(off) & ~off
+    lab, n = ndi.label(holes)
+    if n:
+        size = np.bincount(lab.ravel())
+        small = size < max_hole
+        small[0] = False
+        off |= small[lab]
+    off = ndi.binary_opening(off, iterations=1)         # одиночные тексели (край кокетки) — не нашивка
+    off = ndi.binary_dilation(off, iterations=2)
+    return pm & ~off, int((pm & off).sum())
+
+
 def weave_tile(xy):
     """Ячейка плетения: высокие частоты рельефа (xy − складки) на участке WEAVE_SRC, усреднённые по остаткам
     (строка mod 8, столбец mod 6)."""
@@ -1482,7 +1548,7 @@ def island_weave(mesh, tile, Tt, bb, Te, Be, S, rpx=None):
     qv = np.zeros((len(mesh["pos"]), 2))
     qv[vs] = q[wi.g]
     qt = (bb[:, :, None] * qv[Tt]).sum(1)
-    cy, cx = WEAVE_CELL
+    cy, cx = tile.shape[:2]
     fy, fx = qt[:, 1] - 0.5, qt[:, 0] - 0.5
     y0, x0 = np.floor(fy).astype(np.int64), np.floor(fx).astype(np.int64)
     ay, ax = (fy - y0)[:, None], (fx - x0)[:, None]
@@ -1594,6 +1660,45 @@ def seam_height(t):
     return -a * np.exp(-(t / s) ** 2) + lip * np.exp(-((t - la) / lw) ** 2)
 
 
+def ring_field(G):
+    """Обод на растре relief_geometry G: R — расстояние обода от края ворота по |θ| (inf там, где обода нет: у
+    середины переда, |θ| < θ_S, — там планка), dR — наклон по дуге (для расстояния по нормали), сводка θ_S/D_S."""
+    from scipy.interpolate import PchipInterpolator
+    P, N, m, D, TH, B = (G[k] for k in ("P", "N", "m", "D", "TH", "B"))
+    x, y = P[..., 0], P[..., 1]
+    pz = m & ~B & (N[..., 2] > 0.2) & (P[..., 2] > 0.03)
+    r_xz = np.hypot(P[..., 0], P[..., 2] - G["zc"])
+    Sx, Sy = PLACKET_HALF[-1]
+    R = np.full(D.shape, np.inf)
+    dR = np.zeros(D.shape)
+    info = {}
+    for sgn in (-1.0, 1.0):
+        k_ = pz & (np.sign(x) == sgn)
+        dd = np.where(k_, np.hypot(x - sgn * Sx, y - Sy), np.inf)
+        i_ = np.unravel_index(np.argmin(dd), dd.shape)
+        thS, DS = abs(float(TH[i_])), float(D[i_])
+        kn = [(thS, DS)] + [(a, d_) for a, d_ in RING_KNOTS if a > thS + 1.0]
+        f = PchipInterpolator([a for a, _ in kn], [d_ for _, d_ in kn])
+        ta = np.clip(np.abs(TH), thS, 180.0)
+        side = m & ~B & (TH * sgn > 0) & (np.abs(TH) >= thS)
+        R = np.where(side, f(ta), R)
+        dR = np.where(side, f.derivative()(ta) / np.maximum(r_xz * np.pi / 180.0, 0.02), dR)
+        info["ring_S_%+d" % int(sgn)] = (round(thS, 1), round(DS * 100, 2))
+    return R, dR, info
+
+
+def yoke_field(G, yk):
+    """Кокетка на растре G: F > 0 внутри (м до края: бока — кривые EA в uv0, низ — высоты yk.h), иначе < 0."""
+    P, N, U0 = G["P"], G["N"], G["U0"]
+    y, ax = P[..., 1], np.abs(P[..., 0])
+    Q = yk.poly
+    uL, uR = np.interp(U0[..., 1], *Q["left"]), np.interp(U0[..., 1], *Q["right"])
+    dside = np.where(U0[..., 0] < 0.5, U0[..., 0] - uL, uR - U0[..., 0]) * G["MPU"]
+    h = np.where(P[..., 2] >= 0, np.interp(ax, *yk.h["front"]), np.interp(ax, *yk.h["back"]))
+    dh = (y - h) / np.maximum(np.sqrt(np.clip(1 - N[..., 1] ** 2, 0, 1)), 0.3)
+    return np.minimum(dside, dh)
+
+
 def design_seams(mesh, painters, S=2048, out_S=1024):
     """Швы по границам цветов, которые рисуются здесь же (кокетка, кромка ворота, вставка со щитом): высота по
     расстоянию до ближайшей границы → наклон нормали (касательное пространство карты out_S). -> (xy (out_S², 2),
@@ -1623,14 +1728,9 @@ def design_seams(mesh, painters, S=2048, out_S=1024):
     else:
         wid = np.zeros((S, S))
     d_y = inf
-    yk = painters.get("cur")
+    yk = painters.get("cur") or painters.get("yoke_shape")
     if yk is not None:
-        Q = yk.poly
-        uL, uR = np.interp(U0[..., 1], *Q["left"]), np.interp(U0[..., 1], *Q["right"])
-        dside = np.where(U0[..., 0] < 0.5, U0[..., 0] - uL, uR - U0[..., 0]) * G["MPU"]
-        h = np.where(P[..., 2] >= 0, np.interp(ax, *yk.h["front"]), np.interp(ax, *yk.h["back"]))
-        dh = (y - h) / np.maximum(np.sqrt(np.clip(1 - N[..., 1] ** 2, 0, 1)), 0.3)
-        F_y = np.minimum(dside, dh)
+        F_y = yoke_field(G, yk)
         lace = (P[..., 2] > 0) & (ax < YOKE_LACE_X) & (y < YOKE_LACE_Y)
         d_y = np.where(m & ~B & ~in_ins & ~lace & (D > wid + 0.002) & (y > 1.45), np.abs(F_y), inf)
     # планка под шнуровкой (как у NHL 24: PLACKET_HALF) — отрезки в виде спереди (x, y), середина горловины — x = 0
@@ -1646,22 +1746,10 @@ def design_seams(mesh, painters, S=2048, out_S=1024):
     # делится на √(1 + (dR/ds)²), у S линия круто уходит от ворота)
     d_r = inf.copy()
     if RING:
-        from scipy.interpolate import PchipInterpolator
-        r_xz = np.hypot(P[..., 0], P[..., 2] - G["zc"])
-        Sx, Sy = PLACKET_HALF[-1]
-        for sgn in (-1.0, 1.0):
-            k_ = pz & (np.sign(x) == sgn)
-            dd = np.where(k_, np.hypot(x - sgn * Sx, y - Sy), np.inf)
-            i_ = np.unravel_index(np.argmin(dd), dd.shape)
-            thS, DS = abs(float(TH[i_])), float(D[i_])
-            kn = [(thS, DS)] + [(a, d_) for a, d_ in RING_KNOTS if a > thS + 1.0]
-            f = PchipInterpolator([a for a, _ in kn], [d_ for _, d_ in kn])
-            ta = np.clip(np.abs(TH), thS, 180.0)
-            R = f(ta)
-            dR = f.derivative()(ta) / np.maximum(r_xz * np.pi / 180.0, 0.02)
-            side = m & ~B & ~in_ins & (TH * sgn > 0) & (np.abs(TH) >= thS) & (D > wid + 0.004)
-            d_r = np.where(side, np.minimum(d_r, np.abs(D - R) / np.sqrt(1.0 + dR ** 2)), d_r)
-            info["ring_S_%+d" % int(sgn)] = (round(thS, 1), round(DS * 100, 2))
+        R, dR, rinfo = ring_field(G)
+        info.update(rinfo)
+        side = np.isfinite(R) & ~in_ins & (D > wid + 0.004)
+        d_r = np.where(side, np.abs(D - np.where(side, R, 0.0)) / np.sqrt(1.0 + dR ** 2), inf)
     # полосы рукава (пользователь, 19.10: «полосы на руках — ровно по шву»): швы по их границам — кольца по столбцам
     # развёртки рукава Edge (SleeveMap: полоса — столбец u)
     d_s = inf.copy()
@@ -1752,6 +1840,12 @@ def rebuild_relief(nm_path, code, kit, mesh, cmap, n_jt, painters=None):
     num = np.stack([ndi.gaussian_filter(low[..., c] * keep, FOLD_INPAINT) for c in range(2)], -1)
     den = ndi.gaussian_filter(keep, FOLD_INPAINT)[..., None]
     low = np.where(seam_m[..., None], num / np.maximum(den, 1e-6), low)
+    # метки чистого рельефа T=4 на спине (RELIEF_CLEAR) — складками со строк рядом (плетение и сетка — свои, поверх)
+    from . import kit_fix
+    for u0, v0, u1, v1, dv in RELIEF_CLEAR:
+        cm_ = ndi.gaussian_filter(ndi.binary_dilation(kit_fix._box(S, [u0, v0, u1, v1]), iterations=2).astype(np.float64),
+                                  2.0)[..., None]
+        low = low * (1 - cm_) + np.roll(low, -int(round(dv * S)), axis=0) * cm_
     # швы NHL 24: base_normal без спонсорских нашивок (как у цвета — clean_color)
     bn = normal_map(J.n24_tex(Hy.CLUB_NAME[code], kit, "base_normal"), 2048).astype(np.float64)
     defaults, rules = kit_hybrid.load_rules(kit_hybrid.RULES, code, kit, [])
@@ -1820,6 +1914,8 @@ def rebuild_relief(nm_path, code, kit, mesh, cmap, n_jt, painters=None):
     ys, xs = np.nonzero(m)
     wv = weave[ys, xs].copy()
     low_px = low[ys, xs].copy()
+    it = np.zeros(len(ys), bool)
+    rpx = None
     if "island" in mesh:
         it = mesh["island"][T].all(1)
         if it.any():
@@ -1838,6 +1934,27 @@ def rebuild_relief(nm_path, code, kit, mesh, cmap, n_jt, painters=None):
             rpx = ndi.distance_transform_edt(im)[ys[it], xs[it]]
             wv[it] = island_weave(mesh, tile, T[it], b[it], Te[it], Be[it], S, rpx)
             print("  плетение острова: якорей / узлов", island_weave.resid)
+    # сетчатая кокетка: ямки вместо плетения Edge (та же решётка; на острове — island_weave с ячейкой ямок)
+    yk = painters.get("cur") or painters.get("yoke_shape")
+    perf = np.zeros(len(ys), bool)
+    pdepth = np.zeros(len(ys))
+    if PERF and yk is not None:
+        ptile, pdep = perf_tile()
+        pm = perf_mask(relief_geometry(mesh, S), yk)
+        if os.path.exists(cm_path):                     # нашивки и надписи (не цвет ткани кокетки) — без ямок
+            col = np.asarray(Image.open(cm_path).convert("RGB").resize((S, S), Image.BILINEAR)).astype(np.float64)
+            pm, n_patch = perf_without_patches(pm, col)
+            print(f"  сетчатая кокетка: без нашивок — {n_patch} текселей")
+        perf = pm[ys, xs]
+        cy_, cx_ = PERF_CELL
+        pw = ptile[ys % cy_, xs % cx_].copy()
+        pdepth = pdep[ys % cy_, xs % cx_].copy()
+        if it.any():
+            pw[it] = island_weave(mesh, ptile, T[it], b[it], Te[it], Be[it], S, rpx)
+            pd2 = np.stack([pdep, np.zeros_like(pdep)], -1)          # глубина — та же выборка (длина вектора)
+            pdepth[it] = np.linalg.norm(island_weave(mesh, pd2, T[it], b[it], Te[it], Be[it], S, rpx), axis=1)
+        wv = np.where(perf[:, None], pw, wv)
+        print(f"  сетчатая кокетка: {int(perf.sum())} текселей")
     gen, ginfo = design_seams(mesh, painters, out_S=S)
     # кромка ворота и вставка со щитом — гладкая ткань (у NHL 24 на них нет сетки плетения; на кромке у ворота
     # решётка плетения к тому же сходилась веером): плетение — на нет, край — по шву
@@ -1863,8 +1980,14 @@ def rebuild_relief(nm_path, code, kit, mesh, cmap, n_jt, painters=None):
     out = cur.copy()
     out[..., 0], out[..., 1], out[..., 2] = new_xy[..., 0] + 127.5, new_xy[..., 1] + 127.5, z + 127.5
     Image.fromarray(np.clip(np.round(out), 0, 255).astype(np.uint8), "RGBA").save(nm_path)
+    # блеск: ровная ткань, в ямках сетчатой кокетки — тусклее (Reebok сзади кладёт потом BrandSwap.relief)
+    sm_path = os.path.join(os.path.dirname(nm_path), "jersey_sm.png")
+    smv = np.full((S, S), float(SM_BASE))
+    smv[ys, xs] = SM_BASE - PERF_SM * np.clip(pdepth, 0, 1) * perf
+    sm = np.dstack([smv, smv, smv, np.full((S, S), 255.0)])
+    Image.fromarray(np.clip(np.round(sm), 0, 255).astype(np.uint8), "RGBA").save(sm_path)
     return {"seams_removed_px": int(seam_m.sum()), "n24_kept": float((keep24 > 0.5).mean()),
-            "design_seams": ginfo}
+            "design_seams": ginfo, "perf_texels": int(perf.sum())}
 
 
 def px_size(F, m):
@@ -2186,6 +2309,31 @@ def clean_edge_relief(xy, E, ea_curves, band_w):
     return shift_fill(xy, mask, m), mask
 
 
+def _yoke_shape_path(code):
+    return os.path.join(WORK, f"yoke_shape_{code}.json")
+
+
+def save_yoke_shape(code, poly, heights):
+    """Форма кокетки (бока — кривые EA в uv0, низ — высоты) — для форм клуба без цветной кокетки."""
+    import json
+    js = {"left": [list(map(float, a)) for a in poly["left"]], "right": [list(map(float, a)) for a in poly["right"]],
+          "front": [list(map(float, a)) for a in heights["front"]], "back": [list(map(float, a)) for a in heights["back"]]}
+    with open(_yoke_shape_path(code), "w", encoding="utf-8") as f:
+        json.dump(js, f)
+
+
+def load_yoke_shape(code):
+    import json
+    p = _yoke_shape_path(code)
+    if not os.path.exists(p):
+        return None
+    js = json.load(open(p, encoding="utf-8"))
+    poly = {"left": tuple(np.array(a) for a in js["left"]), "right": tuple(np.array(a) for a in js["right"]),
+            "green": np.zeros(3), "white": np.zeros(3)}
+    heights = {"front": tuple(np.array(a) for a in js["front"]), "back": tuple(np.array(a) for a in js["back"])}
+    return poly, heights
+
+
 def cmd_kit(a):
     """Свитер (и шрифт, шорты, гетры, превью) комплекта клуба по fb.pilot build, но: сетка — изогнутая копия Edge,
     перенос основы — coord_transfer; ворот со шнуровкой EA (collar_lace) — выключен (перед ворота — свой, adidas);
@@ -2254,7 +2402,9 @@ def cmd_kit(a):
             ea = np.asarray(Image.open(os.path.join(self.tpl_dir, name)).convert(mode).resize((1024, 1024),
                                                                                             Image.LANCZOS)).astype(np.float64)
             out = cur.copy()
-            for u0, v0, u1, v1, dv in RELIEF_CLEAR:          # метка — тканью со строк ниже (мягкий край)
+            for u0, v0, u1, v1, dv in (() if RELIEF_REBUILD else RELIEF_CLEAR):   # метка — тканью со строк ниже
+                #                                            (при RELIEF_REBUILD — в rebuild_relief, только складки:
+                #                                            иначе в кокетке под Reebok — гладкий прямоугольник без сетки)
                 cb = kit_fix._box(1024, [u0, v0, u1, v1])
                 cm_ = ndi.gaussian_filter(ndi.binary_dilation(cb, iterations=2).astype(np.float64), 2.0)
                 src_ = np.roll(cur, -int(round(dv * 1024)), axis=0)
@@ -2323,6 +2473,7 @@ def cmd_kit(a):
                                     os.path.join(KITS_OUT, f"{a.club}_{kit}", "jersey_cm.png"))
                 print("  кокетка: цвета", np.round(poly["green"]).tolist(), np.round(poly["white"]).tolist())
                 yoke_rule["cur"] = YokePaint(poly, keep, {k: E2[k] for k in ("pos", "uv", "nrm", "tri", "uv0")}, heights)
+                save_yoke_shape(a.club, poly, heights)
             yoke_rule["trim"] = trim_rule(a.club, kit, {k: E2[k] for k in ("pos", "uv", "nrm", "tri")},
                                           with_yoke=yr is not None)
             if (a.club, kit) in INSERT_KITS:
@@ -2340,6 +2491,11 @@ def cmd_kit(a):
                 print("  полосы рукава к кисти: k, верх рисунка", SLV_COMPRESS)
             pilot.cmd_build(SimpleNamespace(club=a.club, kits=kit, reuse=False))
             painters = dict(yoke_rule)
+            if "cur" not in painters:                    # кокетка без цвета (дом MIN): шов и сетчатая ткань — как у
+                sh = load_yoke_shape(a.club)             # выезда (у NHL 24 крой один)
+                if sh is not None:
+                    painters["yoke_shape"] = YokePaint(sh[0], keep, {k: E2[k] for k in ("pos", "uv", "nrm", "tri", "uv0")},
+                                                       sh[1])
             yoke_rule.pop("insert", None)
             yoke_rule.pop("trim", None)
             od = os.path.join(KITS_OUT, f"{a.club}_{kit}")
@@ -2548,6 +2704,9 @@ SLOT_KITS = {
     "away": {"kit": "edge_away", "legacy": "1_14_3", "sock": "legacy", "label": "Away (Edge collar 24)"},
 }
 SOCK_PARTS = ((0.0, (24, 56, 46)), (30, (214, 203, 165)), (30, (159, 14, 10)), (110, (214, 203, 165)))
+SOCK_TOP_V = 0.49                  # верх полос своих гетр (v развёртки гетр: 0 — у колена): у EA MIN 0,48–0,50;
+#                                    перенесённые с NHL 24 — 0,576 (на ~6,5 см ниже — «повыше», пользователь, 19.10)
+SOCK_SHIFT_V = 0.03                # гетры EA (светлая): полосы выше на столько (≈ 2,3 см)
 
 
 def flat_sock(src_png):
@@ -2560,6 +2719,8 @@ def flat_sock(src_png):
     med = np.median(a, axis=1)
     band = np.nonzero(np.linalg.norm(med - base, axis=1) > 40)[0]
     y0, y1 = float(band.min()), float(band.max() + 1)
+    if SOCK_TOP_V is not None:                           # своя высота полосы (ширина — как у перенесённых)
+        y0, y1 = SOCK_TOP_V * H, SOCK_TOP_V * H + (y1 - y0)
     tot = sum(w for w, _ in SOCK_PARTS[1:])
     edges, cols = [y0], []
     for w_, c in SOCK_PARTS[1:]:
@@ -2577,6 +2738,26 @@ def flat_sock(src_png):
         out[y] = acc + rest * base
     img = np.repeat(out[:, None, :], W, axis=1)
     return Image.fromarray(np.clip(np.round(img), 0, 255).astype(np.uint8)), (y0, y1, edges)
+
+
+def shift_sock(src_png, dst_png, dv, lum_thr=120):
+    """Гетры EA: полоса (строки, где медиана — не цвет ткани) выше на dv; ниже полосы — ткань подтягивается снизу
+    (строки сдвигаются целиком от верха полосы − dv до низа полосы + dv)."""
+    from PIL import Image
+    a = np.asarray(Image.open(src_png).convert("RGB"))
+    H = a.shape[0]
+    med = np.median(a[:, a.shape[1] // 4:3 * a.shape[1] // 4].astype(np.float64), axis=1)
+    base = np.median(med, axis=0)
+    band = np.nonzero(np.abs(med.mean(1) - base.mean()) > 40)[0]
+    dy = int(round(dv * H))
+    if not len(band) or dy <= 0:
+        Image.fromarray(a).save(dst_png)
+        return
+    y0, y1 = int(band.min()), int(band.max()) + 1
+    out = a.copy()
+    for y in range(max(y0 - dy, 0), min(y1 + dy, H - dy)):
+        out[y] = a[y + dy]
+    Image.fromarray(out).save(dst_png)
 
 
 def deislanded(cm_png, out_png):
@@ -2628,7 +2809,7 @@ def cmd_slot(a):
             im.save(os.path.join(d, "sock_cm.png"))
             print(f"  гетры {kit}: полоса строк {info[0]:.1f}–{info[1]:.1f}, края {[round(e, 1) for e in info[2]]}")
         else:
-            shutil.copy2(os.path.join(leg, "sock_cm.png"), os.path.join(d, "sock_cm.png"))
+            shift_sock(os.path.join(leg, "sock_cm.png"), os.path.join(d, "sock_cm.png"), SOCK_SHIFT_V)
         tmp = os.path.join(d, "_edge_layout_cm.png")
         n = deislanded(os.path.join(d, "jersey_cm.png"), tmp)
         pilot.fe_preview_ea(tmp).save(os.path.join(d, "fe.png"))
