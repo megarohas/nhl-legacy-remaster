@@ -24,7 +24,7 @@
 | Главное меню: без синей подложки на входе; пункты без онлайна, EXIT, панель описаний про офлайн | `tools/menu12_legacy.py` (подложка), `tools/menuitems_legacy.py` (legacy-fe, 09.10) | ✔ синего нет ([fe-menu-legacy.md](fe-menu-legacy.md) §7); меню и EXIT проверены, EXIT — только с exe nhl-legacy-port (§8) |
 | Доски драфта на 32: три колонки 15 + 15 + 2 (Be a GM, фэнтези-драфт и его порядок, Live the Life) | `tools/draft32_legacy.py` + `tools/aptc.py` (legacy-fe, 11.10) | ✔ Entry Draft и фэнтези-драфт (exe nhl-legacy-port a1cb8f74), у пользователя с 11.10 16:36; в out — эти 3 ролика, Live the Life — нет ([fe-menu-legacy.md](fe-menu-legacy.md) §11) |
 | Год 2015 → 2026 в надписях: стартовый экран, юридический текст, титры, подсказка FA | `tools/year2026_legacy.py` (legacy-fe, 12.10) | в игре не проверялось, не поставлено; в out и out-ahl32 ([fe-menu-legacy.md](fe-menu-legacy.md) §12) |
-| Сканы голов NHL 24 игрокам с типовой головой: 178 в out-ahl32 (сканы EA не трогаются), headid = ID EA, строки `stockplayerheads` на местах доноров | `tools/scans24.py` (этап `scans24`, [heads-nhl24.md](heads-nhl24.md)) | пилот Cale Makar ✔ (пользователь, 12.10); массово — собрано, в `cache:` не ставилось |
+| Сканы голов NHL 24 игрокам с типовой головой: 178 в out-ahl32 (сканы EA не трогаются), headid = ID EA, строки `stockplayerheads` на местах доноров | `tools/scans24.py` (этап `scans24`, [heads-nhl24.md](heads-nhl24.md)) | пилот Cale Makar ✔ (пользователь, 12.10); массово — ✔ стоит: 358 файлов голов в `cache:` совпадают с out (12.10 10:17–11:39), база — 178 номеров scans24, сейв ROSTER записан 12.10 (`backup-saves/scans24-20261012-101718`); сверка 20.10 |
 
 Набор — `game/work/legacy-data/out/` (дерево путей как в `cache:`); ставится при закрытой игре:
 
