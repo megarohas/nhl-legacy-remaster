@@ -166,12 +166,17 @@ bool IsNation(uint32_t id) {
   return false;
 }
 
-constexpr uint32_t kFieldJuniorTeam = 0xF97F5A5Au;    // хеш поля juniorteam (leagueplayerbiotable)
-constexpr uint32_t kFieldJuniorLeague = 0x1A86215Au;  // хеш поля juniorleague
-constexpr uint32_t kTypeInt = 11;
+// Имена таблиц и полей база ищет по хешу (CRC-32, отражённая таблица, начальное 0, буквы — заглавные). Поле строки
+// курсора — 827B3008/827B3030(курсор, номер таблицы, номер поля, 1, &значение, 0); номер поля — место поля среди полей
+// таблицы по возрастанию хеша имени (juniorteam = 11, как у оригинала; juniorleague = 6), номер таблицы — по
+// дескриптору 827B5D40(база+8, хеш таблицы).
+constexpr uint32_t kTablePlayerBio = 0xF97F5A5Au;     // leagueplayerbiotable
+constexpr uint32_t kFieldJuniorLeague = 0x1A86215Au;  // juniorleague (для условия запроса)
+constexpr uint32_t kColJuniorTeam = 11;
+constexpr uint32_t kColJuniorLeague = 6;
 constexpr uint32_t kJuniorLock = 0x83DA3A00u;         // критическая секция цикла (как у оригинала)
 
-uint32_t FieldIndex(PPCContext& ctx, uint8_t* base, uint32_t db, uint32_t hash) {
+uint32_t TableIndex(PPCContext& ctx, uint8_t* base, uint32_t db, uint32_t hash) {
   ctx.r3.u64 = Load32(base, db + 8);
   ctx.r4.u64 = hash;
   sub_827B5D40(ctx, base);
@@ -206,8 +211,7 @@ extern "C" void sub_82B099E0(PPCContext& ctx, uint8_t* base) {
     rex::runtime::ResolveIndirectFunction(Load32(base, Load32(base, mgr) + 28))(ctx, base);  // vtable +28
     sub_82A07D88(ctx, base);
     const uint32_t db = ctx.r3.u32;
-    const uint32_t ix_team = FieldIndex(ctx, base, db, kFieldJuniorTeam);
-    const uint32_t ix_league = FieldIndex(ctx, base, db, kFieldJuniorLeague);
+    const uint32_t table = TableIndex(ctx, base, db, kTablePlayerBio);
     // juniorleague ∈ {9, 10, 11}
     uint32_t pred[3];
     const uint32_t slot[3] = {f + 160, f + 128, f + 96};
@@ -231,7 +235,7 @@ extern "C" void sub_82B099E0(PPCContext& ctx, uint8_t* base) {
     sub_827B7D08(ctx, base);
     ctx.r4.u64 = ctx.r3.u64;
     ctx.r3.u64 = f + 80;
-    ctx.r5.u64 = kFieldJuniorTeam;
+    ctx.r5.u64 = kTablePlayerBio;
     sub_827B4818(ctx, base);
     ctx.r4.u64 = where;
     ctx.r5.u64 = 1;
@@ -258,38 +262,38 @@ extern "C" void sub_82B099E0(PPCContext& ctx, uint8_t* base) {
       const int32_t off_whl = ctx.r3.s32;
       ctx.r3.u64 = kJuniorLock;
       __imp__RtlEnterCriticalSection(ctx, base);
-      auto get = [&](uint32_t ix) {
+      auto get = [&](uint32_t col) {
         ctx.r3.u64 = cur;
-        ctx.r4.u64 = ix;
-        ctx.r5.u64 = kTypeInt;
+        ctx.r4.u64 = table;
+        ctx.r5.u64 = col;
         ctx.r6.u64 = 1;
         ctx.r7.u64 = f + 88;
         ctx.r8.u64 = 0;
         sub_827B3008(ctx, base);
         return static_cast<int32_t>(Load32(base, f + 88));
       };
-      auto put = [&](uint32_t ix, int32_t v) {
+      auto put = [&](uint32_t col, int32_t v) {
         Store32(base, f + 92, static_cast<uint32_t>(v));
         ctx.r3.u64 = cur;
-        ctx.r4.u64 = ix;
-        ctx.r5.u64 = kTypeInt;
+        ctx.r4.u64 = table;
+        ctx.r5.u64 = col;
         ctx.r6.u64 = 1;
         ctx.r7.u64 = f + 92;
         ctx.r8.u64 = 0;
         sub_827B3030(ctx, base);
       };
       for (int32_t i = 0; i < n; ++i) {
-        const int32_t league = get(ix_league);
-        const int32_t team = get(ix_team);
+        const int32_t league = get(kColJuniorLeague);
+        const int32_t team = get(kColJuniorTeam);
         if (league == 9) {
-          put(ix_team, team - off_ohl);
+          put(kColJuniorTeam, team - off_ohl);
           ++counts[0];
         } else if (league == 11) {
-          put(ix_team, team - off_whl);
+          put(kColJuniorTeam, team - off_whl);
           ++counts[2];
         } else {
-          put(ix_team, -1);
-          put(ix_league, 0);
+          put(kColJuniorTeam, -1);
+          put(kColJuniorLeague, 0);
           ++counts[1];
         }
         ctx.r3.u64 = cur;
