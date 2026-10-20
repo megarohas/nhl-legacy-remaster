@@ -4,6 +4,10 @@ tools/legacy_data/install-legacy-data.sh / uninstall-legacy-data.sh (docs/legacy
 
     python tools/legacy_data/install_legacy_data.py install [--ahl32] [--nhl24] [ЧАСТЬ… | @СПИСОК…]
     python tools/legacy_data/install_legacy_data.py uninstall [ЧАСТЬ… | --nhl24]
+    python tools/legacy_data/install_legacy_data.py status [--ahl32] [--nhl24]   # что стоит и что изменит установка
+    python tools/legacy_data/install_legacy_data.py diff   [--ahl32] [--nhl24] [ЧАСТЬ…]   # список таких файлов
+    python tools/legacy_data/install_legacy_data.py verify                     # стоящее = нынешней сборке?
+(status, diff, verify только читают; без флагов — флаги последней полной установки.)
 
 --ahl32 — поверх out ещё накладка out-ahl32 (база и локализация «АХЛ на 32»: CV/HSK, nhl32 --ahl32;
 франшизе нужен порт с врезками АХЛ на 32).
@@ -60,16 +64,33 @@ BACKUP = os.path.join(STATE, 'backup')
 FLAGS = os.path.join(STATE, 'install-flags.txt')        # флаги последней полной установки (--ahl32, --nhl24)
 
 
-def cache_dir():
+PORT_EXE = os.path.join(_repo(), 'nhl-legacy-port', 'out', 'build', 'win-amd64-release', 'nhllegacy.exe')
+
+
+def cache_source():
+    """(папка cache: порта, откуда взята): переменная CACHE; строка «CACHE: …» в game/work/status/legacy-port.md;
+    user_data_root из nhllegacy.toml рядом с exe порта (<user_data_root>/cache/guest)."""
     env = os.environ.get('CACHE')
     if env:
-        return os.path.normpath(env)
+        return os.path.normpath(env), 'переменная CACHE'
     st = os.path.join(GAME, 'work', 'status', 'legacy-port.md')
-    for line in open(st, encoding='utf-8', errors='replace'):
-        m = re.match(r'CACHE:\s*(\S+)', line)
-        if m:
-            return os.path.normpath(m.group(1))
-    sys.exit('не знаю папку cache: порта (нет строки CACHE: в work/status/legacy-port.md, задайте CACHE=…)')
+    if os.path.exists(st):
+        for line in open(st, encoding='utf-8', errors='replace'):
+            m = re.match(r'CACHE:\s*(\S+)', line)
+            if m:
+                return os.path.normpath(m.group(1)), 'game/work/status/legacy-port.md'
+    root = _toml_root(PORT_EXE)
+    if root:
+        return os.path.join(root, 'cache', 'guest'), 'nhllegacy.toml рядом с exe порта'
+    return None, None
+
+
+def cache_dir():
+    c, _ = cache_source()
+    if not c:
+        sys.exit('не знаю папку cache: порта: задайте CACHE=<user_data_root>/cache/guest (или user_data_root в '
+                 'nhllegacy.toml рядом с nhl-legacy-port/out/build/win-amd64-release/nhllegacy.exe)')
+    return c
 
 
 def game_running():
@@ -177,6 +198,103 @@ def check_nhl24(ahl32):
             sys.exit(f'локализация {key} пересобрана после накладки NHL 24 — сначала bash tools/legacy_data/build-all.sh nhl24')
 
 
+def sources(ahl32, nhl24, parts=()):
+    """{путь в cache: → файл сборки}: out, затем накладки (накладка главнее), только выбранные части."""
+    srcs = {}
+    for base in [SRC] + ([SRC_AHL32] if ahl32 else []) + ([SRC_NHL24] if nhl24 else []) + \
+            ([SRC_NHL24_AHL32] if nhl24 and ahl32 else []):
+        for root, _, names in os.walk(base):
+            for n in names:
+                if n.endswith('.part'):
+                    continue
+                full = os.path.join(root, n)
+                rel = os.path.relpath(full, base).replace(os.sep, '/')
+                if selected(rel, parts):
+                    srcs[rel] = full
+    return srcs
+
+
+def _flags(args, cache):
+    """Флаги из аргументов, иначе — последней полной установки."""
+    given = {x for x in args if x in ('--ahl32', '--nhl24')}
+    had = installed_flags(cache)
+    f = given or had
+    return '--ahl32' in f, '--nhl24' in f, [x for x in args if x not in ('--ahl32', '--nhl24')]
+
+
+def plan(cache, ahl32, nhl24, parts):
+    """Что сделает установка: ([(«изменён»/«новый», путь)], [путь, который полная установка уберёт])."""
+    srcs = sources(ahl32, nhl24, parts)
+    out = []
+    for rel in sorted(srcs):
+        dst = os.path.join(cache, *rel.split('/'))
+        if not os.path.exists(dst):
+            out.append(('новый', rel))
+        elif not filecmp.cmp(srcs[rel], dst, shallow=False):
+            out.append(('изменён', rel))
+    gone = [] if parts else sorted(set(read_list(LIST)) - set(srcs))
+    return out, gone
+
+
+def cmd_status(args, cwd):
+    cache, where = cache_source()
+    print(f'cache: {cache or "—"} ({where or "не найдена"})')
+    if not cache:
+        cache_dir()
+    items = read_list(LIST)
+    had = installed_flags(cache)
+    print(f'поставлено файлов: {len(items)}; флаги последней полной установки: {" ".join(sorted(had)) or "—"}')
+    print('игра:', 'запущена' if game_running() else 'не запущена')
+    ahl32, nhl24, parts = _flags(args, cache)
+    todo, gone = plan(cache, ahl32, nhl24, parse_parts(parts, cwd))
+    by = {}
+    for kind, rel in todo:
+        top = '/'.join(rel.split('/')[:2])
+        by.setdefault(top, {}).setdefault(kind, 0)
+        by[top][kind] += 1
+    fl = ' '.join(x for x, on in (('--ahl32', ahl32), ('--nhl24', nhl24)) if on) or 'без накладок'
+    print(f'установка ({fl}) изменит {len(todo)} файлов' + (f', уберёт {len(gone)}' if gone else '') +
+          ('' if todo or gone else ' — cache: совпадает со сборкой'))
+    for top, k in sorted(by.items()):
+        print(f'  {top}: ' + ', '.join(f'{n} {v}' for n, v in sorted(k.items())))
+
+
+def cmd_diff(args, cwd):
+    cache = cache_dir()
+    ahl32, nhl24, parts = _flags(args, cache)
+    todo, gone = plan(cache, ahl32, nhl24, parse_parts(parts, cwd))
+    for kind, rel in todo:
+        print(f'{kind:8} {rel}')
+    for rel in gone:
+        print(f'{"убрать":8} {rel}')
+    print(f'итого: {len(todo)} к установке, {len(gone)} убрать')
+
+
+def cmd_verify(args, cwd):
+    """Каждый поставленный файл (installed.txt) есть в cache: и совпадает с нынешней сборкой (флаги прошлой
+    установки): иначе — cache: правили мимо установщика или сборку пересобрали без установки."""
+    cache = cache_dir()
+    items = read_list(LIST)
+    if not items:
+        print(f'ничего не поставлено ({LIST})')
+        return
+    had = installed_flags(cache)
+    srcs = sources('--ahl32' in had, '--nhl24' in had)
+    missing = [r for r in items if not os.path.exists(os.path.join(cache, *r.split('/')))]
+    nosrc = [r for r in items if r not in srcs]
+    differ = [r for r in items if r in srcs and r not in missing and
+              not filecmp.cmp(srcs[r], os.path.join(cache, *r.split('/')), shallow=False)]
+    print(f'поставлено {len(items)}: нет в cache: {len(missing)}, нет в сборке {len(nosrc)}, отличаются от сборки '
+          f'{len(differ)}')
+    for lab, xs in (('нет в cache:', missing), ('нет в сборке', nosrc), ('отличается', differ)):
+        for r in xs[:20]:
+            print(f'  {lab:13} {r}')
+        if len(xs) > 20:
+            print(f'  … ещё {len(xs) - 20}')
+    if missing or differ:
+        sys.exit(1)
+
+
 def install(args, cwd):
     cache = cache_dir()
     if not os.path.isdir(SRC):
@@ -195,17 +313,7 @@ def install(args, cwd):
             if f in had and f not in flags and '--no-' + f[2:] not in flags:
                 sys.exit(f'сейчас стоит накладка {f[2:]}: добавьте {f} (оставить) или --no-{f[2:]} (снять); '
                          f'накладку NHL 24 снимает uninstall-legacy-data.sh --nhl24')
-    srcs = {}                                        # путь в cache: → файл-источник (накладка — главнее)
-    for base in [SRC] + ([SRC_AHL32] if ahl32 else []) + ([SRC_NHL24] if nhl24 else []) + \
-            ([SRC_NHL24_AHL32] if nhl24 and ahl32 else []):
-        for root, _, names in os.walk(base):
-            for n in names:
-                if n.endswith('.part'):
-                    continue
-                full = os.path.join(root, n)
-                rel = os.path.relpath(full, base).replace(os.sep, '/')
-                if selected(rel, parts):
-                    srcs[rel] = full
+    srcs = sources(ahl32, nhl24, parts)
     files = sorted(srcs)
     if not files:
         sys.exit(f'в {SRC} нет файлов' + (f' для: {" ".join(parts)}' if parts else ''))
@@ -282,8 +390,11 @@ def uninstall(args, cwd):
 def main():
     sys.stdout.reconfigure(encoding='utf-8')
     sys.stderr.reconfigure(encoding='utf-8')         # сообщения sys.exit
-    if len(sys.argv) < 2 or sys.argv[1] not in ('install', 'uninstall'):
+    if len(sys.argv) < 2 or sys.argv[1] not in ('install', 'uninstall', 'status', 'diff', 'verify'):
         sys.exit(__doc__)
+    cwd = os.environ.get('ORIG_PWD') or os.getcwd()
+    if sys.argv[1] in ('status', 'diff', 'verify'):                  # только чтение — игра не мешает
+        return {'status': cmd_status, 'diff': cmd_diff, 'verify': cmd_verify}[sys.argv[1]](sys.argv[2:], cwd)
     if game_running():
         # игра с другой папкой userdata (например, тестовая копия nhl-legacy-port) этот cache: не читает — можно
         target = _norm(os.path.join(cache_dir(), os.pardir, os.pardir))      # CACHE = <user_data_root>/cache/guest

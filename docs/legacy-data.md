@@ -34,10 +34,21 @@ bash tools/legacy_data/install-legacy-data.sh --ahl32    # и накладка o
 bash tools/legacy_data/install-legacy-data.sh db fe/loc  # только части (начало пути)
 bash tools/legacy_data/install-legacy-data.sh @game/work/legacy-data/models/files.txt   # по списку
 bash tools/legacy_data/uninstall-legacy-data.sh          # снять (чужие файлы вернутся из backup/)
+python tools/legacy_data/install_legacy_data.py status   # что стоит, с какими флагами, что изменит установка
+python tools/legacy_data/install_legacy_data.py diff     # список файлов, которые установка поменяет или уберёт
+python tools/legacy_data/install_legacy_data.py verify   # всё поставленное = нынешней сборке? (иначе код 1)
 ```
 
-Папка `cache:` порта — строка «CACHE: …» в `game/work/status/legacy-port.md` (сейчас
-`nhl-legacy-port/userdata/cache/guest`) или переменная `CACHE`. Работает `tools/legacy_data/install_legacy_data.py`
+`status`, `diff` и `verify` (с 20.10.2026) только читают, игра им не мешает. Без флагов они берут флаги последней
+полной установки (`install-flags.txt`).
+
+Папка `cache:` порта ищется по порядку:
+1. переменная `CACHE`;
+2. строка «CACHE: …» в `game/work/status/legacy-port.md` (личный файл, сейчас `nhl-legacy-port/userdata/cache/guest`);
+3. `user_data_root` из `nhllegacy.toml` рядом с `nhl-legacy-port/out/build/win-amd64-release/nhllegacy.exe` +
+   `cache/guest`.
+
+`status` пишет, откуда взята папка. Работает `tools/legacy_data/install_legacy_data.py`
 (2500 файлов — секунды). Список поставленного — `game/work/legacy-data/installed.txt`, прежние чужие файлы —
 `game/work/legacy-data/backup/`. Своя папка для них — `LEGACY_DATA_STATE`. Проверка на копии userdata ставится
 так: `CACHE=копия LEGACY_DATA_STATE=папка bash tools/legacy_data/install-legacy-data.sh`, и установку

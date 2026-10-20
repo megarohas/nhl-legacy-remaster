@@ -1,6 +1,5 @@
 """Общие части kitport: пути, окружение, сборка → cache: игры (сравнение, установка с копией, откат), снимки."""
 import datetime
-import hashlib
 import importlib.util
 import json
 import os
@@ -43,47 +42,17 @@ def install_flags():
     return [ln.strip() for ln in open(p, encoding="utf-8") if ln.strip().startswith("--")]
 
 
-def overlay_layers(flags=None):
-    """Папки сборки в порядке наложения, как у установщика: out, out-ahl32, out-nhl24, out-nhl24-ahl32."""
-    flags = install_flags() if flags is None else flags
-    ahl, n24 = "--ahl32" in flags, "--nhl24" in flags
-    names = ["out"] + (["out-ahl32"] if ahl else []) + (["out-nhl24"] if n24 else []) + \
-        (["out-nhl24-ahl32"] if ahl and n24 else [])
-    return [os.path.join(LEGACY_DATA, n) for n in names if os.path.isdir(os.path.join(LEGACY_DATA, n))]
-
-
-def _md5(p):
-    h = hashlib.md5()
-    with open(p, "rb") as f:
-        for b in iter(lambda: f.read(1 << 20), b""):
-            h.update(b)
-    return h.hexdigest()
-
-
-def built_files(flags=None):
-    """{путь в cache: → файл сборки} с учётом наложения."""
-    out = {}
-    for base in overlay_layers(flags):
-        for dp, _, fn in os.walk(base):
-            for f in fn:
-                p = os.path.join(dp, f)
-                out[os.path.relpath(p, base).replace(os.sep, "/")] = p
-    return out
-
-
 def diff(flags=None, prefix=""):
-    """Файлы сборки, которые отличаются от cache: игры: [(«CHANGED»/«NEW», путь, файл сборки)]."""
-    cache = cache_dir()
-    res = []
-    for rel, p in sorted(built_files(flags).items()):
-        if prefix and not rel.startswith(prefix):
-            continue
-        c = os.path.join(cache, rel)
-        if not os.path.exists(c):
-            res.append(("NEW", rel, p))
-        elif os.path.getsize(c) != os.path.getsize(p) or _md5(c) != _md5(p):
-            res.append(("CHANGED", rel, p))
-    return res
+    """Файлы сборки, которые отличаются от cache: игры: [(«CHANGED»/«NEW», путь, файл сборки)] — расчёт установщика
+    (install_legacy_data.plan: out и накладки в порядке наложения, флаги — последней полной установки)."""
+    m = installer()
+    cache = m.cache_dir()
+    fl = install_flags() if flags is None else flags
+    ahl, n24 = "--ahl32" in fl, "--nhl24" in fl
+    parts = [prefix.strip("/")] if prefix else []
+    srcs = m.sources(ahl, n24, parts)
+    todo, _ = m.plan(cache, ahl, n24, parts)
+    return [("CHANGED" if k == "изменён" else "NEW", rel, srcs[rel]) for k, rel in todo]
 
 
 def game_blocks_cache():
