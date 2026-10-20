@@ -651,7 +651,7 @@ adidas, сейв ROSTER дописывается в конец). Шорты и �
 | Шорты | `rendering/pant/texlib_0_14_{5,6}.rx2` | от 1_14_4 / 1_14_3 |
 | Гетры | `rendering/sock/sock_0_14_{5,6}_cm.rx2` | дом — `flat_sock` (доли полос NHL 24 ровными строками, верх — `SOCK_TOP_V` 0,49); выезд — гетры 1_14_3, полоса растянута в те же строки, что у дома (`place_sock`, 251–332 из 512) |
 | Наклейка на шлем | `rendering/logo/texlib_14_0_{5,6}.rx2` | копия наклейки 1_14_4 / 1_14_3 |
-| Превью меню | `fe/ion/artassets/jerseys/jersey_0_14_{5,6}.big` | `fe_preview_edge`: поза, свет и кадр EA (`pilot.fe_preview_ea`) по текстуре без острова (`deislanded`), перед ворота сдвинут на картинке на подъём сетки (иначе — V-вырез Edge модели позы) |
+| Превью меню | `fe/ion/artassets/jerseys/jersey_0_14_{5,6}.big` | `fe_preview_edge`: поза, свет и кадр EA (`pilot.fe_preview_ea`) по текстуре без острова (`deislanded`), перед ворота сдвинут на картинке на подъём сетки (иначе — V-вырез Edge модели позы); у середины ворота и в столбце шнуровки — проекция своей сетки t0 p1 с островом камерой модели позы (`_fe_collar`, 8 × 8 точек на пиксель, затенение модели сглажено), шнуровки на превью нет, щит со вставкой крупнее в 1,35 раза (`FE_LENS`): в 10–12 px карта UV модели давала месиво |
 | Строки форм | `db/nhlng.db`, `stockteamjerseys`: style 0, teamartid 14, variant / fevariant 5 и 6, jerseyindex 10 / 11, locstring 6 | реестр `tools/legacy_data/nhl24_kits.json` (`edge_home`, `edge_away`); в манифесте `phase` 2 — в конце таблицы (в сборке ahl32 — строки 779 и 780 из 781) |
 | Шлемы | `db/nhlng.db`, `stockteamequipmenttable`: era 0, variant 5 / 6, equipment 7 | `nhl24.py build_db` → `add_helmets`, фаза 2 — в конце таблицы |
 | Названия | `fe/loc/NHL_ENG_US.db`: `Vintage_0_14_5` «Home (Edge collar 24)», `Vintage_0_14_6` «Away (Edge collar 24)» | `label` в манифесте (`SLOT_KITS`) |
@@ -688,3 +688,6 @@ adidas, сейв ROSTER дописывается в конец). Шорты и �
   воротом (`pack-edge`; прежние — `pack-edge-v1`, `-v2`). Обновились 27 файлов: 6 сеток вратарей, 16 сеток полевых
   lod 0 / 3, `texlib_0_14_{5,6}`, `sock_0_14_6_cm`, `jersey_0_14_{5,6}.big`; база та же. Копия заменённого —
   `backup-cache/user-20261020-edge3`.
+- 20.10 07:32 — превью меню: перед ворота проекцией сетки, без шнуровки, щит крупнее (`pack-edge`; прежний —
+  `pack-edge-v3`). Обновились 2 файла: `fe/ion/artassets/jerseys/jersey_0_14_{5,6}.big`. Копия заменённого —
+  `backup-cache/user-20261020-edge4`.
