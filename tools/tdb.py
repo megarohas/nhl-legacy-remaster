@@ -28,7 +28,8 @@ FILE — `.db` или внутренний файл сейва (`RosterFile`, `D
   checksum_a (CRC-32/IEEE по [0x1C..конец файла], с хвостом) → 0x10, оба big-endian.
   Для `Dynasty` NHL 13 проверено на своих сейвах; у `RosterFile` хвоста нет.
 - сейв NHL Legacy (ZlibV4: база сжата zlib с 0x30) — класс ZlibV4 ниже; читается и пишется так же,
-  схема — `--meta` с nhlng-meta.xml Legacy (tools/gameprofile.py).
+  схема — `--meta` с nhlng-meta.xml; без него — схема Legacy из распакованной игры (tools/gameprofile.py),
+  иначе анкер NHL 13 из ref/ (не в git).
 """
 import argparse, os, struct, sys, zlib
 from tdb_read import load_meta
@@ -36,6 +37,20 @@ from tdb_read import load_meta
 DEFAULT_META = os.path.join(os.path.dirname(__file__), '..', 'ref', 'nhl-modding-studio', 'anchors',
                             'xbox360', 'nhl13', 'databases', 'nhlng-meta.xml')
 CONTAINER_HEADER = 0x2C
+
+
+def default_meta():
+    """Схема без --meta: NHL Legacy из распакованной игры (gameprofile), иначе анкер NHL 13 в ref/ (не в git)."""
+    try:
+        import gameprofile
+        p = gameprofile.get('legacy').meta
+        if p and os.path.isfile(p):
+            return p
+    except Exception:                                       # noqa: BLE001
+        pass
+    if os.path.isfile(DEFAULT_META):
+        return DEFAULT_META
+    sys.exit('нет схемы базы: укажите --meta nhlng-meta.xml (cacheboot/db распакованной игры, tools/big.py disc)')
 
 _REV8 = bytes(int(f'{i:08b}'[::-1], 2) for i in range(256))
 
@@ -446,9 +461,11 @@ def main():
     ap.add_argument('cmd', choices=['verify', 'live', 'states', 'setstate', 'set'])
     ap.add_argument('file')
     ap.add_argument('args', nargs='*')
-    ap.add_argument('--meta', default=DEFAULT_META)
+    ap.add_argument('--meta', default=None,
+                    help='nhlng-meta.xml игры (по умолчанию — схема NHL Legacy из распакованной игры, tools/gameprofile.py; '
+                         'анкер NHL 13 из ref/, если он есть)')
     a = ap.parse_args()
-    s = SaveFile(open(a.file, 'rb').read(), load_meta(a.meta))
+    s = SaveFile(open(a.file, 'rb').read(), load_meta(a.meta or default_meta()))
     if a.cmd == 'verify':
         bad = s.verify()
         kind = bytes(s.header[:16]).rstrip(b'\0').decode('latin1') if s.header is not None else ''

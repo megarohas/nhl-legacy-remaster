@@ -188,6 +188,33 @@ def decode(data):
         kinds.append(k)
     return data, '+'.join(kinds)
 
+# --- чтение одной записи --------------------------------------------------------------------
+
+class Member:
+    """Запись архива для чтения по одной: смещение, размер в архиве, полный размер, сжата ли."""
+    __slots__ = ('path', 'offset', 'stored_size', 'unpacked_size', 'is_packed')
+
+    def __init__(self, e):
+        self.path, self.offset, self.stored_size = e.path, e.offset, e.stored
+        self.unpacked_size = e.size if e.size is not None else e.stored
+        self.is_packed = e.size is not None and e.stored != e.size
+
+
+def members(path):
+    """{путь внутри архива: Member} — для чтения отдельных файлов без распаковки всего архива."""
+    return {e.path: Member(e) for e in parse(path)[1]}
+
+
+def decompress_packed_member(blob, unpacked_size=None):
+    """Снять сжатие записи (chunkzip/chunklzx/RefPack, по магии). unpacked_size — для совместимости вызовов."""
+    return decode(blob)[0]
+
+
+def read_member(f, m):
+    """Открытый архив f, запись m (Member) -> разжатые данные."""
+    f.seek(m.offset)
+    return decode(f.read(m.stored_size))[0]
+
 # --- распаковка ------------------------------------------------------------------------------
 
 def safe_path(root, name):

@@ -40,8 +40,9 @@
 
 1. ~~Этап `useredits` требует разовый `equip_from_save.py` вне git~~ — с 20.10 это `user_equipment.py extract`.
 2. Этапу `contracts` нужны `game/work/contracts/screens/*.json` от разборщика вне git (решение пользователя).
-3. `kitpaint.py`, `teamart.py` (а через них `czkit.py`, `fepose.py`) импортируют `unpack_big` из `ref/` (не в git).
-   Схему базы по умолчанию из `ref/nhl-modding-studio` берут `tdb.py`, `fefont.py`, `roster/common.py`.
+3. ~~`kitpaint.py`, `teamart.py` (а через них `czkit.py`, `fepose.py`) импортируют `unpack_big` из `ref/`~~ — с 20.10
+   чтение архивов через `tools/big.py` (`members`, `read_member`). Схема `tdb.py` без `--meta` — Legacy из
+   распакованной игры; `fefont.py`, `roster/common.py` берут `ref/` только для замороженного NHL 13.
 4. Установщик берёт `cache:` из личного `game/work/status/legacy-port.md`. У других работает только переменная
    `CACHE`.
 5. Сезон зашит: `roster/common.py`, `roster/ahl_ht.py` (`SEASON_ID`), `build-all.sh` (`teams-94.json`),
@@ -54,7 +55,7 @@
 | # | Что | Основа | Объём |
 |---|---|---|---|
 | 1 | ✔ 20.10: `user_equipment.py extract` вместо разового `equip_from_save.py` (вывод сверен: 191 правка, снимок совпал) | — | S |
-| 2 | Без `ref/…/unpack_big` в `kitpaint`, `teamart` (→ `czkit`, `fepose`) | `tools/big.py` | S–M |
+| 2 | ✔ 20.10: без `ref/…/unpack_big` в `kitpaint`, `teamart` (→ `czkit`, `fepose`); схема `tdb.py` по умолчанию — Legacy | `tools/big.py` | S–M |
 | 3 | Одна настройка сезона (`--season` / профиль) для составов, АХЛ, строк года | `roster/common.py`, `roster/ahl_ht.py`, `year2026_legacy.py`, `build-all.sh` | M |
 | 4 | Установщик: `status`, `verify`, `diff`, проверка на копии userdata; `CACHE` явно или из `nhllegacy.toml` | разовые `tmp/check_install.py`, `cmp_cache*.py`, `make_ud.py`, `cmp_dry.py`; `kitport.core` | M |
 | 5 | `tdb.py dump/diff/query` и «всё о клубе» | десяток разовых выгрузок (`tmp/dbdiff.py`, `*_dump.py`) | S–M |

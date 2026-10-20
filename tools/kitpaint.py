@@ -118,14 +118,12 @@ _DISC = {}
 
 
 def _disc_entries(arc):
+    """(путь архива образа диска NHL 13, {путь: big.Member}, кодек с decompress_packed_member) — читалка архивов
+    tools/big.py (раньше — unpack_big из ref/, не в git)."""
     if arc not in _DISC:
-        from pathlib import Path
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                        'ref', 'nhl-legacy-recomp', 'docs', 'nhl12-decomp-reference', 'tools'))
-        import unpack_big
+        import big
         path = os.path.join(game_dir(), 'extracted', 'disc', arc + '.big')
-        big = unpack_big.parse_bigeb(Path(path))
-        _DISC[arc] = (path, {e.path: e for e in big.entries}, unpack_big)
+        _DISC[arc] = (path, big.members(path), big)
     return _DISC[arc]
 
 

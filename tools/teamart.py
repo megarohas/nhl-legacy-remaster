@@ -1294,10 +1294,7 @@ def alias_uniforms(src, dst, outdir, game=None):
     Номера с одинаковым числом цифр (имена растров переписываются на месте). NHL 13 — из образа диска, другая игра
     (set_game) — из её распакованных архивов (_alias_uniforms_extracted)."""
     import re
-    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                    'ref', 'nhl-legacy-recomp', 'docs', 'nhl12-decomp-reference', 'tools'))
-    from pathlib import Path
-    import unpack_big
+    import big as unpack_big                       # читалка архивов tools/big.py (раньше — ref/, не в git)
     import unchunk
     if len(str(src)) != len(str(dst)):
         raise SystemExit('номера должны быть одной длины (имена растров внутри файлов)')
@@ -1307,11 +1304,11 @@ def alias_uniforms(src, dst, outdir, game=None):
     made = []
     for arc in sorted({a for a, _ in UNIFORM_SETS}):
         path = os.path.join(g, 'extracted', 'disc', arc + '.big')
-        big = unpack_big.parse_bigeb(Path(path))
+        members = unpack_big.members(path)
         pats = [(re.compile('^' + re.escape(p).replace(r'\{s\}', r'(\d+)').replace(r'\{v\}', r'(\d+)')
                             .replace(r'\{a\}', str(src)) + '$'), p) for a2, p in UNIFORM_SETS if a2 == arc]
         with open(path, 'rb') as f:
-            for e in big.entries:
+            for e in members.values():
                 for rx, p in pats:
                     m = rx.match(e.path)
                     if not m:
