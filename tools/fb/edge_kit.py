@@ -1828,6 +1828,7 @@ def design_seams(mesh, painters, S=2048, out_S=1024):
     t = d / np.maximum(ts, 1e-6)
     H = np.where(np.isfinite(t), seam_height(np.where(np.isfinite(t), t, 99.0)), 0.0)
     H = np.where(m, H, 0.0)
+    design_seams.height = H.reshape(out_S, S // out_S, out_S, S // out_S).mean((1, 3))   # высота швов (превью меню)
     # наклон: dH на тексель out_S (тексель S — в S/out_S раз мельче)
     k = S / out_S
     gy_, gx_ = np.gradient(H)
@@ -2043,6 +2044,11 @@ def rebuild_relief(nm_path, code, kit, mesh, cmap, n_jt, painters=None):
     out[..., 0], out[..., 1], out[..., 2] = new_xy[..., 0] + 127.5, new_xy[..., 1] + 127.5, z + 127.5
     Image.fromarray(np.clip(np.round(out), 0, 255).astype(np.uint8), "RGBA").save(nm_path)
     # блеск: ровная ткань, в ямках сетчатой кокетки — тусклее (Reebok сзади кладёт потом BrandSwap.relief)
+    # глубина швов и ямок сетки (для превью меню: там рельеф 256² не различить — затенение по глубине)
+    pd_map = np.zeros((S, S))
+    pd_map[ys, xs] = np.clip(pdepth, 0, 1) * perf
+    np.savez_compressed(os.path.join(os.path.dirname(nm_path), "relief_depth.npz"),
+                        seam=design_seams.height.astype(np.float16), perf=pd_map.astype(np.float16))
     sm_path = os.path.join(os.path.dirname(nm_path), "jersey_sm.png")
     smv = np.full((S, S), float(SM_BASE))
     smv[ys, xs] = SM_BASE - PERF_SM * np.clip(pdepth, 0, 1) * perf
@@ -2866,9 +2872,31 @@ FE_SHIELD = (1.10, 0.004, 0.0055)  # щит на превью: крупнее в
 #                                    по точкам сетки щит гнула, красное плыло)
 FE_SHADE_SIGMA = 1.2               # px: затенение модели позы у ворота — сглаженное (в нём тени шнуровки EA)
 FE_OUTLIER_PX = 6.0                # px: пиксель свитера модели, чья точка проецируется дальше, — выброс карты UV
+# Швы и сетка кокетки на превью (пользователь, 20.10: «тот же рельеф, что в игре — швы на плечах, перфорация»): наклоны
+# рельефа на 256² гасят друг друга (канавка шва — 1 тексель из 2,7 на пиксель), поэтому — затенение по глубине
+# (relief_depth.npz от rebuild_relief: высота своих швов design_seams и ямки сетки): цвет × (1 + K_s·h − K_p·ямка).
+FE_SEAM_K = 2.0
+FE_PERF_K = 0.20
 
 
-def _fe_collar(out, m, A, isl_png, Jmap, front, perr):
+def _deisland_arrays(arrs, M):
+    """Карты в развёртке с островом (S², как текстуры формы) → в развёртке Edge (uv0): прежнее место острова — значениями
+    с острова (как fill_old_place, без поворота базиса)."""
+    tri = M["tri"][M["island"][M["tri"]].all(1)]
+    out = []
+    for a in arrs:
+        S = a.shape[0]
+        tid, bar = kit3d.raster_uv({"uv": M["uv0"], "tri": tri}, S)
+        m = tid >= 0
+        T = tri[tid[m]]
+        uvi = (bar[m][:, :, None] * M["uv"][T]).sum(1)
+        b = a.astype(np.float64).copy()
+        b[m] = kit3d.sample_bilinear(a.astype(np.float64)[..., None], uvi[:, 0], uvi[:, 1])[:, 0]
+        out.append(b)
+    return out
+
+
+def _fe_collar(out, m, A, isl_png, Jmap, front, perr, depth=None):
     """Перед ворота превью (out, RGBA на месте) — проекцией сетки t0 p1 с островом (текстура isl_png — с островом)
     камерой A, затенение — gain/bias модели позы из пикселя-источника Jmap. Край ворота — только свой: где под ним
     (или над ним) была ткань переда модели позы (front — по пикселям свитера модели), фон — манекен (шея): иначе
@@ -2943,8 +2971,12 @@ def _fe_collar(out, m, A, isl_png, Jmap, front, perr):
     w_sub = np.maximum(Hy.smooth((FE_ROI_D - Dh) / FE_ROI_FADE),
                        Hy.smooth((FE_LACE_X + 0.014 - ax) / 0.008) * Hy.smooth((y3 - 1.50) / 0.012))
     w_sub = w_sub * Hy.smooth((FE_ROI_X - ax) / FE_ROI_FADE)
-    Cs = np.zeros((Hp * ss, Wp * ss, 4))
-    Cs[hit] = np.c_[c, w_sub]
+    rel = np.ones(len(c))                               # затенение по глубине швов и ямок (depth — с островом)
+    if depth is not None:
+        dh = kit3d.sample_bilinear(np.dstack(depth), uvt[:, 0], uvt[:, 1])
+        rel = np.where(drawn, 1.0, 1.0 + FE_SEAM_K * dh[:, 0] - FE_PERF_K * dh[:, 1])
+    Cs = np.zeros((Hp * ss, Wp * ss, 5))
+    Cs[hit] = np.c_[c, w_sub, rel]
     _fe_collar.shield = None
     if FE_SHIELD:                                       # щит — спрайтом: крупнее и ниже, на его месте — красный
         s_sh, d_sh, m_sh = FE_SHIELD
@@ -2977,7 +3009,7 @@ def _fe_collar(out, m, A, isl_png, Jmap, front, perr):
             Cs[~hit] = 0.0
             _fe_collar.shield = (int(sg.sum()), round(float(k_sh / ss), 2))
     _fe_collar.grid = (Cs[..., :3], hit, P3)            # отладка: точки кадра (цвет, попадание, где)
-    agg = Cs.reshape(Hp, ss, Wp, ss, 4).sum((1, 3))
+    agg = Cs.reshape(Hp, ss, Wp, ss, 5).sum((1, 3))
     n = hit.reshape(Hp, ss, Wp, ss).sum((1, 3)).astype(np.float64)
     cov = n / ss ** 2
     mean = agg / np.maximum(n, 1)[..., None]
@@ -2997,7 +3029,7 @@ def _fe_collar(out, m, A, isl_png, Jmap, front, perr):
         num = np.stack([ndi.gaussian_filter(full[..., c_] * jm, FE_SHADE_SIGMA) for c_ in range(3)], -1)
         den = ndi.gaussian_filter(jm, FE_SHADE_SIGMA)[..., None]
         sm_.append((num / np.maximum(den, 1e-6))[m["ys"][j], m["xs"][j]])
-    col = np.clip(sm_[0] * mean[inside][:, :3] + sm_[1], 0, 255)
+    col = np.clip((sm_[0] * mean[inside][:, :3] + sm_[1]) * mean[inside][:, 4:5], 0, 255)
     jc = Jmap[gy.clip(0, H - 1), gx.clip(0, W_ - 1)]
     # выбросы модели у ворота: цвет — средний по соседям без выбросов (2 прохода)
     okb = (gy >= 0) & (gy < H) & (gx >= 0) & (gx < W_)
@@ -3030,7 +3062,7 @@ def _fe_collar(out, m, A, isl_png, Jmap, front, perr):
     return int((k[inside] > 0.5).sum())
 
 
-def fe_preview_edge(jersey_png, isl_png=None):
+def fe_preview_edge(jersey_png, isl_png=None, depth_npz=None):
     """Превью меню в позе EA (fb.pilot.fe_preview_ea: манекен, свет и кадр EA — по развёртке Edge), но с поднятым
     передом ворота: модель позы снята с V-выреза Edge, а у этой сетки перед ворота поднят (deform) — без сдвига
     кромка, вставка и щит садились в «галочку» V-выреза (пользователь, 20.10: «чтобы воротник отображался
@@ -3115,13 +3147,22 @@ def fe_preview_edge(jersey_png, isl_png=None):
         _, (iy2, ix2) = ndi.distance_transform_edt(idx < 0, return_indices=True)
         j[lost] = idx[iy2[jr[lost], jc[lost]], ix2[jr[lost], jc[lost]]]
     tex = np.asarray(Image.open(jersey_png).convert("RGB")).astype(np.float64)
+    depth = depth0 = None
+    if depth_npz is not None and os.path.exists(depth_npz):
+        dz = np.load(depth_npz)
+        depth = (dz["seam"].astype(np.float64), dz["perf"].astype(np.float64))
+        depth0 = np.dstack(_deisland_arrays(depth, mesh_for(0, 1, 2)))   # в развёртке Edge — для модели позы
     acc = np.zeros((len(ty), 3))
+    accd = np.zeros((len(ty), 2))
     offs = ((np.arange(FE_SS) + 0.5) / FE_SS - 0.5) * FE_FOOT
     for oy in offs:
         for ox in offs:
             u, v = pilot._uv_at(m, sy + oy, sx + ox, home=(m["u"][j], m["v"][j]))
             acc += kit3d.sample_bilinear(tex, u, v)[:, :3]
-    col = np.clip(m["gain"][j] * acc / FE_SS ** 2 + m["bias"][j], 0, 255)
+            if depth0 is not None:
+                accd += kit3d.sample_bilinear(depth0, u, v)[:, :2]
+    rel = (1.0 + FE_SEAM_K * accd[:, 0:1] / FE_SS ** 2 - FE_PERF_K * accd[:, 1:2] / FE_SS ** 2)
+    col = np.clip((m["gain"][j] * acc / FE_SS ** 2 + m["bias"][j]) * rel, 0, 255)
     out = m["base"].copy()
     out[ty, tx, :3] = np.round(col).astype(np.uint8)
     out[ty, tx, 3] = m["alpha"][j]
@@ -3131,7 +3172,7 @@ def fe_preview_edge(jersey_png, isl_png=None):
         Jmap[ty, tx] = j
         perr = np.full(len(ys), np.inf)
         perr[fin] = np.linalg.norm(np.c_[Pp[fin], np.ones(fin.sum())] @ A - np.c_[xs[fin], ys[fin]], axis=1)
-        n_roi = _fe_collar(out, m, A, isl_png, Jmap, front, perr)
+        n_roi = _fe_collar(out, m, A, isl_png, Jmap, front, perr, depth)
     fe_preview_edge.info = {"fit_px": [round(float(v), 2) for v in np.percentile(err, [50, 90])],
                             "max_shift_px": round(float(np.abs(F).max()), 2), "warped_px": int(good.sum()),
                             "collar_px": n_roi, "shield": getattr(_fe_collar, "shield", None)}
@@ -3178,7 +3219,8 @@ def cmd_slot(a):
             print(f"  гетры {kit}: полоса строк {was[0]:.0f}–{was[1]:.0f} → {now[0]:.1f}–{now[1]:.1f} (как у {flat_kit})")
         tmp = os.path.join(d, "_edge_layout_cm.png")
         n = deislanded(os.path.join(d, "jersey_cm.png"), tmp)
-        fe_preview_edge(tmp, os.path.join(d, "jersey_cm.png")).save(os.path.join(d, "fe.png"))   # поза EA, ворот —
+        fe_preview_edge(tmp, os.path.join(d, "jersey_cm.png"), os.path.join(src, "relief_depth.npz")).save(
+            os.path.join(d, "fe.png"))                                        # поза EA, ворот —
         #                                                                     поднятый, перед — проекцией сетки
         os.remove(tmp)
         tpl = J.kit_template(new)
