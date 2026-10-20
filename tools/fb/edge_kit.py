@@ -2846,15 +2846,120 @@ def deislanded(cm_png, out_png):
 
 FE_ITER = 12                       # итераций обратного сдвига (поле сдвига плавное: |∇Δ| < 0,4 — сходится)
 FE_SS, FE_FOOT = 4, 1.25           # сглаживание превью — как у fb.pilot.fe_preview_ea
+# Перед ворота на превью — проекцией своей сетки (камера модели позы — аффинно по точкам у ворота, ошибка ~0,6 px):
+# карта UV модели позы EA у ворота шумная (подбор по корреляции), а вставка со щитом и шнуровка — 10–12 px: месиво
+# (пользователь, 20.10: «шнуровка превращается в непонятное месиво»). Шнуровку на превью — убрать (ткань), вставка
+# со щитом — как есть, со сглаживанием FE_SSR² точек на пиксель.
+FE_ROI_D, FE_ROI_X = 0.065, 0.095  # м: до края ворота и от середины — зона своей проекции
+FE_ROI_FADE = 0.012                # м: переход к модели позы
+FE_SSR = 8                         # точек на пиксель (по стороне)
+FE_NO_LACES = True
+FE_LACE_X = 0.040                  # м: столбец шнуровки (как PLACKET_HALF)
+FE_LENS = ((0.0, 1.618), 0.022, 0.045, 1.35)   # щит со вставкой на превью крупнее: центр (x, y), радиусы (м) — до
+#                                    первого увеличение FE_LENS[3], ко второму — на нет; вся линза — в острове развёртки
+#                                    (вне его развёртка другая: x, y → uv там не продолжить)
+FE_SHADE_SIGMA = 1.2               # px: затенение модели позы у ворота — сглаженное (в нём тени шнуровки EA)
 
 
-def fe_preview_edge(jersey_png):
+def _fe_collar(out, m, A, isl_png, Jmap):
+    """Перед ворота превью (out, RGBA на месте) — проекцией сетки t0 p1 с островом (текстура isl_png — с островом)
+    камерой A, затенение — gain/bias модели позы из пикселя-источника Jmap. -> пикселей."""
+    from PIL import Image
+    from scipy import ndimage as ndi
+    H, W_ = Jmap.shape
+    M = mesh_for(0, 1, 2)
+    w = Hy.Welded(M)
+    ring = w.neck()
+    zc = float(w.P[ring, 2].mean())
+    band, lip = Hy.edge_layers(w, ring, zc)
+    Dv = Hy.ring_dist(M["pos"], collar_edge(w, band, lip, zc, win=2.0))
+    bandt = band[w.g[M["tri"]]].all(1)
+    Q = np.c_[M["pos"], np.ones(len(M["pos"]))] @ A
+    cam = np.cross(A[:3, 0], A[:3, 1])                  # направление проекции; к камере — +z
+    cam = cam / np.linalg.norm(cam) * (1 if cam[2] > 0 else -1)
+    T = M["tri"]
+    nt = kit3d._unit(kit3d._unit(M["nrm"])[T].mean(1))
+    c3 = M["pos"][T].mean(1)
+    sel = ((nt @ cam) > 0.05) & ~bandt & (c3[:, 2] > zc - 0.02) &         ((Dv[T].min(1) < FE_ROI_D + 0.03) | (np.abs(c3[:, 0]) < FE_LACE_X + 0.04)) &         (np.abs(c3[:, 0]) < FE_ROI_X + 0.04) & (c3[:, 1] > 1.46)
+    Ts = T[sel]
+    Ts = Ts[np.argsort(M["pos"][Ts].mean(1) @ cam)]     # дальние — первыми: ближние ложатся поверх
+    q = Q[Ts]
+    x0, y0 = int(np.floor(q[..., 0].min())) - 1, int(np.floor(q[..., 1].min())) - 1
+    x1, y1 = int(np.ceil(q[..., 0].max())) + 1, int(np.ceil(q[..., 1].max())) + 1
+    Wp, Hp, ss = x1 - x0 + 1, y1 - y0 + 1, FE_SSR
+    uvp = np.c_[(Q[:, 0] - x0 + 0.5) / Wp, (Q[:, 1] - y0 + 0.5) / Hp]
+    tid, bar = kit3d.raster_uv({"uv": uvp, "tri": Ts}, (Wp * ss, Hp * ss))
+    hit = tid >= 0
+    TT, bb = Ts[tid[hit]], bar[hit]
+    uvt = (bb[:, :, None] * M["uv"][TT]).sum(1)
+    P3 = (bb[:, :, None] * M["pos"][TT]).sum(1)
+    Dh = (bb * Dv[TT]).sum(1)
+    if FE_LENS is not None:                             # линза: точка показывает рисунок ближе к центру (крупнее)
+        (cx, cy), r1, r2, s0 = FE_LENS
+        isl = (uvt[:, 0] > ISL_BOX[0]) & (uvt[:, 0] < ISL_BOX[2]) & (uvt[:, 1] > ISL_BOX[1]) & (uvt[:, 1] < ISL_BOX[3])
+        fr = isl & (P3[:, 2] > zc) & (np.abs(P3[:, 0] - cx) < r2 + 0.01) & (np.abs(P3[:, 1] - cy) < r2 + 0.01)
+        L = np.linalg.lstsq(np.c_[P3[fr, :2], np.ones(fr.sum())], uvt[fr], rcond=None)[0]   # (x, y) → uv у вставки
+        dxy = P3[:, :2] - np.array([cx, cy])
+        r = np.hypot(dxy[:, 0], dxy[:, 1])
+        sc = 1.0 + (s0 - 1.0) * Hy.smooth((r2 - r) / (r2 - r1))
+        lens = fr & (r < r2)
+        dP = dxy[lens] / sc[lens, None] - dxy[lens]
+        uvt[lens] += dP @ L[:2]
+        P3 = P3.copy()
+        P3[lens, :2] += dP
+    tex = np.asarray(Image.open(isl_png).convert("RGB")).astype(np.float64)
+    c = kit3d.sample_bilinear(tex, uvt[:, 0], uvt[:, 1])[:, :3]
+    if FE_NO_LACES:                                     # шнуровка и люверсы — ткань свитера (вставка остаётся)
+        ax, y3 = np.abs(P3[:, 0]), P3[:, 1]
+        ys_h, hs_h = (np.array(v) for v in zip(*INSERT_HW))
+        hw = np.interp(y3, ys_h, hs_h, left=-1.0, right=-1.0)
+        body_m = (ax > FE_LACE_X + 0.006) & (ax < FE_LACE_X + 0.035) & (y3 > 1.52) & (y3 < 1.575)
+        body = np.median(c[body_m], 0) if body_m.sum() > 20 else np.median(c, 0)
+        lace = (ax < FE_LACE_X) & (y3 > 1.48) & (y3 < 1.66) & (ax > hw + 0.0015)
+        c[lace] = body
+    # зона своей проекции: у края ворота (FE_ROI_D) и весь столбец шнуровки вниз до её низа
+    ax_ = np.abs(P3[:, 0])
+    w_sub = np.maximum(Hy.smooth((FE_ROI_D - Dh) / FE_ROI_FADE),
+                       Hy.smooth((FE_LACE_X + 0.014 - ax_) / 0.008) * Hy.smooth((P3[:, 1] - 1.50) / 0.012))
+    w_sub = w_sub * Hy.smooth((FE_ROI_X - ax_) / FE_ROI_FADE)
+    Cs = np.zeros((Hp * ss, Wp * ss, 4))
+    Cs[hit] = np.c_[c, w_sub]
+    agg = Cs.reshape(Hp, ss, Wp, ss, 4).sum((1, 3))
+    n = hit.reshape(Hp, ss, Wp, ss).sum((1, 3)).astype(np.float64)
+    cov = n / ss ** 2
+    mean = agg / np.maximum(n, 1)[..., None]
+    k = np.where(n > 0, cov * mean[..., 3], 0.0)
+    gy, gx = np.mgrid[y0:y1 + 1, x0:x1 + 1]
+    inside = (gy >= 0) & (gy < H) & (gx >= 0) & (gx < W_) & (k > 1e-3)
+    _, (iy, ix) = ndi.distance_transform_edt(Jmap < 0, return_indices=True)
+    py, px_ = gy[inside], gx[inside]
+    j = Jmap[iy[py, px_], ix[py, px_]]
+    # затенение — сглаженное по пикселям свитера (нормированный гаусс)
+    jm = np.zeros((H, W_))
+    jm[m["ys"], m["xs"]] = 1.0
+    sm_ = []
+    for arr in (m["gain"], m["bias"]):
+        full = np.zeros((H, W_, 3))
+        full[m["ys"], m["xs"]] = arr
+        num = np.stack([ndi.gaussian_filter(full[..., c_] * jm, FE_SHADE_SIGMA) for c_ in range(3)], -1)
+        den = ndi.gaussian_filter(jm, FE_SHADE_SIGMA)[..., None]
+        sm_.append((num / np.maximum(den, 1e-6))[m["ys"][j], m["xs"][j]])
+    col = np.clip(sm_[0] * mean[inside][:, :3] + sm_[1], 0, 255)
+    kk = k[inside][:, None]
+    cur = out[py, px_].astype(np.float64)
+    out[py, px_, :3] = np.round(cur[:, :3] * (1 - kk) + col * kk).astype(np.uint8)
+    out[py, px_, 3] = np.round(cur[:, 3] * (1 - kk[:, 0]) + m["alpha"][j] * kk[:, 0]).astype(np.uint8)
+    return int((k[inside] > 0.5).sum())
+
+
+def fe_preview_edge(jersey_png, isl_png=None):
     """Превью меню в позе EA (fb.pilot.fe_preview_ea: манекен, свет и кадр EA — по развёртке Edge), но с поднятым
     передом ворота: модель позы снята с V-выреза Edge, а у этой сетки перед ворота поднят (deform) — без сдвига
     кромка, вставка и щит садились в «галочку» V-выреза (пользователь, 20.10: «чтобы воротник отображался
     корректно»). Сдвиг точек свитера сетки t0 p1 (по uv) → в пиксели превью (аффинно, по точкам у ворота); пиксель
     превью q показывает точку p, для которой p + Δ(p) = q (итерации), если p — перед свитера; иначе — как у EA.
-    jersey_png — текстура в развёртке Edge (deislanded). -> RGBA 256²."""
+    jersey_png — текстура в развёртке Edge (deislanded); isl_png — она же с островом: перед ворота — проекцией сетки
+    (_fe_collar). -> RGBA 256²."""
     from PIL import Image
     from scipy import ndimage as ndi
     from . import pilot
@@ -2942,8 +3047,14 @@ def fe_preview_edge(jersey_png):
     out = m["base"].copy()
     out[ty, tx, :3] = np.round(col).astype(np.uint8)
     out[ty, tx, 3] = m["alpha"][j]
+    n_roi = 0
+    if isl_png is not None:
+        Jmap = -np.ones((H, W_), np.int64)
+        Jmap[ty, tx] = j
+        n_roi = _fe_collar(out, m, A, isl_png, Jmap)
     fe_preview_edge.info = {"fit_px": [round(float(v), 2) for v in np.percentile(err, [50, 90])],
-                            "max_shift_px": round(float(np.abs(F).max()), 2), "warped_px": int(good.sum())}
+                            "max_shift_px": round(float(np.abs(F).max()), 2), "warped_px": int(good.sum()),
+                            "collar_px": n_roi}
     return Image.fromarray(out, "RGBA")
 
 
@@ -2987,7 +3098,8 @@ def cmd_slot(a):
             print(f"  гетры {kit}: полоса строк {was[0]:.0f}–{was[1]:.0f} → {now[0]:.1f}–{now[1]:.1f} (как у {flat_kit})")
         tmp = os.path.join(d, "_edge_layout_cm.png")
         n = deislanded(os.path.join(d, "jersey_cm.png"), tmp)
-        fe_preview_edge(tmp).save(os.path.join(d, "fe.png"))   # поза EA, перед ворота — поднятый
+        fe_preview_edge(tmp, os.path.join(d, "jersey_cm.png")).save(os.path.join(d, "fe.png"))   # поза EA, ворот —
+        #                                                                     поднятый, перед — проекцией сетки
         os.remove(tmp)
         tpl = J.kit_template(new)
         tdir = os.path.join(cur, tpl)
