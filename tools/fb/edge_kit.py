@@ -2882,26 +2882,35 @@ FE_PERF_K = 0.20
 # по пикселям свитера (тонкие линии уходят, складки и края — нет); рукава — как есть (там складки позы).
 FE_CLEAN_MED = 5
 FE_CLEAN_X = (0.18, 0.22)          # м (|x| в позе привязки): торс — до первого, рукав — от второго
+FE_CLEAN_SHOULDER = (0.36, 0.40, 1.40, 7)   # и плечо с верхом рукава выше подмышки (y > 1,40), медианой 7²: там
+#                                    кольцо шва проймы рукава Edge (|x| 0,29–0,33, линия 2–3 px — дуга на плече;
+#                                    пользователь, 20.10: «я про это, ничего не поправил»; в игре шва там нет)
 
 
 def _pose_clean(m, Pp, fin):
-    """gain/bias модели позы без тонких линий на торсе (медиана по соседям-пикселям свитера). -> (gain, bias)."""
+    """gain/bias модели позы без тонких линий на торсе и плечах (медиана по соседям-пикселям свитера). -> (gain, bias)."""
+    import warnings
     H, W_ = m["h"], m["w"]
-    r = FE_CLEAN_MED // 2
-    out = []
-    for arr in (m["gain"], m["bias"]):
+
+    def med_of(arr, k):
+        r = k // 2
         full = np.full((H, W_, arr.shape[1]), np.nan)
         full[m["ys"], m["xs"]] = arr
         pad = np.pad(full, ((r, r), (r, r), (0, 0)), constant_values=np.nan)
-        import warnings
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
-            med = np.nanmedian(np.stack([pad[dy:dy + H, dx:dx + W_] for dy in range(2 * r + 1)
-                                         for dx in range(2 * r + 1)]), 0)[m["ys"], m["xs"]]
-        med = np.where(np.isfinite(med), med, arr)
-        ax = np.where(fin, np.abs(np.nan_to_num(Pp[:, 0])), 1.0)
-        w = Hy.smooth((FE_CLEAN_X[1] - ax) / (FE_CLEAN_X[1] - FE_CLEAN_X[0]))[:, None]
-        out.append(arr * (1 - w) + med * w)
+            med = np.nanmedian(np.stack([pad[dy:dy + H, dx:dx + W_] for dy in range(k) for dx in range(k)]), 0)
+        med = med[m["ys"], m["xs"]]
+        return np.where(np.isfinite(med), med, arr)
+    ax = np.where(fin, np.abs(np.nan_to_num(Pp[:, 0])), 1.0)
+    yy = np.where(fin, np.nan_to_num(Pp[:, 1]), 0.0)
+    x0s, x1s, y0s, ks = FE_CLEAN_SHOULDER
+    w_t = Hy.smooth((FE_CLEAN_X[1] - ax) / (FE_CLEAN_X[1] - FE_CLEAN_X[0]))[:, None]
+    w_s = (Hy.smooth((x1s - ax) / (x1s - x0s)) * Hy.smooth((yy - y0s) / 0.03))[:, None] * (1 - w_t)
+    out = []
+    for arr in (m["gain"], m["bias"]):
+        res = arr * (1 - w_t) + med_of(arr, FE_CLEAN_MED) * w_t
+        out.append(res * (1 - w_s) + med_of(arr, ks) * w_s)
     return out
 
 
