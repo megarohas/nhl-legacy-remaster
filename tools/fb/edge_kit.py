@@ -2850,20 +2850,30 @@ FE_SS, FE_FOOT = 4, 1.25           # сглаживание превью — к�
 # карта UV модели позы EA у ворота шумная (подбор по корреляции), а вставка со щитом и шнуровка — 10–12 px: месиво
 # (пользователь, 20.10: «шнуровка превращается в непонятное месиво»). Шнуровку на превью — убрать (ткань), вставка
 # со щитом — как есть, со сглаживанием FE_SSR² точек на пиксель.
-FE_ROI_D, FE_ROI_X = 0.065, 0.095  # м: до края ворота и от середины — зона своей проекции
+FE_ROI_D, FE_ROI_X = 0.065, 0.120  # м: до края ворота и от середины — зона своей проекции
 FE_ROI_FADE = 0.012                # м: переход к модели позы
 FE_SSR = 8                         # точек на пиксель (по стороне)
 FE_NO_LACES = True
 FE_LACE_X = 0.040                  # м: столбец шнуровки (как PLACKET_HALF)
-FE_LENS = ((0.0, 1.618), 0.022, 0.045, 1.35)   # щит со вставкой на превью крупнее: центр (x, y), радиусы (м) — до
-#                                    первого увеличение FE_LENS[3], ко второму — на нет; вся линза — в острове развёртки
-#                                    (вне его развёртка другая: x, y → uv там не продолжить)
+FE_LACE_Y = (1.48, 1.616)          # м: шнуровка — ниже вставки (выше — кромка и кокетка: при 1,66 у верхних углов
+#                                    вставки выходили блоки цвета ткани; при 1,612 оставались концы верхнего шнурка)
+FE_LACES = ((1.603, 1.581), 0.024, 0.0100)   # шнурки на превью — крупнее настоящих (пользователь, 20.10: «хотя бы
+#                                    пару шнурков, без них скудно»): высоты (м), полуширина, толщина; цвет — шнурков
+FE_LACE_V = 0.0065                 # м: красный «V» между шнурками (полуширина вверху; пользователь, 20.10)
+FE_SHIELD = (1.10, 0.005)          # щит на превью: крупнее во столько и ниже на столько (м; пользователь, 20.10: «чтобы
+#                                    над ним был виден красный») — спрайтом в кадре: вырезан со сглаженным краем, место —
+#                                    красным вставки, вставлен заново (линза по точкам сетки щит гнула, красное плыло)
 FE_SHADE_SIGMA = 1.2               # px: затенение модели позы у ворота — сглаженное (в нём тени шнуровки EA)
+FE_OUTLIER_PX = 6.0                # px: пиксель свитера модели, чья точка проецируется дальше, — выброс карты UV
 
 
-def _fe_collar(out, m, A, isl_png, Jmap):
+def _fe_collar(out, m, A, isl_png, Jmap, front, perr):
     """Перед ворота превью (out, RGBA на месте) — проекцией сетки t0 p1 с островом (текстура isl_png — с островом)
-    камерой A, затенение — gain/bias модели позы из пикселя-источника Jmap. -> пикселей."""
+    камерой A, затенение — gain/bias модели позы из пикселя-источника Jmap. Край ворота — только свой: где под ним
+    (или над ним) была ткань переда модели позы (front — по пикселям свитера модели), фон — манекен (шея): иначе
+    сквозь сглаженный край проступал пиксельный край модели — лесенкой (пользователь, 20.10). Выбросы карты UV модели
+    у ворота (perr — px между пикселем свитера и проекцией его точки: у шеи пиксель показывал подол — белая точка) —
+    цветом соседей. -> пикселей."""
     from PIL import Image
     from scipy import ndimage as ndi
     H, W_ = Jmap.shape
@@ -2894,43 +2904,84 @@ def _fe_collar(out, m, A, isl_png, Jmap):
     uvt = (bb[:, :, None] * M["uv"][TT]).sum(1)
     P3 = (bb[:, :, None] * M["pos"][TT]).sum(1)
     Dh = (bb * Dv[TT]).sum(1)
-    if FE_LENS is not None:                             # линза: точка показывает рисунок ближе к центру (крупнее)
-        (cx, cy), r1, r2, s0 = FE_LENS
-        isl = (uvt[:, 0] > ISL_BOX[0]) & (uvt[:, 0] < ISL_BOX[2]) & (uvt[:, 1] > ISL_BOX[1]) & (uvt[:, 1] < ISL_BOX[3])
-        fr = isl & (P3[:, 2] > zc) & (np.abs(P3[:, 0] - cx) < r2 + 0.01) & (np.abs(P3[:, 1] - cy) < r2 + 0.01)
-        L = np.linalg.lstsq(np.c_[P3[fr, :2], np.ones(fr.sum())], uvt[fr], rcond=None)[0]   # (x, y) → uv у вставки
-        dxy = P3[:, :2] - np.array([cx, cy])
-        r = np.hypot(dxy[:, 0], dxy[:, 1])
-        sc = 1.0 + (s0 - 1.0) * Hy.smooth((r2 - r) / (r2 - r1))
-        lens = fr & (r < r2)
-        dP = dxy[lens] / sc[lens, None] - dxy[lens]
-        uvt[lens] += dP @ L[:2]
-        P3 = P3.copy()
-        P3[lens, :2] += dP
     tex = np.asarray(Image.open(isl_png).convert("RGB")).astype(np.float64)
+    ys_h, hs_h = (np.array(v) for v in zip(*INSERT_HW))
     c = kit3d.sample_bilinear(tex, uvt[:, 0], uvt[:, 1])[:, :3]
-    if FE_NO_LACES:                                     # шнуровка и люверсы — ткань свитера (вставка остаётся)
-        ax, y3 = np.abs(P3[:, 0]), P3[:, 1]
-        ys_h, hs_h = (np.array(v) for v in zip(*INSERT_HW))
-        hw = np.interp(y3, ys_h, hs_h, left=-1.0, right=-1.0)
+    ax, y3 = np.abs(P3[:, 0]), P3[:, 1]
+    hw = np.interp(y3, ys_h, hs_h, left=-1.0, right=-1.0)
+    in_ins = (ax < hw - 0.002) & (y3 > 1.60)
+    red = np.median(c[in_ins], 0) if in_ins.sum() > 20 else np.array([160.0, 15.0, 10.0])
+    drawn = np.zeros(len(c), bool)                     # нарисованное на превью (шнурки, «V») — поверх щита
+    if FE_NO_LACES:                                     # шнуровка и люверсы — ткань свитера, во вставке — красный
         body_m = (ax > FE_LACE_X + 0.006) & (ax < FE_LACE_X + 0.035) & (y3 > 1.52) & (y3 < 1.575)
         body = np.median(c[body_m], 0) if body_m.sum() > 20 else np.median(c, 0)
-        lace = (ax < FE_LACE_X) & (y3 > 1.48) & (y3 < 1.66) & (ax > hw + 0.0015)
-        c[lace] = body
+        col_z = (ax < FE_LACE_X) & (y3 > FE_LACE_Y[0]) & (y3 < FE_LACE_Y[1])
+        cand = col_z & (ax > hw + 0.0015) & (np.linalg.norm(c - body, axis=1) > 60) &             (np.linalg.norm(c - red, axis=1) > 60)
+        if cand.sum() > 10:                             # цвет шнурков — самые далёкие от ткани (без краёв со сглаживанием)
+            dist = np.linalg.norm(c[cand] - body, axis=1)
+            lace_col = np.median(c[cand][dist >= np.percentile(dist, 75)], 0)
+        else:
+            lace_col = 255.0 - body
+        c[col_z & (ax > hw + 0.0015)] = body
+        c[col_z & (ax <= hw + 0.0015)] = red
+        if FE_LACES:
+            ys_l, hw_l, th_l = FE_LACES
+            # ниже верхнего шнурка — ткань, и кончик вставки тоже (торчал красным между шнурками)
+            c[(ax < FE_LACE_X) & (y3 > FE_LACE_Y[0]) & (y3 < max(ys_l) - th_l / 2)] = body
+            if FE_LACE_V and len(ys_l) > 1:              # «V» остриём вниз между верхним и следующим шнурком
+                yt, yb = ys_l[0] - th_l / 2, ys_l[1] + th_l / 2
+                f_v = np.clip((y3 - yb) / max(yt - yb, 1e-6), 0, 1)
+                on = (y3 > yb) & (y3 <= yt) & (ax < FE_LACE_V * f_v) & (P3[:, 2] > zc)
+                c[on] = red
+                drawn |= on
+            for yl in ys_l:
+                on = (np.abs(y3 - yl) < th_l / 2) & (ax < hw_l) & (P3[:, 2] > zc)
+                c[on] = lace_col
+                drawn |= on
     # зона своей проекции: у края ворота (FE_ROI_D) и весь столбец шнуровки вниз до её низа
-    ax_ = np.abs(P3[:, 0])
     w_sub = np.maximum(Hy.smooth((FE_ROI_D - Dh) / FE_ROI_FADE),
-                       Hy.smooth((FE_LACE_X + 0.014 - ax_) / 0.008) * Hy.smooth((P3[:, 1] - 1.50) / 0.012))
-    w_sub = w_sub * Hy.smooth((FE_ROI_X - ax_) / FE_ROI_FADE)
+                       Hy.smooth((FE_LACE_X + 0.014 - ax) / 0.008) * Hy.smooth((y3 - 1.50) / 0.012))
+    w_sub = w_sub * Hy.smooth((FE_ROI_X - ax) / FE_ROI_FADE)
     Cs = np.zeros((Hp * ss, Wp * ss, 4))
     Cs[hit] = np.c_[c, w_sub]
+    _fe_collar.shield = None
+    if FE_SHIELD:                                       # щит — спрайтом: крупнее и ниже, на его месте — красный
+        s_sh, d_sh = FE_SHIELD
+        sg = np.zeros(hit.shape, bool)
+        sg[hit] = (ax < hw - 0.0005) & (y3 > 1.612) & ~drawn & (np.linalg.norm(c - red, axis=1) > 70)
+        lab, nl = ndi.label(ndi.binary_closing(sg, iterations=2))
+        if nl:
+            sz = np.bincount(lab.ravel())
+            sz[0] = 0
+            sg = ndi.binary_fill_holes(lab == sz.argmax())   # сам щит — крупнейшая часть
+            reg = ndi.binary_dilation(sg, iterations=3) & hit  # с краем сглаживания
+            C3 = Cs[..., :3]
+            dr = np.linalg.norm(C3 - red, axis=-1)
+            al = np.where(reg, np.clip((dr - 12.0) / 50.0, 0, 1), 0.0)
+            al[sg] = np.maximum(al[sg], 0.0)
+            pre = (C3 - (1 - al[..., None]) * red) * reg[..., None]      # цвет щита, умноженный на долю
+            gr, gc = np.argwhere(sg).mean(0)
+            k_sh = d_sh * abs(A[1, 1]) * ss                 # вниз, точек сетки
+            rr, cc = np.mgrid[0:hit.shape[0], 0:hit.shape[1]].astype(np.float64)
+            sr, sc_ = gr + (rr - gr - k_sh) / s_sh, gc + (cc - gc) / s_sh
+            a_n = ndi.map_coordinates(al, [sr, sc_], order=1, mode="constant")
+            p_n = np.stack([ndi.map_coordinates(pre[..., i], [sr, sc_], order=1, mode="constant") for i in range(3)], -1)
+            # место щита и красная кайма под новым (низ щита ниже вставки — на красном) — красным
+            base3 = np.where((reg | (ndi.binary_dilation(a_n > 0.05, iterations=3) & hit))[..., None], red, C3)
+            Cs[..., :3] = p_n + (1 - a_n[..., None]) * base3
+            dg = np.zeros(hit.shape, bool)
+            dg[hit] = drawn
+            Cs[dg, :3] = c[drawn]
+            Cs[~hit] = 0.0
+            _fe_collar.shield = (int(sg.sum()), round(float(k_sh / ss), 2))
+    _fe_collar.grid = (Cs[..., :3], hit, P3)            # отладка: точки кадра (цвет, попадание, где)
     agg = Cs.reshape(Hp, ss, Wp, ss, 4).sum((1, 3))
     n = hit.reshape(Hp, ss, Wp, ss).sum((1, 3)).astype(np.float64)
     cov = n / ss ** 2
     mean = agg / np.maximum(n, 1)[..., None]
     k = np.where(n > 0, cov * mean[..., 3], 0.0)
     gy, gx = np.mgrid[y0:y1 + 1, x0:x1 + 1]
-    inside = (gy >= 0) & (gy < H) & (gx >= 0) & (gx < W_) & (k > 1e-3)
+    inside = (gy >= 0) & (gy < H) & (gx >= 0) & (gx < W_) & (k > 1e-3) & (cov > 0)
     _, (iy, ix) = ndi.distance_transform_edt(Jmap < 0, return_indices=True)
     py, px_ = gy[inside], gx[inside]
     j = Jmap[iy[py, px_], ix[py, px_]]
@@ -2945,10 +2996,35 @@ def _fe_collar(out, m, A, isl_png, Jmap):
         den = ndi.gaussian_filter(jm, FE_SHADE_SIGMA)[..., None]
         sm_.append((num / np.maximum(den, 1e-6))[m["ys"][j], m["xs"][j]])
     col = np.clip(sm_[0] * mean[inside][:, :3] + sm_[1], 0, 255)
-    kk = k[inside][:, None]
+    jc = Jmap[gy.clip(0, H - 1), gx.clip(0, W_ - 1)]
+    # выбросы модели у ворота: цвет — средний по соседям без выбросов (2 прохода)
+    okb = (gy >= 0) & (gy < H) & (gx >= 0) & (gx < W_)
+    bad = okb & (jc >= 0) & (perr[np.maximum(jc, 0)] > FE_OUTLIER_PX)
+    for _ in range(2):
+        if not bad.any():
+            break
+        reg = out[y0:y1 + 1, x0:x1 + 1].astype(np.float64) if (y0 >= 0 and x0 >= 0 and y1 < H and x1 < W_) else None
+        if reg is None:
+            break
+        good = (~bad).astype(np.float64)
+        num = np.stack([ndi.uniform_filter(reg[..., c_] * good, 3) for c_ in range(4)], -1)
+        den = ndi.uniform_filter(good, 3)[..., None]
+        fix = bad & (den[..., 0] > 0.05)
+        reg[fix] = (num / np.maximum(den, 1e-6))[fix]
+        out[y0:y1 + 1, x0:x1 + 1] = np.round(reg).astype(np.uint8)
+        bad &= ~fix
+    # фон: ткань переда модели позы у края (своя ткань — только из проекции) → манекен
+    was_front = (jc >= 0) & front[np.maximum(jc, 0)]
+    above = ndi.binary_dilation(k > 0.3, iterations=3) & (n == 0) & was_front &         (gy >= 0) & (gy < H) & (gx >= 0) & (gx < W_)
+    out[gy[above], gx[above]] = m["base"][gy[above], gx[above]]
+    # доля своей сетки cov: из неё — доля своего рисунка wR (переход к модели позы — её же тканью), вне сетки — фон
+    cv = cov[inside][:, None]
+    wr = mean[inside][:, 3:4]
     cur = out[py, px_].astype(np.float64)
-    out[py, px_, :3] = np.round(cur[:, :3] * (1 - kk) + col * kk).astype(np.uint8)
-    out[py, px_, 3] = np.round(cur[:, 3] * (1 - kk[:, 0]) + m["alpha"][j] * kk[:, 0]).astype(np.uint8)
+    bg = np.where(was_front[inside][:, None], m["base"][py, px_].astype(np.float64), cur)
+    mine = np.c_[col, m["alpha"][j]]
+    res = cv * (wr * mine + (1 - wr) * cur) + (1 - cv) * bg
+    out[py, px_] = np.round(np.clip(res, 0, 255)).astype(np.uint8)
     return int((k[inside] > 0.5).sum())
 
 
@@ -3051,10 +3127,12 @@ def fe_preview_edge(jersey_png, isl_png=None):
     if isl_png is not None:
         Jmap = -np.ones((H, W_), np.int64)
         Jmap[ty, tx] = j
-        n_roi = _fe_collar(out, m, A, isl_png, Jmap)
+        perr = np.full(len(ys), np.inf)
+        perr[fin] = np.linalg.norm(np.c_[Pp[fin], np.ones(fin.sum())] @ A - np.c_[xs[fin], ys[fin]], axis=1)
+        n_roi = _fe_collar(out, m, A, isl_png, Jmap, front, perr)
     fe_preview_edge.info = {"fit_px": [round(float(v), 2) for v in np.percentile(err, [50, 90])],
                             "max_shift_px": round(float(np.abs(F).max()), 2), "warped_px": int(good.sum()),
-                            "collar_px": n_roi}
+                            "collar_px": n_roi, "shield": getattr(_fe_collar, "shield", None)}
     return Image.fromarray(out, "RGBA")
 
 
