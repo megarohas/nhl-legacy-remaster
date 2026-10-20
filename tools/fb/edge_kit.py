@@ -2877,6 +2877,32 @@ FE_OUTLIER_PX = 6.0                # px: пиксель свитера моде�
 # (relief_depth.npz от rebuild_relief: высота своих швов design_seams и ямки сетки): цвет × (1 + K_s·h − K_p·ямка).
 FE_SEAM_K = 2.0
 FE_PERF_K = 0.20
+# Свет модели позы — со швами EA (кокетка поперёк груди, V-вырез, подол, «призраки» нашивок — тонкие линии в 1–2 px):
+# со своими швами выходило «и новые, и старые» (пользователь, 20.10). На торсе и плечах свет — медианой FE_CLEAN_MED²
+# по пикселям свитера (тонкие линии уходят, складки и края — нет); рукава — как есть (там складки позы).
+FE_CLEAN_MED = 5
+FE_CLEAN_X = (0.18, 0.22)          # м (|x| в позе привязки): торс — до первого, рукав — от второго
+
+
+def _pose_clean(m, Pp, fin):
+    """gain/bias модели позы без тонких линий на торсе (медиана по соседям-пикселям свитера). -> (gain, bias)."""
+    H, W_ = m["h"], m["w"]
+    r = FE_CLEAN_MED // 2
+    out = []
+    for arr in (m["gain"], m["bias"]):
+        full = np.full((H, W_, arr.shape[1]), np.nan)
+        full[m["ys"], m["xs"]] = arr
+        pad = np.pad(full, ((r, r), (r, r), (0, 0)), constant_values=np.nan)
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            med = np.nanmedian(np.stack([pad[dy:dy + H, dx:dx + W_] for dy in range(2 * r + 1)
+                                         for dx in range(2 * r + 1)]), 0)[m["ys"], m["xs"]]
+        med = np.where(np.isfinite(med), med, arr)
+        ax = np.where(fin, np.abs(np.nan_to_num(Pp[:, 0])), 1.0)
+        w = Hy.smooth((FE_CLEAN_X[1] - ax) / (FE_CLEAN_X[1] - FE_CLEAN_X[0]))[:, None]
+        out.append(arr * (1 - w) + med * w)
+    return out
 
 
 def _deisland_arrays(arrs, M):
@@ -3094,6 +3120,9 @@ def fe_preview_edge(jersey_png, isl_png=None, depth_npz=None):
     yi = np.clip((m["v"] * S).astype(int), 0, S - 1)
     Pp, Dp, Np = P[yi, xi], D[yi, xi], N[yi, xi]
     fin = np.isfinite(Pp[:, 0])
+    if FE_CLEAN_MED:                                    # свет без швов EA на торсе
+        g_c, b_c = _pose_clean(m, Pp, fin)
+        m = dict(m, gain=g_c, bias=b_c)
     front = fin & (Pp[:, 2] > zc) & (Np[:, 2] > 0.1)
     # проекция у ворота: (x, y, z) → пиксель, аффинно по точкам переда у ворота
     near = front & (np.abs(Pp[:, 0]) < 0.16) & (Pp[:, 1] > 1.45) & (Pp[:, 1] < 1.72)
