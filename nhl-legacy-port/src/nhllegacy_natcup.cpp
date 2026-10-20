@@ -48,8 +48,8 @@ bool Enabled() {
   return on;
 }
 
-// Дни ↔ дата (григорианский календарь, отсчёт как у leaguetasks: 30.12.1899 = 0; у движка, похоже, на день
-// иначе — для своей задачи важна только разность с датами сезона, она от эпохи не зависит).
+// Дни ↔ дата (григорианский календарь). Эпоха движка — 28.12.1899 = 0: старт франшизы «NHL Entry Draft» в игре
+// 19.06.2026 = 46190, 25.08.2026 в игре = 46257 (leaguestates type 0), прогон 20.10.
 int64_t DaysFromCivil(int64_t y, unsigned m, unsigned d) {
   y -= m <= 2;
   const int64_t era = (y >= 0 ? y : y - 399) / 400;
@@ -58,7 +58,7 @@ int64_t DaysFromCivil(int64_t y, unsigned m, unsigned d) {
   const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
   return era * 146097 + static_cast<int64_t>(doe) - 719468;
 }
-const int64_t kEpoch = DaysFromCivil(1899, 12, 30);
+const int64_t kEpoch = DaysFromCivil(1899, 12, 28);
 
 void CivilFromDays(int64_t z, int* y, unsigned* m, unsigned* d) {
   z += 719468;
