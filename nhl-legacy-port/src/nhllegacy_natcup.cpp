@@ -183,6 +183,7 @@ constexpr uint32_t kTableGameStats = 0x5C32910Au;  // leaguegamestats
 constexpr uint32_t kTableSkaterAi = 0xE5C10816u;   // leagueskaterai
 constexpr uint32_t kTableGoalieAi = 0xEA50C5DAu;   // leaguegoalieai
 constexpr uint32_t kTableTeams = 0xC7BCD146u;      // leagueteams
+constexpr uint32_t kTableRoster = 0x32926EE1u;     // leaguerostertable
 constexpr uint32_t kFieldMonth = 0xBFC025ABu;
 // номера полей — порядок в схеме nhlng-meta.xml (см. выше)
 namespace col {
@@ -192,7 +193,8 @@ constexpr uint32_t kGsIndex = 0, kGsOt = 1, kGsShootout = 3, kGsScoreAway = 7, k
 constexpr uint32_t kBioIndex = 0, kBioCountry = 42, kBioPosition = 84, kBioTeam = 78, kBioInjury = 29, kBioJersey = 58;
 constexpr uint32_t kSkIndex = 0, kSkStyle = 25;
 constexpr uint32_t kGkIndex = 0, kGkStyle = 21;
-constexpr uint32_t kTmIndex = 0, kTmTeamId = 3;
+constexpr uint32_t kTmIndex = 0, kTmTeamId = 3, kTmLeague = 30;
+constexpr uint32_t kRsPlayer = 48, kRsTeam = 67;
 }  // namespace col
 
 // Строки таблицы (все или с условием «поле == значение»): fn(get, put) на каждую строку; get(номер поля) → значение,
@@ -803,7 +805,51 @@ int32_t Loser(const Game& g) {
 }
 
 // Первый день: составы 16 сборных, 8 участников (сборная пользователя + сильнейшие), группы змейкой, игры круга.
+// Перед турниром: стоковым игрокам сборных bio.team = сборная. У дублей игроков клубов (их создаёт 82B3DFC8 при
+// создании франшизы) bio.team — клуб, хотя в его составе их нет: без этого Finish их не вернёт (тест 5: −37 строк
+// у 8 участниц), а пул «игроков клубов» получает второго Кросби. Трогаем только тех, кого нет ни в одном составе
+// клуба и у кого bio.team — сборная, НХЛ, АХЛ или −1 (сейв 20.10: 325 — своя сборная, 47 — клуб, 3 — −1); юниоры
+// CHL в составах не числятся, свободные агенты в турнир не идут — повторный Setup их не заденет.
+void AnchorStock(PPCContext& ctx, uint8_t* base, uint32_t f, const std::map<uint32_t, uint32_t>& teams) {
+  std::map<int32_t, bool> nation_team, pro_team;
+  for (const auto& [id, t] : teams) {
+    nation_team[static_cast<int32_t>(t)] = true;
+  }
+  ForEachRow(ctx, base, f, kTableTeams, 0, 0, [&](auto& get, auto&) {
+    const int32_t lg = get(col::kTmLeague);
+    if (lg == 0 || lg == 1) {
+      pro_team[get(col::kTmIndex)] = true;
+    }
+  });
+  std::map<int32_t, int32_t> stock;  // игрок → сборная
+  std::map<int32_t, bool> in_club;
+  ForEachRow(ctx, base, f, kTableRoster, 0, 0, [&](auto& get, auto&) {
+    const int32_t t = get(col::kRsTeam), pl = get(col::kRsPlayer);
+    if (nation_team.count(t)) {
+      stock[pl] = t;
+    } else {
+      in_club[pl] = true;
+    }
+  });
+  int moved = 0;
+  ForEachRow(ctx, base, f, kTablePlayerBio, 0, 0, [&](auto& get, auto& put) {
+    const int32_t idx = get(col::kBioIndex);
+    auto it = stock.find(idx);
+    if (it == stock.end() || in_club.count(idx)) {
+      return;
+    }
+    const int32_t team = get(col::kBioTeam);
+    if (team != it->second && (team == -1 || nation_team.count(team) || pro_team.count(team))) {
+      put(col::kBioTeam, it->second);
+      ++moved;
+    }
+  });
+  REXLOG_INFO("[nhllegacy] natcup: stock national players: {} on rosters, {} re-anchored (bio.team)", stock.size(),
+              moved);
+}
+
 void Setup(PPCContext& ctx, uint8_t* base, uint32_t f, const std::map<uint32_t, uint32_t>& teams) {
+  AnchorStock(ctx, base, f, teams);
   auto players = ReadPlayers(ctx, base, f, teams);
   std::vector<Nation> nations;
   for (const uint32_t id : kNations) {
