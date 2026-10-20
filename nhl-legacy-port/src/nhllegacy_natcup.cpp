@@ -1,5 +1,10 @@
 // Кубок наций во франшизе NHL Legacy — эксперимент (ветка nations-cup, docs/nations-cup.md, cvar nhl_natcup).
 //
+// Лига сборных: в новой франшизе Be a GM уровень QMJHL (лига 10, 18 клубов) отдаётся сборным (лига 8): создатель лиги
+// 829DAEC8 добавляет уровни CHL вызовами 829DA768(настройки, уровень, лига) — подменяем 10 → 8 и оставляем в списках
+// команд уровня (+6040 и +3136, шаг 484: [число, teamid…]) kNations — 16 сборных (предел франшизы — 126 команд:
+// 64 НХЛ/АХЛ + OHL 20 + WHL 22 + проспекты 2 + 16). Решение пользователя 20.10: «убрать одну лигу CHL».
+//
 // Шаг 1: своя задача календаря франшизы в августе. Задачи сезона уровня ставит 82B3BDC8(уровень, сезон) —
 // после оригинала у верхнего уровня (82975FA0(+4, +8) == 0) пишем задачу типа kTaskType на 1–20 августа года
 // конца сезона (сезон: +16 начало, +20 конец — дни от эпохи движка) через 82AF5DB0(—, &начало, &конец, тип,
@@ -21,10 +26,17 @@ extern "C" void __imp__sub_82B3BDC8(PPCContext& ctx, uint8_t* base);  // сез�
 extern "C" void __imp__sub_82B4BBC0(PPCContext& ctx, uint8_t* base);  // диспетчер задач
 extern "C" void sub_82AF5DB0(PPCContext& ctx, uint8_t* base);         // запись задачи в leaguetasks
 extern "C" void sub_82975FA0(PPCContext& ctx, uint8_t* base);         // номер уровня лиги
+extern "C" void __imp__sub_829DA768(PPCContext& ctx, uint8_t* base);  // создатель лиги: добавить уровень
 
 namespace {
 
 constexpr uint32_t kTaskType = 1;
+constexpr int32_t kQmjhl = 10;
+constexpr int32_t kNationsLeague = 8;
+constexpr uint32_t kModeBeAGm = 4;            // режим создателя (+3124): Be a GM 4, Be a Pro 5
+// сборные лиги 8 (exhibitionteams): без Великобритании 141, Италии 142, Японии 143, Казахстана 144 и Польши 147 —
+// у них во франшизе почти нет игроков (пулы natcup.franchise: 3, 6, 1, 0, 9)
+constexpr uint32_t kNations[] = {133, 134, 135, 136, 137, 138, 139, 140, 145, 146, 148, 149, 150, 151, 152, 153};
 
 uint8_t* Host(uint8_t* base, uint32_t addr) {
   return base + addr + (addr >= 0xE0000000u ? 0x1000u : 0u);
@@ -86,6 +98,37 @@ uint32_t ToSerial(int y, unsigned m, unsigned d) {
 }
 
 }  // namespace
+
+// 829DA768(настройки создателя, уровень, лига) — добавить уровень лиги франшизы; QMJHL → сборные (только Be a GM).
+extern "C" void sub_829DA768(PPCContext& ctx, uint8_t* base) {
+  const uint32_t self = ctx.r3.u32;
+  const uint32_t level = ctx.r4.u32;
+  if (!Enabled() || ctx.r5.s32 != kQmjhl || Load32(base, self + 3124) != kModeBeAGm) {
+    __imp__sub_829DA768(ctx, base);
+    return;
+  }
+  ctx.r5.s64 = kNationsLeague;
+  __imp__sub_829DA768(ctx, base);
+  const uint64_t ret = ctx.r3.u64;
+  for (const uint32_t list : {self + 6040 + 484 * level, self + 3136 + 484 * level}) {
+    const uint32_t n = Load32(base, list);
+    uint32_t kept = 0;
+    for (uint32_t i = 0; i < n && i < 120; ++i) {
+      const uint32_t id = Load32(base, list + 4 + 4 * i);
+      bool keep = false;
+      for (const uint32_t k : kNations) {
+        keep = keep || k == id;
+      }
+      if (keep) {
+        Store32(base, list + 4 + 4 * kept++, id);
+      }
+    }
+    Store32(base, list, kept);
+    REXLOG_INFO("[nhllegacy] natcup: league level {}: QMJHL (10) -> national teams (8), list +{}: {} -> {} teams", level,
+                list - self, n, kept);
+  }
+  ctx.r3.u64 = ret;
+}
 
 // 82B3BDC8(уровень лиги, сезон) — сезонные задачи уровня; после них — своя задача в августе (только верхний уровень).
 extern "C" void sub_82B3BDC8(PPCContext& ctx, uint8_t* base) {
