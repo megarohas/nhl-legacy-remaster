@@ -11,8 +11,13 @@
 // +4, +8). Диспетчер задач 82B4BBC0(лига, тип, уровень, под-лига, &дата) у типов 0, 1 и ≥ 36 обработчика не имеет
 // (ветка 82B4C3A0, r3 = 0) — тип kTaskType разбираем сами, остальные — оригиналу.
 
+#include <algorithm>
+#include <functional>
 #include <cstdint>
 #include <cstring>
+#include <map>
+#include <string>
+#include <vector>
 
 #include <rex/cvar.h>
 #include <rex/logging.h>
@@ -20,6 +25,9 @@
 
 REXCVAR_DEFINE_BOOL(nhl_natcup, false, "NHLLegacy",
                     "Nations Cup experiment: an August franchise calendar task (logged for now)")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
+REXCVAR_DEFINE_INT32(nhl_natcup_nation, 0, "NHLLegacy",
+                     "Nations Cup: the user's national team (teamid 133-153; 0 = the strongest nation)")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
 extern "C" void __imp__sub_82B3BDC8(PPCContext& ctx, uint8_t* base);  // сезонные задачи уровня лиги
@@ -49,12 +57,20 @@ extern "C" void sub_827B2C40(PPCContext& ctx, uint8_t* base);         // кур�
 extern "C" void sub_82975B50(PPCContext& ctx, uint8_t* base);         // сдвиг teamid лиги → номер франшизы
 extern "C" void sub_82AF8BF0(PPCContext& ctx, uint8_t* base);         // менеджер лиги
 extern "C" void sub_82AF9838(PPCContext& ctx, uint8_t* base);         // уровень лиги (−1 — нет)
-extern "C" void sub_82AE9DD8(PPCContext& ctx, uint8_t* base);         // итератор команд: создать
-extern "C" void sub_82AE9E28(PPCContext& ctx, uint8_t* base);         // итератор команд: удалить
-extern "C" void sub_82AF6570(PPCContext& ctx, uint8_t* base);         // сведения о команде франшизы (+8 teamid)
 extern "C" void sub_82A1BB18(PPCContext& ctx, uint8_t* base);         // удалить состав команды
 extern "C" void __imp__RtlEnterCriticalSection(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__RtlLeaveCriticalSection(PPCContext& ctx, uint8_t* base);
+extern "C" void sub_82BA65C8(PPCContext& ctx, uint8_t* base);         // временный объект записи (16 б): создать
+extern "C" void sub_82BCC4A0(PPCContext& ctx, uint8_t* base);         // … удалить
+extern "C" void sub_829748A0(PPCContext& ctx, uint8_t* base);         // структура состава R (3244 б): создать
+extern "C" void sub_82657880(PPCContext& ctx, uint8_t* base);         // memset(адрес, байт, длина)
+extern "C" void sub_82A29D48(PPCContext& ctx, uint8_t* base);         // записать состав (tmp, команда, &R)
+extern "C" void sub_82B87538(PPCContext& ctx, uint8_t* base);         // звенья: мозг (L, команда, tag)
+extern "C" void sub_82B7E6E8(PPCContext& ctx, uint8_t* base);         // … собрать
+extern "C" void sub_82B871F8(PPCContext& ctx, uint8_t* base);         // … записать
+extern "C" void sub_82B87870(PPCContext& ctx, uint8_t* base);         // … удалить
+extern "C" void sub_82BEC748(PPCContext& ctx, uint8_t* base);         // вставить игру в leaguescheduletable
+extern "C" void sub_82B1B048(PPCContext& ctx, uint8_t* base);         // управление командой (менеджер, команда, флаг)
 
 namespace {
 
@@ -137,26 +153,6 @@ int32_t LevelOf(PPCContext& ctx, uint8_t* base, int32_t league) {
   return ctx.r3.s32;
 }
 
-// teamid (байт +8 сведений) команды франшизы номер n.
-uint32_t TeamIdOf(PPCContext& ctx, uint8_t* base, uint32_t n) {
-  const uint64_t saved_r1 = ctx.r1.u64;
-  const uint32_t iter = (ctx.r1.u32 - 0x200) & ~0xFu;
-  const uint32_t info = iter + 0x20;
-  std::memset(Host(base, iter), 0, 0x140);
-  ctx.r1.u64 = iter - 0x80;
-  ctx.r3.u64 = iter;
-  sub_82AE9DD8(ctx, base);
-  ctx.r3.u64 = iter;
-  ctx.r4.u64 = n;
-  ctx.r5.u64 = info;
-  sub_82AF6570(ctx, base);
-  const uint32_t id = *Host(base, info + 8);
-  ctx.r3.u64 = iter;
-  sub_82AE9E28(ctx, base);
-  ctx.r1.u64 = saved_r1;
-  return id;
-}
-
 bool IsNation(uint32_t id) {
   for (const uint32_t k : kNations) {
     if (k == id) {
@@ -184,6 +180,632 @@ uint32_t TableIndex(PPCContext& ctx, uint8_t* base, uint32_t db, uint32_t hash) 
   return (desc - Load32(base, Load32(base, desc + 4) + 28)) / 68;
 }
 
+// ---------------------------------------------------------------- чтение таблиц (курсор, как у 82B099E0)
+
+constexpr uint32_t kTableSchedule = 0xE0A915B4u;   // leaguescheduletable
+constexpr uint32_t kTableGameStats = 0x5C32910Au;  // leaguegamestats
+constexpr uint32_t kTableSkaterAi = 0xE5C10816u;   // leagueskaterai
+constexpr uint32_t kTableGoalieAi = 0xEA50C5DAu;   // leaguegoalieai
+constexpr uint32_t kTableTeams = 0xC7BCD146u;      // leagueteams
+constexpr uint32_t kFieldMonth = 0xBFC025ABu;
+// номера полей — место среди полей таблицы по хешу имени (как juniorteam = 11 у leagueplayerbiotable)
+namespace col {
+constexpr uint32_t kSchStatus = 0, kSchHome = 1, kSchLeague = 2, kSchDay = 3, kSchIndex = 4, kSchAway = 5, kSchMonth = 6,
+                   kSchRound = 7;
+constexpr uint32_t kGsOt = 0, kGsShootout = 2, kGsScoreAway = 6, kGsIndex = 13, kGsScoreHome = 17;
+constexpr uint32_t kBioIndex = 60, kBioCountry = 42, kBioPosition = 85, kBioTeam = 79, kBioInjury = 30, kBioJersey = 58;
+constexpr uint32_t kSkIndex = 100, kSkOverall = 88, kSkStyle = 25;
+constexpr uint32_t kGkIndex = 91, kGkOverall = 80, kGkStyle = 20;
+constexpr uint32_t kTmIndex = 35, kTmTeamId = 1;
+}  // namespace col
+
+// Строки таблицы (все или с условием «поле == значение»): fn(get, put) на каждую строку; get(номер поля) → значение,
+// put(номер поля, значение) пишет в строку курсора (827B3030). Кадр f — свои 0x100 байт (f+80…f+200), вызываемые
+// функции пишут ниже f.
+template <typename Fn>
+int32_t ForEachRow(PPCContext& ctx, uint8_t* base, uint32_t f, uint32_t table_hash, uint32_t where_field,
+                   int32_t where_value, Fn&& fn) {
+  const uint64_t saved_r1 = ctx.r1.u64;
+  std::memset(Host(base, f), 0, 0x100);
+  ctx.r1.u64 = f;
+  sub_82A07D88(ctx, base);
+  const uint32_t db = ctx.r3.u32;
+  const uint32_t table = TableIndex(ctx, base, db, table_hash);
+  uint32_t where = 0;
+  if (where_field) {
+    ctx.r3.u64 = f + 96;
+    ctx.r4.u64 = where_field;
+    sub_827B10C8(ctx, base);
+    ctx.r4.s64 = where_value;
+    sub_827B1588(ctx, base);
+    where = ctx.r3.u32;
+  }
+  sub_82A07D88(ctx, base);
+  ctx.r4.u64 = ctx.r3.u64;
+  ctx.r3.u64 = f + 84;
+  sub_827B7D08(ctx, base);
+  ctx.r4.u64 = ctx.r3.u64;
+  ctx.r3.u64 = f + 80;
+  ctx.r5.u64 = table_hash;
+  sub_827B4818(ctx, base);
+  if (where) {
+    ctx.r4.u64 = where;
+    ctx.r5.u64 = 1;
+    sub_827B4A48(ctx, base);
+  }
+  sub_827B5568(ctx, base);
+  const uint32_t cur = ctx.r3.u32;
+  ctx.r3.u64 = f + 80;
+  sub_833FBEA0(ctx, base);
+  ctx.r3.u64 = f + 84;
+  sub_833FBEA0(ctx, base);
+  if (where) {
+    ctx.r3.u64 = f + 96;
+    sub_827B11E0(ctx, base);
+  }
+  ctx.r3.u64 = cur;
+  sub_827B2E10(ctx, base);
+  const int32_t n = static_cast<int32_t>(ctx.r3.u32 & 0xFFFFu);
+  auto get = [&](uint32_t c) {
+    ctx.r3.u64 = cur;
+    ctx.r4.u64 = table;
+    ctx.r5.u64 = c;
+    ctx.r6.u64 = 1;
+    ctx.r7.u64 = f + 88;
+    ctx.r8.u64 = 0;
+    sub_827B3008(ctx, base);
+    return static_cast<int32_t>(Load32(base, f + 88));
+  };
+  auto put = [&](uint32_t c, int32_t v) {
+    Store32(base, f + 92, static_cast<uint32_t>(v));
+    ctx.r3.u64 = cur;
+    ctx.r4.u64 = table;
+    ctx.r5.u64 = c;
+    ctx.r6.u64 = 1;
+    ctx.r7.u64 = f + 92;
+    ctx.r8.u64 = 0;
+    sub_827B3030(ctx, base);
+  };
+  if (n > 0) {
+    ctx.r3.u64 = kJuniorLock;
+    __imp__RtlEnterCriticalSection(ctx, base);
+    for (int32_t i = 0; i < n; ++i) {
+      fn(get, put);
+      ctx.r3.u64 = cur;
+      ctx.r4.u64 = 1;
+      ctx.r5.u64 = 1;
+      sub_827B2D08(ctx, base);
+    }
+    ctx.r3.u64 = kJuniorLock;
+    __imp__RtlLeaveCriticalSection(ctx, base);
+  }
+  ctx.r3.u64 = cur;
+  sub_827B2C40(ctx, base);
+  ctx.r1.u64 = saved_r1;
+  return n;
+}
+
+// Номера франшизы сборных (leagueteams: teamid → index). Итератор сведений о командах (82AE9DD8/82AF6570) при
+// создании франшизы сборных не видит (прогон 20.10: 0 из 16) — читаем таблицу.
+std::map<uint32_t, uint32_t> NationTeams(PPCContext& ctx, uint8_t* base, uint32_t f) {
+  std::map<uint32_t, uint32_t> out;
+  ForEachRow(ctx, base, f, kTableTeams, 0, 0, [&](auto& get, auto&) {
+    const uint32_t id = static_cast<uint32_t>(get(col::kTmTeamId));
+    if (IsNation(id)) {
+      out[id] = static_cast<uint32_t>(get(col::kTmIndex));
+    }
+  });
+  return out;
+}
+
+// ---------------------------------------------------------------- Кубок наций
+
+constexpr uint32_t kLevelGroup = 2, kLevelSub = 0;  // пара уровня сборных (+4, +8): 82975FA0(2, 0) = 3 (лог задач)
+constexpr uint32_t kAugust = 7;                     // месяц с нуля
+constexpr uint32_t kGroupDays[3] = {1, 3, 5};       // 2, 4, 6 августа (день с нуля)
+constexpr uint32_t kSemiDay = 8, kFinalDay = 10;    // 9 и 11 августа
+constexpr uint32_t kLastDay = 19;                   // 20 августа — уборка
+constexpr uint32_t kLinesTag = 149;                 // счётчик кэша звеньев (Матча звёзд при АХЛ-32 нет)
+constexpr uint32_t kStatusCancelled = 2;            // leaguescheduletable.status: 2 — отменена
+constexpr int kQuota[5] = {4, 4, 4, 8, 3};          // C, LW, RW, D, G (крайние — 8 вместе)
+constexpr int kDressed[3] = {12, 6, 2};             // в заявке на матч: нападающие, защитники, вратари
+constexpr size_t kRosterSize = 23;
+constexpr int kTeams = 8;
+
+// intlcountry → teamid сборной (как tools/natcup/franchise.py NATIONS; только 16 сборных франшизы)
+uint32_t NationOfCountry(int32_t c) {
+  switch (c) {
+    case 0: return 135;   // Canada
+    case 14: return 153;  // USA
+    case 67: return 138;  // Finland
+    case 69: return 150;  // Sweden
+    case 82: return 136;  // Czech Republic
+    case 97: return 151;  // Switzerland
+    case 85: return 140;  // Germany
+    case 76: return 148;  // Russia
+    case 95: return 149;  // Slovakia
+    case 68: return 146;  // Norway
+    case 70: return 134;  // Belarus
+    case 74: return 145;  // Latvia
+    case 66: return 137;  // Denmark
+    case 84: return 139;  // France
+    case 77: return 152;  // Ukraine
+    case 78: return 133;  // Austria
+    default: return 0;
+  }
+}
+
+struct Cand {
+  int32_t index, pos, ovr, jersey, style;
+  bool dressed = false;
+};
+
+int Group(const Cand& c) {
+  return c.pos == 4 ? 2 : c.pos == 3 ? 1 : 0;  // нападающие, защитники, вратари
+}
+
+// Заявка на матч (rosterstatus 1): 12 нападающих, 6 защитников, 2 вратаря — лучшие по c_overall; лучший — первым.
+void MarkDressed(std::vector<Cand>& v) {
+  std::stable_sort(v.begin(), v.end(), [](const Cand& a, const Cand& b) { return a.ovr > b.ovr; });
+  int n[3] = {0, 0, 0};
+  for (auto& c : v) {
+    const int g = Group(c);
+    c.dressed = n[g] < kDressed[g];
+    n[g] += c.dressed ? 1 : 0;
+  }
+}
+
+struct Players {
+  std::map<uint32_t, std::vector<Cand>> real;   // teamid сборной → игроки клубов её страны (без травмированных)
+  std::map<uint32_t, std::vector<Cand>> stock;  // номер франшизы сборной → её стоковые игроки (bio.team)
+};
+
+// Стоковые игроки сборной (82B3DFC8 при создании: свои записи, часть — дубли игроков клубов) числятся за ней
+// (bio.team); в турнир идут игроки клубов, стоковые — только на недобор и обратно в состав после турнира.
+Players ReadPlayers(PPCContext& ctx, uint8_t* base, uint32_t f, const std::map<uint32_t, uint32_t>& teams) {
+  std::map<int32_t, std::pair<int32_t, int32_t>> sk, gk;  // index → (overall, style)
+  ForEachRow(ctx, base, f, kTableSkaterAi, 0, 0, [&](auto& get, auto&) {
+    sk[get(col::kSkIndex)] = {get(col::kSkOverall), get(col::kSkStyle)};
+  });
+  ForEachRow(ctx, base, f, kTableGoalieAi, 0, 0, [&](auto& get, auto&) {
+    gk[get(col::kGkIndex)] = {get(col::kGkOverall), get(col::kGkStyle)};
+  });
+  std::map<int32_t, bool> nation_team;
+  for (const auto& [id, t] : teams) {
+    nation_team[static_cast<int32_t>(t)] = true;
+  }
+  Players p;
+  ForEachRow(ctx, base, f, kTablePlayerBio, 0, 0, [&](auto& get, auto&) {
+    const int32_t idx = get(col::kBioIndex);
+    const int32_t pos = get(col::kBioPosition);
+    if (pos < 0 || pos > 4) {
+      return;
+    }
+    const auto& m = pos == 4 ? gk : sk;
+    auto it = m.find(idx);
+    if (it == m.end()) {
+      return;
+    }
+    const Cand c{idx, pos, it->second.first, get(col::kBioJersey), it->second.second};
+    const int32_t team = get(col::kBioTeam);
+    if (nation_team.count(team)) {
+      p.stock[static_cast<uint32_t>(team)].push_back(c);
+      return;
+    }
+    const uint32_t nat = NationOfCountry(get(col::kBioCountry));
+    if (nat && team >= 0 && get(col::kBioInjury) <= 0) {
+      p.real[nat].push_back(c);
+    }
+  });
+  return p;
+}
+
+// 4 C, 8 крайних, 8 D, 3 G: лучшие игроки клубов; недобор — стоковыми игроками сборной, затем любыми полевыми.
+std::vector<Cand> PickRoster(std::vector<Cand> real, std::vector<Cand> stock) {
+  auto by_ovr = [](const Cand& a, const Cand& b) { return a.ovr > b.ovr; };
+  std::stable_sort(real.begin(), real.end(), by_ovr);
+  std::stable_sort(stock.begin(), stock.end(), by_ovr);
+  std::vector<Cand> out;
+  int need[5] = {kQuota[0], kQuota[1], kQuota[2], kQuota[3], kQuota[4]};
+  for (auto* v : {&real, &stock}) {
+    for (auto& c : *v) {
+      int p = c.pos;
+      if ((p == 1 || p == 2) && need[p] == 0 && need[3 - p] > 0) {
+        p = 3 - p;  // крайние — 8 вместе
+      }
+      if (need[p] > 0) {
+        --need[p];
+        out.push_back(c);
+        c.index = -1;
+      }
+    }
+  }
+  for (auto* v : {&real, &stock}) {
+    for (auto& c : *v) {
+      if (out.size() < kRosterSize && c.index >= 0 && c.pos != 4) {
+        out.push_back(c);
+        c.index = -1;
+      }
+    }
+  }
+  MarkDressed(out);
+  return out;
+}
+
+struct Game {
+  int32_t index, day, home, away, round;
+  bool played = false;
+  int32_t gh = 0, ga = 0;
+  bool ot = false;
+};
+
+// Игры августа между сборными (status ≠ 2) и их итоги (строка leaguegamestats с тем же index — игра сыграна).
+std::vector<Game> ReadGames(PPCContext& ctx, uint8_t* base, uint32_t f, const std::map<uint32_t, uint32_t>& teams) {
+  std::map<int32_t, bool> nation_team;
+  for (const auto& [id, t] : teams) {
+    nation_team[static_cast<int32_t>(t)] = true;
+  }
+  std::vector<Game> games;
+  ForEachRow(ctx, base, f, kTableSchedule, kFieldMonth, kAugust, [&](auto& get, auto&) {
+    const int32_t home = get(col::kSchHome), away = get(col::kSchAway);
+    if (!nation_team.count(home) || !nation_team.count(away) ||
+        static_cast<uint32_t>(get(col::kSchStatus)) == kStatusCancelled) {
+      return;
+    }
+    games.push_back({get(col::kSchIndex), get(col::kSchDay), home, away, get(col::kSchRound)});
+  });
+  if (!games.empty()) {
+    std::map<int32_t, Game*> by;
+    for (auto& g : games) {
+      by[g.index] = &g;
+    }
+    ForEachRow(ctx, base, f, kTableGameStats, 0, 0, [&](auto& get, auto&) {
+      auto it = by.find(get(col::kGsIndex));
+      if (it == by.end()) {
+        return;
+      }
+      it->second->played = true;
+      it->second->gh = get(col::kGsScoreHome);
+      it->second->ga = get(col::kGsScoreAway);
+      it->second->ot = get(col::kGsOt) || get(col::kGsShootout);
+    });
+  }
+  return games;
+}
+
+void AddGame(PPCContext& ctx, uint8_t* base, uint32_t f, uint32_t day, uint32_t home, uint32_t away) {
+  const uint64_t saved_r1 = ctx.r1.u64;
+  std::memset(Host(base, f), 0, 0x100);
+  const uint32_t g = f + 0x80;
+  Store32(base, g + 0, 0x82046474u);  // vtable записи календаря
+  Store32(base, g + 8, kAugust);
+  Store32(base, g + 12, day);
+  Store32(base, g + 16, home);
+  Store32(base, g + 20, away);
+  Store32(base, g + 28, 0);  // status
+  Store32(base, g + 32, 0);  // round: 0 — как круг (буллиты вместо бесконечного ОТ — как у IIHF)
+  Store32(base, g + 36, kLevelGroup);
+  Store32(base, g + 40, kLevelSub);
+  ctx.r1.u64 = f;
+  ctx.r3.u64 = 0;
+  ctx.r4.u64 = g;
+  sub_82BEC748(ctx, base);
+  const bool ok = ctx.r3.u8 != 0;
+  ctx.r1.u64 = saved_r1;
+  REXLOG_INFO("[nhllegacy] natcup: game Aug {}: {} - {} {}", day + 1, home, away, ok ? "added" : "NOT added");
+}
+
+void SetUserTeam(PPCContext& ctx, uint8_t* base, uint32_t team, bool user) {
+  sub_82AF8BF0(ctx, base);
+  ctx.r4.u64 = team;
+  ctx.r5.u64 = user ? 0 : 1;
+  sub_82B1B048(ctx, base);
+  REXLOG_INFO("[nhllegacy] natcup: team {} {}", team, user ? "-> user" : "-> CPU");
+}
+
+void ClearRoster(PPCContext& ctx, uint8_t* base, uint32_t team) {
+  ctx.r3.u64 = 0;
+  ctx.r4.u64 = team;
+  sub_82A1BB18(ctx, base);
+}
+
+// Состав команды (82A29D48 → 82A1BBF8: строки leaguerostertable с key = команда × 40 + i; bio.team игроков не
+// меняет — игрок клуба одновременно в сборной, как у Матча звёзд) и звенья (82B87538 …), как у матча проспектов.
+void WriteRoster(PPCContext& ctx, uint8_t* base, uint32_t team, const std::vector<Cand>& players) {
+  const uint64_t saved_r1 = ctx.r1.u64;
+  const uint32_t f = (ctx.r1.u32 - 0x1400) & ~0xFu;  // R (3244 б) + tmp + L (≥ 456 б)
+  const uint32_t r = f + 0x100;
+  const uint32_t tmp = f + 0x100 + 3264;
+  const uint32_t lines = tmp + 0x40;
+  std::memset(Host(base, f), 0, 0x1400);
+  ctx.r1.u64 = f;
+  ClearRoster(ctx, base, team);
+  if (players.empty()) {
+    ctx.r1.u64 = saved_r1;
+    REXLOG_INFO("[nhllegacy] natcup: roster of team {} cleared", team);
+    return;
+  }
+  ctx.r3.u64 = r;
+  sub_829748A0(ctx, base);
+  ctx.r3.u64 = r;
+  ctx.r4.u64 = 0;
+  ctx.r5.u64 = 3244;
+  sub_82657880(ctx, base);
+  const size_t n = std::min<size_t>(players.size(), 40);
+  *Host(base, r + 1) = static_cast<uint8_t>(n);
+  bool taken[100] = {};
+  int leaders = 0;  // капитан и два ассистента — лучшие полевые
+  for (size_t i = 0; i < n; ++i) {
+    const Cand& c = players[i];
+    const uint32_t k = static_cast<uint32_t>(i);
+    int jersey = c.jersey;
+    if (jersey <= 0 || jersey > 99 || taken[jersey]) {
+      jersey = 0;
+      for (int j = c.pos == 4 ? 30 : 2; j < 100 && !jersey; ++j) {
+        jersey = taken[j] ? 0 : j;
+      }
+    }
+    taken[jersey] = true;
+    *Host(base, r + 2 + 2 * k) = static_cast<uint8_t>(c.index >> 8);
+    *Host(base, r + 3 + 2 * k) = static_cast<uint8_t>(c.index & 0xFF);
+    Store32(base, r + 84 + 4 * k, c.dressed ? 1 : 0);
+    *Host(base, r + 244 + k) = static_cast<uint8_t>(jersey);
+    *Host(base, r + 284 + k) = static_cast<uint8_t>(c.style);
+    if (c.pos != 4 && c.dressed && leaders < 3) {
+      *Host(base, r + (leaders == 0 ? 324 : 325) + 2 * k) = 1;  // +324+2i — капитан, +325+2i — ассистент
+      ++leaders;
+    }
+  }
+  ctx.r3.u64 = tmp;
+  sub_82BA65C8(ctx, base);
+  ctx.r3.u64 = tmp;
+  ctx.r4.u64 = team;
+  ctx.r5.u64 = r;
+  sub_82A29D48(ctx, base);
+  const bool ok = ctx.r3.u8 != 0;
+  ctx.r3.u64 = tmp;
+  sub_82BCC4A0(ctx, base);
+  ctx.r3.u64 = lines;
+  ctx.r4.u64 = team;
+  ctx.r5.u64 = kLinesTag;
+  sub_82B87538(ctx, base);
+  ctx.r3.u64 = lines;
+  sub_82B7E6E8(ctx, base);
+  ctx.r3.u64 = lines;
+  sub_82B871F8(ctx, base);
+  ctx.r3.u64 = lines;
+  sub_82B87870(ctx, base);
+  ctx.r1.u64 = saved_r1;
+  REXLOG_INFO("[nhllegacy] natcup: roster of team {}: {} players {}", team, n, ok ? "written" : "NOT written");
+}
+
+struct Nation {
+  uint32_t teamid = 0, team = 0;  // teamid базы и номер франшизы
+  std::vector<Cand> roster;
+  double strength = 0;
+};
+
+struct Row {
+  uint32_t team;
+  int pts = 0, w = 0, gf = 0, ga = 0;
+};
+
+// Группы и таблица — по играм группового этапа (дни до kSemiDay): команды, игравшие друг с другом, — одна группа.
+std::vector<std::vector<Row>> Standings(const std::vector<Game>& games) {
+  std::map<uint32_t, uint32_t> grp;  // команда → представитель группы
+  std::function<uint32_t(uint32_t)> find = [&](uint32_t t) { return grp[t] == t ? t : grp[t] = find(grp[t]); };
+  for (const auto& g : games) {
+    if (static_cast<uint32_t>(g.day) >= kSemiDay) {
+      continue;
+    }
+    for (const uint32_t t : {static_cast<uint32_t>(g.home), static_cast<uint32_t>(g.away)}) {
+      if (!grp.count(t)) {
+        grp[t] = t;
+      }
+    }
+    grp[find(g.home)] = find(g.away);
+  }
+  std::map<uint32_t, std::map<uint32_t, Row>> tables;
+  for (auto& [t, _] : grp) {
+    tables[find(t)][t].team = t;
+  }
+  for (const auto& g : games) {
+    if (static_cast<uint32_t>(g.day) >= kSemiDay || !g.played) {
+      continue;
+    }
+    auto& tb = tables[find(g.home)];
+    Row& h = tb[g.home];
+    Row& a = tb[g.away];
+    h.gf += g.gh, h.ga += g.ga, a.gf += g.ga, a.ga += g.gh;
+    Row& win = g.gh > g.ga ? h : a;
+    Row& los = g.gh > g.ga ? a : h;
+    win.pts += 2, win.w += 1;
+    if (g.ot) {
+      los.pts += 1;
+    }
+  }
+  std::vector<std::vector<Row>> out;
+  for (auto& [_, tb] : tables) {
+    std::vector<Row> v;
+    for (auto& [t, r] : tb) {
+      v.push_back(r);
+    }
+    std::sort(v.begin(), v.end(), [](const Row& a, const Row& b) {
+      if (a.pts != b.pts) return a.pts > b.pts;
+      if (a.gf - a.ga != b.gf - b.ga) return a.gf - a.ga > b.gf - b.ga;
+      return a.gf > b.gf;
+    });
+    out.push_back(std::move(v));
+  }
+  return out;
+}
+
+int32_t Winner(const Game& g) {
+  return g.gh > g.ga ? g.home : g.away;
+}
+int32_t Loser(const Game& g) {
+  return g.gh > g.ga ? g.away : g.home;
+}
+
+// Первый день: составы 16 сборных, 8 участников (сборная пользователя + сильнейшие), группы змейкой, игры круга.
+void Setup(PPCContext& ctx, uint8_t* base, uint32_t f, const std::map<uint32_t, uint32_t>& teams) {
+  auto players = ReadPlayers(ctx, base, f, teams);
+  std::vector<Nation> nations;
+  for (const uint32_t id : kNations) {
+    auto it = teams.find(id);
+    if (it == teams.end()) {
+      continue;
+    }
+    Nation nn;
+    nn.teamid = id;
+    nn.team = it->second;
+    nn.roster = PickRoster(players.real[id], players.stock[nn.team]);
+    double sum = 0;
+    for (const auto& c : nn.roster) {
+      sum += c.ovr;
+    }
+    nn.strength = nn.roster.empty() ? 0 : sum / static_cast<double>(nn.roster.size());
+    REXLOG_INFO("[nhllegacy] natcup: nation {} (team {}): club players {}, stock {}, roster {}, strength {:.1f}", id,
+                nn.team, players.real[id].size(), players.stock[nn.team].size(), nn.roster.size(), nn.strength);
+    nations.push_back(std::move(nn));
+  }
+  std::vector<Nation*> ok;
+  for (auto& n : nations) {
+    if (n.roster.size() >= 20) {
+      ok.push_back(&n);
+    }
+  }
+  std::sort(ok.begin(), ok.end(), [](Nation* a, Nation* b) { return a->strength > b->strength; });
+  if (ok.size() < static_cast<size_t>(kTeams)) {
+    REXLOG_INFO("[nhllegacy] natcup: only {} national teams with a full roster - no tournament", ok.size());
+    return;
+  }
+  const int32_t want = REXCVAR_GET(nhl_natcup_nation);
+  Nation* user = ok[0];
+  for (auto* n : ok) {
+    if (static_cast<int32_t>(n->teamid) == want) {
+      user = n;
+    }
+  }
+  std::vector<Nation*> field{user};
+  for (auto* n : ok) {
+    if (n != user && field.size() < static_cast<size_t>(kTeams)) {
+      field.push_back(n);
+    }
+  }
+  std::sort(field.begin(), field.end(), [](Nation* a, Nation* b) { return a->strength > b->strength; });
+  for (auto* n : field) {
+    WriteRoster(ctx, base, n->team, n->roster);
+  }
+  // змейка: A — 1, 4, 5, 8; B — 2, 3, 6, 7; круг на 4: (0-1, 2-3), (2-0, 3-1), (0-3, 1-2)
+  const int ga[4] = {0, 3, 4, 7}, gb[4] = {1, 2, 5, 6};
+  const int pairs[3][2][2] = {{{0, 1}, {2, 3}}, {{2, 0}, {3, 1}}, {{0, 3}, {1, 2}}};
+  for (const int* g : {ga, gb}) {
+    for (int d = 0; d < 3; ++d) {
+      for (int k = 0; k < 2; ++k) {
+        AddGame(ctx, base, f, kGroupDays[d], field[g[pairs[d][k][0]]]->team, field[g[pairs[d][k][1]]]->team);
+      }
+    }
+  }
+  SetUserTeam(ctx, base, user->team, true);
+  std::string list;
+  for (auto* n : field) {
+    list += std::to_string(n->teamid) + "/" + std::to_string(n->team) + " ";
+  }
+  REXLOG_INFO("[nhllegacy] natcup: tournament set up: user nation {} (team {}), field {}", user->teamid, user->team, list);
+}
+
+// 20 августа: сборным — стоковые составы, управление — CPU, игры турнира — status 2 (через год их не видно).
+void Finish(PPCContext& ctx, uint8_t* base, uint32_t f, const std::map<uint32_t, uint32_t>& teams,
+            const std::vector<Game>& games) {
+  std::map<uint32_t, bool> played;
+  for (const auto& g : games) {
+    played[g.home] = played[g.away] = true;
+  }
+  auto players = ReadPlayers(ctx, base, f, teams);
+  for (auto& [t, _] : played) {
+    auto& stock = players.stock[t];
+    MarkDressed(stock);
+    WriteRoster(ctx, base, t, stock);
+    SetUserTeam(ctx, base, t, false);
+  }
+  int closed = 0;
+  ForEachRow(ctx, base, f, kTableSchedule, kFieldMonth, kAugust, [&](auto& get, auto& put) {
+    if (played.count(static_cast<uint32_t>(get(col::kSchHome))) && played.count(static_cast<uint32_t>(get(col::kSchAway)))) {
+      put(col::kSchStatus, static_cast<int32_t>(kStatusCancelled));
+      ++closed;
+    }
+  });
+  REXLOG_INFO("[nhllegacy] natcup: tournament over: {} national rosters restored, {} games closed", played.size(), closed);
+}
+
+void CupDay(PPCContext& ctx, uint8_t* base, uint32_t day0, uint32_t month0) {
+  if (month0 != kAugust) {
+    return;
+  }
+  const uint64_t saved_r1 = ctx.r1.u64;
+  const uint32_t f = (ctx.r1.u32 - 0x400) & ~0xFu;
+  const uint32_t fr = f - 0x200;  // кадр чтения таблиц и вставки игр
+  ctx.r1.u64 = f;
+  const auto teams = NationTeams(ctx, base, fr);
+  const auto games = ReadGames(ctx, base, fr, teams);
+  if (games.empty()) {
+    if (day0 <= kGroupDays[0]) {
+      Setup(ctx, base, fr, teams);
+    }
+    ctx.r1.u64 = saved_r1;
+    return;
+  }
+  if (day0 >= kLastDay) {
+    Finish(ctx, base, fr, teams, games);
+    ctx.r1.u64 = saved_r1;
+    return;
+  }
+  int group_left = 0;
+  std::vector<const Game*> semis, finals;
+  for (const auto& g : games) {
+    if (static_cast<uint32_t>(g.day) < kSemiDay) {
+      group_left += g.played ? 0 : 1;
+    } else if (static_cast<uint32_t>(g.day) < kFinalDay) {
+      semis.push_back(&g);
+    } else {
+      finals.push_back(&g);
+    }
+  }
+  if (group_left == 0 && semis.empty() && day0 < kSemiDay) {
+    auto st = Standings(games);
+    if (st.size() == 2 && st[0].size() >= 2 && st[1].size() >= 2) {
+      for (int k = 0; k < 2; ++k) {
+        std::string t;
+        for (const auto& r : st[k]) {
+          t += std::to_string(r.team) + " " + std::to_string(r.pts) + "pts " + std::to_string(r.gf) + "-" +
+               std::to_string(r.ga) + "; ";
+        }
+        REXLOG_INFO("[nhllegacy] natcup: group {}: {}", k ? "B" : "A", t);
+      }
+      AddGame(ctx, base, fr, kSemiDay, st[0][0].team, st[1][1].team);
+      AddGame(ctx, base, fr, kSemiDay, st[1][0].team, st[0][1].team);
+    } else {
+      REXLOG_INFO("[nhllegacy] natcup: group stage over, but {} groups found - no playoffs", st.size());
+    }
+  } else if (semis.size() == 2 && finals.empty() && semis[0]->played && semis[1]->played && day0 < kFinalDay) {
+    AddGame(ctx, base, fr, kFinalDay, Winner(*semis[0]), Winner(*semis[1]));
+    AddGame(ctx, base, fr, kFinalDay, Loser(*semis[0]), Loser(*semis[1]));
+  } else if (semis.size() == 2 && finals.size() == 2) {
+    const int32_t w0 = Winner(*semis[0]), w1 = Winner(*semis[1]);
+    for (const Game* g : finals) {
+      const bool is_final = (g->home == w0 || g->home == w1) && (g->away == w0 || g->away == w1);
+      static int32_t announced[2] = {-1, -1};
+      if (g->played && announced[is_final] != g->index) {
+        announced[is_final] = g->index;
+        REXLOG_INFO("[nhllegacy] natcup: {} team {} ({}-{}{} vs team {})", is_final ? "CHAMPION" : "bronze", Winner(*g),
+                    std::max(g->gh, g->ga), std::min(g->gh, g->ga), g->ot ? " OT/SO" : "", Loser(*g));
+      }
+    }
+  }
+  ctx.r1.u64 = saved_r1;
+}
+
 }  // namespace
 
 // 82B099E0(создание) — juniorteam юниоров CHL в номера франшизы. Оригинал вычитает у всех (juniorleague 9, 10, 11)
@@ -192,11 +814,13 @@ uint32_t TableIndex(PPCContext& ctx, uint8_t* base, uint32_t db, uint32_t hash) 
 // −1, как у прочих). Затем — пустые составы сборных: при создании им пишутся стоковые (дубли игроков клубов), до
 // 1 августа они не нужны.
 extern "C" void sub_82B099E0(PPCContext& ctx, uint8_t* base) {
+  const uint64_t arg = ctx.r3.u64;  // LevelOf портит r3
   if (!Enabled() || LevelOf(ctx, base, kQmjhl) >= 0 || LevelOf(ctx, base, kNationsLeague) < 0) {
+    ctx.r3.u64 = arg;
     __imp__sub_82B099E0(ctx, base);
     return;
   }
-  const uint32_t self = ctx.r3.u32;
+  const uint32_t self = static_cast<uint32_t>(arg);
   const uint64_t saved_r1 = ctx.r1.u64;
   const uint32_t f = (ctx.r1.u32 - 0x300) & ~0xFu;  // кадр как у оригинала: f+80…f+175
   std::memset(Host(base, f), 0, 0x300);
@@ -309,16 +933,9 @@ extern "C" void sub_82B099E0(PPCContext& ctx, uint8_t* base) {
     ctx.r3.u64 = cur;
     sub_827B2C40(ctx, base);
   }
-  // составы сборных — пустые до турнира
-  for (uint32_t t = 0; t < 126; ++t) {
-    if (IsNation(TeamIdOf(ctx, base, t))) {
-      ctx.r3.u64 = 0;
-      ctx.r4.u64 = t;
-      sub_82A1BB18(ctx, base);
-      ++counts[3];
-    }
-  }
-  REXLOG_INFO("[nhllegacy] natcup: national teams in the franchise: {}, stock rosters cleared", counts[3]);
+  // стоковые составы сборных (82B3DFC8) остаются до турнира: уровень с пустыми командами — лишний риск
+  counts[3] = static_cast<int>(NationTeams(ctx, base, f - 0x200).size());
+  REXLOG_INFO("[nhllegacy] natcup: national teams in the franchise: {}", counts[3]);
   ctx.r1.u64 = saved_r1;
 }
 
@@ -397,13 +1014,16 @@ extern "C" void sub_82B3BDC8(PPCContext& ctx, uint8_t* base) {
   ctx.r3.u64 = ret;
 }
 
-// 82B4BBC0(лига, тип, уровень, под-лига, &дата) — диспетчер задач; свой тип — только в лог (шаг 1).
+// 82B4BBC0(лига, тип, уровень, под-лига, &дата) — диспетчер задач; свой тип — день Кубка наций (CupDay).
 extern "C" void sub_82B4BBC0(PPCContext& ctx, uint8_t* base) {
   if (Enabled() && ctx.r4.u32 == kTaskType) {
     const uint32_t day = ctx.r7.u32 ? Load32(base, ctx.r7.u32) : 0;
     const Ymd t = ToYmd(day);
     REXLOG_INFO("[nhllegacy] natcup: task day {} ({:04}-{:02}-{:02}), tier {} sub {}", day, t.y, t.m, t.d, ctx.r5.u32,
                 ctx.r6.u32);
+    if (LevelOf(ctx, base, kNationsLeague) >= 0) {
+      CupDay(ctx, base, t.d - 1, t.m - 1);
+    }
     ctx.r3.u64 = 1;
     return;
   }
