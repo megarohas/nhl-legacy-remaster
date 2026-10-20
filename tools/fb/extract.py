@@ -14,9 +14,11 @@ import sys
 from . import cas, texture
 from .cas import REPO
 
-DATA = os.path.join(REPO, "game", "other", "nhl24", "Data", "Gen4b", "superbundlelayout")
-WORK = os.path.join(REPO, "game", "work", "nhl24")
-CAT = os.path.join(WORK, "catalog")
+from . import source  # noqa: E402
+
+DATA = source.LAYOUT
+WORK = source.WORK
+CAT = source.CATALOG
 
 _files = {}
 _chunks = None
@@ -24,8 +26,11 @@ VERIFY = True  # сверять sha1 чанка перед распаковко�
 
 
 def cas_path(key):
-    ip, c = key.split("/")
-    return os.path.join(DATA, "nhl_installpackage_" + ip[2:], c + ".cas")
+    """ipNN/cas_MM → файл CAS; patch/ipNN/cas_MM — из папки патча (fb.source.PATCH)."""
+    parts = key.split("/")
+    ip, c = parts[-2], parts[-1]
+    root = os.path.join(source.PATCH, source.PLATFORM, "superbundlelayout")         if parts[0] == "patch" and source.PATCH else DATA
+    return os.path.join(root, source.PACKAGE + ip[2:], c + ".cas")
 
 
 def cas_file(key):
@@ -147,6 +152,8 @@ def main():
     ap.add_argument("--mip", type=int, default=0)
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--list", action="store_true", help="только заголовки, без PNG")
+    ap.add_argument("--no-detile", action="store_true",
+                    help="без детайлинга PS4 (сравнить с обычным — проверка тайлинга нового дампа, PS5)")
     a = ap.parse_args()
     rows = textures(a.regex)
     if a.limit:
@@ -177,7 +184,7 @@ def main():
         else:
             try:
                 lvl = min(max(a.mip, start), max(h["mips"] - 1, 0))
-                img = texture.decode_mip(h, data, lvl, data_first=start)
+                img = texture.decode_mip(h, data, lvl, data_first=start, tiled=not a.no_detile)
                 p = os.path.join(base, out_name(r["name"]) + ".png")
                 os.makedirs(os.path.dirname(p), exist_ok=True)
                 img.save(p)

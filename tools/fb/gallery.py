@@ -22,7 +22,7 @@ from . import kit3d
 from .cas import REPO
 from .kit_batch import CLUBS
 
-NHL24 = os.path.join(REPO, "game", "work", "nhl24")
+from .source import WORK as NHL24  # noqa: E402
 SRC = os.path.join(NHL24, "extract", "gallery24")
 OUT = os.path.join(NHL24, "gallery")
 RX = re.compile(r"^content/character/skater/league/nhl/([a-z0-9]+)/([a-z0-9]+)/([a-z0-9]+)/jersey_\2_\1_\3_color$")

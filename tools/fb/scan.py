@@ -16,16 +16,18 @@ from multiprocessing import Pool
 from . import bundle, cas
 
 REPO = cas.REPO
-DATA = os.path.join(REPO, "game", "other", "nhl24", "Data")
-OUT = os.path.join(REPO, "game", "work", "nhl24", "catalog", "scan")
+from . import source  # noqa: E402
+
+DATA = source.DATA
+OUT = os.path.join(source.CATALOG, "scan")
 
 
 def cas_files():
-    return sorted(glob.glob(os.path.join(DATA, "Gen4b", "superbundlelayout", "*", "cas_*.cas")))
+    return sorted(glob.glob(os.path.join(source.LAYOUT, "*", "cas_*.cas")))
 
 
 def cas_key(path):
-    pkg = os.path.basename(os.path.dirname(path)).replace("nhl_installpackage_", "ip")
+    pkg = os.path.basename(os.path.dirname(path)).replace(source.PACKAGE, "ip")
     return f"{pkg}/{os.path.splitext(os.path.basename(path))[0]}"
 
 

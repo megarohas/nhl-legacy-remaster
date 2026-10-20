@@ -12,7 +12,7 @@ import sys
 from .cas import REPO
 from .texture import RES_TEXTURE
 
-CAT = os.path.join(REPO, "game", "work", "nhl24", "catalog")
+from .source import CATALOG as CAT  # noqa: E402
 
 
 def records():

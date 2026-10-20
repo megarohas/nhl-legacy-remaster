@@ -22,7 +22,7 @@ import numpy as np
 from . import cas, texture
 from .cas import REPO
 
-CAT = os.path.join(REPO, "game", "work", "nhl24", "catalog")
+from .source import CATALOG as CAT  # noqa: E402
 LICENSED = "content/character/skater/shared/head/licensed"
 FMT = {3: ("<f4", 3), 6: ("<f2", 2), 8: ("<f2", 4), 0x0D: ("u1", 4), 0x16: ("u1", 4), 0x17: ("<u2", 4),
        2: ("<f4", 2), 4: ("<f4", 4)}
@@ -100,7 +100,10 @@ def mesh(name):
             acc += st * nv
         sec = {"nv": nv, "ntri": ntri, "tri": ib[first:first + 3 * ntri].reshape(-1, 3).astype(np.int64)}
         for usage, fmt, ofs, stream in elems:
-            if fmt not in FMT:
+            if fmt not in FMT:                       # неизвестный формат: позиция или UV — ошибка (новый движок),
+                if usage in (1, 0x21):               # прочее — в список пропущенного (раньше пропускалось молча)
+                    raise ValueError(f"{sname}: формат 0x{fmt:02x} у {USAGE.get(usage, hex(usage))} не поддержан")
+                sec.setdefault("skipped", []).append((usage, fmt))
                 continue
             dt, n = FMT[fmt]
             st = strides[stream]

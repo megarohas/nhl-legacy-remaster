@@ -14,7 +14,7 @@ from . import extract
 from .cas import REPO
 from .kit_batch import CLUBS, KITS
 
-NHL24 = os.path.join(REPO, "game", "work", "nhl24")
+from .source import WORK as NHL24  # noqa: E402
 
 
 def check_texture(name, rows_by_name):

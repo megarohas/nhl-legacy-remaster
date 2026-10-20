@@ -23,17 +23,20 @@ import uuid
 from . import bundle, cas
 from .cas import REPO
 
-DATA = os.path.join(REPO, "game", "other", "nhl24", "Data")
-CAT = os.path.join(REPO, "game", "work", "nhl24", "catalog")
+from . import source  # noqa: E402
+
+DATA = source.DATA
+CAT = source.CATALOG
 BASE = 0x22C
 
 
-def cas_key(catalog, casn):
-    return f"ip{catalog:02d}/cas_{casn:02d}"
+def cas_key(catalog, casn, patch=0):
+    """Ключ места: ipNN/cas_MM; из патча — patch/ipNN/cas_MM (у NHL 24 патча нет)."""
+    return ("patch/" if patch else "") + f"ip{catalog:02d}/cas_{casn:02d}"
 
 
-def cas_path(catalog, casn):
-    return os.path.join(DATA, "Gen4b", "superbundlelayout", f"nhl_installpackage_{catalog:02d}", f"cas_{casn:02d}.cas")
+def cas_path(catalog, casn, patch=0):
+    return source.cas_path(catalog, casn, patch)
 
 
 def read_toc(path):
@@ -77,8 +80,8 @@ def read_toc(path):
 
 
 def all_tocs():
-    return [os.path.join(DATA, "layout.toc")] + sorted(glob.glob(os.path.join(DATA, "Gen4b", "*.toc"))) + \
-        sorted(glob.glob(os.path.join(DATA, "Gen4b", "levels", "*", "*.toc")))
+    return [os.path.join(DATA, "layout.toc")] + sorted(glob.glob(os.path.join(source.PLATFORM_DIR, "*.toc"))) + \
+        sorted(glob.glob(os.path.join(source.PLATFORM_DIR, "levels", "*", "*.toc")))
 
 
 def cmd_stats(a):
@@ -94,13 +97,13 @@ def cmd_index(a):
     for p in all_tocs()[1:]:
         r = read_toc(p)
         for g, catalog, casn, patch, eo, es in r["chunks"]:
-            chunks.setdefault(g, {"cas": cas_key(catalog, casn), "ofs": eo, "csize": es, "src": "toc"})
+            chunks.setdefault(g, {"cas": cas_key(catalog, casn, patch), "ofs": eo, "csize": es, "src": "toc"})
         nb = 0
         for ents in r["bundles"]:
             if not ents:
                 continue
             catalog, casn, patch, eo, es = ents[0]
-            path = cas_path(catalog, casn)
+            path = cas_path(catalog, casn, patch)
             if not os.path.exists(path):
                 continue
             with open(path, "rb") as f:
@@ -113,8 +116,8 @@ def cmd_index(a):
             for k, it in enumerate(m["chunks"]):
                 j = 1 + len(m["ebx"]) + len(m["res"]) + k
                 if j < len(ents):
-                    c2, n2, _p, o2, s2 = ents[j]
-                    chunks.setdefault(it["id"], {"cas": cas_key(c2, n2), "ofs": o2, "csize": s2, "src": "bundle",
+                    c2, n2, p2, o2, s2 = ents[j]
+                    chunks.setdefault(it["id"], {"cas": cas_key(c2, n2, p2), "ofs": o2, "csize": s2, "src": "bundle",
                                                  "lo": it["logical_offset"], "ls": it["logical_size"],
                                                  "sha1": it["sha1"]})
             nb += 1

@@ -30,7 +30,8 @@ LEGACY_JERSEY = "rendering/jersey/jersey_0_1_2_0_1_2.rx2"
 
 def find_res(name):
     key = f'"name": "{name}"'
-    for p in sorted(glob.glob(os.path.join(REPO, "game", "work", "nhl24", "catalog", "scan", "*.jsonl"))):
+    from .source import CATALOG
+    for p in sorted(glob.glob(os.path.join(CATALOG, "scan", "*.jsonl"))):
         with open(p, encoding="utf-8") as f:
             for line in f:
                 if key in line and '"k": "res"' in line and '"ofs"' in line:

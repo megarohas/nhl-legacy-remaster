@@ -10,8 +10,7 @@ import os
 import struct
 import zlib
 
-REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-OOZ_DLL = os.path.join(REPO, "game", "work", "nhl24", "bin", "ooz.dll")
+from .source import OOZ_DLL, REPO  # noqa: E402,F401  (пути — fb.source: FB_GAME / FB_WORK …)
 _ooz = None
 
 
