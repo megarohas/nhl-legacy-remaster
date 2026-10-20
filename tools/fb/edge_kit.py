@@ -1101,11 +1101,24 @@ KITS_OUT = os.path.join(WORK, "out")
 # щит NHL (пользователь, 19.10): крупнее, по центру (у NHL 24 центр нашивки на 4 мм левее), чуть выше — чтобы не
 # заходил на шнуровку
 SHOULDER_IN_CM = 2.0               # нашивки на плечах — на 2 см к шее (пользователь, 19.10)
+SHOULDER_SCALE = 0.9               # и на 10 % меньше (от центра): близко к соседним элементам (пользователь, 21.10)
 SHIELD_SCALE = 0.88                # меньше (пользователь, 19.10: «слишком большой»); у форм NHL 24 на Edge — 0,8 (под щит EA)
 SHIELD_OFFSET_CM = [0.41, 0.6, 0.0]  # x: середина горловины NHL 24 — на 0,35–0,41 см левее оси (как CoordMap.x_fix)
 RELIEF_CLEAR = [(0.468, 0.136, 0.532, 0.178, -0.05), (0.466, 0.386, 0.534, 0.401, -0.03)]   # u0, v0, u1, v1, сдвиг
 #                                    источника по v: метка и черта над местом Reebok EA в чистом
 #                                    рельефе T=4 на спине (под номером — прямоугольник, у EA-форм его нет)
+# Надпись сзади у ворота — своя вместо Reebok (пользователь, 21.10: «в таком же стиле, но mgrhs»): шрифт —
+# полужирный гротеск, как у Reebok EA (Arial Bold; x-высота 8,7 текселя 1024², базовая линия — 2,7 строки от верха
+# рамки src_box, у развёртки текст повёрнут на 180°), рамка — src_box EA с запасом BRAND_PAD строк сверху и снизу
+# (хвост g); цвет — как у Reebok (цвет adidas NHL 24), рельеф и блеск — по форме своих букв, сила рельефа —
+# подбором по буквам Reebok EA (brand_relief_model). None — Reebok EA.
+BRAND_TEXT = "mgrhs"
+BRAND_FONT = r"C:\Windows\Fonts\arialbd.ttf"
+BRAND_XH = 8.7
+BRAND_BASE_ROW = 2.7
+BRAND_PAD = 2
+BRAND_SS = 16
+BRAND_SM_UP = 4                    # блеск букв выше ткани (у EA: 20 при ткани 16)
 REEBOK_BACK_UV = [0.5, 0.4183]  # 1,663 м — между 0,4205 (1,666: «чуть-чуть пониже») и 0,416 (1,66: «слишком
 #                                    низко»), пользователь, 19.10; у EA — 0,4085 (1,648)
 #                                        # у EA — 0,4085 (на 2,6 см ниже места логотипа adidas NHL 24, 1,674 м)
@@ -2190,6 +2203,39 @@ def brand_alpha():
     return np.clip((win - bg) / max(fg - bg, 1.0), 0, 1)
 
 
+def wordmark_alpha():
+    """Своя надпись (BRAND_TEXT) в рамке src_box EA (+BRAND_PAD строк сверху и снизу) на сетке 1024², повёрнутая на
+    180° (как Reebok на развёртке), 0…1."""
+    from PIL import Image, ImageDraw, ImageFont
+    H, W = brand_alpha().shape
+    S, Hh = BRAND_SS, (H + 2 * BRAND_PAD) * BRAND_SS
+    f = ImageFont.truetype(BRAND_FONT, 400)
+    bx = f.getbbox("x")
+    f = ImageFont.truetype(BRAND_FONT, int(round(400 * BRAND_XH * S / (bx[3] - bx[1]))))
+    img = Image.new("L", (W * S, Hh), 0)
+    d = ImageDraw.Draw(img)
+    widths = [f.getlength(ch) for ch in BRAND_TEXT]
+    x, base = (W * S - sum(widths)) / 2, int(round(Hh - (BRAND_PAD + BRAND_BASE_ROW) * S))
+    for ch, wc in zip(BRAND_TEXT, widths):
+        d.text((x, base), ch, font=f, fill=255, anchor="ls")
+        x += wc
+    hi = (np.asarray(img).astype(np.float64) / 255)[::-1, ::-1]
+    return hi.reshape(H + 2 * BRAND_PAD, S, W, S).mean((1, 3))
+
+
+def brand_relief_model(ea_nm, a, sigma=0.7):
+    """Рельеф букв Reebok EA как наклон сглаженной формы: канал R — по v, G — по u (у развёртки спины), + плоское
+    дно букв. ea_nm — окно карты EA (как a), a — альфа надписи. -> (k_R, k_G, R0, G0, B0)."""
+    from scipy import ndimage as ndi
+    h = ndi.gaussian_filter(a, sigma)
+    gy, gx = np.gradient(h)
+    m = ndi.binary_dilation(a > 0.25, iterations=1)
+    A = np.stack([gy[m], gx[m], np.ones(m.sum())], 1)
+    kr, _, r0 = np.linalg.lstsq(A, ea_nm[..., 0][m], rcond=None)[0]
+    _, kg, g0 = np.linalg.lstsq(A, ea_nm[..., 1][m], rcond=None)[0]
+    return kr, kg, r0, g0, float(np.median(ea_nm[..., 2][a > 0.8]))
+
+
 def insert_rule(ours_png, mesh, code, kit):
     """InsertPaint по первой сборке: красный — середина вставки NHL 24 (кромка ворота спереди), ткань и кокетка — с
     нашей текстуры, линия кокетки спереди — высота перехода цветов на нашей сетке (по |x|)."""
@@ -2437,7 +2483,8 @@ def cmd_kit(a):
         d, r = orig_rules(path, club, kit, profiles)
         for nm_, sx in (("shoulder_r", 1.0), ("shoulder_l", -1.0)):   # ближе к шее (заходили на границу кокетки)
             if nm_ in r:
-                r[nm_] = dict(r[nm_], offset_cm=[sx * SHOULDER_IN_CM, 0.0, 0.0])
+                r[nm_] = dict(r[nm_], offset_cm=[sx * SHOULDER_IN_CM, 0.0, 0.0],
+                              scale=float(r[nm_].get("scale", 1.0)) * SHOULDER_SCALE)
         if "neck_shield" in r:                           # щит — где у NHL 24 (под краем ворота adidas), не у мыска V EA
             sh = {k: v for k, v in r["neck_shield"].items() if k != "legacy_uv"}
             r["neck_shield"] = dict(sh, offset_cm=SHIELD_OFFSET_CM, scale=SHIELD_SCALE)
@@ -2452,12 +2499,24 @@ def cmd_kit(a):
         return t
     kit_fix._rules = fix_rules
     orig_brand_relief = kit_fix.BrandSwap.relief
+    orig_brand_init = kit_fix.BrandSwap.__init__
+
+    def brand_init(self, rule, comp, tpl_dir, spots=()):
+        """Своя надпись (BRAND_TEXT) вместо альфы Reebok EA: рамка выше на 2·BRAND_PAD строк, центр — тот же."""
+        orig_brand_init(self, rule, comp, tpl_dir, spots)
+        if BRAND_TEXT:
+            H = self.src_a.shape[0]
+            self.src_a = wordmark_alpha()
+            self.src_wh = (self.src_wh[0], self.src_wh[1] * (H + 2 * BRAND_PAD) / H)
+    kit_fix.BrandSwap.__init__ = brand_init
 
     def brand_relief(self, nm_path, sm_path):
         """Рельеф Reebok — туда же, куда цвет (REEBOK_BACK_UV), а не на место EA: иначе под логотипом — второй,
         выдавленный «Reebok»; и метка-прямоугольник в чистом рельефе спины (RELIEF_CLEAR) — заглажена."""
         from PIL import Image
         from scipy import ndimage as ndi
+        if BRAND_TEXT:
+            return wordmark_relief(self, nm_path, sm_path)
         sb = self.rule["src_box"]
         box = np.zeros((1024, 1024), bool)                 # только буквы (альфа надписи EA), не вся рамка: в рамке
         u0, v0 = int(round(sb[0] * 1024)), int(round(sb[1] * 1024))   # у EA — и край кокетки (давал черту)
@@ -2483,6 +2542,46 @@ def cmd_kit(a):
             out = out * (1 - mm) + ea_s * mm
             Image.fromarray(np.clip(np.round(out), 0, 255).astype(np.uint8), mode).save(path)
     kit_fix.BrandSwap.relief = brand_relief
+
+    def wordmark_relief(self, nm_path, sm_path):
+        """Рельеф и блеск своей надписи — по её форме на месте цвета (REEBOK_BACK_UV, как BrandSwap.__call__):
+        внутри букв — гладко (без сетки кокетки), по краю — наклон силы Reebok EA (brand_relief_model)."""
+        from PIL import Image
+        from scipy import ndimage as ndi
+        ea_a = brand_alpha()
+        sb = self.rule["src_box"]
+        u0, v0 = int(round(sb[0] * 1024)), int(round(sb[1] * 1024))
+        ea_nm = np.asarray(Image.open(os.path.join(self.tpl_dir, "jersey_nm.png")).convert("RGBA")
+                           .resize((1024, 1024), Image.LANCZOS)).astype(np.float64)
+        kr, kg, r0, g0, b0 = brand_relief_model(ea_nm[v0:v0 + ea_a.shape[0], u0:u0 + ea_a.shape[1]], ea_a)
+        a = wordmark_alpha()
+        ph, pw = a.shape
+        x0 = int(round(REEBOK_BACK_UV[0] * 1024 - pw / 2))
+        y0 = int(round(REEBOK_BACK_UV[1] * 1024 - ph / 2))
+        A = np.zeros((1024, 1024))
+        A[y0:y0 + ph, x0:x0 + pw] = a
+        h = ndi.gaussian_filter(A, 0.7)
+        gy, gx = np.gradient(h)
+        m = ndi.gaussian_filter(ndi.binary_dilation(A > 0.25, iterations=2).astype(np.float64), 1.0)
+        img = Image.open(nm_path)
+        mode = img.mode
+        cur = np.asarray(img.convert(mode).resize((1024, 1024))).astype(np.float64)
+        letter = cur.copy()
+        letter[..., 0], letter[..., 1], letter[..., 2] = r0 + kr * gy, g0 + kg * gx, b0
+        out = cur * (1 - m[..., None]) + letter * m[..., None]
+        Image.fromarray(np.clip(np.round(out), 0, 255).astype(np.uint8), mode).save(nm_path)
+        img = Image.open(sm_path)
+        mode = img.mode
+        cur = np.asarray(img.convert(mode).resize((1024, 1024))).astype(np.float64)
+        aa = ndi.gaussian_filter(A, 0.5)[..., None]
+        out = cur.copy()
+        n = 3 if cur.ndim == 3 and cur.shape[2] == 4 else (cur.shape[2] if cur.ndim == 3 else 1)
+        if cur.ndim == 3:
+            out[..., :n] = cur[..., :n] * (1 - aa) + (SM_BASE + BRAND_SM_UP) * aa
+        else:
+            out = cur * (1 - aa[..., 0]) + (SM_BASE + BRAND_SM_UP) * aa[..., 0]
+        Image.fromarray(np.clip(np.round(out), 0, 255).astype(np.uint8), mode).save(sm_path)
+        print(f"  надпись «{BRAND_TEXT}» сзади: рельеф k_R {kr:.0f}, k_G {kg:.0f}, дно ({r0:.0f}, {g0:.0f}, {b0:.0f})")
     # «рубашка» в вырезе — тёмной подкладкой NHL 24 (медиана её острова развёртки), а не цветом свитера: у ворота
     # adidas внутри — подкладка (у выездной белая рубашка торчала белым кольцом)
     from scipy.sparse.csgraph import connected_components
@@ -2589,6 +2688,7 @@ def cmd_kit(a):
         kit_hybrid.load_rules = orig_rules
         kit_fix._rules = orig_fix_rules
         kit_fix.BrandSwap.relief = orig_brand_relief
+        kit_fix.BrandSwap.__init__ = orig_brand_init
 
 
 def sleeve_compress(cmap, code, kit, od, plan_out):
@@ -2772,6 +2872,10 @@ SLOT_KITS = {
     "home": {"kit": "edge_home", "legacy": "1_14_4", "sock": "flat", "label": "Home (Edge collar 24)"},
     "away": {"kit": "edge_away", "legacy": "1_14_3", "sock": "legacy", "label": "Away (Edge collar 24)"},
 }
+# Буква капитана (зоны 5 и 7 карты номеров): у выездной 1_14_3 они на 0,023 по v ниже, чем у домашней 1_14_4, при
+# том же месте герба — на светлой букву почти прижимало к гербу (пользователь, 21.10). Зоны букв — с карты этой формы.
+LETTER_ZONES = (5, 7)
+LETTER_ZONES_FROM = {"away": "home"}
 SOCK_PARTS = ((0.0, (24, 56, 46)), (30, (214, 203, 165)), (30, (159, 14, 10)), (110, (214, 203, 165)))
 SOCK_TOP_V = 0.49                  # верх полос своих гетр (v развёртки гетр: 0 — у колена): у EA MIN 0,48–0,50;
 #                                    перенесённые с NHL 24 — 0,576 (на ~6,5 см ниже — «повыше», пользователь, 19.10)
@@ -2830,6 +2934,26 @@ def place_sock(src_png, dst_png, top_v, bot_v):
     out = a[i0] * (1 - t) + a[i1] * t
     Image.fromarray(np.clip(np.round(out), 0, 255).astype(np.uint8)).save(dst_png)
     return (y0, y1), (Y0, Y1)
+
+
+def copy_zones(dst_png, ref_png, zones):
+    """Зоны карты номеров (R, G > 128, B = номер зоны) — с карты ref: у dst зона стирается (фон — белый), из ref
+    переносится как есть. -> {зона: (v0 было, v0 стало)}."""
+    from PIL import Image
+    a = np.asarray(Image.open(dst_png).convert("RGBA")).copy()
+    r = np.asarray(Image.open(ref_png).convert("RGBA"))
+    res = {}
+    for z in zones:
+        md = (a[..., 0] > 128) & (a[..., 1] > 128) & (a[..., 2] == z)
+        mr = (r[..., 0] > 128) & (r[..., 1] > 128) & (r[..., 2] == z)
+        if not mr.any():
+            continue
+        res[z] = (round(float(np.nonzero(md)[0].min()) / a.shape[0], 3) if md.any() else None,
+                  round(float(np.nonzero(mr)[0].min()) / a.shape[0], 3))
+        a[md] = (255, 255, 255, 255)
+        a[mr] = r[mr]
+    Image.fromarray(a, "RGBA").save(dst_png)
+    return res
 
 
 def deislanded(cm_png, out_png):
@@ -3244,6 +3368,12 @@ def cmd_slot(a):
             shutil.copy2(os.path.join(src, f + ".png"), os.path.join(d, f + ".png"))
         for f in ("name_cm", "pant_cm", "pant_nm", "pant_sm"):
             shutil.copy2(os.path.join(leg, f + ".png"), os.path.join(d, f + ".png"))
+        if kit in LETTER_ZONES_FROM:
+            ref = os.path.join(cur, SLOT_KITS[LETTER_ZONES_FROM[kit]]["legacy"])
+            if not os.path.exists(os.path.join(ref, "kit.json")):
+                J.unpack_kit(SLOT_KITS[LETTER_ZONES_FROM[kit]]["legacy"], ref)
+            print(f"  буква капитана {kit}: зоны {LETTER_ZONES} — как у {LETTER_ZONES_FROM[kit]}:",
+                  copy_zones(os.path.join(d, "name_cm.png"), os.path.join(ref, "name_cm.png"), LETTER_ZONES))
         flat_src = os.path.join(KITS_OUT, f"{a.club}_{flat_kit}", "sock_cm.png")
         if spec["sock"] == "flat":
             im, info = flat_sock(flat_src)
