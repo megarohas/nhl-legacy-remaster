@@ -70,6 +70,10 @@ extern "C" void sub_82B1B048(PPCContext& ctx, uint8_t* base);         // упр�
 extern "C" void sub_82B4C958(PPCContext& ctx, uint8_t* base);         // удалить игрока (черновик, playerindex)
 extern "C" void sub_82B87E80(PPCContext& ctx, uint8_t* base);         // список: убрать элемент
 extern "C" void sub_828A3478(PPCContext& ctx, uint8_t* base);         // освободить память
+extern "C" void __imp__sub_82B7E6E8(PPCContext& ctx, uint8_t* base);  // звенья: собрать (L)
+extern "C" void __imp__sub_82B85F40(PPCContext& ctx, uint8_t* base);  // звенья: в объект состава (L)
+extern "C" void __imp__sub_82B373C8(PPCContext& ctx, uint8_t* base);  // новичок драфта
+extern "C" void __imp__sub_82B37598(PPCContext& ctx, uint8_t* base);  // новичок драфта
 
 namespace {
 
@@ -295,6 +299,8 @@ int32_t ForEachRow(PPCContext& ctx, uint8_t* base, uint32_t f, uint32_t table_ha
 
 // Номера франшизы сборных (leagueteams: teamid → index). Итератор сведений о командах (82AE9DD8/82AF6570) при
 // создании франшизы сборных не видит (прогон 20.10: 0 из 16) — читаем таблицу.
+bool g_nation_team[128];  // номер франшизы → сборная (последний NationTeams)
+
 std::map<uint32_t, uint32_t> NationTeams(PPCContext& ctx, uint8_t* base, uint32_t f) {
   std::map<uint32_t, uint32_t> out;
   ForEachRow(ctx, base, f, kTableTeams, 0, 0, [&](auto& get, auto&) {
@@ -303,6 +309,12 @@ std::map<uint32_t, uint32_t> NationTeams(PPCContext& ctx, uint8_t* base, uint32_
       out[id] = static_cast<uint32_t>(get(col::kTmIndex));
     }
   });
+  std::memset(g_nation_team, 0, sizeof(g_nation_team));
+  for (const auto& [id, t] : out) {
+    if (t < 128) {
+      g_nation_team[t] = true;
+    }
+  }
   return out;
 }
 
@@ -1084,11 +1096,14 @@ void Finish(PPCContext& ctx, uint8_t* base, uint32_t f, const std::map<uint32_t,
   for (const auto& g : games) {
     played[g.home] = played[g.away] = true;
   }
+  // стоковые составы — всем 16 (у не игравших — без тех, кого подписали клубы: тест 7, 8 игроков ушли в АХЛ)
   auto players = ReadPlayers(ctx, base, f, teams);
-  for (auto& [t, _] : played) {
+  for (const auto& [id, t] : teams) {
     auto& stock = players.stock[t];
     MarkDressed(stock);
     WriteRoster(ctx, base, t, stock);
+  }
+  for (auto& [t, _] : played) {
     SetUserTeam(ctx, base, t, false);
   }
   ProtectStock(ctx, base, f, teams);
@@ -1176,7 +1191,86 @@ void CupDay(PPCContext& ctx, uint8_t* base, uint32_t day0, uint32_t month0) {
   ctx.r1.u64 = saved_r1;
 }
 
+// Новички драфта: генератор (82B373C8 / 82B37598 → 82B37120 → 82B009D8) делает по 40 на каждую лигу CHL, и на
+// QMJHL тоже — с juniorteam = teamid QMJHL (174–191; в этой франшизе там места WHL). Раздаём их в OHL и WHL
+// поочерёдно по командам (тест 7: 40 таких в новой франшизе).
+void FixQmjhlProspects(PPCContext& ctx, uint8_t* base) {
+  const uint64_t saved_r1 = ctx.r1.u64;
+  const uint32_t f = (ctx.r1.u32 - 0x400) & ~0xFu;
+  ctx.r1.u64 = f;
+  std::vector<int32_t> ohl, whl;
+  ForEachRow(ctx, base, f - 0x200, kTableTeams, 0, 0, [&](auto& get, auto&) {
+    const int32_t lg = get(col::kTmLeague);
+    if (lg == 9 || lg == 11) {
+      (lg == 9 ? ohl : whl).push_back(get(col::kTmIndex));
+    }
+  });
+  int n = 0;
+  if (!ohl.empty() && !whl.empty()) {
+    ForEachRow(ctx, base, f - 0x200, kTablePlayerBio, kFieldJuniorLeague, kQmjhl, [&](auto&, auto& put) {
+      const bool to_ohl = n % 2 == 0;
+      const auto& v = to_ohl ? ohl : whl;
+      put(kColJuniorLeague, to_ohl ? 9 : 11);
+      put(kColJuniorTeam, v[static_cast<size_t>(n / 2) % v.size()]);
+      ++n;
+    });
+  }
+  ctx.r1.u64 = saved_r1;
+  if (n) {
+    REXLOG_INFO("[nhllegacy] natcup: {} QMJHL draft prospects moved to OHL/WHL", n);
+  }
+}
+
+bool NationsLevelOn(PPCContext& ctx, uint8_t* base) {
+  return Enabled() && LevelOf(ctx, base, kQmjhl) < 0 && LevelOf(ctx, base, kNationsLeague) >= 0;
+}
+
 }  // namespace
+
+// Построитель звеньев движка (82B87538 → 82B7E6E8 → 82B85F40 → 82B57B98) правит объект состава в кэше, а общий
+// сброс 82B57B98 пишет его в базу: сборным он оставляет пустые звенья (тесты 4, 6, 7 — «on the ice 0», зависание).
+// Звенья сборных пишет модуль — для них сборку и правку объекта пропускаем (L+424 — объект состава, +0 команда;
+// L+444 — команда).
+extern "C" void sub_82B7E6E8(PPCContext& ctx, uint8_t* base) {
+  if (Enabled()) {
+    const uint32_t obj = Load32(base, ctx.r3.u32 + 424);
+    const uint32_t team = obj ? Load32(base, obj) : 0xFFFFFFFFu;
+    if (team < 128 && g_nation_team[team]) {
+      return;
+    }
+  }
+  __imp__sub_82B7E6E8(ctx, base);
+}
+
+extern "C" void sub_82B85F40(PPCContext& ctx, uint8_t* base) {
+  if (Enabled()) {
+    const uint32_t team = Load32(base, ctx.r3.u32 + 444);
+    if (team < 128 && g_nation_team[team]) {
+      return;
+    }
+  }
+  __imp__sub_82B85F40(ctx, base);
+}
+
+extern "C" void sub_82B373C8(PPCContext& ctx, uint8_t* base) {
+  __imp__sub_82B373C8(ctx, base);
+  const uint64_t r3 = ctx.r3.u64, r4 = ctx.r4.u64;
+  if (NationsLevelOn(ctx, base)) {
+    FixQmjhlProspects(ctx, base);
+  }
+  ctx.r3.u64 = r3;
+  ctx.r4.u64 = r4;
+}
+
+extern "C" void sub_82B37598(PPCContext& ctx, uint8_t* base) {
+  __imp__sub_82B37598(ctx, base);
+  const uint64_t r3 = ctx.r3.u64, r4 = ctx.r4.u64;
+  if (NationsLevelOn(ctx, base)) {
+    FixQmjhlProspects(ctx, base);
+  }
+  ctx.r3.u64 = r3;
+  ctx.r4.u64 = r4;
+}
 
 // 82B099E0(создание) — juniorteam юниоров CHL в номера франшизы. Оригинал вычитает у всех (juniorleague 9, 10, 11)
 // сдвиг OHL 82975B50(9) — верно, только пока OHL, QMJHL и WHL идут подряд. Без QMJHL (лига сборных на её уровне):
