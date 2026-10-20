@@ -1182,8 +1182,9 @@ python tools/legacy_data/nhl24.py verify ПАПКА_CACHE                 # cach
 ## Правки экипировки пользователя (этап useredits, 11.10.2026)
 
 Экипировку, которую пользователь меняет в игре (клюшки, обмотка, гетры, коньки, шорты, наплечники…), игра хранит в
-его сейве `ROSTER …`. Выгрузка — `game/work/legacy-data/tmp/equip_from_save.py НОВЫЙ_СЕЙВ ПРЕДЫДУЩИЙ_СЕЙВ
-game/work/legacy-data/equipment-user`: полный снимок экипировки и `… — правки.json` (отличия от предыдущего сейва:
+его сейве `ROSTER …`. Выгрузка — `python tools/legacy_data/user_equipment.py extract НОВЫЙ_СЕЙВ ПРЕДЫДУЩИЙ_СЕЙВ`
+(с 20.10.2026; до этого — разовый `game/work/legacy-data/tmp/equip_from_save.py`, вывод тот же), по умолчанию в
+`game/work/legacy-data/equipment-user`: полный снимок экипировки и `… — правки.json` (отличия от предыдущего сейва:
 игрок, поле, было → стало). Этап `useredits` (после `ahl` и `nhlattrs`) ставит правки во все базы сборки (`nhlng.db` и
 `draft_roster.db` в out и out-ahl32) через `tools/legacy_data/user_equipment.py`: только где в базе прежнее значение,
 иное — конфликт в отчёт; повтор ничего не меняет. 11.10 04:07: сейв `ROSTER 20261011010728` — 191 правка у 105

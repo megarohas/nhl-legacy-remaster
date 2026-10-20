@@ -158,7 +158,7 @@ if want nhlattrs; then
 fi
 if want useredits; then
   # правки экипировки пользователя из его сейва ROSTER (game/work/legacy-data/equipment-user/*правки.json, выгрузка —
-  # game/work/legacy-data/tmp/equip_from_save.py): ставятся, где в базе прежнее значение; повтор ничего не меняет
+  # user_equipment.py extract НОВЫЙ_СЕЙВ ПРЕДЫДУЩИЙ): ставятся, где в базе прежнее значение; повтор ничего не меняет
   say "правки экипировки пользователя (user_equipment.py)"
   for B in $O $W/out-ahl32; do
     for F in nhlng.db draft_roster.db; do [ -f $B/db/$F ] && python $T/user_equipment.py $B/db/$F; done
