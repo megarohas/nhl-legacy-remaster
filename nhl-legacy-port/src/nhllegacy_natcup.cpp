@@ -27,6 +27,34 @@ extern "C" void __imp__sub_82B4BBC0(PPCContext& ctx, uint8_t* base);  // дис�
 extern "C" void sub_82AF5DB0(PPCContext& ctx, uint8_t* base);         // запись задачи в leaguetasks
 extern "C" void sub_82975FA0(PPCContext& ctx, uint8_t* base);         // номер уровня лиги
 extern "C" void __imp__sub_829DA768(PPCContext& ctx, uint8_t* base);  // создатель лиги: добавить уровень
+extern "C" void __imp__sub_82B099E0(PPCContext& ctx, uint8_t* base);  // создание: juniorteam юниоров CHL
+extern "C" void sub_8289F5B0(PPCContext& ctx, uint8_t* base);
+extern "C" void sub_82974FA0(PPCContext& ctx, uint8_t* base);
+extern "C" void sub_82A07D88(PPCContext& ctx, uint8_t* base);         // база
+extern "C" void sub_827B5D40(PPCContext& ctx, uint8_t* base);         // поле по хешу
+extern "C" void sub_827B10C8(PPCContext& ctx, uint8_t* base);         // ссылка на поле (хеш)
+extern "C" void sub_827B1588(PPCContext& ctx, uint8_t* base);         // условие «поле == значение»
+extern "C" void sub_827B2418(PPCContext& ctx, uint8_t* base);         // ИЛИ условий
+extern "C" void sub_827B7D08(PPCContext& ctx, uint8_t* base);
+extern "C" void sub_827B4818(PPCContext& ctx, uint8_t* base);         // запрос к таблице (хеш)
+extern "C" void sub_827B4A48(PPCContext& ctx, uint8_t* base);         // фильтр запроса
+extern "C" void sub_827B5568(PPCContext& ctx, uint8_t* base);         // курсор
+extern "C" void sub_833FBEA0(PPCContext& ctx, uint8_t* base);
+extern "C" void sub_827B11E0(PPCContext& ctx, uint8_t* base);
+extern "C" void sub_827B2E10(PPCContext& ctx, uint8_t* base);         // число строк курсора
+extern "C" void sub_827B3008(PPCContext& ctx, uint8_t* base);         // чтение поля строки
+extern "C" void sub_827B3030(PPCContext& ctx, uint8_t* base);         // запись поля строки
+extern "C" void sub_827B2D08(PPCContext& ctx, uint8_t* base);         // следующая строка
+extern "C" void sub_827B2C40(PPCContext& ctx, uint8_t* base);         // курсор: удалить
+extern "C" void sub_82975B50(PPCContext& ctx, uint8_t* base);         // сдвиг teamid лиги → номер франшизы
+extern "C" void sub_82AF8BF0(PPCContext& ctx, uint8_t* base);         // менеджер лиги
+extern "C" void sub_82AF9838(PPCContext& ctx, uint8_t* base);         // уровень лиги (−1 — нет)
+extern "C" void sub_82AE9DD8(PPCContext& ctx, uint8_t* base);         // итератор команд: создать
+extern "C" void sub_82AE9E28(PPCContext& ctx, uint8_t* base);         // итератор команд: удалить
+extern "C" void sub_82AF6570(PPCContext& ctx, uint8_t* base);         // сведения о команде франшизы (+8 teamid)
+extern "C" void sub_82A1BB18(PPCContext& ctx, uint8_t* base);         // удалить состав команды
+extern "C" void __imp__RtlEnterCriticalSection(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__RtlLeaveCriticalSection(PPCContext& ctx, uint8_t* base);
 
 namespace {
 
@@ -60,8 +88,8 @@ bool Enabled() {
   return on;
 }
 
-// Дни ↔ дата (григорианский календарь). Эпоха движка — 28.12.1899 = 0: старт франшизы «NHL Entry Draft» в игре
-// 19.06.2026 = 46190, 25.08.2026 в игре = 46257 (leaguestates type 0), прогон 20.10.
+// Дни ↔ дата (григорианский календарь). Эпоха движка — 1.01.1900 = 0: старт франшизы «NHL Entry Draft» в игре
+// 19.06.2026 = 46190, 25.08.2026 в игре = 46257 (leaguestates type 0), 1.09 турнира = 46264 (прогоны 20.10).
 int64_t DaysFromCivil(int64_t y, unsigned m, unsigned d) {
   y -= m <= 2;
   const int64_t era = (y >= 0 ? y : y - 399) / 400;
@@ -70,7 +98,7 @@ int64_t DaysFromCivil(int64_t y, unsigned m, unsigned d) {
   const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
   return era * 146097 + static_cast<int64_t>(doe) - 719468;
 }
-const int64_t kEpoch = DaysFromCivil(1899, 12, 28);
+const int64_t kEpoch = DaysFromCivil(1900, 1, 1);
 
 void CivilFromDays(int64_t z, int* y, unsigned* m, unsigned* d) {
   z += 719468;
@@ -97,9 +125,202 @@ uint32_t ToSerial(int y, unsigned m, unsigned d) {
   return static_cast<uint32_t>(DaysFromCivil(y, m, d) - kEpoch);
 }
 
+// Уровень лиги во франшизе (82AF9838(менеджер, лига, 0)); −1 — лиги нет.
+int32_t LevelOf(PPCContext& ctx, uint8_t* base, int32_t league) {
+  sub_82AF8BF0(ctx, base);
+  if (!ctx.r3.u32) {
+    return -1;
+  }
+  ctx.r4.s64 = league;
+  ctx.r5.u64 = 0;
+  sub_82AF9838(ctx, base);
+  return ctx.r3.s32;
+}
+
+// teamid (байт +8 сведений) команды франшизы номер n.
+uint32_t TeamIdOf(PPCContext& ctx, uint8_t* base, uint32_t n) {
+  const uint64_t saved_r1 = ctx.r1.u64;
+  const uint32_t iter = (ctx.r1.u32 - 0x200) & ~0xFu;
+  const uint32_t info = iter + 0x20;
+  std::memset(Host(base, iter), 0, 0x140);
+  ctx.r1.u64 = iter - 0x80;
+  ctx.r3.u64 = iter;
+  sub_82AE9DD8(ctx, base);
+  ctx.r3.u64 = iter;
+  ctx.r4.u64 = n;
+  ctx.r5.u64 = info;
+  sub_82AF6570(ctx, base);
+  const uint32_t id = *Host(base, info + 8);
+  ctx.r3.u64 = iter;
+  sub_82AE9E28(ctx, base);
+  ctx.r1.u64 = saved_r1;
+  return id;
+}
+
+bool IsNation(uint32_t id) {
+  for (const uint32_t k : kNations) {
+    if (k == id) {
+      return true;
+    }
+  }
+  return false;
+}
+
+constexpr uint32_t kFieldJuniorTeam = 0xF97F5A5Au;    // хеш поля juniorteam (leagueplayerbiotable)
+constexpr uint32_t kFieldJuniorLeague = 0x1A86215Au;  // хеш поля juniorleague
+constexpr uint32_t kTypeInt = 11;
+constexpr uint32_t kJuniorLock = 0x83DA3A00u;         // критическая секция цикла (как у оригинала)
+
+uint32_t FieldIndex(PPCContext& ctx, uint8_t* base, uint32_t db, uint32_t hash) {
+  ctx.r3.u64 = Load32(base, db + 8);
+  ctx.r4.u64 = hash;
+  sub_827B5D40(ctx, base);
+  const uint32_t desc = ctx.r3.u32;
+  return (desc - Load32(base, Load32(base, desc + 4) + 28)) / 68;
+}
+
 }  // namespace
 
+// 82B099E0(создание) — juniorteam юниоров CHL в номера франшизы. Оригинал вычитает у всех (juniorleague 9, 10, 11)
+// сдвиг OHL 82975B50(9) — верно, только пока OHL, QMJHL и WHL идут подряд. Без QMJHL (лига сборных на её уровне):
+// OHL и WHL — каждый своим сдвигом 82975B50(лига), юниоры QMJHL — без юниорского клуба (juniorleague 0, juniorteam
+// −1, как у прочих). Затем — пустые составы сборных: при создании им пишутся стоковые (дубли игроков клубов), до
+// 1 августа они не нужны.
+extern "C" void sub_82B099E0(PPCContext& ctx, uint8_t* base) {
+  if (!Enabled() || LevelOf(ctx, base, kQmjhl) >= 0 || LevelOf(ctx, base, kNationsLeague) < 0) {
+    __imp__sub_82B099E0(ctx, base);
+    return;
+  }
+  const uint32_t self = ctx.r3.u32;
+  const uint64_t saved_r1 = ctx.r1.u64;
+  const uint32_t f = (ctx.r1.u32 - 0x300) & ~0xFu;  // кадр как у оригинала: f+80…f+175
+  std::memset(Host(base, f), 0, 0x300);
+  ctx.r1.u64 = f;
+  sub_8289F5B0(ctx, base);
+  const uint32_t mgr = ctx.r3.u32;
+  ctx.r3.u64 = Load32(base, self + 48);
+  sub_82974FA0(ctx, base);
+  int counts[4] = {0, 0, 0, 0};
+  if ((ctx.r3.u32 & 0xFFu) != 0) {
+    ctx.r3.u64 = mgr;
+    rex::runtime::ResolveIndirectFunction(Load32(base, Load32(base, mgr) + 28))(ctx, base);  // vtable +28
+    sub_82A07D88(ctx, base);
+    const uint32_t db = ctx.r3.u32;
+    const uint32_t ix_team = FieldIndex(ctx, base, db, kFieldJuniorTeam);
+    const uint32_t ix_league = FieldIndex(ctx, base, db, kFieldJuniorLeague);
+    // juniorleague ∈ {9, 10, 11}
+    uint32_t pred[3];
+    const uint32_t slot[3] = {f + 160, f + 128, f + 96};
+    for (int k = 0; k < 3; ++k) {
+      ctx.r3.u64 = slot[k];
+      ctx.r4.u64 = kFieldJuniorLeague;
+      sub_827B10C8(ctx, base);
+      ctx.r4.u64 = static_cast<uint64_t>(11 - k);
+      sub_827B1588(ctx, base);
+      pred[k] = ctx.r3.u32;
+    }
+    ctx.r3.u64 = pred[2];
+    ctx.r4.u64 = pred[1];
+    sub_827B2418(ctx, base);
+    ctx.r4.u64 = pred[0];
+    sub_827B2418(ctx, base);
+    const uint32_t where = ctx.r3.u32;
+    sub_82A07D88(ctx, base);
+    ctx.r4.u64 = ctx.r3.u64;
+    ctx.r3.u64 = f + 84;
+    sub_827B7D08(ctx, base);
+    ctx.r4.u64 = ctx.r3.u64;
+    ctx.r3.u64 = f + 80;
+    ctx.r5.u64 = kFieldJuniorTeam;
+    sub_827B4818(ctx, base);
+    ctx.r4.u64 = where;
+    ctx.r5.u64 = 1;
+    sub_827B4A48(ctx, base);
+    sub_827B5568(ctx, base);
+    const uint32_t cur = ctx.r3.u32;
+    ctx.r3.u64 = f + 80;
+    sub_833FBEA0(ctx, base);
+    ctx.r3.u64 = f + 84;
+    sub_833FBEA0(ctx, base);
+    for (const uint32_t o : {f + 96, f + 128, f + 160}) {
+      ctx.r3.u64 = o;
+      sub_827B11E0(ctx, base);
+    }
+    ctx.r3.u64 = cur;
+    sub_827B2E10(ctx, base);
+    const int32_t n = static_cast<int32_t>(ctx.r3.u32 & 0xFFFFu);
+    if (n > 0) {
+      ctx.r3.u64 = 9;
+      sub_82975B50(ctx, base);
+      const int32_t off_ohl = ctx.r3.s32;
+      ctx.r3.u64 = 11;
+      sub_82975B50(ctx, base);
+      const int32_t off_whl = ctx.r3.s32;
+      ctx.r3.u64 = kJuniorLock;
+      __imp__RtlEnterCriticalSection(ctx, base);
+      auto get = [&](uint32_t ix) {
+        ctx.r3.u64 = cur;
+        ctx.r4.u64 = ix;
+        ctx.r5.u64 = kTypeInt;
+        ctx.r6.u64 = 1;
+        ctx.r7.u64 = f + 88;
+        ctx.r8.u64 = 0;
+        sub_827B3008(ctx, base);
+        return static_cast<int32_t>(Load32(base, f + 88));
+      };
+      auto put = [&](uint32_t ix, int32_t v) {
+        Store32(base, f + 92, static_cast<uint32_t>(v));
+        ctx.r3.u64 = cur;
+        ctx.r4.u64 = ix;
+        ctx.r5.u64 = kTypeInt;
+        ctx.r6.u64 = 1;
+        ctx.r7.u64 = f + 92;
+        ctx.r8.u64 = 0;
+        sub_827B3030(ctx, base);
+      };
+      for (int32_t i = 0; i < n; ++i) {
+        const int32_t league = get(ix_league);
+        const int32_t team = get(ix_team);
+        if (league == 9) {
+          put(ix_team, team - off_ohl);
+          ++counts[0];
+        } else if (league == 11) {
+          put(ix_team, team - off_whl);
+          ++counts[2];
+        } else {
+          put(ix_team, -1);
+          put(ix_league, 0);
+          ++counts[1];
+        }
+        ctx.r3.u64 = cur;
+        ctx.r4.u64 = 1;
+        ctx.r5.u64 = 1;
+        sub_827B2D08(ctx, base);
+      }
+      ctx.r3.u64 = kJuniorLock;
+      __imp__RtlLeaveCriticalSection(ctx, base);
+      REXLOG_INFO("[nhllegacy] natcup: junior teams: OHL {} (offset {}), WHL {} (offset {}), QMJHL {} -> no junior team",
+                  counts[0], off_ohl, counts[2], off_whl, counts[1]);
+    }
+    ctx.r3.u64 = cur;
+    sub_827B2C40(ctx, base);
+  }
+  // составы сборных — пустые до турнира
+  for (uint32_t t = 0; t < 126; ++t) {
+    if (IsNation(TeamIdOf(ctx, base, t))) {
+      ctx.r3.u64 = 0;
+      ctx.r4.u64 = t;
+      sub_82A1BB18(ctx, base);
+      ++counts[3];
+    }
+  }
+  REXLOG_INFO("[nhllegacy] natcup: national teams in the franchise: {}, stock rosters cleared", counts[3]);
+  ctx.r1.u64 = saved_r1;
+}
+
 // 829DA768(настройки создателя, уровень, лига) — добавить уровень лиги франшизы; QMJHL → сборные (только Be a GM).
+// Список команд лиги 8 сборщик 829CCA18 оставляет пустым (прогон 20.10: «0 -> 0 teams», франшиза без уровня) —
+// списки уровня (+6040 и +3136, шаг 484: +0 число, +4+4i teamid, +244+4i флаг: 1 — CPU) пишем сами.
 extern "C" void sub_829DA768(PPCContext& ctx, uint8_t* base) {
   const uint32_t self = ctx.r3.u32;
   const uint32_t level = ctx.r4.u32;
@@ -112,20 +333,15 @@ extern "C" void sub_829DA768(PPCContext& ctx, uint8_t* base) {
   const uint64_t ret = ctx.r3.u64;
   for (const uint32_t list : {self + 6040 + 484 * level, self + 3136 + 484 * level}) {
     const uint32_t n = Load32(base, list);
-    uint32_t kept = 0;
-    for (uint32_t i = 0; i < n && i < 120; ++i) {
-      const uint32_t id = Load32(base, list + 4 + 4 * i);
-      bool keep = false;
-      for (const uint32_t k : kNations) {
-        keep = keep || k == id;
-      }
-      if (keep) {
-        Store32(base, list + 4 + 4 * kept++, id);
-      }
+    uint32_t i = 0;
+    for (const uint32_t id : kNations) {
+      Store32(base, list + 4 + 4 * i, id);
+      Store32(base, list + 244 + 4 * i, 1);
+      ++i;
     }
-    Store32(base, list, kept);
+    Store32(base, list, i);
     REXLOG_INFO("[nhllegacy] natcup: league level {}: QMJHL (10) -> national teams (8), list +{}: {} -> {} teams", level,
-                list - self, n, kept);
+                list - self, n, i);
   }
   ctx.r3.u64 = ret;
 }
