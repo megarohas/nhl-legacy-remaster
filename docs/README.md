@@ -9,7 +9,7 @@
 - моддеру — [legacy-data.md](legacy-data.md);
 - разработчику порта — [legacy-port.md](legacy-port.md), раздел «Сборка», и [sdk-build.md](sdk-build.md).
 
-Инструменты — [../tools/README.md](../tools/README.md).
+Инструменты — по задачам: [tools-catalog.md](tools-catalog.md) (что запускать, насколько готово, план), по файлам — [../tools/README.md](../tools/README.md).
 
 ## Порт NHL Legacy
 
