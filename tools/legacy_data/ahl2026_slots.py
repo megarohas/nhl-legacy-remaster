@@ -23,7 +23,8 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 W = os.path.join(REPO, 'game', 'work', 'legacy-data')
 CACHE = os.path.join(REPO, 'game', 'work', 'roster-cache', 'ahl', 'ht')
 OUT = os.path.join(W, 'ahl-2026', 'slots.json')
-SEASON_ID = 94
+import season  # noqa: E402  (tools/season.py)
+SEASON_ID = season.ht_season_id()
 T, A = 'exhibitionteams', 'exhibitionarena'
 
 # слот → (team_id HockeyTech 2026/27, клуб НХЛ — аффилиат 2026/27, почему)
@@ -114,7 +115,7 @@ def main():
         return
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT + '.part', 'w', encoding='utf-8', newline='\n') as f:
-        json.dump({'season': '2026/27', 'ht_season_id': SEASON_ID, 'db': os.path.relpath(dbp, REPO).replace(os.sep, '/'),
+        json.dump({'season': season.LABEL, 'ht_season_id': SEASON_ID, 'db': os.path.relpath(dbp, REPO).replace(os.sep, '/'),
                    'slots': out}, f, ensure_ascii=False, indent=1)
     os.replace(OUT + '.part', OUT)
     ren = [s for s in out if s['renamed']]

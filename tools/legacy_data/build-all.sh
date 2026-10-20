@@ -136,7 +136,8 @@ if want ahl; then
   # (решение пользователя 10.10; docs/legacy-data.md, «АХЛ 2026/27»). Кэш скачивает `python -m roster.ahl_ht
   # teams|ids|players` (сеть — только для АХЛ и свободных агентов); здесь — без сети. Клубы: 8 слотов переименованы,
   # аффилиаты 2026/27, арены; портреты, экипировка по правилам; draft_roster.db — заново
-  if [ -f game/work/roster-cache/ahl/ht/teams-94.json ]; then
+  HT=$(python tools/season.py --ht-id)          # номер сезона HockeyTech (tools/season.py, NHL_SEASON / NHL_AHL_SEASON_ID)
+  if [ -n "$HT" ] && [ -f game/work/roster-cache/ahl/ht/teams-$HT.json ]; then
     say "АХЛ 2026/27 и свободные агенты (ahl2026.py)"
     python $T/ahl2026_slots.py $W/out-ahl32/db/nhlng.db
     python $T/ahl2026.py

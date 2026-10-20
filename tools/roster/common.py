@@ -15,8 +15,10 @@ import gameprofile                     # noqa: E402  (tools/gameprofile.py: nhl1
 
 GAME = gameprofile.get()               # профиль игры (NHL_GAME или nhl13); cli: --game legacy → set_game
 
-SEASON = 20262027                      # сезон составов
-SEASON_YEAR = 2026                     # «сейчас» игры (season_year порта)
+import season as _season                # noqa: E402  (tools/season.py: NHL_SEASON, по умолчанию 2026/27)
+
+SEASON = _season.SEASON                # сезон составов (20262027)
+SEASON_YEAR = _season.YEAR             # «сейчас» игры (season_year порта)
 UA = 'Mozilla/5.0 (megarohas_nhl13 roster pipeline; personal, non-commercial)'
 
 

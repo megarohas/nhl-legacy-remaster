@@ -15,8 +15,8 @@
 
 | Задача | Чем | Док | Зрелость |
 |---|---|---|---|
-| **Составы НХЛ** (клубы, звенья, номера, рейтинги, свободные агенты) | `python tools/roster all --game legacy …` (этап `roster`), `registry_from_db.py`, `nhl_attrs.py`, `retire_veterans.py` | [roster-pipeline.md](roster-pipeline.md), [roster-expansion.md](roster-expansion.md), [legacy-data.md](legacy-data.md) | П — сезон константой (`roster/common.py` `SEASON`, `SEASON_YEAR`) |
-| **Составы АХЛ** | `python -m roster.ahl_ht`, `roster.ahl2026`, этап `ahl` (`ahl2026_slots.py`) | legacy-data.md | П — `SEASON_ID = 94`, имена под 2026/27 |
+| **Составы НХЛ** (клубы, звенья, номера, рейтинги, свободные агенты) | `python tools/roster all --game legacy …` (этап `roster`), `registry_from_db.py`, `nhl_attrs.py`, `retire_veterans.py` | [roster-pipeline.md](roster-pipeline.md), [roster-expansion.md](roster-expansion.md), [legacy-data.md](legacy-data.md) | П — сезон одной настройкой `NHL_SEASON` (`tools/season.py`) |
+| **Составы АХЛ** | `python -m roster.ahl_ht`, `roster.ahl2026`, этап `ahl` (`ahl2026_slots.py`) | legacy-data.md | П — сезон из `tools/season.py`; слоты клубов — таблицей под 2026/27 |
 | **Составы других лиг** | `roster/league.py` (только Liiga) | roster-expansion.md | — CHL, сборные, SHL, DEL, NL, Extraliga, КХЛ |
 | **Фото игроков** | `photos.py` (НХЛ), `python tools/roster photos` (не из НХЛ), `roster.ht_photos` (АХЛ), `photos24.py` (из NHL 24), `playerhead.py` (формат) | [player-photos.md](player-photos.md), [player-photos-nhl24.md](player-photos-nhl24.md) | И; `photos24` — П (привязан к NHL 24) |
 | **Логотипы** НХЛ и АХЛ | `logos/fetch_nhl.py`, `logos/build.py`, этап `logos`; `teamart.py` (арт ⇄ PNG) | [logos-2026.md](logos-2026.md), [logos-arenas.md](logos-arenas.md) | И (лиги вне НХЛ/АХЛ — нет) |
@@ -44,8 +44,8 @@
    чтение архивов через `tools/big.py` (`members`, `read_member`). Схема `tdb.py` без `--meta` — Legacy из
    распакованной игры; `fefont.py`, `roster/common.py` берут `ref/` только для замороженного NHL 13.
 4. ~~Установщик берёт `cache:` только из личного файла~~ — с 20.10 и из `nhllegacy.toml` рядом с exe порта.
-5. Сезон зашит: `roster/common.py`, `roster/ahl_ht.py` (`SEASON_ID`), `build-all.sh` (`teams-94.json`),
-   `year2026_legacy.py`.
+5. ~~Сезон зашит~~ — с 20.10 одна настройка `NHL_SEASON` (`tools/season.py`, [legacy-data.md](legacy-data.md),
+   «Сезон»); данные сезона (слоты АХЛ, потолок, страницы контрактов) — по-прежнему таблицами.
 
 ## 3. План: довести до инструментов
 
@@ -55,7 +55,7 @@
 |---|---|---|---|
 | 1 | ✔ 20.10: `user_equipment.py extract` вместо разового `equip_from_save.py` (вывод сверен: 191 правка, снимок совпал) | — | S |
 | 2 | ✔ 20.10: без `ref/…/unpack_big` в `kitpaint`, `teamart` (→ `czkit`, `fepose`); схема `tdb.py` по умолчанию — Legacy | `tools/big.py` | S–M |
-| 3 | Одна настройка сезона (`--season` / профиль) для составов, АХЛ, строк года | `roster/common.py`, `roster/ahl_ht.py`, `year2026_legacy.py`, `build-all.sh` | M |
+| 3 | ✔ 20.10: одна настройка сезона `NHL_SEASON` (`tools/season.py`) для составов, АХЛ, контрактов, фото, строк года, `build-all.sh` | `roster/common.py`, `roster/ahl_ht.py`, `year2026_legacy.py`, `build-all.sh` | M |
 | 4 | ✔ 20.10: установщик `status`, `diff`, `verify`; `CACHE` и из `nhllegacy.toml`; `kitport diff` — тем же расчётом (осталось: проверка на копии userdata одной командой) | разовые `tmp/check_install.py`, `cmp_cache*.py`, `make_ud.py`, `cmp_dry.py`; `kitport.core` | M |
 | 5 | ✔ 20.10: `tdb.py tables`, `dump --where/--fields/--csv`, `diff A B` (по ключу, значения с rangelow); осталось «всё о клубе» | десяток разовых выгрузок (`tmp/dbdiff.py`, `*_dump.py`) | S–M |
 | 6 | Импорт контрактов из открытого формата (`contracts.py import`), адаптер сайта — локально | `game/work/contracts/parse_pp.py`, `ingest.py` | M (нужно решение) |

@@ -210,6 +210,32 @@ equip, collect, retire, fixdb, utah, ahl, nhlattrs, useredits, tape, goaliegear,
 `nhlfutureschedule` есть только у Legacy, `fcc_*` — только у NHL 13; по обёртке сейва). Константы,
 нужные одному инструменту, живут в нём по ключу профиля (`MUSIC` в music.py, `LOWER_NAMES` в fefont.py).
 
+## Сезон: `tools/season.py` (20.10.2026)
+
+Под какой сезон собираются данные, решает одна настройка — переменная `NHL_SEASON` (первый год сезона,
+по умолчанию 2026, то есть 2026/27). Её читают все этапы: составы (`roster/common.py` `SEASON`, `SEASON_YEAR`),
+АХЛ (`roster/ahl_ht.py`, `ahl2026_slots.py`), контракты, `nhl32.py`, кэш портретов (`roster-cache/photos/<сезон>/`),
+год в копирайтах (`year2026_legacy.py`) и `build-all.sh` (кэш клубов HockeyTech `teams-<id>.json`).
+
+```bash
+python tools/season.py                              # что видят инструменты: год, номер сезона, season_id АХЛ
+NHL_SEASON=2027 bash tools/legacy_data/build-all.sh # вся сборка под 2027/28
+NHL_SEASON=2027 NHL_AHL_SEASON_ID=<номер> bash tools/legacy_data/build-all.sh   # если номера АХЛ нет в таблице
+```
+
+- **Номер сезона АХЛ (HockeyTech).** Таблица `HT_SEASON_IDS` в `tools/season.py` (2026 → 94). Нового сезона там нет —
+  задайте `NHL_AHL_SEASON_ID` или допишите таблицу. Список сезонов с номерами:
+  `cd tools && NHL_SEASON=2027 python -m roster.ahl_ht summary`. Без номера этап АХЛ не скачивает и
+  `build-all.sh` его пропускает.
+- **Год в игре** задаёт cvar порта `season_year` (лаунчер, [launcher.md](launcher.md)). Он должен совпадать с
+  `NHL_SEASON`, иначе возраст игроков и даты разойдутся.
+- **Что настройка не меняет — это данные сезона, их правят руками:** таблица слотов АХЛ (`ahl2026_slots.py` `SLOTS`:
+  какие клубы HockeyTech занимают 32 слота EA), потолок зарплат (`contracts.py` `CAP`, врезка порта
+  `nhl_salary_cap`), сумма минимального контракта в подсказке (`year2026_legacy.py`, `nhl_salary_min` порта),
+  страницы контрактов клубов. Имена файлов `ahl2026*`, `year2026*` — исторические.
+- Проверено 20.10: с настройкой по умолчанию всё как раньше (номер 20262027, АХЛ 94, папка портретов 20262027,
+  локализация `year2026_legacy.py` из того же входа — побайтно та же).
+
 ## Сейвы Legacy: ZlibV4 (`tools/tdb.py`)
 
 Разобрано на анкерах nhl-modding-studio (ROSTER, DYNASTY, SEASON, BEAPRO Legacy для Xbox 360):

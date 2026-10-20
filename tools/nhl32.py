@@ -550,7 +550,8 @@ def ahl_pair_games_div8(rng):
 # из календарей игры (NHL 13 — 2012/13, Legacy — 2015/16), а там бывает день, которого в 2027 году нет:
 # у Legacy — 29 февраля 2016-го. Игры на такой день игра не играет (у nhl-legacy-port 14 клубов закончили
 # регулярку с 83 играми из 84).
-SEASON_YEAR = 2026
+import season as _season  # noqa: E402  (tools/season.py: NHL_SEASON)
+SEASON_YEAR = _season.YEAR
 
 def season_day(month, day, season=SEASON_YEAR):
     """Есть ли день (месяц и день — с нуля, как в календарях базы) в сезоне season/season+1."""

@@ -1,6 +1,6 @@
 """Портреты игроков НХЛ 2026/27 в игру (разбор и план — docs/player-photos.md).
 
-    python photos.py fetch [--work DIR]                 # портреты NHL → game/work/roster-cache/photos/20262027/
+    python photos.py fetch [--work DIR]                 # портреты NHL → game/work/roster-cache/photos/<сезон>/
     python photos.py build [--work DIR] [--jobs N]      # → game/work/photos-all/fe/… (оба размера) + photos.json
     python photos.py db DB_IN DB_OUT [--work DIR]       # hasportrait = 1 у игроков с собранным фото
     python photos.py save SAVE_DIR                      # то же в сейве франшизы (leagueplayerbiotable, по artid);
@@ -24,7 +24,8 @@ import gameprofile  # noqa: E402
 import playerhead  # noqa: E402
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
-CACHE = os.path.join(ROOT, 'game', 'work', 'roster-cache', 'photos', '20262027')
+import season  # noqa: E402  (tools/season.py)
+CACHE = os.path.join(ROOT, 'game', 'work', 'roster-cache', 'photos', str(season.SEASON))
 OUT = os.path.join(ROOT, 'game', 'work', 'photos-all')
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) megarohas-nhl13 (personal use)'
 PNG = b'\x89PNG\r\n\x1a\n'

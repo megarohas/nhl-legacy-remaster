@@ -70,7 +70,9 @@ B, P, R, F = 'exhibitionplayerbiotable', 'exhibitionplayers', 'exhibitionrostert
 T, SAI, GAI = 'exhibitionteams', 'exhibitionskaterai', 'exhibitiongoalieai'
 MAX_PER_TEAM = 40                # записей состава у клуба (roster/write.py): key = клуб × 40 + номер
 SKIP_GROUPS = ('Retained', 'Buyout', 'Buried')
-SEASON = 2026                    # 1-й сезон страниц (2026-27)
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import season as _season  # noqa: E402  (tools/season.py)
+SEASON = _season.YEAR            # 1-й сезон страниц контрактов (2026-27)
 CAP = 104_000_000                # потолок 2026/27 (врезка nhl-legacy-port nhl_salary_cap)
 UNIT = 5000
 FIELDS = ('contractstatus', 'contractdollars', 'contractlength', 'contractis2way', 'contractismultiyear',

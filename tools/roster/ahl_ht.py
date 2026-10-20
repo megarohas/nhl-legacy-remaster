@@ -12,7 +12,7 @@ docs/research-data-sources.md §4) и API НХЛ — для актуализац
 Кэш: ahl/ht/seasons.json, ahl/ht/teams-<season>.json, ahl/ht/roster/<season>-<team>.json,
 ahl/ht/logos/<team>.<ext> (+ logos.json: team → URL), ahl/ht/player/<id>-seasonstats.json, nhl/prospects/<TEAM>.json,
 nhl/search/active.json, nhl/landing/<id>.json (как у fetch.py), photos/ahl/<id>.jpg (leaguestat 240×240),
-photos/20262027/<id>.png (портреты НХЛ, как у photos).
+photos/<сезон>/<id>.png (портреты НХЛ, как у photos).
 """
 import argparse
 import json
@@ -59,7 +59,9 @@ class RateHttp(Http):
 
 HT = 'https://lscluster.hockeytech.com/feed/'
 KEY, CLIENT = '50c2cd9b5e18e390', 'ahl'
-SEASON_ID = 94                      # регулярный чемпионат 2026/27 (docs/research-data-sources.md §4)
+import season as _season  # noqa: E402  (tools/season.py)
+SEASON_ID = _season.ht_season_id(strict=False)  # регулярный чемпионат сезона (2026/27 — 94; docs/research-data-sources.md §4)
+PHOTO_DIR = str(_season.SEASON)     # кэш портретов НХЛ: photos/<сезон>/, как у tools/photos.py
 NHL = 'https://api-web.nhle.com/v1'
 SEARCH_ALL = 'https://search.d3.nhle.com/api/v1/search/player?culture=en-us&limit=10000&q=*&active=true'
 LEAGUESTAT_PHOTO = 'https://assets.leaguestat.com/ahl/240x240/{}.jpg'
@@ -197,11 +199,11 @@ def landing_birth(h, pid):
 
 
 def headshot(h, pid, url, log=print):
-    """Портрет НХЛ в photos/20262027/<id>.png, как tools/photos.py: 302 — фото нет (.default), только PNG."""
+    """Портрет НХЛ в photos/<сезон>/<id>.png, как tools/photos.py: 302 — фото нет (.default), только PNG."""
     import time
     import urllib.error
     import urllib.request
-    fn = os.path.join(h.cache, 'photos', '20262027', f'{pid}.png')
+    fn = os.path.join(h.cache, 'photos', PHOTO_DIR, f'{pid}.png')
     if os.path.exists(fn) or os.path.exists(fn + '.default') or os.path.exists(fn + '.404'):
         return
     if h.offline:
@@ -415,7 +417,7 @@ def players_stage(h, log=print):
     errs += run_lanes(lanes, log)
     # волна 4: у кого портрета сезона нет (302 — заглушка), — «последний» портрет НХЛ (photos_other.NHL_LATEST)
     from . import photos_other as po
-    latest = [i for i, _ in shots if not os.path.exists(os.path.join(h.cache, 'photos', '20262027', f'{i}.png'))]
+    latest = [i for i, _ in shots if not os.path.exists(os.path.join(h.cache, 'photos', PHOTO_DIR, f'{i}.png'))]
     get = po.Getter(pause=h.pause, offline=h.offline)
     log(f'волна 4: портреты НХЛ latest {len(latest)}')
     for i in latest:
@@ -487,6 +489,13 @@ def main():
     set_game('legacy')
     paths = Paths(None, None)
     h = RateHttp(paths.cache, pause=a.pause, offline=a.offline or a.stage == 'summary')
+    if SEASON_ID is None:                       # номер сезона HockeyTech неизвестен: summary — список сезонов
+        if a.stage == 'summary':
+            for s in sitekit(h.json(ht_url('seasons'), 'ahl/ht/seasons.json'), 'Seasons'):
+                print(f"season_id {s.get('season_id')}: {s.get('season_name')}")
+            print(f'сезон {_season.LABEL}: NHL_AHL_SEASON_ID=<номер регулярного чемпионата> или tools/season.py')
+            return
+        _season.ht_season_id()                  # выход с подсказкой
     if a.stage in ('teams', 'summary'):
         seasons, clubs = teams(h)
         cur = next((s for s in seasons if str(s.get('season_id')) == str(SEASON_ID)), None)
