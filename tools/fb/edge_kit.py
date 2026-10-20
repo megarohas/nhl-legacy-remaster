@@ -58,25 +58,43 @@ def n24_ring_for(t, p, lod):
     return Hy.ring_polyline(w, ring, k=4)
 
 
-def deform(E, ring_n24, info=None):
+def collar_edge(w, band, lip, zc, win=3.0, gap=25.0):
+    """Край ворота: сгиб (рёбра подворота и наружного слоя), сглаженный по углу; где сгиба нет на дуге больше gap° —
+    губа (у ближней сетки вратаря подворот только спереди, ±100°: сглаживание там давало точку (0, 0, 0) под углом
+    0° — сдвиг к краю NHL 24 «поднимал» перед на 1,6 м)."""
+    fold = Hy.fold_polyline(w, band, k=1)
+    lp = Hy.lip_polyline(lip)
+    if fold is None:
+        pts = lp
+    else:
+        tf, tl = Hy.theta_of(fold, zc), Hy.theta_of(lp, zc)
+        far = np.abs(((tl[:, None] - tf[None, :] + 180) % 360) - 180).min(1) > gap / 2
+        pts = np.vstack([fold, lp[far]])
+    return Hy.smooth_curve(pts, zc, win=win)
+
+
+def deform(E, ring_n24, info=None, shift=None):
     """Копия сетки Edge E с поднятым передом ворота. -> (сетка, сводка). Узлы края ворота (сгиб наружного слоя и
     подворота) — к краю NHL 24 с тем же углом, с весом w(θ) (LIFT_TH); подворот — тем же сдвигом, что и край над
-    ним; наружный слой ниже — тем же сдвигом, тающим к LIFT_R от края."""
+    ним; наружный слой ниже — тем же сдвигом, тающим к LIFT_R от края. shift (вместо ring_n24): θ → (dr, dy) края —
+    готовый сдвиг (вратарь: как у полевого, от своего края). Сдвиг края — в deform.last_shift (θ, dr, dy)."""
     info = {} if info is None else info
     w = Hy.Welded(E)
     ring = w.neck()
     zc = float(w.P[ring, 2].mean())
     band, lip = Hy.edge_layers(w, ring, zc)
-    fold = Hy.fold_polyline(w, band, k=1)
-    edge = Hy.smooth_curve(fold if fold is not None else Hy.lip_polyline(lip), zc, win=3.0)
+    edge = collar_edge(w, band, lip, zc)
     th = Hy.theta_of(w.P, zc)
-    wt = Hy.smooth((LIFT_TH[1] - np.abs(th)) / (LIFT_TH[1] - LIFT_TH[0]))
     # сдвиг края по углу: край Edge (сглаженный сгиб) → край NHL 24
     te = Hy.theta_of(edge, zc)
     re = np.hypot(edge[:, 0], edge[:, 2] - zc)
-    rt, yt = collar_target(zc, te, ring_n24)
-    w_e = Hy.smooth((LIFT_TH[1] - np.abs(te)) / (LIFT_TH[1] - LIFT_TH[0]))
-    dr_e, dy_e = (rt - re) * w_e, (yt - edge[:, 1]) * w_e
+    if shift is None:
+        rt, yt = collar_target(zc, te, ring_n24)
+        w_e = Hy.smooth((LIFT_TH[1] - np.abs(te)) / (LIFT_TH[1] - LIFT_TH[0]))
+        dr_e, dy_e = (rt - re) * w_e, (yt - edge[:, 1]) * w_e
+    else:
+        dr_e, dy_e = shift(te)
+    deform.last_shift = (te, dr_e, dy_e)
     o = np.argsort(te)
     xp = np.concatenate([te[o] - 360, te[o], te[o] + 360])
     dr = np.interp(th, xp, np.tile(dr_e[o], 3))
@@ -326,11 +344,55 @@ def island():
     return _ISLAND["x"]
 
 
+# Остров — только у ближней детализации (lod 2). У средней и дальней (lod 0, 3) треугольники у края острова крупные:
+# остров по центрам треугольников и продолжение его развёртки за край давали клинья цвета у кокетки и шипы кромки
+# (20.10); у них — прежняя развёртка Edge, а прежнее место острова в текстурах — тот же рисунок (fill_old_place).
+ISLAND_LODS = (2,)
+
+
 def mesh_for(t, p, lod):
-    """Готовая сетка варианта: копия Edge, перед ворота поднят, перед ворота — на своей развёртке."""
+    """Готовая сетка варианта: копия Edge, перед ворота поднят; у ближней — перед ворота на своей развёртке."""
     E = load(t, p, lod)
     E2, _ = deform(E, n24_ring_for(t, p, lod))
-    return island().apply(E2)
+    return island().apply(E2) if lod in ISLAND_LODS else E2
+
+
+def fill_old_place(od, M):
+    """Прежнее место острова в jersey_cm / _nm / _sm (развёртка uv0 его треугольников) — тем же рисунком, что на
+    острове (для сеток без острова, ISLAND_LODS); рельеф — с поворотом касательного базиса (остров → uv0).
+    -> текселей."""
+    from PIL import Image
+    tri = M["tri"][M["island"][M["tri"]].all(1)]
+    t_isl, b_isl = kit3d.vertex_tangents(M)
+    t_old, b_old = kit3d.vertex_tangents(dict(M, uv=M["uv0"]))
+    n = 0
+    for name in ("jersey_cm.png", "jersey_sm.png", "jersey_nm.png"):
+        path = os.path.join(od, name)
+        im0 = Image.open(path)
+        mode = im0.mode
+        im = np.asarray(im0).astype(np.float64)
+        if im.ndim == 2:
+            im = im[..., None]
+        S = im.shape[0]
+        tid, bar = kit3d.raster_uv({"uv": M["uv0"], "tri": tri}, S)
+        m = tid >= 0
+        T = tri[tid[m]]
+        b = bar[m]
+        uvi = (b[:, :, None] * M["uv"][T]).sum(1)
+        val = kit3d.sample_bilinear(im, uvi[:, 0], uvi[:, 1])
+        if name == "jersey_nm.png":
+            N = kit3d._unit((b[:, :, None] * kit3d._unit(M["nrm"])[T]).sum(1))
+            Ti, Bi = kit3d._unit((b[:, :, None] * t_isl[T]).sum(1)), kit3d._unit((b[:, :, None] * b_isl[T]).sum(1))
+            To, Bo = kit3d._unit((b[:, :, None] * t_old[T]).sum(1)), kit3d._unit((b[:, :, None] * b_old[T]).sum(1))
+            v = val[:, :3] / 127.5 - 1.0
+            wv = Ti * v[:, 0:1] + Bi * (-v[:, 1:2]) + N * v[:, 2:3]
+            val[:, :3] = (np.stack([(wv * To).sum(1), -(wv * Bo).sum(1), (wv * N).sum(1)], -1) + 1.0) * 127.5
+        ys, xs = np.nonzero(m)
+        im[ys, xs] = val[:, :im.shape[2]]
+        out = np.clip(np.round(im), 0, 255).astype(np.uint8)
+        Image.fromarray(out[..., 0] if out.shape[2] == 1 else out, mode).save(path)
+        n = int(m.sum())
+    return n
 
 
 def pad_island(od, M, px=6):
@@ -2512,6 +2574,7 @@ def cmd_kit(a):
                                          os.path.join(od, "jersey_nm.png"), os.path.join(od, "jersey_sm.png"))
                 print("  рельеф:", info_r)
             pad_island(od, E2)
+            print("  прежнее место острова (для lod 0, 3):", fill_old_place(od, E2), "текселей")
             J.fe_preview(od, {k: E2[k] for k in ("pos", "uv", "nrm", "tri")})   # превью меню — по своей сетке
     finally:
         pilot.sleeve_rule = orig_sleeve_rule
@@ -2621,23 +2684,23 @@ def load_goalie(h, lod):
     return E
 
 
-def neck_center(E):
-    w = Hy.Welded(E)
-    return w.P[w.neck()].mean(0)
-
-
-def goalie_ring(h, lod):
-    """Край ворота NHL 24 для вратаря: у NHL 24 своя сетка вратаря выше на 6,5 см — край ворота полевого (t0 p1)
-    сдвигается целиком на разницу середин горловин Edge вратаря и полевого."""
-    ring = n24_ring_for(0, 1, 2)
-    return ring + (neck_center(load_goalie(h, lod)) - neck_center(load(0, 1, 2)))
+def skater_shift(lod):
+    """Сдвиг края ворота полевого (t0 p1, та же детализация) по углу: θ → (dr, dy), по кругу."""
+    deform(load(0, 1, lod), n24_ring_for(0, 1, lod))
+    te, dr, dy = deform.last_shift
+    o = np.argsort(te)
+    xp = np.concatenate([te[o] - 360, te[o], te[o] + 360])
+    return lambda th: (np.interp(th, xp, np.tile(dr[o], 3)), np.interp(th, xp, np.tile(dy[o], 3)))
 
 
 def goalie_mesh_for(h, lod):
-    """Вратарь: ворот — как у Edge (горловина вратаря шире и у детализаций разная — сдвиг края к NHL 24 давал
-    выверт), перед ворота — на развёртке острова (по uv0): рисунок кромки, вставки и шнуровки ложится по его краю."""
-    E = load_goalie(h, lod)
-    return island().apply(E), {"deform": "нет"}
+    """Вратарь: перед ворота поднят так же, как у полевого той же детализации (тот же сдвиг края по углу — от своего
+    края: горловина вратаря шире на ~2 см и ниже на 5–6 см, к краю NHL 24 её не тянуть), перед ворота — на развёртке
+    острова (по uv0). Без подъёма рисунок ворота (кромка, вставка, щит — под поднятый ворот) ложился на V-вырез Edge
+    (пользователь, 20.10: «вратарскую форму тоже нужно адаптировать»)."""
+    info = {}
+    E2, info = deform(load_goalie(h, lod), None, info, shift=skater_shift(lod))
+    return (island().apply(E2) if lod in ISLAND_LODS else E2), info
 
 
 def write_mesh(M, dst_rel, out_root):
@@ -2706,7 +2769,8 @@ SLOT_KITS = {
 SOCK_PARTS = ((0.0, (24, 56, 46)), (30, (214, 203, 165)), (30, (159, 14, 10)), (110, (214, 203, 165)))
 SOCK_TOP_V = 0.49                  # верх полос своих гетр (v развёртки гетр: 0 — у колена): у EA MIN 0,48–0,50;
 #                                    перенесённые с NHL 24 — 0,576 (на ~6,5 см ниже — «повыше», пользователь, 19.10)
-SOCK_SHIFT_V = 0.03                # гетры EA (светлая): полосы выше на столько (≈ 2,3 см)
+# гетры EA (светлая): полоса — в тех же строках, что у домашних (пользователь, 20.10: «линии на гетрах — на одном
+# уровне, как на домашней»): place_sock растягивает её (74 → 81 строка из 512) на полосу flat_sock домашних
 
 
 def flat_sock(src_png):
@@ -2740,24 +2804,26 @@ def flat_sock(src_png):
     return Image.fromarray(np.clip(np.round(img), 0, 255).astype(np.uint8)), (y0, y1, edges)
 
 
-def shift_sock(src_png, dst_png, dv, lum_thr=120):
-    """Гетры EA: полоса (строки, где медиана — не цвет ткани) выше на dv; ниже полосы — ткань подтягивается снизу
-    (строки сдвигаются целиком от верха полосы − dv до низа полосы + dv)."""
+def place_sock(src_png, dst_png, top_v, bot_v):
+    """Гетры EA: полоса (строки, где медиана — не цвет ткани) — в строки top_v…bot_v (доли высоты), растяжением по
+    строкам (линейно, края — со сглаживанием); выше и ниже — ткань тем же сдвигом. -> (строки было, стало)."""
     from PIL import Image
-    a = np.asarray(Image.open(src_png).convert("RGB"))
+    a = np.asarray(Image.open(src_png).convert("RGB")).astype(np.float64)
     H = a.shape[0]
-    med = np.median(a[:, a.shape[1] // 4:3 * a.shape[1] // 4].astype(np.float64), axis=1)
+    med = np.median(a[:, a.shape[1] // 4:3 * a.shape[1] // 4], axis=1)
     base = np.median(med, axis=0)
     band = np.nonzero(np.abs(med.mean(1) - base.mean()) > 40)[0]
-    dy = int(round(dv * H))
-    if not len(band) or dy <= 0:
-        Image.fromarray(a).save(dst_png)
-        return
-    y0, y1 = int(band.min()), int(band.max()) + 1
-    out = a.copy()
-    for y in range(max(y0 - dy, 0), min(y1 + dy, H - dy)):
-        out[y] = a[y + dy]
-    Image.fromarray(out).save(dst_png)
+    y0, y1 = float(band.min()), float(band.max() + 1)
+    Y0, Y1 = top_v * H, bot_v * H
+    yc = np.arange(H) + 0.5                              # центр строки назначения → строка источника
+    src = np.where(yc < Y0, yc - (Y0 - y0), np.where(yc < Y1, y0 + (yc - Y0) * (y1 - y0) / (Y1 - Y0), yc - (Y1 - y1)))
+    f = np.clip(src - 0.5, 0, H - 1)
+    i0 = np.floor(f).astype(int)
+    i1 = np.minimum(i0 + 1, H - 1)
+    t = (f - i0)[:, None, None]
+    out = a[i0] * (1 - t) + a[i1] * t
+    Image.fromarray(np.clip(np.round(out), 0, 255).astype(np.uint8)).save(dst_png)
+    return (y0, y1), (Y0, Y1)
 
 
 def deislanded(cm_png, out_png):
@@ -2778,6 +2844,109 @@ def deislanded(cm_png, out_png):
     return int(m.sum())
 
 
+FE_ITER = 12                       # итераций обратного сдвига (поле сдвига плавное: |∇Δ| < 0,4 — сходится)
+FE_SS, FE_FOOT = 4, 1.25           # сглаживание превью — как у fb.pilot.fe_preview_ea
+
+
+def fe_preview_edge(jersey_png):
+    """Превью меню в позе EA (fb.pilot.fe_preview_ea: манекен, свет и кадр EA — по развёртке Edge), но с поднятым
+    передом ворота: модель позы снята с V-выреза Edge, а у этой сетки перед ворота поднят (deform) — без сдвига
+    кромка, вставка и щит садились в «галочку» V-выреза (пользователь, 20.10: «чтобы воротник отображался
+    корректно»). Сдвиг точек свитера сетки t0 p1 (по uv) → в пиксели превью (аффинно, по точкам у ворота); пиксель
+    превью q показывает точку p, для которой p + Δ(p) = q (итерации), если p — перед свитера; иначе — как у EA.
+    jersey_png — текстура в развёртке Edge (deislanded). -> RGBA 256²."""
+    from PIL import Image
+    from scipy import ndimage as ndi
+    from . import pilot
+    m = pilot._pose()
+    H, W_ = m["h"], m["w"]
+    ys, xs = m["ys"], m["xs"]
+    E = load(0, 1, 2)
+    E2, _ = deform(E, n24_ring_for(0, 1, 2))
+    zc = float(Hy.Welded(E).P[Hy.Welded(E).neck(), 2].mean())
+    S = 1024
+    tid, bar = kit3d.raster_uv(E, S)
+    ok = tid >= 0
+    P = np.full((S, S, 3), np.nan)
+    D = np.zeros((S, S, 3))
+    T = E["tri"][tid[ok]]
+    b = bar[ok]
+    P[ok] = (b[:, :, None] * E["pos"][T]).sum(1)
+    D[ok] = (b[:, :, None] * (E2["pos"] - E["pos"])[T]).sum(1)
+    N = np.zeros((S, S, 3))
+    N[ok] = kit3d._unit((b[:, :, None] * kit3d._unit(E["nrm"])[T]).sum(1))
+    xi = np.clip((m["u"] * S).astype(int), 0, S - 1)
+    yi = np.clip((m["v"] * S).astype(int), 0, S - 1)
+    Pp, Dp, Np = P[yi, xi], D[yi, xi], N[yi, xi]
+    fin = np.isfinite(Pp[:, 0])
+    front = fin & (Pp[:, 2] > zc) & (Np[:, 2] > 0.1)
+    # проекция у ворота: (x, y, z) → пиксель, аффинно по точкам переда у ворота
+    near = front & (np.abs(Pp[:, 0]) < 0.16) & (Pp[:, 1] > 1.45) & (Pp[:, 1] < 1.72)
+    X = np.c_[Pp[near], np.ones(near.sum())]
+    A = np.linalg.lstsq(X, np.c_[xs[near], ys[near]], rcond=None)[0]
+    err = np.linalg.norm(X @ A - np.c_[xs[near], ys[near]], axis=1)
+    dpx = np.where(front[:, None], np.nan_to_num(Dp) @ A[:3], 0.0)
+    # поле сдвига на всём кадре: перед — свой, прочее — от ближайшего пикселя переда (чтобы итерация из выреза
+    # сходилась к переду), сглажено
+    F = np.zeros((H, W_, 2))
+    fm = np.zeros((H, W_), bool)
+    F[ys[front], xs[front]] = dpx[front]
+    fm[ys[front], xs[front]] = True
+    _, (iy, ix) = ndi.distance_transform_edt(~fm, return_indices=True)
+    F = F[iy, ix]
+    F = np.stack([ndi.gaussian_filter(F[..., c], 0.7) for c in range(2)], -1)
+    moved = np.hypot(F[..., 0], F[..., 1]) > 0.05
+
+    def field(py, px_):
+        y0, x0 = np.clip(np.floor(py).astype(int), 0, H - 2), np.clip(np.floor(px_).astype(int), 0, W_ - 2)
+        fy, fx = (py - y0)[:, None], (px_ - x0)[:, None]
+        return (F[y0, x0] * (1 - fy) * (1 - fx) + F[y0, x0 + 1] * (1 - fy) * fx + F[y0 + 1, x0] * fy * (1 - fx) +
+                F[y0 + 1, x0 + 1] * fy * fx)
+
+    # цели: пиксели, куда может попасть сдвинутый перед (у ворота), — источник p(q)
+    reach = ndi.binary_dilation(moved & fm, iterations=int(np.ceil(np.abs(F).max())) + 2)
+    qy, qx = np.nonzero(reach)
+    py, px_ = qy.astype(np.float64), qx.astype(np.float64)
+    for _ in range(FE_ITER):
+        d = field(py, px_)
+        px_, py = qx - d[:, 0], qy - d[:, 1]
+    d = field(py, px_)
+    resid = np.hypot(px_ + d[:, 0] - qx, py + d[:, 1] - qy)
+    pr, pc = np.clip(np.round(py).astype(int), 0, H - 1), np.clip(np.round(px_).astype(int), 0, W_ - 1)
+    good = (resid < 0.3) & fm[pr, pc] & moved[pr, pc]
+    # источник каждого пикселя превью: свой (EA) или p(q)
+    src_y = np.full((H, W_), np.nan)
+    src_x = np.full((H, W_), np.nan)
+    src_y[ys, xs], src_x[ys, xs] = ys, xs
+    src_y[qy[good], qx[good]], src_x[qy[good], qx[good]] = py[good], px_[good]
+    tgt = np.isfinite(src_y)
+    ty, tx = np.nonzero(tgt)
+    sy, sx = src_y[ty, tx], src_x[ty, tx]
+    # затенение и прозрачность — из источника (ближайший пиксель свитера)
+    idx = -np.ones((H, W_), np.int64)
+    idx[ys, xs] = np.arange(len(ys))
+    jr, jc = np.clip(np.round(sy).astype(int), 0, H - 1), np.clip(np.round(sx).astype(int), 0, W_ - 1)
+    j = idx[jr, jc]
+    lost = j < 0                                        # округление ушло с свитера — ближайший пиксель свитера
+    if lost.any():
+        _, (iy2, ix2) = ndi.distance_transform_edt(idx < 0, return_indices=True)
+        j[lost] = idx[iy2[jr[lost], jc[lost]], ix2[jr[lost], jc[lost]]]
+    tex = np.asarray(Image.open(jersey_png).convert("RGB")).astype(np.float64)
+    acc = np.zeros((len(ty), 3))
+    offs = ((np.arange(FE_SS) + 0.5) / FE_SS - 0.5) * FE_FOOT
+    for oy in offs:
+        for ox in offs:
+            u, v = pilot._uv_at(m, sy + oy, sx + ox, home=(m["u"][j], m["v"][j]))
+            acc += kit3d.sample_bilinear(tex, u, v)[:, :3]
+    col = np.clip(m["gain"][j] * acc / FE_SS ** 2 + m["bias"][j], 0, 255)
+    out = m["base"].copy()
+    out[ty, tx, :3] = np.round(col).astype(np.uint8)
+    out[ty, tx, 3] = m["alpha"][j]
+    fe_preview_edge.info = {"fit_px": [round(float(v), 2) for v in np.percentile(err, [50, 90])],
+                            "max_shift_px": round(float(np.abs(F).max()), 2), "warped_px": int(good.sum())}
+    return Image.fromarray(out, "RGBA")
+
+
 def cmd_slot(a):
     """Комплекты формы в слот стиля SLOT_STYLE (номера — реестр nhl24_kits.json): слои → kitpaint pack → a.out
     (раскладка cache:), превью меню — в позе EA (fb.pilot.fe_preview_ea), наклейка на шлем — как у формы-образца."""
@@ -2789,6 +2958,7 @@ def cmd_slot(a):
     reg = json.load(open(os.path.join(REPO, "tools", "legacy_data", "nhl24_kits.json"), encoding="utf-8"))
     regmap = {(k["club"], k["kit"]): k for k in reg["kits"]}
     cur = os.path.join(WORK, "cur_kits")
+    flat_kit = next(k for k, sp in SLOT_KITS.items() if sp["sock"] == "flat")
     for kit, spec in SLOT_KITS.items():
         r = regmap.get((a.club, spec["kit"]))
         if r is None or r.get("style", 1) != SLOT_STYLE:
@@ -2804,15 +2974,20 @@ def cmd_slot(a):
             shutil.copy2(os.path.join(src, f + ".png"), os.path.join(d, f + ".png"))
         for f in ("name_cm", "pant_cm", "pant_nm", "pant_sm"):
             shutil.copy2(os.path.join(leg, f + ".png"), os.path.join(d, f + ".png"))
+        flat_src = os.path.join(KITS_OUT, f"{a.club}_{flat_kit}", "sock_cm.png")
         if spec["sock"] == "flat":
-            im, info = flat_sock(os.path.join(src, "sock_cm.png"))
+            im, info = flat_sock(flat_src)
             im.save(os.path.join(d, "sock_cm.png"))
             print(f"  гетры {kit}: полоса строк {info[0]:.1f}–{info[1]:.1f}, края {[round(e, 1) for e in info[2]]}")
-        else:
-            shift_sock(os.path.join(leg, "sock_cm.png"), os.path.join(d, "sock_cm.png"), SOCK_SHIFT_V)
+        else:                                            # полоса — в строках своих гетр (flat_sock) другой формы
+            im, info = flat_sock(flat_src)
+            H_ = im.size[1]
+            was, now = place_sock(os.path.join(leg, "sock_cm.png"), os.path.join(d, "sock_cm.png"),
+                                  info[0] / H_, info[1] / H_)
+            print(f"  гетры {kit}: полоса строк {was[0]:.0f}–{was[1]:.0f} → {now[0]:.1f}–{now[1]:.1f} (как у {flat_kit})")
         tmp = os.path.join(d, "_edge_layout_cm.png")
         n = deislanded(os.path.join(d, "jersey_cm.png"), tmp)
-        pilot.fe_preview_ea(tmp).save(os.path.join(d, "fe.png"))
+        fe_preview_edge(tmp).save(os.path.join(d, "fe.png"))   # поза EA, перед ворота — поднятый
         os.remove(tmp)
         tpl = J.kit_template(new)
         tdir = os.path.join(cur, tpl)
@@ -2912,14 +3087,14 @@ def cmd_meshes(a):
             rel = J.skater_rel(t, pp, lod, SLOT_STYLE)
             info = write_mesh(M, rel, out)
             n += 1
-            print(f"{rel}: {info}, остров {int(M['island'].sum())} вершин", flush=True)
+            print(f"{rel}: {info}, остров {int(M.get('island', np.zeros(1)).sum())} вершин", flush=True)
     for h in GOALIE_H:
         for lod in (2, 0, 3):
             M, dinfo = goalie_mesh_for(h, lod)
             rel = J.goalie_rel(h, lod, SLOT_STYLE)
             info = write_mesh(M, rel, out)
             n += 1
-            print(f"{rel}: {info}, остров {int(M['island'].sum())} вершин, ворот {dinfo}", flush=True)
+            print(f"{rel}: {info}, остров {int(M.get('island', np.zeros(1)).sum())} вершин, ворот {dinfo}", flush=True)
     rel, names = ao_for_slot(out)
     print(f"{rel}: {names}")
     print(f"{n} сеток → {out}")
