@@ -65,10 +65,6 @@ extern "C" void sub_82BCC4A0(PPCContext& ctx, uint8_t* base);         // … у�
 extern "C" void sub_829748A0(PPCContext& ctx, uint8_t* base);         // структура состава R (3244 б): создать
 extern "C" void sub_82657880(PPCContext& ctx, uint8_t* base);         // memset(адрес, байт, длина)
 extern "C" void sub_82A29D48(PPCContext& ctx, uint8_t* base);         // записать состав (tmp, команда, &R)
-extern "C" void sub_82B87538(PPCContext& ctx, uint8_t* base);         // звенья: мозг (L, команда, tag)
-extern "C" void sub_82B7E6E8(PPCContext& ctx, uint8_t* base);         // … собрать
-extern "C" void sub_82B871F8(PPCContext& ctx, uint8_t* base);         // … записать
-extern "C" void sub_82B87870(PPCContext& ctx, uint8_t* base);         // … удалить
 extern "C" void sub_82BEC748(PPCContext& ctx, uint8_t* base);         // вставить игру в leaguescheduletable
 extern "C" void sub_82B1B048(PPCContext& ctx, uint8_t* base);         // управление командой (менеджер, команда, флаг)
 
@@ -194,8 +190,8 @@ constexpr uint32_t kSchIndex = 0, kSchStatus = 1, kSchHome = 2, kSchLeague = 3, 
                    kSchRound = 7;
 constexpr uint32_t kGsIndex = 0, kGsOt = 1, kGsShootout = 3, kGsScoreAway = 7, kGsScoreHome = 17;
 constexpr uint32_t kBioIndex = 0, kBioCountry = 42, kBioPosition = 84, kBioTeam = 78, kBioInjury = 29, kBioJersey = 58;
-constexpr uint32_t kSkIndex = 0, kSkOverall = 92, kSkStyle = 25;
-constexpr uint32_t kGkIndex = 0, kGkOverall = 87, kGkStyle = 21;
+constexpr uint32_t kSkIndex = 0, kSkStyle = 25;
+constexpr uint32_t kGkIndex = 0, kGkStyle = 21;
 constexpr uint32_t kTmIndex = 0, kTmTeamId = 3;
 }  // namespace col
 
@@ -305,7 +301,6 @@ constexpr uint32_t kAugust = 7;                     // месяц с нуля
 constexpr uint32_t kGroupDays[3] = {1, 3, 5};       // 2, 4, 6 августа (день с нуля)
 constexpr uint32_t kSemiDay = 8, kFinalDay = 10;    // 9 и 11 августа
 constexpr uint32_t kLastDay = 19;                   // 20 августа — уборка
-constexpr uint32_t kLinesTag = 149;                 // счётчик кэша звеньев (Матча звёзд при АХЛ-32 нет)
 constexpr uint32_t kStatusCancelled = 2;            // leaguescheduletable.status: 2 — отменена
 constexpr int kQuota[5] = {4, 4, 4, 8, 3};          // C, LW, RW, D, G (крайние — 8 вместе)
 constexpr int kDressed[3] = {12, 6, 2};             // в заявке на матч: нападающие, защитники, вратари
@@ -333,6 +328,55 @@ uint32_t NationOfCountry(int32_t c) {
     case 78: return 133;  // Austria
     default: return 0;
   }
+}
+
+// OVR, который показывает игра (tools/roster/ovrformula.py, сверено с игрой на 61 полевом): c_overall в базе — 0
+// (игра его не читает), OVR считается из атрибутов c_* (шкала 0…63 + 36) по таблицам worth2.brk: категория —
+// Σ вес·атрибут, зажатая в [lo·W, hi·W], → 0…999; OVR = Σ категория·доля / 1000 в пределах 36…99. Номера колонок —
+// порядок полей leagueskaterai / leaguegoalieai в nhlng-meta.xml.
+struct OvrTerm {
+  uint8_t col, w;
+};
+struct OvrCat {
+  int share, lo, hi, n;
+  OvrTerm t[7];
+};
+constexpr OvrCat kOvrF[] = {  // нападающие (таблица 9)
+    {16, 40, 94, 4, {{111, 17}, {84, 17}, {144, 40}, {6, 26}}},
+    {16, 20, 94, 4, {{126, 55}, {109, 23}, {30, 11}, {114, 11}}},
+    {16, 20, 94, 3, {{36, 80}, {89, 19}, {32, 1}}},
+    {20, 40, 93, 5, {{110, 25}, {82, 25}, {101, 25}, {60, 24}, {80, 1}}},
+    {10, 40, 94, 5, {{103, 55}, {141, 35}, {86, 2}, {16, 2}, {79, 6}}},
+    {22, 50, 93, 4, {{136, 69}, {116, 5}, {76, 25}, {28, 1}}},
+};
+constexpr OvrCat kOvrD[] = {  // защитники (таблица 6)
+    {8, 40, 95, 4, {{111, 30}, {84, 55}, {144, 5}, {6, 10}}},
+    {11, 40, 94, 4, {{126, 60}, {109, 25}, {30, 12}, {114, 3}}},
+    {10, 45, 95, 2, {{36, 97}, {32, 3}}},
+    {11, 40, 93, 5, {{110, 26}, {82, 21}, {101, 26}, {60, 26}, {80, 1}}},
+    {10, 50, 95, 5, {{103, 55}, {141, 35}, {86, 2}, {16, 2}, {79, 6}}},
+    {50, 30, 93, 5, {{136, 55}, {116, 13}, {76, 20}, {89, 11}, {28, 1}}},
+};
+constexpr OvrCat kOvrG[] = {  // вратари (таблица 13)
+    {60, 27, 95, 7, {{70, 15}, {97, 12}, {45, 13}, {9, 15}, {14, 15}, {5, 15}, {6, 15}}},
+    {20, 40, 95, 6, {{112, 1}, {80, 1}, {76, 46}, {91, 46}, {41, 1}, {83, 5}}},
+    {20, 37, 94, 6, {{79, 15}, {96, 20}, {72, 15}, {74, 20}, {103, 15}, {104, 15}}},
+};
+constexpr int kAttrBase = 36;
+
+template <size_t N, typename Get>
+int GameOvr(const OvrCat (&cats)[N], Get&& attr) {
+  int v = 0;
+  for (const auto& c : cats) {
+    int sum = 0, w = 0;
+    for (int k = 0; k < c.n; ++k) {
+      sum += c.t[k].w * (attr(c.t[k].col) + kAttrBase);
+      w += c.t[k].w;
+    }
+    sum = std::min(std::max(sum, c.lo * w), c.hi * w);
+    v += std::min(999, (sum - c.lo * w) * 1000 / ((c.hi - c.lo) * w)) * c.share;
+  }
+  return std::min(std::max(v / 1000, 36), 99);
 }
 
 struct Cand {
@@ -363,12 +407,25 @@ struct Players {
 // Стоковые игроки сборной (82B3DFC8 при создании: свои записи, часть — дубли игроков клубов) числятся за ней
 // (bio.team); в турнир идут игроки клубов, стоковые — только на недобор и обратно в состав после турнира.
 Players ReadPlayers(PPCContext& ctx, uint8_t* base, uint32_t f, const std::map<uint32_t, uint32_t>& teams) {
-  std::map<int32_t, std::pair<int32_t, int32_t>> sk, gk;  // index → (overall, style)
+  struct Ai {
+    int f, d, style;  // OVR нападающего и защитника (у вратаря — оба), стиль
+  };
+  std::map<int32_t, Ai> sk, gk;
   ForEachRow(ctx, base, f, kTableSkaterAi, 0, 0, [&](auto& get, auto&) {
-    sk[get(col::kSkIndex)] = {get(col::kSkOverall), get(col::kSkStyle)};
+    int a[160];
+    for (const auto* cats : {kOvrF, kOvrD}) {
+      for (size_t k = 0; k < 6; ++k) {
+        for (int j = 0; j < cats[k].n; ++j) {
+          a[cats[k].t[j].col] = get(cats[k].t[j].col);
+        }
+      }
+    }
+    auto attr = [&](int c) { return a[c]; };
+    sk[get(col::kSkIndex)] = {GameOvr(kOvrF, attr), GameOvr(kOvrD, attr), get(col::kSkStyle)};
   });
   ForEachRow(ctx, base, f, kTableGoalieAi, 0, 0, [&](auto& get, auto&) {
-    gk[get(col::kGkIndex)] = {get(col::kGkOverall), get(col::kGkStyle)};
+    const int g = GameOvr(kOvrG, [&](int c) { return get(c); });
+    gk[get(col::kGkIndex)] = {g, g, get(col::kGkStyle)};
   });
   std::map<int32_t, bool> nation_team;
   for (const auto& [id, t] : teams) {
@@ -386,7 +443,7 @@ Players ReadPlayers(PPCContext& ctx, uint8_t* base, uint32_t f, const std::map<u
     if (it == m.end()) {
       return;
     }
-    const Cand c{idx, pos, it->second.first, get(col::kBioJersey), it->second.second};
+    const Cand c{idx, pos, pos == 3 ? it->second.d : it->second.f, get(col::kBioJersey), it->second.style};
     const int32_t team = get(col::kBioTeam);
     if (nation_team.count(team)) {
       p.stock[static_cast<uint32_t>(team)].push_back(c);
@@ -503,6 +560,104 @@ void SetUserTeam(PPCContext& ctx, uint8_t* base, uint32_t team, bool user) {
   REXLOG_INFO("[nhllegacy] natcup: team {} {}", team, user ? "-> user" : "-> CPU");
 }
 
+// Поля звеньев leaguerostertable — байты R+404+71i+k (k — номер ниже; порядок — загрузки 82A1BBF8).
+namespace ln {
+enum : int {
+  L1LW, L1C, L1RW, L2LW, L2C, L2RW, L3LW, L3C, L3RW, L4LW, L4C, L4RW,
+  L1LD, L1RD, L2LD, L2RD, L3LD, L3RD,
+  PP1LW, PP1C, PP1RW, PP1LD, PP1RD, PP2LW, PP2C, PP2RW, PP2LD, PP2RD,
+  PP41C, PP41LW, PP41LD, PP41RD, PP42C, PP42LW, PP42LD, PP42RD,
+  PK41C, PK41LW, PK41LD, PK41RD, PK42C, PK42LW, PK42LD, PK42RD,
+  PK31C, PK31LD, PK31RD, PK32C, PK32LD, PK32RD,
+  S1, S2, S3, S4, S5, G1, G2, X1, X2,
+  OT1C, OT1LW, OT1LD, OT1RD, OT2C, OT2LW, OT2LD, OT2RD, OT3C, OT3LW, OT3LD, OT3RD,
+  kCount
+};
+static_assert(kCount == 71, "71 поле звеньев");
+}  // namespace ln
+
+// Звенья из заявки (players отсортированы по OVR): 4 тройки (центр, левый и правый — по амплуа, если хватает),
+// 3 пары защиты, большинство/меньшинство/ОТ — из первых звеньев, буллиты — 5 лучших нападающих. slot[k] — номер
+// игрока в players (−1 — некого).
+std::vector<int> BuildLines(const std::vector<Cand>& players, size_t n) {
+  std::vector<int> c, w, d, g, f;
+  for (size_t i = 0; i < n; ++i) {
+    const Cand& p = players[i];
+    if (!p.dressed) {
+      continue;
+    }
+    auto& v = p.pos == 0 ? c : (p.pos == 1 || p.pos == 2) ? w : p.pos == 3 ? d : g;
+    v.push_back(static_cast<int>(i));
+    if (p.pos != 3 && p.pos != 4) {
+      f.push_back(static_cast<int>(i));
+    }
+  }
+  while (c.size() < 4 && w.size() > 8) {  // нехватка центров — лучшим лишним крайним
+    c.push_back(w.back());
+    w.pop_back();
+  }
+  std::vector<int> slot(ln::kCount, -1);
+  auto at = [](const std::vector<int>& v, size_t i) { return i < v.size() ? v[i] : -1; };
+  std::vector<bool> used(n, false);
+  auto wing = [&](int side) {  // лучший свободный крайний своей стороны, иначе любой
+    for (const int pass : {0, 1}) {
+      for (const int i : w) {
+        if (!used[i] && (pass == 1 || players[i].pos == side)) {
+          used[i] = true;
+          return i;
+        }
+      }
+    }
+    return -1;
+  };
+  int lw[4], rw[4];
+  for (int k = 0; k < 4; ++k) {
+    slot[ln::L1C + 3 * k] = at(c, k);
+    lw[k] = slot[ln::L1LW + 3 * k] = wing(1);
+    rw[k] = slot[ln::L1RW + 3 * k] = wing(2);
+  }
+  for (int k = 0; k < 3; ++k) {
+    slot[ln::L1LD + 2 * k] = at(d, 2 * k);
+    slot[ln::L1RD + 2 * k] = at(d, 2 * k + 1);
+  }
+  for (int k = 0; k < 2; ++k) {
+    const int o = 5 * k;  // PP1 / PP2 — тройка k и пара k
+    slot[ln::PP1LW + o] = lw[k];
+    slot[ln::PP1C + o] = at(c, k);
+    slot[ln::PP1RW + o] = rw[k];
+    slot[ln::PP1LD + o] = at(d, 2 * k);
+    slot[ln::PP1RD + o] = at(d, 2 * k + 1);
+    const int q = 4 * k;  // PP 4 на 3, PK 4 на 5 (центры 2 и 3 тройки), PK 3 на 5
+    slot[ln::PP41C + q] = at(c, k);
+    slot[ln::PP41LW + q] = lw[k];
+    slot[ln::PP41LD + q] = at(d, 2 * k);
+    slot[ln::PP41RD + q] = at(d, 2 * k + 1);
+    slot[ln::PK41C + q] = at(c, k + 1);
+    slot[ln::PK41LW + q] = lw[k + 1];
+    slot[ln::PK41LD + q] = at(d, 2 * k);
+    slot[ln::PK41RD + q] = at(d, 2 * k + 1);
+    const int t = 3 * k;
+    slot[ln::PK31C + t] = at(c, k + 1);
+    slot[ln::PK31LD + t] = at(d, 2 * k);
+    slot[ln::PK31RD + t] = at(d, 2 * k + 1);
+  }
+  for (int k = 0; k < 3; ++k) {
+    const int o = 4 * k;
+    slot[ln::OT1C + o] = at(c, k);
+    slot[ln::OT1LW + o] = lw[k];
+    slot[ln::OT1LD + o] = at(d, 2 * k);
+    slot[ln::OT1RD + o] = at(d, 2 * k + 1);
+  }
+  for (int k = 0; k < 5; ++k) {
+    slot[ln::S1 + k] = at(f, k);
+  }
+  slot[ln::G1] = at(g, 0);
+  slot[ln::G2] = at(g, 1);
+  slot[ln::X1] = at(c, 1);
+  slot[ln::X2] = lw[1];
+  return slot;
+}
+
 void ClearRoster(PPCContext& ctx, uint8_t* base, uint32_t team) {
   ctx.r3.u64 = 0;
   ctx.r4.u64 = team;
@@ -510,14 +665,15 @@ void ClearRoster(PPCContext& ctx, uint8_t* base, uint32_t team) {
 }
 
 // Состав команды (82A29D48 → 82A1BBF8: строки leaguerostertable с key = команда × 40 + i; bio.team игроков не
-// меняет — игрок клуба одновременно в сборной, как у Матча звёзд) и звенья (82B87538 …), как у матча проспектов.
+// меняет — игрок клуба одновременно в сборной, как у Матча звёзд) со своими звеньями (BuildLines): построитель
+// звеньев 82B87538 → 82B7E6E8 → 82B871F8 берёт объект состава из кэша 82B61C80 и сборным звеньев не дал (тест 4:
+// g1/l1c… = 0, «on the ice 0», зависание сима на финале).
 void WriteRoster(PPCContext& ctx, uint8_t* base, uint32_t team, const std::vector<Cand>& players) {
   const uint64_t saved_r1 = ctx.r1.u64;
-  const uint32_t f = (ctx.r1.u32 - 0x1400) & ~0xFu;  // R (3244 б) + tmp + L (≥ 456 б)
+  const uint32_t f = (ctx.r1.u32 - 0x1000) & ~0xFu;  // R (3244 б) + tmp (16 б)
   const uint32_t r = f + 0x100;
   const uint32_t tmp = f + 0x100 + 3264;
-  const uint32_t lines = tmp + 0x40;
-  std::memset(Host(base, f), 0, 0x1400);
+  std::memset(Host(base, f), 0, 0x1000);
   ctx.r1.u64 = f;
   ClearRoster(ctx, base, team);
   if (players.empty()) {
@@ -556,6 +712,14 @@ void WriteRoster(PPCContext& ctx, uint8_t* base, uint32_t team, const std::vecto
       ++leaders;
     }
   }
+  const auto slot = BuildLines(players, n);
+  int filled = 0;
+  for (int k = 0; k < ln::kCount; ++k) {
+    if (slot[k] >= 0) {
+      *Host(base, r + 404 + 71 * static_cast<uint32_t>(slot[k]) + static_cast<uint32_t>(k)) = 1;
+      ++filled;
+    }
+  }
   ctx.r3.u64 = tmp;
   sub_82BA65C8(ctx, base);
   ctx.r3.u64 = tmp;
@@ -565,18 +729,9 @@ void WriteRoster(PPCContext& ctx, uint8_t* base, uint32_t team, const std::vecto
   const bool ok = ctx.r3.u8 != 0;
   ctx.r3.u64 = tmp;
   sub_82BCC4A0(ctx, base);
-  ctx.r3.u64 = lines;
-  ctx.r4.u64 = team;
-  ctx.r5.u64 = kLinesTag;
-  sub_82B87538(ctx, base);
-  ctx.r3.u64 = lines;
-  sub_82B7E6E8(ctx, base);
-  ctx.r3.u64 = lines;
-  sub_82B871F8(ctx, base);
-  ctx.r3.u64 = lines;
-  sub_82B87870(ctx, base);
   ctx.r1.u64 = saved_r1;
-  REXLOG_INFO("[nhllegacy] natcup: roster of team {}: {} players {}", team, n, ok ? "written" : "NOT written");
+  REXLOG_INFO("[nhllegacy] natcup: roster of team {}: {} players, {}/{} line slots, {}", team, n, filled,
+              static_cast<int>(ln::kCount), ok ? "written" : "NOT written");
 }
 
 struct Nation {
