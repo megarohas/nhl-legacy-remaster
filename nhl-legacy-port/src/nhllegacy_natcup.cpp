@@ -67,6 +67,9 @@ extern "C" void sub_82657880(PPCContext& ctx, uint8_t* base);         // memset(
 extern "C" void sub_82A29D48(PPCContext& ctx, uint8_t* base);         // записать состав (tmp, команда, &R)
 extern "C" void sub_82BEC748(PPCContext& ctx, uint8_t* base);         // вставить игру в leaguescheduletable
 extern "C" void sub_82B1B048(PPCContext& ctx, uint8_t* base);         // управление командой (менеджер, команда, флаг)
+extern "C" void sub_82B4C958(PPCContext& ctx, uint8_t* base);         // удалить игрока (черновик, playerindex)
+extern "C" void sub_82B87E80(PPCContext& ctx, uint8_t* base);         // список: убрать элемент
+extern "C" void sub_828A3478(PPCContext& ctx, uint8_t* base);         // освободить память
 
 namespace {
 
@@ -184,6 +187,11 @@ constexpr uint32_t kTableSkaterAi = 0xE5C10816u;   // leagueskaterai
 constexpr uint32_t kTableGoalieAi = 0xEA50C5DAu;   // leaguegoalieai
 constexpr uint32_t kTableTeams = 0xC7BCD146u;      // leagueteams
 constexpr uint32_t kTableRoster = 0x32926EE1u;     // leaguerostertable
+constexpr uint32_t kFieldTeam = 0xD33194B7u;
+constexpr int32_t kContractActive = 0;  // contractstatus игрока по контракту (rangelow −1: в сейве 1), как у НХЛ
+constexpr int32_t kStockContractYears = 3;
+constexpr uint32_t kRosterCache = 0x83BDC550u;  // кэш объектов состава (82B61C80): +0 число, +4 голова; элемент:
+                                                // +0 следующий, +8 команда, +12 счётчик ссылок
 constexpr uint32_t kFieldMonth = 0xBFC025ABu;
 // номера полей — порядок в схеме nhlng-meta.xml (см. выше)
 namespace col {
@@ -191,10 +199,12 @@ constexpr uint32_t kSchIndex = 0, kSchStatus = 1, kSchHome = 2, kSchLeague = 3, 
                    kSchRound = 7;
 constexpr uint32_t kGsIndex = 0, kGsOt = 1, kGsShootout = 3, kGsScoreAway = 7, kGsScoreHome = 17;
 constexpr uint32_t kBioIndex = 0, kBioCountry = 42, kBioPosition = 84, kBioTeam = 78, kBioInjury = 29, kBioJersey = 58;
+constexpr uint32_t kBioYear = 56, kBioMonth = 70, kBioDay = 38, kBioHeight = 61, kBioWeight = 16;
+constexpr uint32_t kBioContract = 36, kBioContractLen = 87;
 constexpr uint32_t kSkIndex = 0, kSkStyle = 25;
 constexpr uint32_t kGkIndex = 0, kGkStyle = 21;
 constexpr uint32_t kTmIndex = 0, kTmTeamId = 3, kTmLeague = 30;
-constexpr uint32_t kRsPlayer = 48, kRsTeam = 67;
+constexpr uint32_t kRsPlayer = 48, kRsTeam = 67, kRsG1 = 68;
 }  // namespace col
 
 // Строки таблицы (все или с условием «поле == значение»): fn(get, put) на каждую строку; get(номер поля) → значение,
@@ -384,6 +394,7 @@ int GameOvr(const OvrCat (&cats)[N], Get&& attr) {
 struct Cand {
   int32_t index, pos, ovr, jersey, style;
   bool dressed = false;
+  bool injured = false;
 };
 
 int Group(const Cand& c) {
@@ -396,7 +407,7 @@ void MarkDressed(std::vector<Cand>& v) {
   int n[3] = {0, 0, 0};
   for (auto& c : v) {
     const int g = Group(c);
-    c.dressed = n[g] < kDressed[g];
+    c.dressed = !c.injured && n[g] < kDressed[g];
     n[g] += c.dressed ? 1 : 0;
   }
 }
@@ -404,6 +415,7 @@ void MarkDressed(std::vector<Cand>& v) {
 struct Players {
   std::map<uint32_t, std::vector<Cand>> real;   // teamid сборной → игроки клубов её страны (без травмированных)
   std::map<uint32_t, std::vector<Cand>> stock;  // номер франшизы сборной → её стоковые игроки (bio.team)
+  std::map<int32_t, Cand> all;                  // все игроки с атрибутами
 };
 
 // Стоковые игроки сборной (82B3DFC8 при создании: свои записи, часть — дубли игроков клубов) числятся за ней
@@ -445,14 +457,16 @@ Players ReadPlayers(PPCContext& ctx, uint8_t* base, uint32_t f, const std::map<u
     if (it == m.end()) {
       return;
     }
-    const Cand c{idx, pos, pos == 3 ? it->second.d : it->second.f, get(col::kBioJersey), it->second.style};
+    Cand c{idx, pos, pos == 3 ? it->second.d : it->second.f, get(col::kBioJersey), it->second.style};
+    c.injured = get(col::kBioInjury) > 0;
+    p.all[idx] = c;
     const int32_t team = get(col::kBioTeam);
     if (nation_team.count(team)) {
       p.stock[static_cast<uint32_t>(team)].push_back(c);
       return;
     }
     const uint32_t nat = NationOfCountry(get(col::kBioCountry));
-    if (nat && team >= 0 && get(col::kBioInjury) <= 0) {
+    if (nat && team >= 0 && !c.injured) {
       p.real[nat].push_back(c);
     }
   });
@@ -660,6 +674,43 @@ std::vector<int> BuildLines(const std::vector<Cand>& players, size_t n) {
   return slot;
 }
 
+// Объект состава команды в кэше 82B61C80 (элементы не освобождаются, пока 82B61D18 не очистит весь кэш): после
+// записи состава старый объект остаётся, и построитель звеньев (82B87538 → 82B7E6E8 → 82B871F8) считает по нему —
+// тест 6: у 4 из 8 сборных звенья обнулены до первых игр. Убираем элемент команды, если его никто не держит
+// (так же, как 82B61D18): 1 — убран, 0 — не было, −1 — занят.
+int DropCachedRoster(PPCContext& ctx, uint8_t* base, uint32_t team) {
+  const uint32_t n = Load32(base, kRosterCache);
+  uint32_t e = Load32(base, kRosterCache + 4);
+  for (uint32_t i = 0; i < n && e; ++i, e = Load32(base, e)) {
+    if (Load32(base, e + 8) != team) {
+      continue;
+    }
+    if (Load32(base, e + 12) != 0) {
+      return -1;
+    }
+    ctx.r3.u64 = kRosterCache;
+    ctx.r4.u64 = e;
+    sub_82B87E80(ctx, base);
+    ctx.r3.u64 = e;
+    sub_828A3478(ctx, base);
+    return 1;
+  }
+  return 0;
+}
+
+// Удалить игрока, как игра удаляет ушедших (82B567B8 → 82B4C958: звенья, bio, атрибуты, экипировка, составы…);
+// первый аргумент — черновик (+80, +132, +136).
+void DeletePlayer(PPCContext& ctx, uint8_t* base, int32_t index) {
+  const uint64_t saved_r1 = ctx.r1.u64;
+  const uint32_t scratch = (ctx.r1.u32 - 0x200) & ~0xFu;
+  std::memset(Host(base, scratch), 0, 0x100);
+  ctx.r1.u64 = scratch;
+  ctx.r3.u64 = scratch;
+  ctx.r4.s64 = index;
+  sub_82B4C958(ctx, base);
+  ctx.r1.u64 = saved_r1;
+}
+
 void ClearRoster(PPCContext& ctx, uint8_t* base, uint32_t team) {
   ctx.r3.u64 = 0;
   ctx.r4.u64 = team;
@@ -731,6 +782,10 @@ void WriteRoster(PPCContext& ctx, uint8_t* base, uint32_t team, const std::vecto
   const bool ok = ctx.r3.u8 != 0;
   ctx.r3.u64 = tmp;
   sub_82BCC4A0(ctx, base);
+  const int cache = DropCachedRoster(ctx, base, team);
+  if (cache < 0) {
+    REXLOG_INFO("[nhllegacy] natcup: team {}: cached roster object in use, not dropped", team);
+  }
   ctx.r1.u64 = saved_r1;
   REXLOG_INFO("[nhllegacy] natcup: roster of team {}: {} players, {}/{} line slots, {}", team, n, filled,
               static_cast<int>(ln::kCount), ok ? "written" : "NOT written");
@@ -848,6 +903,112 @@ void AnchorStock(PPCContext& ctx, uint8_t* base, uint32_t f, const std::map<uint
               moved);
 }
 
+// Стоковым игрокам сборных — контракт со сборной на kStockContractYears лет: со сроком 1 при создании к июльскому
+// рынку они становятся свободными агентами (сейв 30.07: 321 из 375 — contractstatus 5, 47 подписали клубы НХЛ).
+int ProtectStock(PPCContext& ctx, uint8_t* base, uint32_t f, const std::map<uint32_t, uint32_t>& teams) {
+  std::map<int32_t, bool> nation_team;
+  for (const auto& [id, t] : teams) {
+    nation_team[static_cast<int32_t>(t)] = true;
+  }
+  int n = 0;
+  ForEachRow(ctx, base, f, kTablePlayerBio, 0, 0, [&](auto& get, auto& put) {
+    if (!nation_team.count(get(col::kBioTeam))) {
+      return;
+    }
+    if (get(col::kBioContract) != kContractActive) {
+      put(col::kBioContract, kContractActive);
+    }
+    if (get(col::kBioContractLen) < kStockContractYears) {
+      put(col::kBioContractLen, kStockContractYears);
+    }
+    ++n;
+  });
+  return n;
+}
+
+// Создание франшизы: стоковые составы сборных (82B3DFC8) — 375 своих записей, из них 89 — копии игроков клубов
+// (та же дата рождения, страна, амплуа, рост и вес; сверено по именам на сейве 20.10 — все 89). Копии удаляем, как
+// игра удаляет ушедших игроков; остальным — контракт со сборной, составам — звенья.
+void CleanStock(PPCContext& ctx, uint8_t* base, uint32_t f, const std::map<uint32_t, uint32_t>& teams) {
+  std::map<int32_t, bool> nation_team;
+  for (const auto& [id, t] : teams) {
+    nation_team[static_cast<int32_t>(t)] = true;
+  }
+  std::map<int32_t, bool> stock;
+  ForEachRow(ctx, base, f, kTableRoster, 0, 0, [&](auto& get, auto&) {
+    if (nation_team.count(get(col::kRsTeam))) {
+      stock[get(col::kRsPlayer)] = true;
+    }
+  });
+  std::map<uint64_t, bool> others;
+  std::vector<std::pair<int32_t, uint64_t>> stock_keys;
+  ForEachRow(ctx, base, f, kTablePlayerBio, 0, 0, [&](auto& get, auto&) {
+    uint64_t key = 0;
+    for (const uint32_t c : {col::kBioYear, col::kBioMonth, col::kBioDay, col::kBioCountry, col::kBioPosition,
+                             col::kBioHeight, col::kBioWeight}) {
+      key = key * 256 + static_cast<uint64_t>(get(c) & 0xFF);
+    }
+    const int32_t idx = get(col::kBioIndex);
+    if (stock.count(idx)) {
+      stock_keys.push_back({idx, key});
+    } else {
+      others[key] = true;
+    }
+  });
+  int dups = 0;
+  for (const auto& [idx, key] : stock_keys) {
+    if (others.count(key)) {
+      DeletePlayer(ctx, base, idx);
+      ++dups;
+    }
+  }
+  const int protected_n = ProtectStock(ctx, base, f, teams);
+  auto players = ReadPlayers(ctx, base, f, teams);
+  for (const auto& [id, t] : teams) {
+    auto& v = players.stock[t];
+    MarkDressed(v);
+    WriteRoster(ctx, base, t, v);
+  }
+  REXLOG_INFO("[nhllegacy] natcup: stock national players: {}, copies of club players deleted {}, contracts {}",
+              stock_keys.size(), dups, protected_n);
+}
+
+// Звенья команд турнира перед играми дня: если их стёрли (нет g1 ни у кого), — заново по тем же игрокам.
+void RepairLines(PPCContext& ctx, uint8_t* base, uint32_t f, const std::map<uint32_t, uint32_t>& teams,
+                 const std::map<uint32_t, bool>& playing) {
+  std::map<int32_t, std::vector<int32_t>> rows;
+  std::map<int32_t, int> g1;
+  ForEachRow(ctx, base, f, kTableRoster, 0, 0, [&](auto& get, auto&) {
+    const int32_t t = get(col::kRsTeam);
+    if (playing.count(static_cast<uint32_t>(t))) {
+      rows[t].push_back(get(col::kRsPlayer));
+      g1[t] += get(col::kRsG1) ? 1 : 0;
+    }
+  });
+  std::vector<int32_t> bad;
+  for (const auto& [t, _] : playing) {
+    if (!g1[static_cast<int32_t>(t)]) {
+      bad.push_back(static_cast<int32_t>(t));
+    }
+  }
+  if (bad.empty()) {
+    return;
+  }
+  auto players = ReadPlayers(ctx, base, f, teams);
+  for (const int32_t t : bad) {
+    std::vector<Cand> v;
+    for (const int32_t pl : rows[t]) {
+      auto it = players.all.find(pl);
+      if (it != players.all.end()) {
+        v.push_back(it->second);
+      }
+    }
+    MarkDressed(v);
+    REXLOG_INFO("[nhllegacy] natcup: team {}: lines were wiped, rewriting", t);
+    WriteRoster(ctx, base, static_cast<uint32_t>(t), v);
+  }
+}
+
 void Setup(PPCContext& ctx, uint8_t* base, uint32_t f, const std::map<uint32_t, uint32_t>& teams) {
   AnchorStock(ctx, base, f, teams);
   auto players = ReadPlayers(ctx, base, f, teams);
@@ -930,6 +1091,7 @@ void Finish(PPCContext& ctx, uint8_t* base, uint32_t f, const std::map<uint32_t,
     WriteRoster(ctx, base, t, stock);
     SetUserTeam(ctx, base, t, false);
   }
+  ProtectStock(ctx, base, f, teams);
   int closed = 0;
   ForEachRow(ctx, base, f, kTableSchedule, kFieldMonth, kAugust, [&](auto& get, auto& put) {
     if (played.count(static_cast<uint32_t>(get(col::kSchHome))) && played.count(static_cast<uint32_t>(get(col::kSchAway)))) {
@@ -961,6 +1123,13 @@ void CupDay(PPCContext& ctx, uint8_t* base, uint32_t day0, uint32_t month0) {
     Finish(ctx, base, fr, teams, games);
     ctx.r1.u64 = saved_r1;
     return;
+  }
+  if (day0 <= kFinalDay) {
+    std::map<uint32_t, bool> playing;
+    for (const auto& g : games) {
+      playing[g.home] = playing[g.away] = true;
+    }
+    RepairLines(ctx, base, fr, teams, playing);
   }
   int group_left = 0;
   std::vector<const Game*> semis, finals;
@@ -1030,7 +1199,7 @@ extern "C" void sub_82B099E0(PPCContext& ctx, uint8_t* base) {
   const uint32_t mgr = ctx.r3.u32;
   ctx.r3.u64 = Load32(base, self + 48);
   sub_82974FA0(ctx, base);
-  int counts[4] = {0, 0, 0, 0};
+  int counts[3] = {0, 0, 0};
   if ((ctx.r3.u32 & 0xFFu) != 0) {
     ctx.r3.u64 = mgr;
     rex::runtime::ResolveIndirectFunction(Load32(base, Load32(base, mgr) + 28))(ctx, base);  // vtable +28
@@ -1134,9 +1303,10 @@ extern "C" void sub_82B099E0(PPCContext& ctx, uint8_t* base) {
     ctx.r3.u64 = cur;
     sub_827B2C40(ctx, base);
   }
-  // стоковые составы сборных (82B3DFC8) остаются до турнира: уровень с пустыми командами — лишний риск
-  counts[3] = static_cast<int>(NationTeams(ctx, base, f - 0x200).size());
-  REXLOG_INFO("[nhllegacy] natcup: national teams in the franchise: {}", counts[3]);
+  // стоковые составы сборных (82B3DFC8) остаются до турнира, без копий игроков клубов и с контрактами
+  const auto teams = NationTeams(ctx, base, f - 0x200);
+  REXLOG_INFO("[nhllegacy] natcup: national teams in the franchise: {}", teams.size());
+  CleanStock(ctx, base, f - 0x200, teams);
   ctx.r1.u64 = saved_r1;
 }
 
