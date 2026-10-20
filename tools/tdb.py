@@ -5,6 +5,11 @@
     python tdb.py states  FILE                          # leaguestates: type/key -> value
     python tdb.py setstate FILE OUT TYPE KEY VALUE [TYPE KEY VALUE …]
     python tdb.py set     FILE OUT TABLE FIELD ROW VALUE
+    python tdb.py tables  FILE                          # таблицы: имя, id, живых записей, полей
+    python tdb.py dump    FILE TABLE [--fields a,b] [--where f=v|f~regex|f!=v …] [--limit N] [--raw] [--csv OUT]
+                                                        # записи таблицы (значения — с rangelow схемы; --raw — как в файле)
+    python tdb.py diff    A B [--tables t1,t2] [--key ПОЛЕ] [--limit N] [--raw]
+                                                        # разница двух баз/сейвов: записи по ключу (index, game_id …)
 
 FILE — `.db` или внутренний файл сейва (`RosterFile`, `Dynasty`…: заголовок 0x2C байт,
 база длиной u32@0x24, у франшизы после базы ещё хвост своих данных). Схема полей —
@@ -85,16 +90,21 @@ class Tdb:
             reclen = self.u32(h + 8)
             maxr, curr = struct.unpack(self.E + 'HH', self.d[h + 0x14:h + 0x18])
             alloc, nf = self.u32(h + 4), self.d[h + 0x1C]
-            fields = {}
+            fields, kinds = {}, {}
             for j in range(nf):
                 fd = h + 0x28 + 16 * j
                 fid = bytes(self.d[fd + 8:fd + 12]).decode('latin1')
                 fields[fid] = (self.u32(fd + 4), self.u32(fd + 12))
+                kinds[fid] = self.u32(fd)                       # 0 — строка, 3 — целое (в базах NHL)
             name, fmeta = meta.get(tid, (tid, {}))
-            byname = {fmeta.get(fid, (fid,))[0]: v for fid, v in fields.items()}
+            fname = lambda fid: fmeta.get(fid, (fid,))[0]       # noqa: E731
+            byname = {fname(fid): v for fid, v in fields.items()}
             rows = maxr if alloc in (2, 6) else curr
             self.tables.append(dict(id=tid, name=name, block=block, reclen=reclen, rows=rows,
-                                    records=h + 0x28 + 16 * nf, fields=byname))
+                                    records=h + 0x28 + 16 * nf, fields=byname,
+                                    kinds={fname(fid): k for fid, k in kinds.items()},
+                                    lows={fname(fid): fmeta[fid][1] for fid in fields if fid in fmeta and
+                                          len(fmeta[fid]) > 1}))
         self.by_name = {t['name']: t for t in self.tables}
 
     def u32(self, o):
@@ -128,6 +138,14 @@ class Tdb:
         off, width = t['fields'][field]
         start = t['records'] + row * t['reclen'] + off // 8
         return bytes(self.d[start:start + width // 8]).split(b'\0', 1)[0].decode('utf-8', errors='replace')
+
+    def value(self, table, field, row, raw=False):
+        """Значение поля: строка — текстом, целое — с rangelow схемы (как его видит игра); raw — как в файле."""
+        t = self.by_name[table]
+        if t['kinds'].get(field) == 0:
+            return self.get_string(table, field, row)
+        v = self.get(table, field, row)
+        return v if raw else v + t['lows'].get(field, 0)
 
     def set_string(self, table, field, row, text):
         t = self.by_name[table]
@@ -437,6 +455,8 @@ def states(db):
     """leaguestates: [(строка, type, key, value, tier)] — только живые записи (в сейве франшизы за current —
     запас 0xDB и остатки прежних состояний, их type/key игра не видит)."""
     t = 'leaguestates'
+    if t not in db.by_name:
+        sys.exit('нет таблицы leaguestates: она есть в сейвах франшизы (DYNASTY …), а не в базе и не в ROSTER')
     g = lambda f, r: db.get(t, f, r)
     return [(r, g('type', r), g('key', r), g('value', r), g('tier', r)) for r in db.live_rows(t)]
 
@@ -456,16 +476,144 @@ def live_report(db, tables=None):
                f'(у alloc 2/6 rows = max)')
     return out
 
+KEY_FIELDS = ('index', 'game_id', 'key', 'teamid', 'playerid', 'id')
+
+
+def _match(where):
+    """--where f=v | f!=v | f~regex -> предикат по значениям строки."""
+    import re
+    tests = []
+    for w in where or ():
+        m = re.match(r'^([^=!~]+)(!=|=|~)(.*)$', w)
+        if not m:
+            sys.exit(f'--where: «{w}» — нужно поле=значение, поле!=значение или поле~regex')
+        f, op, v = m.groups()
+        tests.append((f, op, re.compile(v) if op == '~' else v))
+    return tests
+
+
+def dump(db, table, fields=None, where=None, limit=0, raw=False):
+    """[(строка, {поле: значение})] живых записей таблицы с условиями --where."""
+    if table not in db.by_name:
+        sys.exit(f'нет таблицы {table} (python tdb.py tables FILE)')
+    t = db.by_name[table]
+    names = fields or sorted(t['fields'])
+    bad = [f for f in names if f not in t['fields']]
+    tests = _match(where)
+    bad += [f for f, _, _ in tests if f not in t['fields']]
+    if bad:
+        sys.exit(f'{table}: нет полей {sorted(set(bad))}; есть: {", ".join(sorted(t["fields"]))}')
+    out = []
+    for r in db.live_rows(table):
+        ok = True
+        for f, op, v in tests:
+            x = str(db.value(table, f, r, raw))
+            ok = (x == v) if op == '=' else (x != v) if op == '!=' else bool(v.search(x))
+            if not ok:
+                break
+        if ok:
+            out.append((r, {f: db.value(table, f, r, raw) for f in names}))
+            if limit and len(out) >= limit:
+                break
+    return names, out
+
+
+def _keyed(db, table, key, fields, raw):
+    """{ключ: {поле: значение}} живых записей; ключ — значение поля key (повторы — с номером), иначе номер строки."""
+    out, seen = {}, {}
+    for r in db.live_rows(table):
+        vals = {f: db.value(table, f, r, raw) for f in fields}
+        k = vals.get(key, r) if key else r
+        n = seen.get(k, 0)
+        seen[k] = n + 1
+        out[k if n == 0 else (k, n)] = vals
+    return out
+
+
+def diff(a, b, tables=None, key=None, limit=20, raw=False):
+    """Строки отчёта: таблицы, где различаются записи (добавлены, убраны, изменены поля) — по ключу."""
+    lines = []
+    for name in sorted(set(a.by_name) | set(b.by_name)):
+        if tables and name not in tables:
+            continue
+        if name not in a.by_name or name not in b.by_name:
+            lines.append(f'{name}: только в {"B" if name not in a.by_name else "A"}')
+            continue
+        fields = sorted(set(a.by_name[name]['fields']) & set(b.by_name[name]['fields']))
+        k = key if key in fields else next((f for f in KEY_FIELDS if f in fields), None)
+        ra, rb = _keyed(a, name, k, fields, raw), _keyed(b, name, k, fields, raw)
+        added, removed = [x for x in rb if x not in ra], [x for x in ra if x not in rb]
+        changed = []
+        for x in ra:
+            if x in rb and ra[x] != rb[x]:
+                changed.append((x, [(f, ra[x][f], rb[x][f]) for f in fields if ra[x][f] != rb[x][f]]))
+        extra = sorted(set(a.by_name[name]['fields']) ^ set(b.by_name[name]['fields']))
+        if not (added or removed or changed or extra):
+            continue
+        lines.append(f'{name} (ключ {k or "номер строки"}): записей A {len(ra)}, B {len(rb)}; добавлено {len(added)}, '
+                     f'убрано {len(removed)}, изменено {len(changed)}' + (f'; поля только в одной: {extra}' if extra
+                                                                         else ''))
+        for x, ch in changed[:limit]:
+            lines.append(f'  {k or "строка"} {x}: ' + ', '.join(f'{f} {u!r} → {v!r}' for f, u, v in ch[:8]) +
+                         (' …' if len(ch) > 8 else ''))
+        if len(changed) > limit:
+            lines.append(f'  … ещё {len(changed) - limit}')
+        for lab, xs in (('добавлено', added), ('убрано', removed)):
+            if xs:
+                lines.append(f'  {lab}: ' + ', '.join(map(str, xs[:limit])) + (' …' if len(xs) > limit else ''))
+    return lines or ['различий нет']
+
+
 def main():
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument('cmd', choices=['verify', 'live', 'states', 'setstate', 'set'])
+    sys.stdout.reconfigure(encoding='utf-8')
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('cmd', choices=['verify', 'live', 'states', 'setstate', 'set', 'tables', 'dump', 'diff'])
     ap.add_argument('file')
     ap.add_argument('args', nargs='*')
+    ap.add_argument('--fields', default=None, help='dump: поля через запятую (по умолчанию — все)')
+    ap.add_argument('--where', action='append', default=None, help='dump: условие поле=значение / != / ~regex')
+    ap.add_argument('--limit', type=int, default=None, help='dump: сколько записей (0 — все); diff: строк на таблицу')
+    ap.add_argument('--raw', action='store_true', help='значения как в файле (без rangelow схемы)')
+    ap.add_argument('--csv', default=None, help='dump: записать в CSV')
+    ap.add_argument('--tables', default=None, help='diff: только эти таблицы (через запятую)')
+    ap.add_argument('--key', default=None, help=f'diff: поле-ключ записей (по умолчанию — первое из {KEY_FIELDS})')
     ap.add_argument('--meta', default=None,
                     help='nhlng-meta.xml игры (по умолчанию — схема NHL Legacy из распакованной игры, tools/gameprofile.py; '
                          'анкер NHL 13 из ref/, если он есть)')
     a = ap.parse_args()
-    s = SaveFile(open(a.file, 'rb').read(), load_meta(a.meta or default_meta()))
+    meta = load_meta(a.meta or default_meta())
+    s = SaveFile(open(a.file, 'rb').read(), meta)
+    if a.cmd == 'tables':
+        print(f'{"таблица":36} {"id":5} {"живых":>6} {"полей":>5}')
+        for t in sorted(s.db.tables, key=lambda t: t['name']):
+            print(f'{t["name"]:36} {t["id"]:5} {len(s.db.live_rows(t["name"])):6} {len(t["fields"]):5}')
+        return
+    if a.cmd == 'dump':
+        if not a.args:
+            ap.error('dump FILE TABLE')
+        names, rows = dump(s.db, a.args[0], a.fields.split(',') if a.fields else None, a.where,
+                           a.limit or 0, a.raw)
+        if a.csv:
+            import csv
+            with open(a.csv, 'w', newline='', encoding='utf-8') as f:
+                w = csv.writer(f)
+                w.writerow(['row'] + names)
+                for r, v in rows:
+                    w.writerow([r] + [v[n] for n in names])
+            print(f'{len(rows)} записей → {a.csv}')
+        else:
+            print('\t'.join(['row'] + names))
+            for r, v in rows:
+                print('\t'.join([str(r)] + [str(v[n]) for n in names]))
+            print(f'записей: {len(rows)}', file=sys.stderr)
+        return
+    if a.cmd == 'diff':
+        if not a.args:
+            ap.error('diff A B')
+        b = SaveFile(open(a.args[0], 'rb').read(), meta)
+        print('\n'.join(diff(s.db, b.db, a.tables.split(',') if a.tables else None, a.key,
+                             20 if a.limit is None else a.limit, a.raw)))
+        return
     if a.cmd == 'verify':
         bad = s.verify()
         kind = bytes(s.header[:16]).rstrip(b'\0').decode('latin1') if s.header is not None else ''

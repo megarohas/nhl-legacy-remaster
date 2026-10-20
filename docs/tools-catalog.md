@@ -58,7 +58,7 @@
 | 2 | ✔ 20.10: без `ref/…/unpack_big` в `kitpaint`, `teamart` (→ `czkit`, `fepose`); схема `tdb.py` по умолчанию — Legacy | `tools/big.py` | S–M |
 | 3 | Одна настройка сезона (`--season` / профиль) для составов, АХЛ, строк года | `roster/common.py`, `roster/ahl_ht.py`, `year2026_legacy.py`, `build-all.sh` | M |
 | 4 | Установщик: `status`, `verify`, `diff`, проверка на копии userdata; `CACHE` явно или из `nhllegacy.toml` | разовые `tmp/check_install.py`, `cmp_cache*.py`, `make_ud.py`, `cmp_dry.py`; `kitport.core` | M |
-| 5 | `tdb.py dump/diff/query` и «всё о клубе» | десяток разовых выгрузок (`tmp/dbdiff.py`, `*_dump.py`) | S–M |
+| 5 | ✔ 20.10: `tdb.py tables`, `dump --where/--fields/--csv`, `diff A B` (по ключу, значения с rangelow); осталось «всё о клубе» | десяток разовых выгрузок (`tmp/dbdiff.py`, `*_dump.py`) | S–M |
 | 6 | Импорт контрактов из открытого формата (`contracts.py import`), адаптер сайта — локально | `game/work/contracts/parse_pp.py`, `ingest.py` | M (нужно решение) |
 | 7 | Правила: `legacy_settings.py set-rule/copy-rules`, таблица ID 9…27 | `legacy_settings.py`, `nhllegacy_settings.cpp` | S–M |
 | 8 | Новый игрок: `python tools/roster add-player SPEC.json` (донор, био, атрибуты под OVR, номер, звено, портрет, голова, сейв) | `roster/write.py`, `ratings`, `ovrformula`, `photos.py`, `playerhead`, `heads24` | M–L |

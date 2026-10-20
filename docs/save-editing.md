@@ -29,6 +29,26 @@ python tools/stfs.py replace "game/raw/…/DYNASTY 20240213195118A" "DYNASTY 202
 python tools/stfs.py verify  "game/work/DYNASTY 20240213195118A"
 ```
 
+## Посмотреть и сравнить (базы и сейвы Legacy, 20.10.2026)
+
+`tools/tdb.py` читает и базу (`nhlng.db`, `draft_roster.db`), и сейв ROSTER/DYNASTY порта (ZlibV4). Схема — `--meta`,
+без него — схема Legacy из распакованной игры (`tools/gameprofile.py`).
+
+```bash
+python tools/tdb.py tables  game/work/legacy-data/out/db/nhlng.db           # таблицы, живые записи, поля
+python tools/tdb.py dump    game/work/legacy-data/out/db/nhlng.db exhibitionplayerbiotable \
+       --fields game_id,firstname,lastname,team --where "lastname=Crosby"   # = точно, != , ~ регулярное выражение
+python tools/tdb.py dump    "…/ROSTER 20261011010728" stockteamjerseys --where "teamid=13" --csv min.csv
+python tools/tdb.py diff    "…/ROSTER до" "…/ROSTER после" --tables exhibitionskaterequipment   # что поменял игрок
+```
+
+- **Значения.** Целые показываются с `rangelow` схемы — так их видит игра: у поля с `rangelow` −1 сырое 0 — это −1.
+  `--raw` — как в файле.
+- **`diff`** сводит записи по ключу: первое из `index`, `game_id`, `key`, `teamid` … или `--key`. Печатает
+  добавленные, убранные и изменённые поля.
+- **Пример.** Правка игрока в редакторе игры переписывает и его `birthplace` заглавными буквами («Calgary» →
+  «CALGARY»): видно в `diff` двух сейвов ROSTER 10–11.10.
+
 Подпись пакета CON (RSA приставки) после правки недействительна. Розничная
 приставка такой сейв не примет; на RGH подписи контента, как правило, не
 проверяются — подтверждается только опытом.
