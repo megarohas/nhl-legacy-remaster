@@ -633,3 +633,51 @@ bash tools/legacy_data/install-legacy-data.sh --ahl32 --nhl24 && python tools/le
 adidas, сейв ROSTER дописывается в конец). Шорты и наклейки на шлем — от основных форм клуба (дом 1_14_4, выезд 1_14_3),
 гетры светлой — от 1_14_3, тёмной — полосы гетр NHL 24 ровными строками. Поставлено 19.10 16:16; копия заменённого —
 `game/work/legacy-data/backup-cache/user-20261019-edge`.
+
+### 15.1. Что куда ставится (журнал; дополнять при каждой правке форм)
+
+Пути — от кэша игры `nhl-legacy-port/userdata/cache/guest/` (россыпь поверх архивов). Пак собирает
+`fb.edge_kit pack` в `game/work/nhl24/out/pack-edge` (формат 1: `manifest.json` + `cache/`; основа — копия
+`pack-adidas`, поверх — 43 файла слота из `edgekit/slot/cache`), ставит `install-legacy-data.sh --nhl24`.
+
+| Что | Куда (кэш) | Откуда / чем |
+|---|---|---|
+| Сетки свитера полевых, 24 | `rendering/jersey/jersey_0_0_2_{t}_{p}_{lod}.rx2`: t — заправка 0–3, p — щитки 0–1, lod 2 / 0 / 3 (близко / средне / далеко) | `edge_kit meshes`: сетка Edge, перед ворота поднят, остров развёртки; заменяют сетки adidas стиля 0 |
+| Сетки вратарей, 6 | `rendering/jersey/jersey_1_0_{h}_0_0_{lod}.rx2`, h — рука ловушки 0 / 1 | ворот Edge как есть, только остров развёртки |
+| Затенение (AO) стиля 0 | `rendering/jersey/texlib_0_999.rx2` (растры `jersey_0_{g}_{t}_am`, 256²; в renderboot) | `texlib_1_999` + тексели острова с прежнего места |
+| Свитер: цвет, рельеф, блеск, шрифт номеров | `rendering/jersey/texlib_0_14_5.rx2` (дом), `…_0_14_6.rx2` (выезд): `jersey_0_14_V_cm`, `_sm`, `_0_nm`, `font_*` | `edge_kit kit` → `out/MIN_{home,away}` → `edge_kit slot` (kitpaint pack, шаблон `kit.json` — от `0_14_x`) |
+| Места номера и фамилии | `rendering/jersey/name_0_14_{5,6}_cm.rx2` | от основной формы: дом 1_14_4, выезд 1_14_3 |
+| Шорты | `rendering/pant/texlib_0_14_{5,6}.rx2` | от 1_14_4 / 1_14_3 |
+| Гетры | `rendering/sock/sock_0_14_{5,6}_cm.rx2` | дом — `flat_sock` (доли полос NHL 24 ровными строками, верх — `SOCK_TOP_V`); выезд — гетры 1_14_3, полосы выше на `SOCK_SHIFT_V` (`shift_sock`) |
+| Наклейка на шлем | `rendering/logo/texlib_14_0_{5,6}.rx2` | копия наклейки 1_14_4 / 1_14_3 |
+| Превью меню | `fe/ion/artassets/jerseys/jersey_0_14_{5,6}.big` | `pilot.fe_preview_ea` по текстуре без острова (`deislanded`) |
+| Строки форм | `db/nhlng.db`, `stockteamjerseys`: style 0, teamartid 14, variant / fevariant 5 и 6, jerseyindex 10 / 11, locstring 6 | реестр `tools/legacy_data/nhl24_kits.json` (`edge_home`, `edge_away`); в манифесте `phase` 2 — в конце таблицы (в сборке ahl32 — строки 779 и 780 из 781) |
+| Шлемы | `db/nhlng.db`, `stockteamequipmenttable`: era 0, variant 5 / 6, equipment 7 | `nhl24.py build_db` → `add_helmets`, фаза 2 — в конце таблицы |
+| Названия | `fe/loc/NHL_ENG_US.db`: `Vintage_0_14_5` «Home (Edge collar 24)», `Vintage_0_14_6` «Away (Edge collar 24)» | `label` в манифесте (`SLOT_KITS`) |
+| Сейв | ROSTER 20261016065245: те же строки форм и шлемов дописаны в конец (+4) | `nhl24.py save ROSTER --write` (его копия — `game/work/legacy-data/backup-saves/`) |
+
+Карты свитера (`edge_kit kit`, всё в `out/MIN_{kit}`):
+- `jersey_cm` — цвет: перенос NHL 24 + кокетка, кромка, вставка, планка (свои маляры);
+- `jersey_nm` — рельеф целиком заново (`rebuild_relief`): складки и плетение Edge без швов Edge, швы NHL 24 ниже
+  `Y_SUPPRESS`, свои швы по границам цветов (`design_seams`), сетчатая ткань кокетки: квадратная решётка ямок
+  (`PERF_CELL` 4 × 4 текселя ≈ 6–8 мм, сила `PERF_RMS` 40 — как у NHL 24, у плетения Edge ≈ 6), в кокетке за ободом,
+  без вставки, шнуровки и нашивок (`perf_mask`, `perf_without_patches`: не цвет ткани кокетки — с залитыми дырами);
+  метки чистого рельефа T=4 на спине (`RELIEF_CLEAR`) заглаживаются здесь же, только в складках (с 20.10: раньше —
+  в `brand_relief` по всему рельефу, и под Reebok выходил гладкий прямоугольник без сетки);
+- `jersey_sm` — блеск тоже заново (с 20.10): ровный `SM_BASE`, в ямках кокетки тусклее на `PERF_SM`, Reebok сзади —
+  `BrandSwap.relief`. До 20.10 блеск оставался от Edge T=4 (V-вырез с молнией, реглан, сетка боков) — в игре это
+  выглядело как старые швы: блик рисует их и при новом рельефе;
+- кокетка у домашней формы без цвета, но той же формы, что у выезда (`yoke_shape_MIN.json`, пишет сборка выезда):
+  поэтому выезд собирать раньше дома (`--kits away,home`).
+
+Что сломано слотом: формы adidas стиля 0 других клубов рисуются на этих сетках и AO («поплывут», решение пользователя
+19.10). Пак формы Edge пересобирать `edge_kit pack` (основа — `pack-adidas`, прежний `pack-edge` — переименовать);
+любые другие паки NHL 24 — поверх `pack-edge`, иначе установка вернёт сетки adidas.
+
+Установки:
+- 19.10 16:16 — первая (`pack-edge`, теперь `pack-edge-v1`); копия заменённого — `backup-cache/user-20261019-edge`;
+- 20.10 06:45 — свой блеск, сетчатая кокетка (обе формы), гетры выше (дом — верх полос v 0,49 вместо 0,576, ≈ 6,5 см;
+  выезд — на 0,03, ≈ 2,3 см). Обновились 4 файла: `rendering/jersey/texlib_0_14_{5,6}.rx2`,
+  `rendering/sock/sock_0_14_{5,6}_cm.rx2`; база (9908c73d), подписи, превью — те же; сейвы ROSTER 20261016065245 и
+  20261019132105 (его игра записала после первой установки) уже совпадают с базой — не правились. Копия
+  заменённого — `backup-cache/user-20261020-edge2`.
