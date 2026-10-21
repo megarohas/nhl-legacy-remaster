@@ -285,7 +285,7 @@ def main():
     s = sub.add_parser("survey", help="обзор форм клубов источника: перед, плечо, ворот (разбор по типам)")
     s.add_argument("--source", default="nhl27")
     s.add_argument("--clubs", default="", help="папки клубов через запятую (по умолчанию — все)")
-    s.add_argument("--kits", default="home,away")
+    s.add_argument("--kits", default="default", help="default — дом и выезд по базе источника; или папки через запятую")
     s.add_argument("--jobs", type=int, default=8)
     a = p.parse_args()
     if a.cmd in ("sheet",):

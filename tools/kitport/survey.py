@@ -1,7 +1,9 @@
 """Обзор форм клубов источника (NHL 27 и др.) на сетке свитера NHL 24: перед, бок (плечо), ворот крупно — для разбора
 клубов по типам (ворот со шнуровкой или нет, кокетка: нет / до плеча / на плечо), docs/kitport.md §12.
 
-    python -m kitport survey [--source nhl27] [--clubs chicago,dallas] [--kits home,away] [--jobs 8]
+    python -m kitport survey [--source nhl27] [--clubs chicago,dallas] [--kits default|home,away] [--jobs 8]
+
+--kits default (по умолчанию) — нынешние дом и выезд клуба по базе источника (default_kits), иначе — эти папки.
 
 Текстуры — прямо из дампа по каталогу (без выгрузки клуба), сетка — NHL 24 (развёртка у NHL 27 та же), кэш —
 <EDGE_WORK>/survey_mesh.npz. Листы — game/work/<источник>/kit-survey/survey_N.png, по форме — survey/<клуб>_<форма>.png.
@@ -15,9 +17,35 @@ import numpy as np
 
 from . import core
 
-# у Юты в NHL 27 дом и выезд — комплекты ten / eleven (adidas/home и away нет)
-KITS = {"utah": ("ten", "eleven")}
-EXTRA = ("utah",)
+# формы клуба — по базе источника: дом и выезд по умолчанию (stockteamjerseys стиль 2, isdefault, locstring 0 / 1),
+# вариант → папка комплекта. В NHL 27 папки adidas/home и away — прежние формы (времён NHL 24), нынешние — ten/eleven и
+# дальше (пользователь, 21.10: «ты рассматриваешь формы NHL 24, а не 27»: ANA, BOS, BUF, CAR, STL, OTT, PHI, SJ, UTA)
+WORDS = {0: "home", 1: "away", 2: "three", 10: "ten", 11: "eleven", 12: "twelve", 13: "thirteen", 14: "fourteen",
+         15: "fifteen", 16: "sixteen"}
+ABBR_FOLDER = {"NYI": "nyi", "NYR": "nyr"}          # остальные — город без пробелов и точек (St. Louis → stlouis)
+
+
+def default_kits(source):
+    """{папка клуба: (дом, выезд)} — комплекты по умолчанию из базы источника (только NHL 27; иначе {})."""
+    if source != "nhl27":
+        return {}
+    sys.path.insert(0, core.TOOLS)
+    from roster import nhl27 as N
+    db = N.open_db(os.path.join(core.GAME, "work", "nhl27", "db", "nhl_game.db"))
+    tm = N.teams(db, {0})
+    J = "stockteamjerseys"
+    found = {}
+    for r in db.live_rows(J):
+        t = db.get(J, "teamid", r)
+        if t in tm and db.value(J, "style", r) == 2 and db.value(J, "isdefault", r) and db.value(J, "locstring", r) in (0, 1):
+            found.setdefault(t, {})[db.value(J, "locstring", r)] = db.value(J, "variant", r)
+    out = {}
+    for t, v in found.items():
+        c = tm[t]
+        folder = ABBR_FOLDER.get(c["abbr"]) or c["city"].lower().replace(" ", "").replace(".", "")
+        if 0 in v and 1 in v and v[0] in WORDS and v[1] in WORDS:
+            out[folder] = (WORDS[v[0]], WORDS[v[1]])
+    return out
 
 
 def mesh_cache():
@@ -49,7 +77,7 @@ def tex(source, name):
 def cell(job):
     source, club, kit, mesh_fn, out_dir = job
     os.environ["FB_GAME"] = source
-    os.environ.setdefault("PHOTOS_SOURCE", "nhl24")
+    os.environ["PHOTOS_SOURCE"] = source                 # photos24 (через scans24) сам выставляет FB_GAME по нему
     sys.path.insert(0, core.TOOLS)
     import scans24 as S
     from PIL import Image, ImageDraw
@@ -80,12 +108,15 @@ def cmd_survey(a):
     from concurrent.futures import ProcessPoolExecutor
     from PIL import Image
     sys.path.insert(0, core.TOOLS)
+    os.environ["FB_GAME"] = a.source                     # до импорта fb в процессах (fb.source читает его при импорте)
     from fb.kit_batch import CLUBS
-    clubs = a.clubs.split(",") if a.clubs else sorted({c for c, _, _ in CLUBS if c != "arizona"} | set(EXTRA))
-    kits = a.kits.split(",")
+    dk = default_kits(a.source)
+    clubs = a.clubs.split(",") if a.clubs else sorted({c for c, _, _ in CLUBS if c != "arizona"} | {"utah"})
     out_dir = os.path.join(core.GAME, "work", a.source, "kit-survey")
     mesh_fn = mesh_cache()
-    jobs = [(a.source, c, k, mesh_fn, out_dir) for c in clubs for k in KITS.get(c, kits)]
+    pick = lambda c: a.kits.split(",") if a.kits != "default" else dk.get(c, ("home", "away"))
+    jobs = [(a.source, c, k, mesh_fn, out_dir) for c in clubs for k in pick(c)]
+    print("комплекты:", {c: pick(c) for c in clubs})
     with ProcessPoolExecutor(max_workers=a.jobs) as ex:
         res = list(ex.map(cell, jobs))
     miss = [f"{c} {k}" for c, k, f in res if not f]
