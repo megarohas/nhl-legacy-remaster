@@ -1046,8 +1046,7 @@ def cmd_build(jobs, disputed, only=None, legacy_hair=LEGACY_HAIR):
         if not want:
             raise SystemExit(f'--only {only}: нет среди сопоставленных (папки — как в licensed/<папка>)')
     print(f'голов к сборке: {len(want)} (ok {sum(1 for f, k, _ in want.values() if k == "ok")}); шаблонов {len(lib)}')
-    plan_fn = os.path.join(work(), 'hair-plan.json')
-    plan = json.load(open(plan_fn, encoding='utf-8')) if os.path.exists(plan_fn) else {}
+    plan = hair_plan()
     joblist = []
     for new, (folder, kind, old) in sorted(want.items()):
         npos = heads.head(folder)['sections']['mat_head']['pos']
@@ -1327,6 +1326,15 @@ def cmd_styles(jobs):
     print(f'стилей с сетками: {len(res)} из {STYLE_MAX + 1} → {fn}')
 
 
+def hair_plan():
+    """Стили по фото: <work>/scans<NN>/hair-plan.json, нет — копия в репозитории tools/legacy_data/hair_plan_<источник>.json
+    (21.10: 259 стилей NHL 27, подобранных по листам hairplan; после правки рабочего файла — скопировать туда)."""
+    for fn in (os.path.join(work(), 'hair-plan.json'), os.path.join(TOOLS, 'legacy_data', f'hair_plan_{P24.SOURCE}.json')):
+        if os.path.exists(fn):
+            return json.load(open(fn, encoding='utf-8'))
+    return {}
+
+
 def hair_players(variant='out-ahl32'):
     """Игроки этапа без своих волос источника: [(папка, имя, artid Legacy, ID EA)] по built.json и match-<variant>.json."""
     built = json.load(open(os.path.join(work(), 'built.json'), encoding='utf-8'))
@@ -1346,7 +1354,7 @@ def cmd_hairplan(variant='out-ahl32', per=30):
     from PIL import Image, ImageDraw, ImageFont
     color = source_hair_colors()
     fn = os.path.join(work(), 'hair-plan.json')
-    plan = json.load(open(fn, encoding='utf-8')) if os.path.exists(fn) else {}
+    plan = hair_plan()
     pl = hair_players(variant)
     for folder, name, art, new in pl:
         e = plan.setdefault(folder, {'style': None, 'color': color.get(new, 2)})

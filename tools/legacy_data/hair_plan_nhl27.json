@@ -1,0 +1,1297 @@
+{
+ "adam_larsson": {
+  "style": 62,
+  "color": 8,
+  "name": "Adam Larsson"
+ },
+ "adam_lowry": {
+  "style": 69,
+  "color": 2,
+  "name": "Adam Lowry"
+ },
+ "adam_pelech": {
+  "style": 57,
+  "color": 2,
+  "name": "Adam Pelech"
+ },
+ "albert_johansson": {
+  "style": 7,
+  "color": 1,
+  "name": "Albert Johansson"
+ },
+ "alex_iafallo": {
+  "style": 37,
+  "color": 1,
+  "name": "Alex Iafallo"
+ },
+ "alex_laferriere": {
+  "style": 62,
+  "color": 13,
+  "name": "Alex Laferriere"
+ },
+ "alex_newhook": {
+  "style": 7,
+  "color": 2,
+  "name": "Alex Newhook"
+ },
+ "alex_turcotte": {
+  "style": 10,
+  "color": 1,
+  "name": "Alex Turcotte"
+ },
+ "alex_vlasic": {
+  "style": 61,
+  "color": 4,
+  "name": "Alex Vlasic"
+ },
+ "alexander_holtz": {
+  "style": 22,
+  "color": 2,
+  "name": "Alexander Holtz"
+ },
+ "alexander_kerfoot": {
+  "style": 71,
+  "color": 1,
+  "name": "Alexander Kerfoot"
+ },
+ "alexander_nikishin": {
+  "style": 65,
+  "color": 4,
+  "name": "Alexander Nikishin"
+ },
+ "alexander_romanov": {
+  "style": 23,
+  "color": 0,
+  "name": "Alexander Romanov"
+ },
+ "alexandre_carrier": {
+  "style": 18,
+  "color": 2,
+  "name": "Alexandre Carrier"
+ },
+ "alexey_toropchenko": {
+  "style": 28,
+  "color": 2,
+  "name": "Alexey Toropchenko"
+ },
+ "aliaksei_protas": {
+  "style": 10,
+  "color": 2,
+  "name": "Aliaksei Protas"
+ },
+ "andre_burakovsky": {
+  "style": 70,
+  "color": 1,
+  "name": "Andre Burakovsky"
+ },
+ "andrew_copp": {
+  "style": 60,
+  "color": 3,
+  "name": "Andrew Copp"
+ },
+ "anthony_beauvillier": {
+  "style": 0,
+  "color": 2,
+  "name": "Anthony Beauvillier"
+ },
+ "anton_lundell": {
+  "style": 44,
+  "color": 5,
+  "name": "Anton Lundell"
+ },
+ "arber_xhekaj": {
+  "style": 62,
+  "color": 1,
+  "name": "Arber Xhekaj"
+ },
+ "artem_zub": {
+  "style": 28,
+  "color": 0,
+  "name": "Artem Zub"
+ },
+ "artturi_lehkonen": {
+  "style": 60,
+  "color": 5,
+  "name": "Artturi Lehkonen"
+ },
+ "artyom_levshunov": {
+  "style": 27,
+  "color": 2,
+  "name": "Artyom Levshunov"
+ },
+ "austin_watson": {
+  "style": 62,
+  "color": 4,
+  "name": "Austin Watson"
+ },
+ "blake_coleman": {
+  "style": 42,
+  "color": 4,
+  "name": "Blake Coleman"
+ },
+ "bobby_brink": {
+  "style": 61,
+  "color": 2,
+  "name": "Bobby Brink"
+ },
+ "braden_schneider": {
+  "style": 28,
+  "color": 2,
+  "name": "Braden Schneider"
+ },
+ "brady_skjei": {
+  "style": 71,
+  "color": 1,
+  "name": "Brady Skjei"
+ },
+ "brandon_carlo": {
+  "style": 37,
+  "color": 2,
+  "name": "Brandon Carlo"
+ },
+ "brandon_hagel": {
+  "style": 71,
+  "color": 2,
+  "name": "Brandon Hagel"
+ },
+ "brandon_tanev": {
+  "style": 18,
+  "color": 0,
+  "name": "Brandon Tanev"
+ },
+ "brandt_clarke": {
+  "style": 28,
+  "color": 4,
+  "name": "Brandt Clarke"
+ },
+ "brayden_mcnabb": {
+  "style": 60,
+  "color": 2,
+  "name": "Brayden McNabb"
+ },
+ "brennan_othmann": {
+  "style": 70,
+  "color": 2,
+  "name": "Brennan Othmann"
+ },
+ "brett_kulak": {
+  "style": 28,
+  "color": 4,
+  "name": "Brett Kulak"
+ },
+ "brian_dumoulin": {
+  "style": 37,
+  "color": 0,
+  "name": "Brian Dumoulin"
+ },
+ "brock_nelson": {
+  "style": 44,
+  "color": 0,
+  "name": "Brock Nelson"
+ },
+ "bryan_rust": {
+  "style": 28,
+  "color": 2,
+  "name": "Bryan Rust"
+ },
+ "calvin_de_haan": {
+  "style": 37,
+  "color": 2,
+  "name": "Calvin de Haan"
+ },
+ "cam_york": {
+  "style": 18,
+  "color": 8,
+  "name": "Cam York"
+ },
+ "cody_ceci": {
+  "style": 62,
+  "color": 1,
+  "name": "Cody Ceci"
+ },
+ "cole_eiserman": {
+  "style": 32,
+  "color": 4,
+  "name": "Cole Eiserman"
+ },
+ "cole_sillinger": {
+  "style": 23,
+  "color": 2,
+  "name": "Cole Sillinger"
+ },
+ "colton_sissons": {
+  "style": 60,
+  "color": 10,
+  "name": "Colton Sissons"
+ },
+ "connor_mcmichael": {
+  "style": 39,
+  "color": 2,
+  "name": "Connor McMichael"
+ },
+ "connor_murphy": {
+  "style": 28,
+  "color": 11,
+  "name": "Connor Murphy"
+ },
+ "connor_zary": {
+  "style": 70,
+  "color": 4,
+  "name": "Connor Zary"
+ },
+ "conor_garland": {
+  "style": 42,
+  "color": 1,
+  "name": "Conor Garland"
+ },
+ "conor_geekie": {
+  "style": 42,
+  "color": 2,
+  "name": "Conor Geekie"
+ },
+ "conor_sheary": {
+  "style": 44,
+  "color": 1,
+  "name": "Conor Sheary"
+ },
+ "cutter_gauthier": {
+  "style": 22,
+  "color": 2,
+  "name": "Cutter Gauthier"
+ },
+ "dakota_joshua": {
+  "style": 10,
+  "color": 0,
+  "name": "Dakota Joshua"
+ },
+ "darcy_kuemper": {
+  "style": 44,
+  "color": 5,
+  "name": "Darcy Kuemper"
+ },
+ "darren_raddysh": {
+  "style": 57,
+  "color": 4,
+  "name": "Darren Raddysh"
+ },
+ "david_jiricek": {
+  "style": 47,
+  "color": 2,
+  "name": "David Jiricek"
+ },
+ "david_kampf": {
+  "style": 30,
+  "color": 2,
+  "name": "David Kampf"
+ },
+ "david_perron": {
+  "style": 69,
+  "color": 2,
+  "name": "David Perron"
+ },
+ "dawson_mercer": {
+  "style": 61,
+  "color": 4,
+  "name": "Dawson Mercer"
+ },
+ "devon_levi": {
+  "style": 54,
+  "color": 1,
+  "name": "Devon Levi"
+ },
+ "dmitri_voronkov": {
+  "style": 10,
+  "color": 1,
+  "name": "Dmitri Voronkov"
+ },
+ "dominik_kubalik": {
+  "style": 27,
+  "color": 2,
+  "name": "Dominik Kubalík"
+ },
+ "dustin_wolf": {
+  "style": 23,
+  "color": 8,
+  "name": "Dustin Wolf"
+ },
+ "dylan_guenther": {
+  "style": 30,
+  "color": 1,
+  "name": "Dylan Guenther"
+ },
+ "dylan_holloway": {
+  "style": 3,
+  "color": 3,
+  "name": "Dylan Holloway"
+ },
+ "dylan_samberg": {
+  "style": 44,
+  "color": 2,
+  "name": "Dylan Samberg"
+ },
+ "eeli_tolvanen": {
+  "style": 69,
+  "color": 4,
+  "name": "Eeli Tolvanen"
+ },
+ "eetu_luostarinen": {
+  "style": 61,
+  "color": 2,
+  "name": "Eetu Luostarinen"
+ },
+ "erik_brannstrom": {
+  "style": 10,
+  "color": 5,
+  "name": "Erik Brännström"
+ },
+ "erik_cernak": {
+  "style": 37,
+  "color": 3,
+  "name": "Erik Cernak"
+ },
+ "erik_gudbranson": {
+  "style": 37,
+  "color": 2,
+  "name": "Erik Gudbranson"
+ },
+ "erik_gustafsson": {
+  "style": 37,
+  "color": 1,
+  "name": "Erik Gustafsson"
+ },
+ "erik_haula": {
+  "style": 62,
+  "color": 1,
+  "name": "Erik Haula"
+ },
+ "esa_lindell": {
+  "style": 7,
+  "color": 5,
+  "name": "Esa Lindell"
+ },
+ "ethan_bear": {
+  "style": 37,
+  "color": 0,
+  "name": "Ethan Bear"
+ },
+ "evan_bouchard": {
+  "style": 36,
+  "color": 1,
+  "name": "Evan Bouchard"
+ },
+ "evan_rodrigues": {
+  "style": 44,
+  "color": 0,
+  "name": "Evan Rodrigues"
+ },
+ "fabian_zetterlund": {
+  "style": 47,
+  "color": 5,
+  "name": "Fabian Zetterlund"
+ },
+ "fedor_svechkov": {
+  "style": 27,
+  "color": 2,
+  "name": "Fedor Svechkov"
+ },
+ "filip_gustavsson": {
+  "style": 44,
+  "color": 3,
+  "name": "Filip Gustavsson"
+ },
+ "frank_nazar": {
+  "style": 61,
+  "color": 0,
+  "name": "Frank Nazar"
+ },
+ "frank_vatrano": {
+  "style": 62,
+  "color": 1,
+  "name": "Frank Vatrano"
+ },
+ "frederick_gaudreau": {
+  "style": 37,
+  "color": 1,
+  "name": "Frederick Gaudreau"
+ },
+ "gage_goncalves": {
+  "style": 30,
+  "color": 2,
+  "name": "Gage Goncalves"
+ },
+ "garnet_hathaway": {
+  "style": 54,
+  "color": 1,
+  "name": "Garnet Hathaway"
+ },
+ "gavin_brindley": {
+  "style": 54,
+  "color": 2,
+  "name": "Gavin Brindley"
+ },
+ "gavin_mckenna": {
+  "style": 22,
+  "color": 3,
+  "name": "Gavin McKenna"
+ },
+ "gustav_forsling": {
+  "style": 60,
+  "color": 5,
+  "name": "Gustav Forsling"
+ },
+ "hampus_lindholm": {
+  "style": 37,
+  "color": 5,
+  "name": "Hampus Lindholm"
+ },
+ "henri_jokiharju": {
+  "style": 44,
+  "color": 2,
+  "name": "Henri Jokiharju"
+ },
+ "igor_shesterkin": {
+  "style": 72,
+  "color": 1,
+  "name": "Igor Shesterkin"
+ },
+ "ilya_sorokin": {
+  "style": 0,
+  "color": 2,
+  "name": "Ilya Sorokin"
+ },
+ "isac_lundestrom": {
+  "style": 37,
+  "color": 2,
+  "name": "Isac Lundeström"
+ },
+ "ivan_barbashev": {
+  "style": 28,
+  "color": 3,
+  "name": "Ivan Barbashev"
+ },
+ "ivan_demidov": {
+  "style": 17,
+  "color": 2,
+  "name": "Ivan Demidov"
+ },
+ "ivan_miroshnichenko": {
+  "style": 10,
+  "color": 4,
+  "name": "Ivan Miroshnichenko"
+ },
+ "ivan_provorov": {
+  "style": 42,
+  "color": 2,
+  "name": "Ivan Provorov"
+ },
+ "ivar_stenberg": {
+  "style": 22,
+  "color": 5,
+  "name": "Ivar Stenberg"
+ },
+ "jack_mcbain": {
+  "style": 69,
+  "color": 1,
+  "name": "Jack McBain"
+ },
+ "jack_quinn": {
+  "style": 70,
+  "color": 2,
+  "name": "Jack Quinn"
+ },
+ "jackson_blake": {
+  "style": 22,
+  "color": 5,
+  "name": "Jackson Blake"
+ },
+ "jackson_lacombe": {
+  "style": 54,
+  "color": 5,
+  "name": "Jackson LaCombe"
+ },
+ "jacob_middleton": {
+  "style": 37,
+  "color": 2,
+  "name": "Jake Middleton"
+ },
+ "jake_debrusk": {
+  "style": 62,
+  "color": 1,
+  "name": "Jake Debrusk"
+ },
+ "jake_evans": {
+  "style": 28,
+  "color": 1,
+  "name": "Jake Evans"
+ },
+ "jake_mccabe": {
+  "style": 60,
+  "color": 2,
+  "name": "Jake McCabe"
+ },
+ "jake_neighbours": {
+  "style": 62,
+  "color": 3,
+  "name": "Jake Neighbours"
+ },
+ "jake_walman": {
+  "style": 18,
+  "color": 0,
+  "name": "Jake Walman"
+ },
+ "jakob_silfverberg": {
+  "style": 37,
+  "color": 4,
+  "name": "Jakob Silfverberg"
+ },
+ "james_hagens": {
+  "style": 14,
+  "color": 2,
+  "name": "James Hagens"
+ },
+ "jamie_drysdale": {
+  "style": 70,
+  "color": 1,
+  "name": "Jamie Drysdale"
+ },
+ "jamie_oleksiak": {
+  "style": 10,
+  "color": 4,
+  "name": "Jamie Oleksiak"
+ },
+ "jan_rutta": {
+  "style": 37,
+  "color": 2,
+  "name": "Jan Rutta"
+ },
+ "jared_mccann": {
+  "style": 28,
+  "color": 2,
+  "name": "Jared McCann"
+ },
+ "jared_spurgeon": {
+  "style": 69,
+  "color": 0,
+  "name": "Jared Spurgeon"
+ },
+ "jason_dickinson": {
+  "style": 27,
+  "color": 1,
+  "name": "Jason Dickinson"
+ },
+ "jason_zucker": {
+  "style": 37,
+  "color": 2,
+  "name": "Jason Zucker"
+ },
+ "jean_gabriel_pageau": {
+  "style": 37,
+  "color": 2,
+  "name": "Jean-Gabriel Pageau"
+ },
+ "jeff_petry": {
+  "style": 62,
+  "color": 2,
+  "name": "Jeff Petry"
+ },
+ "jeremy_lauzon": {
+  "style": 0,
+  "color": 1,
+  "name": "Jérémy Lauzon"
+ },
+ "jiri_kulich": {
+  "style": 54,
+  "color": 2,
+  "name": "Jiri Kulich"
+ },
+ "joe_veleno": {
+  "style": 65,
+  "color": 0,
+  "name": "Joseph Veleno"
+ },
+ "joel_edmundson": {
+  "style": 37,
+  "color": 1,
+  "name": "Joel Edmundson"
+ },
+ "john_gibson": {
+  "style": 37,
+  "color": 2,
+  "name": "John Gibson"
+ },
+ "john_marino": {
+  "style": 30,
+  "color": 1,
+  "name": "John Marino"
+ },
+ "johnathan_kovacevic": {
+  "style": 10,
+  "color": 0,
+  "name": "Johnathan Kovacevic"
+ },
+ "jonas_brodin": {
+  "style": 8,
+  "color": 3,
+  "name": "Jonas Brodin"
+ },
+ "jordan_binnington": {
+  "style": 10,
+  "color": 4,
+  "name": "Jordan Binnington"
+ },
+ "jordan_martinook": {
+  "style": 37,
+  "color": 0,
+  "name": "Jordan Martinook"
+ },
+ "jordan_spence": {
+  "style": 9,
+  "color": 0,
+  "name": "Jordan Spence"
+ },
+ "josh_doan": {
+  "style": 42,
+  "color": 4,
+  "name": "Josh Doan"
+ },
+ "josh_manson": {
+  "style": 28,
+  "color": 4,
+  "name": "Josh Manson"
+ },
+ "josh_norris": {
+  "style": 61,
+  "color": 2,
+  "name": "Josh Norris"
+ },
+ "jt_compher": {
+  "style": 28,
+  "color": 6,
+  "name": "J.T. Compher"
+ },
+ "juuse_saros": {
+  "style": 32,
+  "color": 2,
+  "name": "Juuse Saros"
+ },
+ "kaiden_guhle": {
+  "style": 23,
+  "color": 3,
+  "name": "Kaiden Guhle"
+ },
+ "kasperi_kapanen": {
+  "style": 69,
+  "color": 4,
+  "name": "Kasperi Kapanen"
+ },
+ "kevin_bahl": {
+  "style": 23,
+  "color": 1,
+  "name": "Kevin Bahl"
+ },
+ "kevin_korchinski": {
+  "style": 62,
+  "color": 2,
+  "name": "Kevin Korchinski"
+ },
+ "kiefer_sherwood": {
+  "style": 8,
+  "color": 0,
+  "name": "Kiefer Sherwood"
+ },
+ "kirill_marchenko": {
+  "style": 42,
+  "color": 1,
+  "name": "Kirill Marchenko"
+ },
+ "lane_hutson": {
+  "style": 14,
+  "color": 4,
+  "name": "Lane Hutson"
+ },
+ "lars_eller": {
+  "style": 47,
+  "color": 3,
+  "name": "Lars Eller"
+ },
+ "lawson_crouse": {
+  "style": 60,
+  "color": 11,
+  "name": "Lawson Crouse"
+ },
+ "liam_ohgren": {
+  "style": 8,
+  "color": 2,
+  "name": "Liam Ohgren"
+ },
+ "linus_ullmark": {
+  "style": 39,
+  "color": 3,
+  "name": "Linus Ullmark"
+ },
+ "logan_stankoven": {
+  "style": 10,
+  "color": 2,
+  "name": "Logan Stankoven"
+ },
+ "lukas_reichel": {
+  "style": 28,
+  "color": 2,
+  "name": "Lukas Reichel"
+ },
+ "luke_hughes": {
+  "style": 39,
+  "color": 2,
+  "name": "Luke Hughes"
+ },
+ "marco_rossi": {
+  "style": 9,
+  "color": 3,
+  "name": "Marco Rossi"
+ },
+ "marcus_johansson": {
+  "style": 28,
+  "color": 1,
+  "name": "Marcus Johansson"
+ },
+ "marcus_pettersson": {
+  "style": 37,
+  "color": 2,
+  "name": "Marcus Pettersson"
+ },
+ "martin_fehervary": {
+  "style": 10,
+  "color": 4,
+  "name": "Martin Fehérváry"
+ },
+ "mason_appleton": {
+  "style": 71,
+  "color": 8,
+  "name": "Mason Appleton"
+ },
+ "mason_lohrei": {
+  "style": 71,
+  "color": 6,
+  "name": "Mason Lohrei"
+ },
+ "mathieu_joseph": {
+  "style": 4,
+  "color": 0,
+  "name": "Mathieu Joseph"
+ },
+ "mathieu_olivier": {
+  "style": 58,
+  "color": 4,
+  "name": "Mathieu Olivier"
+ },
+ "matias_maccelli": {
+  "style": 62,
+  "color": 2,
+  "name": "Matias Maccelli"
+ },
+ "matt_grzelcyk": {
+  "style": 27,
+  "color": 1,
+  "name": "Matt Grzelcyk"
+ },
+ "matt_roy": {
+  "style": 42,
+  "color": 2,
+  "name": "Matt Roy"
+ },
+ "matthew_rempe": {
+  "style": 22,
+  "color": 4,
+  "name": "Matt Rempe"
+ },
+ "matthew_schaefer": {
+  "style": 28,
+  "color": 1,
+  "name": "Matthew Schaefer"
+ },
+ "matthew_wood": {
+  "style": 14,
+  "color": 3,
+  "name": "Matthew Wood"
+ },
+ "mattias_ekholm": {
+  "style": 60,
+  "color": 5,
+  "name": "Mattias Ekholm"
+ },
+ "mattias_samuelsson": {
+  "style": 37,
+  "color": 2,
+  "name": "Mattias Samuelsson"
+ },
+ "mavrik_bourque": {
+  "style": 30,
+  "color": 2,
+  "name": "Mavrik Bourque"
+ },
+ "maxim_tsyplakov": {
+  "style": 28,
+  "color": 2,
+  "name": "Maxim Tsyplakov"
+ },
+ "michael_bunting": {
+  "style": 69,
+  "color": 10,
+  "name": "Michael Bunting"
+ },
+ "michael_kesselring": {
+  "style": 28,
+  "color": 4,
+  "name": "Michael Kesselring"
+ },
+ "michael_matheson": {
+  "style": 44,
+  "color": 11,
+  "name": "Mike Matheson"
+ },
+ "michael_misa": {
+  "style": 7,
+  "color": 1,
+  "name": "Michael Misa"
+ },
+ "mikael_backlund": {
+  "style": 44,
+  "color": 1,
+  "name": "Mikael Backlund"
+ },
+ "miles_wood": {
+  "style": 37,
+  "color": 2,
+  "name": "Miles Wood"
+ },
+ "morgan_frost": {
+  "style": 23,
+  "color": 1,
+  "name": "Morgan Frost"
+ },
+ "morgan_geekie": {
+  "style": 57,
+  "color": 5,
+  "name": "Morgan Geekie"
+ },
+ "nate_schmidt": {
+  "style": 57,
+  "color": 9,
+  "name": "Nate Schmidt"
+ },
+ "neal_pionk": {
+  "style": 37,
+  "color": 2,
+  "name": "Neal Pionk"
+ },
+ "nicholas_robertson": {
+  "style": 10,
+  "color": 0,
+  "name": "Nick Robertson"
+ },
+ "nick_cousins": {
+  "style": 44,
+  "color": 10,
+  "name": "Nick Cousins"
+ },
+ "nick_jensen": {
+  "style": 60,
+  "color": 2,
+  "name": "Nick Jensen"
+ },
+ "nick_leddy": {
+  "style": 37,
+  "color": 2,
+  "name": "Nick Leddy"
+ },
+ "nick_paul": {
+  "style": 65,
+  "color": 2,
+  "name": "Nick Paul"
+ },
+ "nick_schmaltz": {
+  "style": 23,
+  "color": 1,
+  "name": "Nick Schmaltz"
+ },
+ "nicolas_hague": {
+  "style": 62,
+  "color": 1,
+  "name": "Nicolas Hague"
+ },
+ "nicolas_roy": {
+  "style": 69,
+  "color": 1,
+  "name": "Nicolas Roy"
+ },
+ "nikita_zadorov": {
+  "style": 37,
+  "color": 2,
+  "name": "Nikita Zadorov"
+ },
+ "niko_mikkola": {
+  "style": 44,
+  "color": 5,
+  "name": "Niko Mikkola"
+ },
+ "nils_lundkvist": {
+  "style": 28,
+  "color": 4,
+  "name": "Nils Lundkvist"
+ },
+ "noah_cates": {
+  "style": 72,
+  "color": 1,
+  "name": "Noah Cates"
+ },
+ "oliver_bjorkstrand": {
+  "style": 63,
+  "color": 2,
+  "name": "Oliver Bjorkstrand"
+ },
+ "ondrej_palat": {
+  "style": 47,
+  "color": 2,
+  "name": "Ondrej Palat"
+ },
+ "paul_cotter": {
+  "style": 63,
+  "color": 1,
+  "name": "Paul Cotter"
+ },
+ "pavel_dorofeyev": {
+  "style": 10,
+  "color": 5,
+  "name": "Pavel Dorofeyev"
+ },
+ "pavel_zacha": {
+  "style": 37,
+  "color": 2,
+  "name": "Pavel Zacha"
+ },
+ "peyton_krebs": {
+  "style": 22,
+  "color": 2,
+  "name": "Peyton Krebs"
+ },
+ "philip_broberg": {
+  "style": 37,
+  "color": 3,
+  "name": "Philip Broberg"
+ },
+ "philip_tomasino": {
+  "style": 61,
+  "color": 2,
+  "name": "Phil Tomasino"
+ },
+ "philipp_kurashev": {
+  "style": 61,
+  "color": 2,
+  "name": "Philipp Kurashev"
+ },
+ "phillip_danault": {
+  "style": 37,
+  "color": 0,
+  "name": "Phillip Danault"
+ },
+ "pierre_olivier_joseph": {
+  "style": 29,
+  "color": 0,
+  "name": "Pierre-Olivier Joseph"
+ },
+ "pius_suter": {
+  "style": 28,
+  "color": 2,
+  "name": "Pius Suter"
+ },
+ "porter_martone": {
+  "style": 23,
+  "color": 2,
+  "name": "Porter Martone"
+ },
+ "pyotr_kochetkov": {
+  "style": 9,
+  "color": 2,
+  "name": "Pyotr Kochetkov"
+ },
+ "radko_gudas": {
+  "style": 58,
+  "color": 1,
+  "name": "Radko Gudas"
+ },
+ "rasmus_andersson": {
+  "style": 62,
+  "color": 2,
+  "name": "Rasmus Andersson"
+ },
+ "rasmus_sandin": {
+  "style": 61,
+  "color": 13,
+  "name": "Rasmus Sandin"
+ },
+ "reilly_smith": {
+  "style": 37,
+  "color": 2,
+  "name": "Reilly Smith"
+ },
+ "ross_colton": {
+  "style": 23,
+  "color": 2,
+  "name": "Ross Colton"
+ },
+ "rutger_mcgroarty": {
+  "style": 9,
+  "color": 2,
+  "name": "Rutger McGroarty"
+ },
+ "ryan_graves": {
+  "style": 62,
+  "color": 2,
+  "name": "Ryan Graves"
+ },
+ "ryan_hartman": {
+  "style": 39,
+  "color": 1,
+  "name": "Ryan Hartman"
+ },
+ "ryan_lindgren": {
+  "style": 42,
+  "color": 3,
+  "name": "Ryan Lindgren"
+ },
+ "ryan_mcleod": {
+  "style": 42,
+  "color": 3,
+  "name": "Ryan McLeod"
+ },
+ "ryan_pulock": {
+  "style": 37,
+  "color": 2,
+  "name": "Ryan Pulock"
+ },
+ "ryker_evans": {
+  "style": 22,
+  "color": 2,
+  "name": "Ryker Evans"
+ },
+ "sam_dickinson": {
+  "style": 22,
+  "color": 1,
+  "name": "Sam Dickinson"
+ },
+ "sam_rinzel": {
+  "style": 54,
+  "color": 6,
+  "name": "Sam Rinzel"
+ },
+ "sammy_blais": {
+  "style": 42,
+  "color": 2,
+  "name": "Samuel Blais"
+ },
+ "scott_laughton": {
+  "style": 37,
+  "color": 2,
+  "name": "Scott Laughton"
+ },
+ "scott_mayfield": {
+  "style": 37,
+  "color": 3,
+  "name": "Scott Mayfield"
+ },
+ "sean_durzi": {
+  "style": 30,
+  "color": 1,
+  "name": "Sean Durzi"
+ },
+ "sean_kuraly": {
+  "style": 44,
+  "color": 2,
+  "name": "Sean Kuraly"
+ },
+ "sean_walker": {
+  "style": 28,
+  "color": 0,
+  "name": "Sean Walker"
+ },
+ "seth_jarvis": {
+  "style": 18,
+  "color": 1,
+  "name": "Seth Jarvis"
+ },
+ "shakir_mukhamadullin": {
+  "style": 14,
+  "color": 1,
+  "name": "Shakir Mukhamadullin"
+ },
+ "shane_pinto": {
+  "style": 23,
+  "color": 1,
+  "name": "Shane Pinto"
+ },
+ "simon_edvinsson": {
+  "style": 42,
+  "color": 11,
+  "name": "Simon Edvinsson"
+ },
+ "simon_holmstrom": {
+  "style": 9,
+  "color": 5,
+  "name": "Simon Holmstrom"
+ },
+ "simon_nemec": {
+  "style": 23,
+  "color": 1,
+  "name": "Simon Nemec"
+ },
+ "stefan_noesen": {
+  "style": 59,
+  "color": 2,
+  "name": "Stefan Noesen"
+ },
+ "tanner_jeannot": {
+  "style": 23,
+  "color": 4,
+  "name": "Tanner Jeannot"
+ },
+ "taylor_raddysh": {
+  "style": 37,
+  "color": 4,
+  "name": "Taylor Raddysh"
+ },
+ "thatcher_demko": {
+  "style": 62,
+  "color": 2,
+  "name": "Thatcher Demko"
+ },
+ "thomas_harley": {
+  "style": 28,
+  "color": 1,
+  "name": "Thomas Harley"
+ },
+ "timothy_liljegren": {
+  "style": 39,
+  "color": 2,
+  "name": "Timothy Liljegren"
+ },
+ "tony_deangelo": {
+  "style": 18,
+  "color": 1,
+  "name": "Tony DeAngelo"
+ },
+ "travis_hamonic": {
+  "style": 32,
+  "color": 1,
+  "name": "Travis Hamonic"
+ },
+ "trent_frederic": {
+  "style": 30,
+  "color": 6,
+  "name": "Trent Frederic"
+ },
+ "trevor_moore": {
+  "style": 18,
+  "color": 1,
+  "name": "Trevor Moore"
+ },
+ "trevor_van_riemsdyk": {
+  "style": 23,
+  "color": 2,
+  "name": "Trevor Van Riemsdyk"
+ },
+ "tye_kartye": {
+  "style": 18,
+  "color": 1,
+  "name": "Tye Kartye"
+ },
+ "tyler_bertuzzi": {
+  "style": 42,
+  "color": 2,
+  "name": "Tyler Bertuzzi"
+ },
+ "tyler_kleven": {
+  "style": 44,
+  "color": 0,
+  "name": "Tyler Kleven"
+ },
+ "tyler_motte": {
+  "style": 37,
+  "color": 2,
+  "name": "Tyler Motte"
+ },
+ "tyler_myers": {
+  "style": 27,
+  "color": 4,
+  "name": "Tyler Myers"
+ },
+ "victor_olofsson": {
+  "style": 37,
+  "color": 1,
+  "name": "Victor Olofsson"
+ },
+ "viktor_arvidsson": {
+  "style": 28,
+  "color": 2,
+  "name": "Viktor Arvidsson"
+ },
+ "vince_dunn": {
+  "style": 62,
+  "color": 2,
+  "name": "Vince Dunn"
+ },
+ "warren_foegele": {
+  "style": 61,
+  "color": 3,
+  "name": "Warren Foegele"
+ },
+ "will_smith": {
+  "style": 22,
+  "color": 3,
+  "name": "Will Smith"
+ },
+ "william_carrier": {
+  "style": 62,
+  "color": 0,
+  "name": "William Carrier"
+ },
+ "william_karlsson": {
+  "style": 62,
+  "color": 3,
+  "name": "William Karlsson"
+ },
+ "wyatt_johnston": {
+  "style": 8,
+  "color": 2,
+  "name": "Wyatt Johnston"
+ },
+ "yanni_gourde": {
+  "style": 28,
+  "color": 2,
+  "name": "Yanni Gourde"
+ },
+ "yegor_chinakhov": {
+  "style": 61,
+  "color": 2,
+  "name": "Egor Chinakhov"
+ },
+ "yegor_sharangovich": {
+  "style": 44,
+  "color": 2,
+  "name": "Yegor Sharangovich"
+ },
+ "zach_benson": {
+  "style": 24,
+  "color": 4,
+  "name": "Zach Benson"
+ },
+ "zach_whitecloud": {
+  "style": 32,
+  "color": 2,
+  "name": "Zach Whitecloud"
+ },
+ "zachary_bolduc": {
+  "style": 7,
+  "color": 2,
+  "name": "Zachary Bolduc"
+ }
+}
