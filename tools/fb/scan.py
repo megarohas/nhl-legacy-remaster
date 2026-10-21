@@ -1,6 +1,7 @@
 """Линейный проход по CAS NHL 24 без TOC: манифест бандла, за ним его ebx/res/chunks подряд.
 
-  python -m fb.scan [--jobs 3] [--only installpackage_00/cas_01]
+  python -m fb.scan [--jobs 3] [--only installpackage_00/cas_01] [--resume]
+--resume — пропустить CAS, у которых уже есть готовый jsonl (файл пишется через .part и переименовывается в конце).
 Пишет game/work/nhl24/catalog/scan/<пакет>_<cas>.jsonl: записи bundle/ebx/res/chunk/orphan
 с координатами (cas, offset, csize, size). Сводка — fb.catalog.
 """
@@ -56,7 +57,7 @@ def scan_file(path):
     fsize = os.path.getsize(path)
     t0 = time.time()
     stats = {"bundles": 0, "ebx": 0, "res": 0, "chunks": 0, "missing": 0, "orphan_bytes": 0}
-    with open(path, "rb", buffering=1 << 16) as f, open(out_path, "w", encoding="utf-8") as out:
+    with open(path, "rb", buffering=1 << 16) as f, open(out_path + ".part", "w", encoding="utf-8") as out:
         pos = 0
         bid = 0
         while pos + 8 <= fsize:
@@ -137,6 +138,7 @@ def scan_file(path):
                 continue
             stats["orphan_bytes"] += pos - start
             out.write(json.dumps({"k": "orphan", "cas": key, "ofs": start, "csize": pos - start, "usize": usum}) + "\n")
+    os.replace(out_path + ".part", out_path)
     stats["sec"] = round(time.time() - t0, 1)
     return key, stats
 
@@ -145,8 +147,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--jobs", type=int, default=3)
     ap.add_argument("--only", default=None, help="подстрока пути CAS")
+    ap.add_argument("--resume", action="store_true", help="пропустить CAS с готовым jsonl")
     a = ap.parse_args()
     files = [p for p in cas_files() if not a.only or a.only in p.replace("\\", "/")]
+    if a.resume:
+        done = lambda p: os.path.exists(os.path.join(OUT, cas_key(p).replace("/", "_") + ".jsonl"))
+        print(f"--resume: готово {sum(map(done, files))} из {len(files)}", flush=True)
+        files = [p for p in files if not done(p)]
     with Pool(a.jobs) as pool:
         for key, st in pool.imap_unordered(scan_file, files):
             print(key, st, flush=True)
