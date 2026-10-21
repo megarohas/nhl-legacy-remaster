@@ -124,11 +124,14 @@ def cmd_survey(a):
     if not ims:
         sys.exit("ни одной формы — проверьте --source и каталог дампа (python tools/eaimport.py status)")
     w, h = ims[0].size
+    # обзор части клубов (--clubs) — в свой лист, не поверх общих survey_N.png (21.10: обзор TBL затёр survey_0)
+    stem = "survey" + (f"_{'-'.join(clubs)}" if a.clubs else "")
     for part in range(0, len(ims), 16):
         chunk = ims[part:part + 16]
         sheet = Image.new("RGB", (2 * (w + 4), ((len(chunk) + 1) // 2) * (h + 4)), (10, 10, 12))
         for k, im in enumerate(chunk):
             sheet.paste(im, ((k % 2) * (w + 4), (k // 2) * (h + 4)))
-        sheet.save(os.path.join(out_dir, f"survey_{part // 16}.png"))
+        many = not a.clubs or len(ims) > 16
+        sheet.save(os.path.join(out_dir, f"{stem}_{part // 16}.png" if many else f"{stem}.png"))
     print(f"форм {len(ims)}, листов {(len(ims) + 15) // 16} → {out_dir}" + (f"; нет: {miss}" if miss else ""))
     return 0

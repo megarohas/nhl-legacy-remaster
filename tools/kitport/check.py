@@ -60,12 +60,31 @@ def shield_y(M, t):
     c = t[ys, xs, :3].astype(float)
     sel = (np.abs(P[:, 0]) < 0.003) & (P[:, 2] > 0.05) & (P[:, 1] > 1.59) & (P[:, 1] < 1.66)
     yy, cc = P[sel, 1], c[sel]
-    sil = (cc.mean(1) > 110) & (np.abs(cc[:, 0] - cc[:, 1]) < 40)
-    red = (cc[:, 0] > cc[:, 1] + 60) & (cc[:, 0] > 100) & (yy > 1.63)
+    sil = (cc.mean(1) > 110) & (np.abs(cc[:, 0] - cc[:, 1]) < 40) & (cc.max(1) - cc.min(1) < 14)   # серый: не смесь кромки с тканью
+    # кромка ворота — сплошная полоса цвета верха (верхние 2 мм середины переда) сверху вниз: окно 1 мм с шагом 0,25 мм
+    # (точек мало — по одной-две на полмиллиметра), конец — первое окно, где цвета кромки меньше половины. У NJD кромка
+    # красная, у TBL дома — белая (21.10: белую кромку замер принимал за щит — «щит 1,622–1,647», кромки нет)
+    top = yy.max() if len(yy) else 0.0
+    trim_c = np.median(cc[yy > top - 0.002], 0) if len(yy) else np.zeros(3)
+    in_trim = np.abs(cc - trim_c).max(1) < 45
+    b = top
+    while b > 1.59:
+        m = (yy <= b) & (yy > b - 0.001)
+        if m.sum() >= 3 and in_trim[m].mean() < 0.5:
+            break
+        b -= 0.00025
+    above = in_trim & (yy >= b)
+    edge = float(yy[above].min()) if above.any() else top
+    red = in_trim & (yy >= edge) & (yy > 1.63)
+    if red.any():                                      # выше низа кромки щита нет (там — кромка и её край)
+        sil &= (yy < edge) & ~in_trim                  # и не цвета кромки: у белой кромки её край — тоже «серебро»
+    low = (yy > 1.59) & (yy < 1.60)                    # ткань под щитом (у белой — тоже «серебро»: TBL выезд)
+    if low.any():
+        sil &= np.abs(cc - np.median(cc[low], 0)).max(1) > 20
     if not sil.any():
         return None, None, float(yy[red].min()) if red.any() else None
     s = np.sort(yy[sil])[::-1]                         # сверху вниз до первого разрыва: светлая ткань ниже — не щит
-    gap = np.nonzero(-np.diff(s) > 0.0015)[0]
+    gap = np.nonzero(-np.diff(s) > 0.004)[0]         # внутри щита — тёмные буквы NHL (до 3 мм)
     lo = float(s[gap[0]] if len(gap) else s[-1])
     return lo, float(s[0]), float(yy[red].min()) if red.any() else None
 

@@ -302,6 +302,14 @@ def main():
     s.add_argument("--clubs", default="", help="клубы через запятую (по умолчанию — все в слоте)")
     s.add_argument("--out", default=None)
     sub.add_parser("params", help="каталог параметров формы")
+    s = sub.add_parser("present", help="лист «ставим или правим» на форму слота: наша и оригинал, «одетый» свитер, "
+                                       "игрок целиком, каска, наклейка, шрифт")
+    s.add_argument("--clubs", default="", help="клубы через запятую (по умолчанию — все в слоте)")
+    s.add_argument("--kits", default="", help="формы через запятую: home,away (по умолчанию — все)")
+    s.add_argument("--name", default="", help="фамилия на спине (по умолчанию — звезда клуба, fb.jersey_mesh.STARS)")
+    s.add_argument("--number", default="", help="номер (по умолчанию — звезды клуба)")
+    s.add_argument("--letter", default="C", choices=("C", "A", ""), help="буква капитана (C, A; пусто — без буквы)")
+    s.add_argument("--out", default=None, help="папка листов (по умолчанию — compare/kitport/)")
     s = sub.add_parser("survey", help="обзор форм клубов источника: перед, плечо, ворот (разбор по типам)")
     s.add_argument("--source", default="nhl27")
     s.add_argument("--clubs", default="", help="папки клубов через запятую (по умолчанию — все)")
@@ -320,6 +328,9 @@ def main():
     if a.cmd == "survey":
         from . import survey
         return survey.cmd_survey(a)
+    if a.cmd == "present":
+        from . import present
+        return present.cmd_present(a)
     if a.cmd == "params":
         from . import params
         return params.cmd_params(a)
