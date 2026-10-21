@@ -1157,15 +1157,19 @@ def use_club(code):
     """Профиль клуба (edge_clubs.toml) → таблицы модуля: источник текстур (fb.kitsrc), кокетка, вставка, слот, гетры."""
     from . import kitsrc
     global YOKE, YOKE_KIND, INSERT_KITS, SLOT_KITS, LETTER_ZONES_FROM, SOCK_PARTS, BODY_KIND, COLLAR, YOKE_EA_KIND
-    global YOKE_SIDE_BLEND, SHIELD_OFFSET_CM, SHIELD_SCALE, SLEEVE_ZONES_FROM
+    global YOKE_SIDE_BLEND, SHIELD_OFFSET_CM, SHIELD_SCALE, SLEEVE_ZONES_FROM, BASE_NM_DECALS, COLLAR_TRIM
+    from . import kit_hybrid
     prof = club_profiles().get(code)
     if prof is None:
         sys.exit(f"{code}: нет профиля клуба в {CLUBS_TOML}")
-    kitsrc.use(prof.get("source", "nhl24"))
+    kitsrc.use(prof.get("source", "nhl24"), prof.get("source_kits"))   # source_kits: метка → папка источника
+    kit_hybrid.MERGE_PARTS = tuple(prof.get("merge_parts", ()))         # части одной нашивки (герб TBL) — одной
+    BASE_NM_DECALS = prof.get("base_normal_decals")
     YOKE = {(code, k): {"from": v} for k, v in prof.get("yoke", {}).items()}
     YOKE_KIND = prof.get("yoke_color", "green")
     BODY_KIND = prof.get("body_color", "light")
     COLLAR = prof.get("collar", "lace")
+    COLLAR_TRIM = prof.get("collar_trim", "auto")
     YOKE_EA_KIND = prof.get("yoke_shape_color")
     YOKE_SIDE_BLEND = prof.get("yoke_side_blend")
     SHIELD_OFFSET_CM = list(prof.get("shield_offset_cm", _SHIELD_DEFAULT[0]))
@@ -1421,6 +1425,12 @@ INSERT_LACE_Y = 1.617              # ниже — шнурки поверх вс
 INSERT_BAND = 0.015                # м за краем вставки — красное перекрашивается в ткань (там прежний перенос)
 INSERT_KITS = {("MIN", "away"), ("MIN", "home")}
 TRIM_SMOOTH = 25.0                 # град: сглаживание ширины кромки по углу
+# Кромка «ступенькой» (пользователь, 21.10, TBL; «таких форм в НХЛ много»): спереди узкая (часто с разрывом посередине),
+# сбоку — ступенька, сзади широкая — во всю ширину до шва обода (RING_KNOTS), не шире. Профиль collar_trim:
+# auto — по замеру источника (trim_profile: широкая / узкая ≥ TRIM_STEP_RATIO), step, smooth (как у MIN и NJD).
+COLLAR_TRIM = "auto"
+TRIM_STEP_RATIO = 2.0              # широкая часть во столько раз шире узкой — «ступенька»
+TRIM_STEP_SOFT = 1.5               # град: переход ступеньки и концов у разрыва (≈ 1–2 текселя)
 AA_PX = 2.0                        # ширина сглаживания краёв — в текселях сверхвыборки (×2): ≈ 1 тексель карты
 TRIM_CLEAR = 0.008                  # м за кромкой — зубцы прежней кромки убираются
 TRIM_INNER = 0.004                 # м: и на подвороте у края — кромкой
@@ -1555,6 +1565,45 @@ FOLD_INPAINT = 4.0                 # текселей: складки под з�
 N24_RELIEF_FLAT = [(0.465, 0.125, 0.535, 0.172),   # u0, v0, u1, v1 base_normal NHL 24: бирка на спине (под номером),
                    (0.398, 0.598, 0.462, 0.662),   # спонсор на груди (TRIA — у MIN; в цвете снят правилом [sponsor])
                    (0.538, 0.598, 0.602, 0.662)]   # и место второго спонсора
+BASE_NM_DECALS = None              # профиль base_normal_decals: "flat" — рельеф нашивок, которые EA «запекла» в
+#                                    _base_normal (TBL ten, 21.10: молния герба и YMCA), выравнивается по маске
+#                                    «готовый − основа»: цвет герба [crest_fit] сдвигает и уменьшает, а рельеф стоял бы на
+#                                    старом месте — двойной контур. None — как было (у MIN и NJD основа рельефа чистая)
+DECAL_FLAT_GROW = 20               # текселей 2048 (≈ 1,6 см): рельеф нашивки шире её цвета (TBL ten: фаска — до 8 px, след
+#                                    тени — до ~20; при 6 и 12 у герба оставался контур, 21.10)
+DECAL_FLAT_FEATHER = 10            # текселей: дальше — плавный переход к рельефу источника (без ступеньки по контуру)
+
+
+def decal_mask(code, kit, size):
+    """Нашивки источника на развёртке size²: |готовый − основа| > 30 (порог find_patches), замкнуто; -> вес 0…1:
+    1 — до DECAL_FLAT_GROW текселей от нашивки, дальше спад до 0 за DECAL_FLAT_FEATHER."""
+    from PIL import Image
+    from scipy import ndimage as ndi
+    club = Hy.CLUB_NAME[code]
+    c, b = (np.asarray(Image.open(J.n24_tex(club, kit, layer)).convert("RGB").resize((size, size))).astype(np.float64)
+            for layer in ("color", "base_color"))
+    m = ndi.binary_fill_holes(ndi.binary_closing(np.abs(c - b).sum(-1) > 30, iterations=3))
+    # каждая нашивка — выпуклой оболочкой: у герба TBL кольцо открыто (буква C), внутри между молнией и кольцом рельеф
+    # фаски источника шире запаса — оставались линии (21.10)
+    from PIL import ImageDraw
+    from scipy.spatial import ConvexHull
+    lab, n = ndi.label(m)
+    hull = Image.new("L", (size, size), 0)
+    dr = ImageDraw.Draw(hull)
+    for i, sl in enumerate(ndi.find_objects(lab)):
+        ys, xs = np.nonzero(lab[sl] == i + 1)
+        if len(ys) < 3:
+            continue
+        pts = np.stack([xs + sl[1].start, ys + sl[0].start], 1)
+        try:
+            dr.polygon([tuple(map(float, pts[k])) for k in ConvexHull(pts).vertices], fill=255)
+        except Exception:                                # вырожденный участок (линия) — как есть
+            continue
+    m |= np.asarray(hull) > 0
+    d = ndi.distance_transform_edt(~m)
+    return np.clip((DECAL_FLAT_GROW + DECAL_FLAT_FEATHER - d) / DECAL_FLAT_FEATHER, 0.0, 1.0)
+
+
 N24_SEAM_SIGMA = 6.0               # px (2048): что крупнее — складки NHL 24, не берутся
 RELIEF_TOP_NY = (0.35, 0.6)        # y нормали: выше — прежний рельеф Edge (верх плеч)
 WEAVE_CELL = (8, 6)                # период плетения в текселях (строки, столбцы) у карт 1024
@@ -2045,6 +2094,10 @@ def rebuild_relief(nm_path, code, kit, mesh, cmap, n_jt, painters=None):
     for u0, v0, u1, v1 in N24_RELIEF_FLAT:
         S2 = bn.shape[0]
         bn[int(v0 * S2):int(v1 * S2), int(u0 * S2):int(u1 * S2), :3] = (128, 128, 255)
+    if BASE_NM_DECALS == "flat":                         # профиль base_normal_decals: нашивки, «запечённые» в рельеф
+        w = decal_mask(code, kit, bn.shape[0])[..., None]
+        bn[..., :3] = bn[..., :3] * (1 - w) + np.array([128.0, 128.0, 255.0]) * w
+        print(f"  рельеф источника: нашивки выровнены (base_normal_decals), {int((w > 0.5).sum())} текселей 2048")
     nxy = bn[..., :2] / 127.5 - 1.0
     nxy = nxy - np.stack([ndi.gaussian_filter(nxy[..., c], N24_SEAM_SIGMA) for c in range(2)], -1)
     bn = bn.copy()
@@ -2237,7 +2290,7 @@ class TrimPaint:
         wid = np.interp(TH, th_w, w_w, period=360)
         texel = 0.0021 * 1024 / Ws
         cov = np.clip(0.5 + (wid - D) / G, 0, 1)
-        cov = np.where(B, (D < TRIM_INNER).astype(float), cov)
+        cov = np.where(B, ((D < TRIM_INNER) & (wid > 1e-4)).astype(float), cov)   # в разрыве кромки — и подворот без неё
         zone = m & msk & (D < wid + 3 * texel)
         out = out.copy()
         c = out[..., :3]
@@ -2282,6 +2335,8 @@ def trim_rule(code, kit, mesh, with_yoke=False):
     near = d < 0.003
     col = np.median(c[near], axis=0)
     is_trim = np.linalg.norm(c - col, axis=1) < 60
+    prof = trim_profile(d, th, is_trim)
+    mode = COLLAR_TRIM if COLLAR_TRIM != "auto" else ("step" if prof["step"] else "smooth")
     ths, wds = [], []
     for a in np.arange(-180, 180, 10.0):
         sel = (np.abs(((th - a) + 180) % 360 - 180) < 6) & (d < 0.03)
@@ -2296,15 +2351,59 @@ def trim_rule(code, kit, mesh, with_yoke=False):
     ker = np.exp(-0.5 * (np.arange(-2 * k, 2 * k + 1) / k) ** 2)
     ker /= ker.sum()
     wf = np.convolve(np.concatenate([wf[-2 * k:], wf, wf[:2 * k]]), ker, mode="valid")
+    wf = wf * TRIM_K
+    if mode == "step":
+        full, wf = step_width(prof)
+        print(f"  кромка ступенькой ({COLLAR_TRIM}): разрыв ±{prof['gap']:.0f}°, узкая {prof['narrow'] * 100:.2f} см "
+              f"× {TRIM_K}, ступенька {prof['step_at']:.0f}°, сзади — до обода (RING_KNOTS)")
     print("  кромка: цвет", np.round(col).tolist(), "ширина, см:",
-          {int(a): round(float(np.interp(a, full, wf)) * 100 * TRIM_K, 2) for a in (0, 45, 90, 135, 180)})
+          {int(a): round(float(np.interp(a, full, wf, period=360)) * 100, 2) for a in (0, 45, 90, 135, 180)})
     tl, bl = kit3d.raster_uv(n24, src.shape[0])
     yl, xl = np.nonzero(tl >= 0)
     lin_t = comp[w.g[n24["tri"][tl[yl, xl], 0]]] != main
     lining = np.median(src[yl[lin_t], xl[lin_t]], axis=0)
     # ткань у ворота (под кромкой, сзади и с боков): у формы без кокетки — одним цветом
     body_c = np.median(c[(d > 0.02) & (d < 0.035) & (np.abs(np.abs(th) - 120) < 40)], axis=0)
-    return TrimPaint(mesh, col, (full, wf * TRIM_K), lining, None if with_yoke else body_c)
+    return TrimPaint(mesh, col, (full, wf), lining, None if with_yoke else body_c)
+
+
+def trim_profile(d, th, is_trim):
+    """Ширина кромки источника по углу от середины переда (|θ|, шаг 1°): сплошная полоса цвета кромки от края ворота —
+    до первого миллиметра, где кромки меньше половины (ткань того же цвета ниже кокетки, NJD дома, — не кромка), и
+    её вид: разрыв спереди (до какого угла кромки нет), узкая и широкая части, угол ступеньки. -> dict."""
+    a_ = np.arange(0, 181, 1.0)
+    wd = np.zeros(len(a_))
+    ath = np.abs(th)
+    for i, a in enumerate(a_):
+        r = (np.abs(ath - a) < 1.5) & (d < 0.06)
+        if r.sum() < 10:
+            continue
+        mm = (d[r] / 0.001).astype(int)
+        cnt = np.bincount(mm, minlength=60)
+        hit = np.bincount(mm, weights=is_trim[r].astype(float), minlength=60)
+        frac = np.where(cnt > 0, hit / np.maximum(cnt, 1), np.nan)
+        k = 0
+        while k < len(frac) and (np.isnan(frac[k]) or frac[k] >= 0.5):
+            k += 1
+        wd[i] = k * 0.001
+    have = wd > 0.003
+    gap = float(a_[np.argmax(have)]) if not have[0] and have.any() else 0.0
+    narrow = float(np.median(wd[(a_ >= gap + 3) & (a_ <= gap + 30)]))
+    wide = float(np.median(wd[a_ >= 150]))
+    step = wide > 0.02 and wide >= TRIM_STEP_RATIO * max(narrow, 1e-4)
+    at = float(a_[(a_ > gap) & (wd > (narrow + wide) / 2)][0]) if step else None
+    return {"angles": a_, "width": wd, "gap": gap, "narrow": narrow, "wide": wide, "step": step, "step_at": at}
+
+
+def step_width(prof):
+    """Ширина кромки «ступенькой» по углу (−180…180, шаг 0,5°): в разрыве — 0, до ступеньки — узкая × TRIM_K, после —
+    до шва обода (RING_KNOTS), переходы — TRIM_STEP_SOFT. -> (углы, ширина, м)."""
+    full = np.arange(-180, 180, 0.5)
+    a = np.abs(full)
+    sm = lambda x: np.clip(0.5 + x / (2 * TRIM_STEP_SOFT), 0, 1)
+    ring = np.interp(a, *zip(*RING_KNOTS))
+    w = prof["narrow"] * TRIM_K + (ring - prof["narrow"] * TRIM_K) * sm(a - prof["step_at"])
+    return full, w * sm(a - prof["gap"])
 
 
 def brand_alpha():
@@ -2769,6 +2868,12 @@ def cmd_kit(a):
                                                   a.club, kit)
                 if heights is not None:                  # линия кокетки — как у YokePaint (по первой сборке она
                     yoke_rule["insert"].yoke_y = heights["front"]   # 1,625 — у угла вставки был зелёный «прыщ»)
+            if SLV_PARAM and (not cmaps or not os.path.exists(os.path.join(KITS_OUT, f"{a.club}_{kit}", "kit.json"))):
+                # первая сборка — и для сжатия полос рукава к кисти: без неё нет карты переноса (cmaps) и шаблона
+                # (kit.json). У MIN и NJD её всегда делают кокетка или вставка; у клуба без них (TBL, 21.10) полосы рукава
+                # шли без сжатия — под номер на рукаве («! полосы рукава: нет kit.json»; у первой формы — молча)
+                print("  полосы рукава: первая сборка комплекта — для сжатия к кисти")
+                pilot.cmd_build(SimpleNamespace(club=a.club, kits=kit, reuse=False))
             global SLV_COMPRESS
             SLV_COMPRESS = None
             if SLV_PARAM and cmaps:                     # сжатие полос к кисти — по зоне номера шаблона (правило [sleeve])
@@ -3608,8 +3713,9 @@ def helmet_from_source(code, kit, leg_art, leg_v, art, v, dst_root):
     import kitpaint as kp
     import teamart as ta
     club = CLUB_NAME[code]
-    png = os.path.join(kitsrc.extract_root(), f"club_{club}", "character", "skater", "league", "nhl", club, "adidas", kit,
-                       f"helmetlogo_adidas_{club}_{kit}_0_color.png")
+    src = kitsrc.folder(kit)                             # папка комплекта источника (профиль source_kits)
+    png = os.path.join(kitsrc.extract_root(), f"club_{club}", "character", "skater", "league", "nhl", club, "adidas", src,
+                       f"helmetlogo_adidas_{club}_{src}_0_color.png")
     if not os.path.exists(png):
         print(f"  наклейка {kit}: нет {png} — как у образца")
         return J.helmet_copy(leg_art, leg_v, art, v, dst_root)

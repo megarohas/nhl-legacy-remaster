@@ -615,8 +615,10 @@ LEG_SM = 16                        # блик ткани Legacy (медиана 
 
 
 def n24_tex(club, kit, layer):
-    """Текстура свитера adidas клуба из выгрузки источника (fb.kitsrc: NHL 24 или NHL 27)."""
+    """Текстура свитера adidas клуба из выгрузки источника (fb.kitsrc: NHL 24 или NHL 27); kit — метка формы, папка
+    комплекта — по source_kits профиля (kitsrc.folder)."""
     from . import kitsrc
+    kit = kitsrc.folder(kit)
     return os.path.join(kitsrc.extract_root(), f"club_{club}", "character", "skater", "league", "nhl", club, "adidas", kit,
                         f"jersey_adidas_{club}_{kit}_{layer}.png")
 

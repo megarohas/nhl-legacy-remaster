@@ -262,8 +262,44 @@ def uv_point(mesh, u, v):
     return w @ mesh["pos"][T], _unit(w @ mesh["nrm"][T])
 
 
+MERGE_PARTS = ()   # имена правил, чьи связные части — одна нашивка (fb.edge_kit.use_club: профиль merge_parts); () — как было
+
+
+def _match(lab, lid, sl, rules, defaults):
+    """Имя правила для участка lid (ближайшее uv центра, не дальше match_radius) или None."""
+    H = lab.shape[0]
+    ys, xs = np.nonzero(lab[sl] == lid)
+    u_c, v_c = (xs.mean() + sl[1].start + 0.5) / H, (ys.mean() + sl[0].start + 0.5) / H
+    best, bd = None, 1e9
+    for name, r in rules.items():
+        if "uv" in r and np.hypot(r["uv"][0] - u_c, r["uv"][1] - v_c) < bd:
+            best, bd = name, np.hypot(r["uv"][0] - u_c, r["uv"][1] - v_c)
+    return best if bd <= defaults.get("match_radius", 0.05) else None
+
+
+def merge_parts(lab, patches, rules, defaults, names):
+    """Участки, которые по месту — одна нашивка из names, — в один (метка, рамка — объединение). Герб TBL (21.10):
+    молния и кольцо — разные связные, рамка молнии выходит за кольцо (find_patches их не сливает), и [crest_fit]
+    уменьшал их порознь (0,75 и 0,99) — молния съёживалась внутри кольца. lab меняется на месте."""
+    out = list(patches)
+    for name in names:
+        grp = [p for p in out if _match(lab, p[0], p[1], rules, defaults) == name]
+        if len(grp) < 2:
+            continue
+        lid0 = grp[0][0]
+        sl = tuple(slice(min(p[1][k].start for p in grp), max(p[1][k].stop for p in grp)) for k in range(2))
+        for lid, s, _ in grp[1:]:
+            v = lab[s]
+            v[v == lid] = lid0
+        out = [(lid0, sl, sum(p[2] for p in grp))] + [p for p in out if p not in grp]
+        print(f"  нашивка {name}: частей {len(grp)} — одной (merge_parts)")
+    return out
+
+
 def plan_decals(comp, lab, patches, rules, defaults, src, dst, tid24):
     """Рамки декалей: центр и якобиан на свитере NHL 24 → правила → посадка на Legacy. -> (placed, soft)."""
+    if MERGE_PARTS:
+        patches = merge_parts(lab, patches, rules, defaults, MERGE_PARTS)
     H = comp.shape[0]
     soft = {}
     placed = []
