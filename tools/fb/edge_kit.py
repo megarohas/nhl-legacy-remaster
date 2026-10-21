@@ -4075,13 +4075,13 @@ def cmd_pack(a):
           f"; не одобрены (default) — не в пакете: {sorted(set(built) - set(clubs))}" if set(built) - set(clubs) else "")
     for code in clubs:
         use_club(code)
-        pack_club(a, code, regmap, man, have, put)
+        pack_club(a, code, regmap, man, have, put, phase=2 + list(prof).index(code))
     with open(os.path.join(a.out, "manifest.json"), "w", encoding="utf-8", newline="\n") as f:
         json.dump(man, f, ensure_ascii=False, indent=1)
     print(f"{a.out}: сеток заменено {n_mesh}, форм {len(man['kits'])}, файлов {len(man['files'])}")
 
 
-def pack_club(a, code, regmap, man, have, put):
+def pack_club(a, code, regmap, man, have, put, phase=2):
     """Формы клуба code (SLOT_KITS профиля) в пакет: файлы слота и строки manifest."""
     for kit, spec in SLOT_KITS.items():
         r = regmap[(code, spec["kit"])]
@@ -4107,7 +4107,9 @@ def pack_club(a, code, regmap, man, have, put):
                                  "club": code, "kit": spec["kit"]})
         man["kits"].append({"club": code, "kit": spec["kit"], "variant": r["variant"],
                             "islightcolor": 0 if kit == "home" else 1, "label": spec["label"], "helmet": kit,
-                            "phase": 2,     # nhl24.py: строки и шлемы — после adidas (сейв дописывается в конец)
+                            "phase": phase,  # nhl24.py: строки и шлемы — после adidas, клуб за клубом в порядке
+                            #                  профилей (edge_clubs.toml): новый клуб — в конец, строки уже
+                            #                  поставленных не сдвигаются (21.10, BOS встал бы раньше MIN)
                             "default": bool(spec.get("default"))})   # одобрена — форма по умолчанию (дом / выезд)
     man["note"] = (man.get("note", "") + f" {code}: формы «{SLOT_KITS['home']['label']}» / «{SLOT_KITS['away']['label']}» "
                    f"({SOURCE_NAME()}) на своей сетке Edge с передом ворота NHL 24 в слоте стиля 0 (сетки adidas сняты, "

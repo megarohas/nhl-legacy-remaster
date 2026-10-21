@@ -181,6 +181,7 @@ legacy = "1_2_0"
 sock = "auto"
 pant = "source"
 helmet_logo = "source"
+default = true                      # одобрено (пользователь, 21.10: «ставим»)
 
 [BOS.slot.away]
 kit = "edge_away"
@@ -188,3 +189,4 @@ legacy = "1_2_1"
 sock = "auto"
 pant = "source"
 helmet_logo = "source"
+default = true
