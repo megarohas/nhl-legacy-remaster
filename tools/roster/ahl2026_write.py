@@ -23,6 +23,8 @@ ROSTER_MIN, ROSTER_MAX = 21, 30          # 21: 20 одетых + запасно�
 
 
 class AhlWriter(W.Writer):
+    ROSTER_MIN, ROSTER_MAX = ROSTER_MIN, ROSTER_MAX       # проверка размера составов своих клубов (CHL — свои)
+
     def legacy_model(self):
         """Атрибуты — под OVR, который игра считает из атрибутов (Model.formula = ovrformula: точная формула игры,
         worth2.brk; OVR игры = цель у полевых и вратарей), а не «среднее атрибутов + поправка АХЛ». Форма нового
@@ -223,8 +225,8 @@ class AhlWriter(W.Writer):
                 bad.append(f"{v2.name(r)}: team {v2.g('team', r)} ≠ клуб {ts[0]} + 1")
         for team in sorted(self.own_clubs):
             te = [e for e in es if e['team'] == team]
-            if not ROSTER_MIN <= len(te) <= ROSTER_MAX:
-                bad.append(f'команда {team}: в составе {len(te)} (нужно {ROSTER_MIN}–{ROSTER_MAX})')
+            if not self.ROSTER_MIN <= len(te) <= self.ROSTER_MAX:
+                bad.append(f'команда {team}: в составе {len(te)} (нужно {self.ROSTER_MIN}–{self.ROSTER_MAX})')
             for f in FLAGS:
                 n = sum(e[f] for e in te)
                 if n != 1:

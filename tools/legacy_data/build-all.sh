@@ -4,8 +4,8 @@
 #   bash tools/legacy_data/build-all.sh [ЭТАП…] [--ahl32]
 #   LEGACY_DATA_WORK=папка bash tools/legacy_data/build-all.sh …   # сухой прогон: всё (и out) — в эту папку;
 #        входы, которые этапом не пересобираются (например, составы без сети), — положить туда заранее
-#        этапы: base roster photos equip collect retire fixdb utah ahl nhlattrs useredits tape players contracts goaliegear photos24
-#        heads scans24 fonts
+#        этапы: base roster photos equip collect retire fixdb utah ahl chl nhlattrs useredits tape players contracts goaliegear
+#        photos24 heads scans24 fonts
 #        music models art logos menu nhl24
 #        (без этапов — все по порядку;
 #        --ahl32 — ещё вариант «АХЛ на 32», накладка game/work/legacy-data/out-ahl32; nhl24 — накладка out-nhl24
@@ -28,7 +28,7 @@ L=game/other/legacy/big/cacheboot
 AHL32=0
 stages=()
 for a in "$@"; do [ "$a" = "--ahl32" ] && AHL32=1 || stages+=("$a"); done
-[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah ahl nhlattrs useredits tape players contracts goaliegear photos24
+[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah ahl chl nhlattrs useredits tape players contracts goaliegear photos24
                                   heads scans24 fonts music models art logos menu nhl24)
 want() { for s in "${stages[@]}"; do [ "$s" = "$1" ] && return 0; done; return 1; }
 say() { echo "== $(date +%H:%M:%S) $*"; }
@@ -143,6 +143,19 @@ if want ahl; then
     python $T/ahl2026.py
   else
     say "АХЛ 2026/27: нет кэша HockeyTech — этап пропущен (python -m roster.ahl_ht teams; ids; players)"
+  fi
+fi
+if want chl; then
+  # составы юниорских лиг CHL (OHL, QMJHL, WHL) — из базы NHL 27 целиком (решение пользователя 21.10; tools/legacy_data/chl27.py,
+  # docs/legacy-data.md, «CHL из NHL 27»): имена, даты рождения, атрибуты, права и контракты, номера, звенья; кто у нас
+  # в НХЛ/АХЛ — остаётся там, дыры — добор запасными клубов лиги; переехавшие клубы — новые названия. После ahl (составы
+  # АХЛ — до CHL), до goaliegear (экипировка вратарей клубов). Нужна база NHL 27: game/work/nhl27/db/nhl_game.db
+  # (NHL27_DB=путь). Повтор ничего не меняет; draft_roster.db — заново
+  if [ -f "${NHL27_DB:-game/work/nhl27/db/nhl_game.db}" ]; then
+    say "составы CHL из NHL 27 (chl27.py)"
+    python $T/chl27.py
+  else
+    say "CHL: нет базы NHL 27 — этап пропущен"
   fi
 fi
 if want nhlattrs; then
