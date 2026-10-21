@@ -117,6 +117,8 @@ class Tdb:
         t = self.by_name[table]
         off, width = t['fields'][field]
         rec = t['records'] + row * t['reclen']
+        if self.E == '<':          # базы little-endian (NHL 24/27 PS4/PS5): бит k записи — в байте k // 8, с младшего
+            return (int.from_bytes(self.d[rec:rec + t['reclen']], 'little') >> off) & ((1 << width) - 1)
         v = int.from_bytes(self.d[rec:rec + t['reclen']], 'big')
         return (v >> (t['reclen'] * 8 - off - width)) & ((1 << width) - 1)
 
@@ -126,6 +128,11 @@ class Tdb:
         if not 0 <= value < (1 << width):
             raise ValueError(f'{table}.{field}: {value} не влезает в {width} бит')
         rec = t['records'] + row * t['reclen']
+        if self.E == '<':
+            v = int.from_bytes(self.d[rec:rec + t['reclen']], 'little')
+            v = (v & ~(((1 << width) - 1) << off)) | (value << off)
+            self.d[rec:rec + t['reclen']] = v.to_bytes(t['reclen'], 'little')
+            return
         total = t['reclen'] * 8
         v = int.from_bytes(self.d[rec:rec + t['reclen']], 'big')
         shift = total - off - width

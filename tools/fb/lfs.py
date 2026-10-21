@@ -57,6 +57,13 @@ def manifest(collector=COLLECTOR):
     r = find_ebx(collector)
     ebx, _ = cas.read_entry(cas_file(r["cas"]), r["ofs"], r["size"])
     m = read_chunk(str(uuid.UUID(bytes=bytes(ebx[0x60:0x70]))))
+    return parse_manifest(m)
+
+
+def parse_manifest(m):
+    """[(имя, GUID чанка, смещение в распакованном чанке, размер)]: формат NHL 24 или NHL 27 (_manifest_v2)."""
+    if struct.unpack_from("<2I", m, 0) == (2, 0x50):
+        return _manifest_v2(m)
     n = struct.unpack_from("<I", m, 0x0C)[0]
     out = []
     for i in range(n):
@@ -69,6 +76,34 @@ def manifest(collector=COLLECTOR):
         name = m[no:m.index(b"\0", no)].decode("utf-8", "replace")
         out.append((name, str(uuid.UUID(bytes=bytes(m[o:o + 16]))), off, size))
     return out
+
+
+def _manifest_v2(m):
+    """Манифест NHL 27 (PS5, разобран 21.10.2026): u32 2, u32 0x50, u32 0, u32 число файлов; u64 @0x10 — записи
+    (по 28 байт: u32 хеш, u64 ключ порядка, u64 ?, u32 размер, u32 номер чанка); u32 @0x30 — таблица GUID чанков
+    (16 байт, как есть); u32 @0x38 — пул имён (C-строки); u32 @0x40 — u32 смещение имени в пуле на файл. Свое
+    смещение у файла не хранится: файлы одного чанка лежат подряд в порядке ключа (проверено на чанке с
+    nhl_game.db: simulation.data, cannedmessage.csv, nhl_game.db, nhl_game-meta.xml, …)."""
+    n = struct.unpack_from("<I", m, 0x0C)[0]
+    ents_at = struct.unpack_from("<Q", m, 0x10)[0]
+    guids_at, pool_at, names_at = (struct.unpack_from("<I", m, o)[0] for o in (0x30, 0x38, 0x40))
+    rows = []
+    for i in range(n):
+        _h, key, _y, size, ci = struct.unpack_from("<IQQII", m, ents_at + 28 * i)
+        no = pool_at + struct.unpack_from("<I", m, names_at + 4 * i)[0]
+        name = m[no:m.index(b"\0", no)].decode("utf-8", "replace")
+        guid = str(uuid.UUID(bytes=bytes(m[guids_at + 16 * ci:guids_at + 16 * ci + 16])))
+        rows.append([name, guid, key, size, ci])
+    by_chunk = {}
+    for r in rows:
+        by_chunk.setdefault(r[4], []).append(r)
+    out = {}
+    for ci, rs in by_chunk.items():
+        off = 0
+        for r in sorted(rs, key=lambda r: r[2]):
+            out[id(r)] = off
+            off += r[3]
+    return [(r[0], r[1], out[id(r)], r[3]) for r in rows]
 
 
 def get(name, collector=COLLECTOR):
