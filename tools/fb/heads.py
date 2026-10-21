@@ -98,7 +98,10 @@ def mesh(name):
     sec_ptr += base
     ib_size, vb_size = struct.unpack_from("<II", d, lod + 0x58)
     cid = str(uuid.UUID(bytes_le=bytes(d[lod + guid_at:lod + guid_at + 16])))
-    if inline and hdr + vb_size + ib_size <= len(d):       # геометрия в самом res (у PS5 meta[1] = 0x4C — не она)
+    c = chunks().get(cid) if ps5 else None
+    if ps5 and not (c and not c.get("missing")) and _align16(hdr + inline) + vb_size + ib_size <= len(d):
+        data = d[_align16(hdr + inline):]                  # PS5: геометрия в самом res — с выровненного на 16 смещения
+    elif not ps5 and inline and hdr + vb_size + ib_size <= len(d):   # PS4: в самом res, сразу за заголовком
         data = d[hdr:]
     else:
         c = chunks().get(cid)
@@ -109,7 +112,9 @@ def mesh(name):
         else:
             data, _ = cas.read_entry(cas_file(c["cas"]), c["ofs"], (c["lo"] or 0) + c["ls"])
     vb = data[:vb_size]
-    ib = np.frombuffer(data[vb_size:vb_size + ib_size], dtype="<u2")
+    ntri_all = sum(struct.unpack_from("<I", d, sec_ptr + k * step + 0x20)[0] for k in range(nsec))
+    # индексы 16 или 32 бита — по размеру буфера (у свитера NHL 27 — 32 бита при 3160 вершинах)
+    ib = np.frombuffer(data[vb_size:vb_size + ib_size], dtype="<u4" if ib_size >= ntri_all * 3 * 4 else "<u2")
     out = {"bbox": struct.unpack_from("<8f", d, base), "sections": {}}
     for k in range(nsec):
         s = sec_ptr + k * step
@@ -143,6 +148,12 @@ def mesh(name):
             sec = weld(sec)
         out["sections"][sname] = sec
     return out
+
+
+def _align16(x):
+    """PS5: геометрия в самом res начинается с (meta[0] + meta[1]), выровненного на 16 (свитер NHL 27: 10176 + 164 →
+    10352; у голов — в чанке, по GUID у LOD+0x70)."""
+    return (x + 15) // 16 * 16
 
 
 def weld(sec):
