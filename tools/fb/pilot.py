@@ -296,7 +296,12 @@ def name_contrast(cm, jersey_png, zone, min_ratio=NAME_CONTRAST):
     solid = cm[..., 3] > 200
     if not (letters & solid).any():
         return cm, None
-    lc = np.median(cm[..., :3][letters & solid], 0)
+    # цвет букв — самый частый (квантование по 32), а не медиана по каналам: у букв с обводкой (NJD NHL 27: белые с
+    # чёрной) медиана выходила серой, контраст «не тот», и буквы перекрашивались целиком — с обводкой и дырками
+    # (пользователь, 21.10: «пропала чёрная обводка», «шрифт кривоват»). Перекраска — только этого цвета, обводка остаётся
+    px = cm[..., :3][letters & solid].astype(np.float64)
+    keys, inv, cnt = np.unique(px // 32, axis=0, return_inverse=True, return_counts=True)
+    lc = np.median(px[inv.reshape(-1) == cnt.argmax()], 0)
     r = _contrast(lc, jc)
     if r >= min_ratio:
         return cm, None
@@ -306,7 +311,8 @@ def name_contrast(cm, jersey_png, zone, min_ratio=NAME_CONTRAST):
     cands = [nc, np.array([235.0, 235, 235]), np.array([20.0, 20, 20])]
     target = max(cands, key=lambda c: _contrast(c, jc) + (0.5 if c is nc else 0))
     out = cm.copy()
-    out[letters, :3] = np.round(target).astype(np.uint8)
+    fill = letters & (np.abs(cm[..., :3].astype(np.float64) - lc).max(-1) < 48)
+    out[fill, :3] = np.round(target).astype(np.uint8)
     return out, (f"фамилия: буквы {lc.astype(int).tolist()} → {target.astype(int).tolist()} (контраст со свитером "
                  f"{r:.1f} → {_contrast(target, jc):.1f})")
 
