@@ -25,6 +25,8 @@ mat_head NHL 24 3157), вершины сопоставляются 1:1 по UV. 
   python tools/scans24.py save СЕЙВ [--write] [--variant out-ahl32]   # то же в сейве ROSTER (копия, проверка CRC)
   python tools/scans24.py sheet [--n 60] [--names "Имя Фамилия,…"]   # лист «типовая сейчас | NHL 24 | наш»
                                            # (+ спорные, + 5 в шлеме)
+  python tools/scans24.py styles --source nhl27            # каталог общих причёсок NHL 27 → <work>/scans27/styles*
+  python tools/scans24.py hairplan --source nhl27          # hair-plan.json (стиль по фото, цвет из базы) и листы
   python tools/scans24.py check [--ea] [--only папка,…] [--cache ПАПКА]   # глаза: против глаза источника, зрачок,
                                            # край шапочки (headeyes.py); --ea — эталон по сканам EA
 
@@ -529,7 +531,9 @@ def build_one(job):
     new, folder, tpl = job['new'], job['folder'], job['tpl']
     out = os.path.join(work(), 'cache', str(new))
     info_fn = os.path.join(out, 'info.json')
-    key = {'version': VERSION, 'eyes': HE.RULE, 'folder': folder, 'tpl': tpl, 'old_head': job.get('old_head')}
+    key = {'version': VERSION, 'eyes': HE.RULE, 'folder': folder, 'tpl': tpl, 'old_head': job.get('old_head'),
+           'style': job.get('style'), 'face_hair': FACE_HAIR if P24.SOURCE in FACE_HAIR_SOURCES else None,
+           'hair_color': job.get('hair_color')}
     if os.path.exists(info_fn):
         info = json.load(open(info_fn, encoding='utf-8'))
         if all(info.get(k) == v for k, v in key.items()):
@@ -607,12 +611,19 @@ def build_one(job):
         # cranium/materials/recipe/<папка>_material_recipe — не разобран). Волосы нарисованы на скальпе (Селебрини) — как
         # есть; иначе голова вышла бы лысой — волосы с нынешней типовой головы игрока (её подбирали по фото, heads24)
         painted, rep['scalp_ratio'] = scalp_painted(N['mat_head'], tx['head'])
-        lh = None if painted else legacy_hair(job.get('old_head'))
-        if lh is not None:
-            hair, hair_tex = lh
-            rep['hair_from'] = f"legacy {job['old_head']}"
-        elif painted:
-            rep['hair_from'] = 'painted'
+        st = job.get('style')
+        if not painted and st is not None:
+            # причёска NHL 27 из общих (подбор по фото — hair-plan.json): сетки, обтянутые по голове игрока, и рисунок на
+            # скальпе (маска стиля на развёртке головы — она у NHL 27 и Legacy одна)
+            hair, hair_tex, tx['head'] = shared_style(st['style'], st['color'], N['mat_head'], tx['head'], rigid)
+            rep['hair_from'] = f"style {st['style']} color {st['color']}"
+        else:
+            lh = None if painted else legacy_hair(job.get('old_head'))
+            if lh is not None:
+                hair, hair_tex = lh
+                rep['hair_from'] = f"legacy {job['old_head']}"
+            elif painted:
+                rep['hair_from'] = 'painted'
     pts, alp = [], []
     for _, s in hair:
         pos, uv, tri = s['pos'], s['uv0'][:, :2], s['tri']
@@ -712,6 +723,14 @@ def build_one(job):
     # проверка разбора
     P2, _, inv3 = parse_rx2(raw)
     rep['check_pos_err_mm'] = round(max(float(np.abs(P2[n]['pos'] - newparts[n]).max()) for n in newparts) * 1000, 3)
+    # растительность на лице NHL 27 — по маске specmask (на текстуре лица её нет, игра рисует её сама)
+    if P24.SOURCE in FACE_HAIR_SOURCES and job.get('hair_color') is not None:
+        try:
+            sm_ = heads.tex(f'{heads.LICENSED}/{folder}/textures/head_{folder}_specmask')
+        except KeyError:
+            sm_ = None
+        if sm_ is not None:
+            tx['head'], rep['face_hair_cover'] = paint_face_hair(tx['head'], sm_, job['hair_color'])
     # texlib
     import kitpaint
     import teamart
@@ -814,6 +833,120 @@ def scalp_painted(mh, tex):
     return r < SCALP_PAINTED, round(r, 2)
 
 
+STYLES = 'content/character/skater/shared/head/hair'
+# цвет волос NHL 27 (haircolorcode базы) → sRGB: средний цвет иконок creationzone/appearance/haircolor/<код> (21.10.2026)
+HAIR_COLORS = {0: (33, 33, 33), 1: (39, 28, 18), 2: (61, 44, 32), 3: (154, 132, 103), 4: (104, 76, 57), 5: (201, 180, 148),
+               6: (100, 59, 32), 7: (133, 133, 133), 8: (121, 63, 29), 9: (176, 166, 131), 10: (77, 64, 50),
+               11: (170, 128, 87), 12: (111, 112, 111), 13: (108, 87, 61)}
+SCALP_GAIN = 1.6                              # рисунок волос на скальпе: альфа head_hair_common_color × маска × 1,6
+                                              # (без усиления короткая стрижка Сорокина почти лысая, 21.10)
+# Растительность на лице по маске: у NHL 27 (в отличие от NHL 24) бороды и щетины на head_<папка>_color нет — игра рисует
+# их по specmask (255 − красный канал: брови, борода). Рисуется ниже линии глаз (FACE_HAIR_ROW доли высоты текстуры:
+# выше — брови, они на текстуре есть, и волосы у голов со своими прядями), цвет — haircolorcode, непрозрачность —
+# маска × FACE_HAIR_GAIN (не больше FACE_HAIR_MAX), цвет волос × FACE_HAIR_SHADE (борода темнее)
+FACE_HAIR = 'v2'                              # v2: маска × 2, цвет × 0,8 (v1 — × 1,25: у Андерссона вместо густой бороды щетина)
+FACE_HAIR_SOURCES = ('nhl27',)
+FACE_HAIR_ROW, FACE_HAIR_MAX, FACE_HAIR_GAIN, FACE_HAIR_SHADE = 0.32, 0.95, 2.0, 0.8
+STYLE_MAX = 72                                # male_0 … male_72 (иконки creationzone/appearance/hairstyle/0…72)
+_MEAN = None
+
+
+def mean_head():
+    """Средняя голова NHL 27 (mat_head, порядок общий): под неё сделаны общие причёски — от неё смещение к голове игрока.
+    Кэш — <work>/mean_head.npy (по 120 лицензированным головам)."""
+    global _MEAN
+    if _MEAN is None:
+        fn = os.path.join(work(), 'mean_head.npy')
+        if not os.path.exists(fn):
+            from fb import heads
+            ref = reference_head()
+            acc, n = np.zeros_like(ref['pos'], dtype=np.float64), 0
+            for f in heads.licensed_folders()[::max(1, len(heads.licensed_folders()) // 120)]:
+                try:
+                    m = heads.head(f)['sections']['mat_head']
+                except Exception:  # noqa: BLE001
+                    continue
+                if m['tri'].shape == ref['tri'].shape and (m['tri'] == ref['tri']).all():
+                    acc += m['pos']
+                    n += 1
+            np.save(fn, acc / n)
+        _MEAN = np.load(fn)
+    return _MEAN
+
+
+def shared_style(style, color, mh, face, rigid):
+    """Общая причёска NHL 27 male_<style> цвета <color> на голову игрока: сетки base/top (вершины — со смещением средняя
+    голова → голова игрока по 8 ближайшим вершинам, затем то же выравнивание, что у головы), их текстура hair_male_<N>_color
+    (серая, тонируется цветом) и рисунок на скальпе: head_hair_common_color по маске head_hair_male_<N>_mask на текстуре
+    лица → (пряди для bake_hair, текстура прядей RGBA float, текстура лица)."""
+    from scipy.spatial import cKDTree
+    from fb import heads
+    tint = np.array(HAIR_COLORS[color], np.float32)
+    base = mean_head()
+    tree = cKDTree(base)
+    shift = mh['pos'] - base
+    secs = []
+    for part in ('base', 'top'):
+        try:
+            m = heads.mesh(f'{STYLES}/male_{style}/default_nomask/components/hair_male_{style}_default_nomask_{part}_mesh')
+        except KeyError:
+            continue
+        for k, v in m['sections'].items():
+            dd, ii = tree.query(v['pos'], k=8)
+            w = 1.0 / np.maximum(dd, 1e-4) ** 2
+            pos = v['pos'] + (shift[ii] * w[..., None]).sum(1) / w.sum(1)[:, None]
+            if rigid is not None:
+                pos = (pos - rigid[1]) @ rigid[0].T + rigid[2]
+            secs.append((f'{part}:{k}', dict(v, pos=pos)))
+    if not secs:
+        raise ValueError(f'male_{style}: нет сеток default_nomask')
+    col = heads.tex(f'{STYLES}/male_{style}/common/textures/hair_male_{style}_color').astype(np.float32)
+    col[..., :3] = np.clip(col[..., :3] / 128.0 * tint, 0, 255)
+    mask = heads.tex(f'{STYLES}/male_{style}/common/textures/head_hair_male_{style}_mask')[..., 0].astype(np.float32) / 255
+    sc = heads.tex(f'{STYLES}/common/textures/head_hair_common_color').astype(np.float32)
+    H, W = face.shape[:2]
+    if sc.shape[:2] != (H, W):
+        from PIL import Image
+        sc = np.asarray(Image.fromarray(sc.astype(np.uint8)).resize((W, H), Image.LANCZOS)).astype(np.float32)
+        mask = np.asarray(Image.fromarray((mask * 255).astype(np.uint8)).resize((W, H), Image.LANCZOS)).astype(np.float32) / 255
+    a = np.clip(sc[..., 3] / 255 * mask * SCALP_GAIN, 0, 1)[..., None]
+    out = face.astype(np.float32).copy()
+    out[..., :3] = out[..., :3] * (1 - a) + np.clip(sc[..., :3] / 128.0 * tint, 0, 255) * a
+    return secs, col, np.clip(out, 0, 255).astype(np.uint8)
+
+
+def paint_face_hair(face, specmask, color):
+    """Борода/щетина NHL 27 на текстуре лица: маска 255 − R specmask ниже FACE_HAIR_ROW, цвет HAIR_COLORS[color]
+    → (текстура, доля покрытой площади ниже линии глаз)."""
+    from PIL import Image
+    H, W = face.shape[:2]
+    m = (255 - specmask[..., 0].astype(np.float32)) / 255
+    if m.shape != (H, W):
+        m = np.asarray(Image.fromarray((m * 255).astype(np.uint8)).resize((W, H), Image.LANCZOS)).astype(np.float32) / 255
+    m[:int(H * FACE_HAIR_ROW)] = 0
+    a = np.clip(m * FACE_HAIR_GAIN, 0, 1)[..., None] * FACE_HAIR_MAX
+    out = face.astype(np.float32).copy()
+    out[..., :3] = out[..., :3] * (1 - a) + np.array(HAIR_COLORS[color], np.float32) * FACE_HAIR_SHADE * a
+    return np.clip(out, 0, 255).astype(np.uint8), round(float((m[int(H * FACE_HAIR_ROW):] > 0.2).mean()), 3)
+
+
+_HCOL = None
+
+
+def source_hair_colors():
+    """{ID EA: haircolorcode} базы источника (NHL 27; у NHL 24 — пусто)."""
+    global _HCOL
+    if _HCOL is None:
+        _HCOL = {}
+        if P24.SOURCE != 'nhl24':
+            from roster import nhl27 as N27
+            os.environ.setdefault('NHL27_DB', os.path.join(P24.SRC['db'], 'nhl_game.db'))
+            db = N27.open_db()
+            B = 'exhibitionplayerbiotable'
+            _HCOL = {db.get(B, 'artid', r): db.get(B, 'haircolorcode', r) for r in db.live_rows(B)}
+    return _HCOL
+
+
 def legacy_hair(headid):
     """Шапка волос головы Legacy headid (архив игры) как «пряди» для bake_hair → ([(имя, сетка)], RGBA float) или None."""
     if not headid:
@@ -913,6 +1046,8 @@ def cmd_build(jobs, disputed, only=None, legacy_hair=LEGACY_HAIR):
         if not want:
             raise SystemExit(f'--only {only}: нет среди сопоставленных (папки — как в licensed/<папка>)')
     print(f'голов к сборке: {len(want)} (ok {sum(1 for f, k, _ in want.values() if k == "ok")}); шаблонов {len(lib)}')
+    plan_fn = os.path.join(work(), 'hair-plan.json')
+    plan = json.load(open(plan_fn, encoding='utf-8')) if os.path.exists(plan_fn) else {}
     joblist = []
     for new, (folder, kind, old) in sorted(want.items()):
         npos = heads.head(folder)['sections']['mat_head']['pos']
@@ -921,7 +1056,9 @@ def cmd_build(jobs, disputed, only=None, legacy_hair=LEGACY_HAIR):
             print(f'  {new} {folder}: нет шаблона с {len(str(new))} цифрами — пропуск')
             continue
         joblist.append({'new': new, 'folder': folder, 'tpl': best[0], 'tpl_dist_mm': round(best[1] * 1000, 2), 'kind': kind,
-                        'old_head': old})
+                        'old_head': old, 'style': {k: plan[folder][k] for k in ('style', 'color')}
+                        if plan.get(folder, {}).get('style') is not None else None,
+                        'hair_color': (plan.get(folder) or {}).get('color', source_hair_colors().get(new))})
     res, bad = {}, []
     with ProcessPoolExecutor(max_workers=jobs) as ex:
         futs = {ex.submit(build_one, j): j for j in joblist}
@@ -942,7 +1079,7 @@ def cmd_build(jobs, disputed, only=None, legacy_hair=LEGACY_HAIR):
     for new, r in res.items():
         hf = r.get('hair_from', 'source')
         if r['kind'] in ('ok', 'no_hair'):
-            r['kind'] = 'ok' if hf in ('source', 'painted') or (legacy_hair and hf.startswith('legacy')) else 'no_hair'
+            r['kind'] = 'ok' if hf in ('source', 'painted') or hf.startswith('style') or (legacy_hair and hf.startswith('legacy'))                 else 'no_hair'
             no_hair += r['kind'] == 'no_hair'
         if r['kind'] != 'ok':
             continue
@@ -1140,6 +1277,117 @@ def cmd_save(save, write, v):
     with open(save, 'wb') as f:
         f.write(out)
     print(f'записано; копия до правки — {bk}')
+
+
+# ------------------------------------------------------------------ причёски NHL 27 по фото
+
+def style_cell(st):
+    """Стиль male_<st> на средней голове NHL 27 (анфас и 3/4, тёмно-русый) → путь картинки или None (нет сеток)."""
+    from fb import heads
+    from PIL import Image, ImageDraw, ImageFont
+    os.environ['KITPAINT_SERIAL'] = '1'
+    ref = heads.head(heads.licensed_folders()[0])['sections']['mat_head']
+    mh = dict(ref, pos=mean_head())
+    face = np.full((1024, 1024, 4), (205, 160, 130, 255), np.uint8)
+    try:
+        secs, col, face = shared_style(st, 2, mh, face, None)
+    except (KeyError, ValueError):
+        return None
+    parts = [{'pos': mh['pos'], 'nrm': weld_normals(mh['pos'], mh['tri'], weld_ids(mh['pos'])), 'uv': mh['uv0'][:, :2],
+              'tri': mh['tri'], 'tex': face}]
+    for _, sec in secs:
+        parts.append({'pos': sec['pos'], 'nrm': weld_normals(sec['pos'], sec['tri'], np.arange(len(sec['pos']))),
+                      'uv': sec['uv0'][:, :2], 'tri': sec['tri'], 'tex': col.copy(), 'alpha': True, 'cut': 100,
+                      'twosided': True})
+    fr = (-0.12, 0.12, 1.70, 2.02)
+    a = render([dict(x) for x in parts], 0.0, 150, frame=fr)
+    b = render([dict(x) for x in parts], np.radians(40), 150, frame=fr)
+    im = Image.new('RGB', (a.size[0] + b.size[0] + 4, a.size[1] + 18), (24, 24, 28))
+    im.paste(a, (0, 18))
+    im.paste(b, (a.size[0] + 4, 18))
+    ImageDraw.Draw(im).text((4, 1), str(st), fill=(255, 220, 140), font=ImageFont.truetype('arial.ttf', 14))
+    fn = os.path.join(work(), 'styles', f'style_{st}.png')
+    os.makedirs(os.path.dirname(fn), exist_ok=True)
+    im.save(fn)
+    return fn
+
+
+def cmd_styles(jobs):
+    """Каталог общих причёсок источника: <work>/styles/style_<N>.png и styles_sheet.png (у кого есть сетки)."""
+    from PIL import Image
+    with ProcessPoolExecutor(max_workers=jobs) as ex:
+        res = [(st, p) for st, p in zip(range(STYLE_MAX + 1), ex.map(style_cell, range(STYLE_MAX + 1))) if p]
+    ims = [Image.open(p) for _, p in res]
+    cols, (w, h) = 6, ims[0].size
+    sheet = Image.new('RGB', (cols * (w + 4), ((len(ims) + cols - 1) // cols) * (h + 4)), (12, 12, 14))
+    for k, im in enumerate(ims):
+        sheet.paste(im, ((k % cols) * (w + 4), (k // cols) * (h + 4)))
+    fn = os.path.join(work(), 'styles_sheet.png')
+    sheet.save(fn)
+    print(f'стилей с сетками: {len(res)} из {STYLE_MAX + 1} → {fn}')
+
+
+def hair_players(variant='out-ahl32'):
+    """Игроки этапа без своих волос источника: [(папка, имя, artid Legacy, ID EA)] по built.json и match-<variant>.json."""
+    built = json.load(open(os.path.join(work(), 'built.json'), encoding='utf-8'))
+    m = json.load(open(os.path.join(work(), f'match-{variant}.json'), encoding='utf-8'))
+    out = []
+    for r in m['ok']:
+        v = built.get(str(r['new']))
+        if v and v.get('hair_from', 'source') not in ('source', 'painted'):
+            out.append((r['folder'], r['name'], r['artid'], r['new']))
+    return sorted(out, key=lambda x: x[1].split(' ', 1)[-1])
+
+
+def cmd_hairplan(variant='out-ahl32', per=30):
+    """hair-plan.json: каждому игроку без своих волос — цвет из базы источника (haircolorcode), стиль — вручную по фото
+    (null — не назначен: голова не идёт в out). Листы <work>/hairplan/sheet-<k>.png: фото | назначенный стиль."""
+    import heads24 as H24
+    from PIL import Image, ImageDraw, ImageFont
+    color = source_hair_colors()
+    fn = os.path.join(work(), 'hair-plan.json')
+    plan = json.load(open(fn, encoding='utf-8')) if os.path.exists(fn) else {}
+    pl = hair_players(variant)
+    for folder, name, art, new in pl:
+        e = plan.setdefault(folder, {'style': None, 'color': color.get(new, 2)})
+        e.setdefault('color', color.get(new, 2))
+        e['name'] = name
+    json.dump(dict(sorted(plan.items())), open(fn, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
+    font = ImageFont.truetype('arial.ttf', 13)
+    d = os.path.join(work(), 'hairplan')
+    os.makedirs(d, exist_ok=True)
+    for k in range(0, len(pl), per):
+        cells = []
+        for i, (folder, name, art, new) in enumerate(pl[k:k + per], k):
+            cell = Image.new('RGB', (300, 176), (24, 24, 28))
+            dr = ImageDraw.Draw(cell)
+            path = H24.portrait_path(art, variant)
+            if path:
+                rgba = H24.portrait_rgba(path)
+                h, w = rgba.shape[:2]
+                ph = Image.fromarray(rgba).crop((int(w * 0.22), 0, int(w * 0.78), int(h * 0.75)))
+                ph.thumbnail((140, 150))
+                bg = Image.new('RGB', ph.size, (60, 60, 66))
+                bg.paste(ph, (0, 0), ph)
+                cell.paste(bg, (2, 22))
+            e = plan[folder]
+            st = e.get('style')
+            sp = os.path.join(work(), 'styles', f'style_{st}.png')
+            if st is not None and os.path.exists(sp):
+                im = Image.open(sp)
+                im = im.crop((0, 18, im.size[0] // 2, im.size[1]))
+                im.thumbnail((150, 150))
+                cell.paste(im, (148, 22))
+            dr.rectangle((282, 2, 296, 16), fill=HAIR_COLORS.get(e['color'], (0, 0, 0)))
+            dr.text((4, 3), f"{i} {name}  стиль {st} цвет {e['color']}", fill=(255, 220, 140), font=font)
+            cells.append(cell)
+        cols = 5
+        sheet = Image.new('RGB', (cols * 304, ((len(cells) + cols - 1) // cols) * 180), (10, 10, 12))
+        for j, c in enumerate(cells):
+            sheet.paste(c, ((j % cols) * 304, (j // cols) * 180))
+        sheet.save(os.path.join(d, f'sheet-{k // per}.png'))
+    done = sum(1 for f, *_ in pl if plan[f].get('style') is not None)
+    print(f'без своих волос: {len(pl)}, стиль назначен: {done} → {fn}; листы — {d}')
 
 
 # ------------------------------------------------------------------ проверка глаз
@@ -1491,7 +1739,7 @@ def cmd_sheet(n, jobs, variant='out-ahl32', names=None, helmets=5, disputed=True
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('cmd', choices=('match', 'build', 'apply', 'save', 'sheet', 'one', 'check'))
+    ap.add_argument('cmd', choices=('match', 'build', 'apply', 'save', 'sheet', 'one', 'check', 'styles', 'hairplan'))
     ap.add_argument('save', nargs='?')
     ap.add_argument('--variant', action='append', choices=VARIANTS)
     ap.add_argument('--write', action='store_true')
@@ -1522,6 +1770,10 @@ def main():
     elif a.cmd == 'sheet':
         names = [x.strip() for x in a.names.split(',')] if a.names else STARS if a.stars else None
         cmd_sheet(a.n, a.jobs, names=names, helmets=a.helmets, disputed=a.disputed)
+    elif a.cmd == 'styles':
+        cmd_styles(a.jobs)
+    elif a.cmd == 'hairplan':
+        cmd_hairplan()
     elif a.cmd == 'check':
         cmd_check(a.jobs, a.only.split(',') if a.only else None, a.ea, a.cache)
     elif a.cmd == 'one':                       # отладка: python scans24.py one 20185:cale_makar

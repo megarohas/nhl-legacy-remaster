@@ -718,4 +718,9 @@ adidas, сейв ROSTER дописывается в конец). Шорты и �
   Обновились 248 файлов: `db/nhlng.db`, `db/draft_roster.db`, 180 изменённых и 66 новых `rendering/player/*`. Копия
   заменённого — `backup-cache/user-20261021-heads-v7-nhl27`. Сейв ROSTER 20261021035202 — `roster_merge.py` (копия —
   `backup-saves/roster_merge-20261021-075944`).
+- 21.10 08:59 — ещё 259 голов NHL 27: причёски подобраны по фото из общих стилей NHL 27, цвет — из базы
+  (`scans24.py hairplan`, `hair-plan.json`). Бороды по маске — у всех 293 голов NHL 27. Обновились 549 файлов:
+  `db/nhlng.db`, `db/draft_roster.db`, 518 новых и 29 изменённых `rendering/player/*`. Копия заменённого —
+  `backup-cache/user-20261021-heads27-styles`. Сейв ROSTER 20261021035202 — `roster_merge.py` (копия —
+  `backup-saves/roster_merge-20261021-085921`).
   стало» — `compare/brand/sheet_20.png`, плечи — `compare/brand/shoulders_20.png`.
