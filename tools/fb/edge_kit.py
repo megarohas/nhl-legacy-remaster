@@ -1104,6 +1104,7 @@ SHOULDER_IN_CM = 2.0               # нашивки на плечах — на 2
 SHOULDER_SCALE = 0.9               # и на 10 % меньше (от центра): близко к соседним элементам (пользователь, 20.10)
 SHIELD_SCALE = 0.88                # меньше (пользователь, 19.10: «слишком большой»); у форм NHL 24 на Edge — 0,8 (под щит EA)
 SHIELD_OFFSET_CM = [0.41, 0.6, 0.0]  # x: середина горловины NHL 24 — на 0,35–0,41 см левее оси (как CoordMap.x_fix)
+_SHIELD_DEFAULT = (list(SHIELD_OFFSET_CM), SHIELD_SCALE)   # профиль клуба: shield_offset_cm, shield_scale
 RELIEF_CLEAR = [(0.468, 0.136, 0.532, 0.178, -0.05), (0.466, 0.386, 0.534, 0.401, -0.03)]   # u0, v0, u1, v1, сдвиг
 #                                    источника по v: метка и черта над местом Reebok EA в чистом
 #                                    рельефе T=4 на спине (под номером — прямоугольник, у EA-форм его нет)
@@ -1154,7 +1155,8 @@ def club_profiles():
 def use_club(code):
     """Профиль клуба (edge_clubs.toml) → таблицы модуля: источник текстур (fb.kitsrc), кокетка, вставка, слот, гетры."""
     from . import kitsrc
-    global YOKE, YOKE_KIND, INSERT_KITS, SLOT_KITS, LETTER_ZONES_FROM, SOCK_PARTS, BODY_KIND, COLLAR
+    global YOKE, YOKE_KIND, INSERT_KITS, SLOT_KITS, LETTER_ZONES_FROM, SOCK_PARTS, BODY_KIND, COLLAR, YOKE_EA_KIND
+    global YOKE_SIDE_BLEND, SHIELD_OFFSET_CM, SHIELD_SCALE
     prof = club_profiles().get(code)
     if prof is None:
         sys.exit(f"{code}: нет профиля клуба в {CLUBS_TOML}")
@@ -1163,6 +1165,10 @@ def use_club(code):
     YOKE_KIND = prof.get("yoke_color", "green")
     BODY_KIND = prof.get("body_color", "light")
     COLLAR = prof.get("collar", "lace")
+    YOKE_EA_KIND = prof.get("yoke_shape_color")
+    YOKE_SIDE_BLEND = prof.get("yoke_side_blend")
+    SHIELD_OFFSET_CM = list(prof.get("shield_offset_cm", _SHIELD_DEFAULT[0]))
+    SHIELD_SCALE = float(prof.get("shield_scale", _SHIELD_DEFAULT[1]))
     INSERT_KITS = {(code, k) for k in prof.get("insert", [])}
     SLOT_KITS = {k: dict(v) for k, v in prof.get("slot", {}).items()}
     LETTER_ZONES_FROM = dict(prof.get("letter_zones_from", {}))
@@ -1180,6 +1186,10 @@ def yoke_mask(img, lum_max=70, kind=None):
 
 
 BODY_BOX = (0.42, 0.12, 0.58, 0.28)  # u0, v0, u1, v1 развёртки: середина спины (без кокетки, надписи и номеров)
+YOKE_EA_KIND = None                # профиль yoke_shape_color: цвет кокетки у EA-формы бокoв (None — как yoke_color)
+YOKE_SIDE_BLEND = None             # профиль yoke_side_blend: полуширина (м по z) перехода высоты края кокетки от
+#                                    переда к спине — у широкой кокетки на плечах (MTL, ANA?) край на руке — одна прямая
+#                                    наискосок, без «лесенки» (пользователь, 21.10, рисунок); None — скачок на боку (z = 0)
 COLLAR = "lace"                    # профиль collar: lace — ворот adidas MIN (шнуровка, красная вставка, планка: их
 #                                    швы, зоны и превью), plain — без них (NJD: кромка по кокетке, мыс со щитом)
 BODY_KIND = "light"                # профиль body_color: light — медиана светлого (lum > 200, как у MIN до 21.10),
@@ -1220,7 +1230,7 @@ def yoke_polygon(ea_png, ours_png):
     ea = np.asarray(Image.open(ea_png).convert("RGB").resize((S, S))).astype(np.float64)
     ours = np.asarray(Image.open(ours_png).convert("RGB").resize((S, S))).astype(np.float64)
     lum = ea.mean(-1)
-    g_ea = yoke_mask(ea, 70)
+    g_ea = yoke_mask(ea, 70, YOKE_EA_KIND)
     lab, _ = ndi.label(g_ea)                             # только сама кокетка (не полосы рукавов)
     g_ea = lab == lab[int(0.53 * S), int(0.37 * S)]
     vv, ul, ur = [], [], []
@@ -1325,6 +1335,17 @@ def yoke_heights(code, kit):
     return res
 
 
+def yoke_edge_h(P, hts):
+    """Высота нижнего края кокетки в точках P (..., 3): спереди — hts["front"](|x|), сзади — hts["back"](|x|); между ними
+    на боку — скачок при z = 0 или (YOKE_SIDE_BLEND) линейно по z: в виде сбоку — прямая от переда к спине."""
+    ax = np.abs(P[..., 0])
+    hf, hb = np.interp(ax, *hts["front"]), np.interp(ax, *hts["back"])
+    if YOKE_SIDE_BLEND:
+        w = np.clip((P[..., 2] + YOKE_SIDE_BLEND) / (2 * YOKE_SIDE_BLEND), 0, 1)
+        return hb + (hf - hb) * w
+    return np.where(P[..., 2] >= 0, hf, hb)
+
+
 class YokePaint:
     """pre-правка основы (fb.kit_hybrid.decal_post), кокетка целиком заново: нижний край — на высоте края NHL 24
     (yoke_heights: прямая спереди 1,63 м и сзади 1,648, к рукаву — вниз), бока — по краю кокетки EA (развёртка, кривые
@@ -1360,7 +1381,7 @@ class YokePaint:
         dr = (np.interp(v, *Q["right"]) - u) / (px * AA_PX)
         dside = np.where(left_side, dl, dr)
         ax = np.abs(P[..., 0])
-        h = np.where(P[..., 2] >= 0, np.interp(ax, *self.h["front"]), np.interp(ax, *self.h["back"]))
+        h = yoke_edge_h(P, self.h)
         dh = (P[..., 1] - h) / GY
         dmin = np.minimum(dside, dh)
         cov = np.clip(0.5 + dmin, 0, 1)
@@ -1851,7 +1872,7 @@ def yoke_field(G, yk):
     Q = yk.poly
     uL, uR = np.interp(U0[..., 1], *Q["left"]), np.interp(U0[..., 1], *Q["right"])
     dside = np.where(U0[..., 0] < 0.5, U0[..., 0] - uL, uR - U0[..., 0]) * G["MPU"]
-    h = np.where(P[..., 2] >= 0, np.interp(ax, *yk.h["front"]), np.interp(ax, *yk.h["back"]))
+    h = yoke_edge_h(P, yk.h)
     dh = (y - h) / np.maximum(np.sqrt(np.clip(1 - N[..., 1] ** 2, 0, 1)), 0.3)
     return np.minimum(dside, dh)
 
@@ -1951,7 +1972,7 @@ def ea_yoke_heights(ea_png):
     E = load(0, 1, 2)
     S = 1024
     ea = np.asarray(Image.open(ea_png).convert("RGB").resize((S, S))).astype(np.float64)
-    g = yoke_mask(ea, 90)
+    g = yoke_mask(ea, 90, YOKE_EA_KIND)
     lab, _ = ndi.label(g)
     g = lab == lab[int(0.53 * S), int(0.37 * S)]
     tid, bar = kit3d.raster_uv(E, S)
