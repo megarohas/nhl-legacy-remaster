@@ -98,7 +98,8 @@ def lev(a, b):
 
 
 def work():
-    return os.path.join(P24.work(), 'scans24')
+    """<work>/scans24 (источник NHL 24) или <work>/scans27 (--source nhl27: сетки PS5 читает fb.heads, 21.10.2026)."""
+    return os.path.join(P24.work(), 'scans24' if P24.SOURCE == 'nhl24' else 'scans' + P24.SOURCE[3:])
 
 
 def norm(s):
@@ -355,10 +356,13 @@ def rotate_frames(a, b, v):
 
 
 def uvmap(luv, lpos, nuv, npos):
-    """Вершины Legacy → вершины NHL 24 по UV (дубли по шву — по позиции)."""
+    """Вершины Legacy → вершины NHL 24 по UV (дубли по шву — по позиции). У NHL 27 UV совпадают с Legacy до 1e-5, а форма
+    у глаз другая: кандидаты — только в пределах «ближайший + 0,0001» (с допуском 0,0008 позиция выбирала соседнюю
+    вершину, 31 совпадение у шаблона 10276, 21.10.2026); у NHL 24 — как было."""
     from scipy.spatial import cKDTree
     dd, jj = cKDTree(nuv).query(luv, k=4)
-    d3 = np.linalg.norm(npos[jj] - lpos[:, None, :], axis=2) + np.where(dd < 0.0008, 0.0, 10.0)
+    near = dd < (dd[:, :1] + 0.0001 if P24.SOURCE != 'nhl24' else 0.0008)
+    d3 = np.linalg.norm(npos[jj] - lpos[:, None, :], axis=2) + np.where(near, 0.0, 10.0)
     return jj[np.arange(len(luv)), d3.argmin(1)], float(dd[:, 0].max())
 
 
@@ -758,7 +762,8 @@ def bake_hair(hair, hair_tex, capmesh, cap_uv, kit3d, size=256, ss=2):
     return np.dstack([np.clip(col, 0, 255), alpha * 255]).astype(np.uint8), len(tris)
 
 
-def cmd_build(jobs, disputed):
+def cmd_build(jobs, disputed, only=None):
+    """only — папки источника или имена игроков (через запятую): собрать только их (пилот одной головы)."""
     lib = templates()
     from fb import heads
     want = {}
@@ -774,6 +779,11 @@ def cmd_build(jobs, disputed):
                 for c in r.get('candidates', []):
                     if c.get('folder') and c['artid'] < TYPICAL and c['artid'] not in want:
                         want[c['artid']] = (c['folder'], 'disputed')
+    if only:
+        keys = {norm(x) for x in only}
+        want = {k: v for k, v in want.items() if norm(v[0]) in keys}
+        if not want:
+            raise SystemExit(f'--only {only}: нет среди сопоставленных (папки — как в licensed/<папка>)')
     print(f'голов к сборке: {len(want)} (ok {sum(1 for f, k in want.values() if k == "ok")}); шаблонов {len(lib)}')
     joblist = []
     for new, (folder, kind) in sorted(want.items()):
@@ -1154,11 +1164,13 @@ def nhl24_parts(folder):
     N = heads.head(folder)['sections']
     tx = heads.head_textures(folder)
     out = []
+    # у сеток NHL 27 (PS5) потока нормалей нет — по поверхности
+    nrm_of = lambda m: unit(m['nrm'][:, :3]) if 'nrm' in m else weld_normals(m['pos'], m['tri'], np.arange(len(m['pos'])))
     h = N['mat_head']
-    out.append({'pos': h['pos'], 'nrm': unit(h['nrm'][:, :3]), 'uv': h['uv0'][:, :2], 'tri': h['tri'], 'tex': tx['head']})
+    out.append({'pos': h['pos'], 'nrm': nrm_of(h), 'uv': h['uv0'][:, :2], 'tri': h['tri'], 'tex': tx['head']})
     e = N.get('mat_eyes')
     if e is not None:
-        out.append({'pos': e['pos'], 'nrm': unit(e['nrm'][:, :3]), 'uv': e['uv1'][:, :2], 'tri': e['tri'],
+        out.append({'pos': e['pos'], 'nrm': nrm_of(e), 'uv': e['uv1'][:, :2], 'tri': e['tri'],
                     'tex': common_tex()['eyes_2_cm'], 'spec': 0.5})
     for _, s in (heads.hair(folder) if tx['hair'] is not None else []):
         nrm = unit(s['nrm'][:, :3]) if 'nrm' in s else weld_normals(s['pos'], s['tri'], np.arange(len(s['pos'])))
@@ -1208,7 +1220,7 @@ def sheet_cell(job):
         cell.paste(i, (4 + k * (W + 4), 36))
     d = ImageDraw.Draw(cell)
     d.text((6, 2), f"{job['name']} ({job.get('league', '')}) — {job.get('tag', '')}", fill=(255, 220, 140), font=font)
-    d.text((6, 18), f"сейчас {job.get('old')} | NHL 24 {job['folder']} | наш {job['new']} (шаблон {job.get('tpl')})",
+    d.text((6, 18), f"сейчас {job.get('old')} | {P24.LABEL} {job['folder']} | наш {job['new']} (шаблон {job.get('tpl')})",
            fill=(200, 200, 200), font=font)
     p = os.path.join(work(), 'sheet', f"{job['new']}{'_h' if job.get('helmet') else ''}.png")
     os.makedirs(os.path.dirname(p), exist_ok=True)
@@ -1274,12 +1286,14 @@ def main():
     ap.add_argument('--disputed', action='store_true', help='build: собрать и головы спорных (в кэш, не в out); sheet: и их')
     ap.add_argument('--stars', action='store_true', help='sheet: 15 звёзд (STARS) вместо случайных')
     ap.add_argument('--helmets', type=int, default=5)
+    ap.add_argument('--source', choices=tuple(P24.SOURCES), default=P24.SOURCE, help='игра-источник сканов (nhl24, nhl27)')
+    ap.add_argument('--only', help='build: только эти папки источника через запятую (пилот: --only macklin_celebrini)')
     a = ap.parse_args()
     variants = a.variant or list(VARIANTS)
     if a.cmd == 'match':
         cmd_match(variants)
     elif a.cmd == 'build':
-        cmd_build(a.jobs, a.disputed)
+        cmd_build(a.jobs, a.disputed, a.only.split(',') if a.only else None)
     elif a.cmd == 'apply':
         cmd_apply(variants)
     elif a.cmd == 'save':

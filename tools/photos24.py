@@ -1,4 +1,8 @@
-"""Портреты из NHL 24 игрокам NHL Legacy, у которых портрета нет (docs/player-photos-nhl24.md). Только офлайн.
+"""Портреты из NHL 24 или NHL 27 игрокам NHL Legacy, у которых портрета нет (docs/player-photos-nhl24.md). Только офлайн.
+
+Источник — `--source nhl24` (по умолчанию) или `--source nhl27` (21.10.2026: дамп PS5, портреты те же p<ID EA>
+512×340, база — game/work/nhl27/db; рабочая папка — <work>/photos27, кэш — game/work/photos-nhl27). Ниже — про NHL 24,
+у NHL 27 всё так же.
 
 Источник — дамп NHL 24 (PS4): портреты `ui/textures/common/playerportraits/p<ID EA>` (BC3 512×340, фото с прозрачным
 фоном) и база `gamemodes/database/t3db/nhl_game.db` (legacy-файл, fb.lfs; TDB little-endian): имя, дата рождения, ID EA
@@ -52,11 +56,26 @@ from tdb_read import load_meta  # noqa: E402
 
 GAME_DIR = common.game_dir() if hasattr(common, 'game_dir') else os.path.join(TOOLS, '..', 'game')
 G = common.GAME
-CACHE24 = os.path.join(GAME_DIR, 'work', 'photos-nhl24')
-DB24 = os.path.join(CACHE24, 'nhl24db')
-SRC24 = os.path.join(CACHE24, 'portraits')                 # p<ID EA>.png — как в NHL 24 (512×340)
+SOURCES = {   # источник портретов: кэш, база игры, каталог дампа, рабочая подпапка <work>
+    'nhl24': {'cache': os.path.join(GAME_DIR, 'work', 'photos-nhl24'), 'label': 'NHL 24', 'sub': 'photos24',
+              'db': os.path.join(GAME_DIR, 'work', 'photos-nhl24', 'nhl24db'),
+              'catalog': os.path.join(GAME_DIR, 'work', 'nhl24', 'catalog', 'textures.csv')},
+    'nhl27': {'cache': os.path.join(GAME_DIR, 'work', 'photos-nhl27'), 'label': 'NHL 27', 'sub': 'photos27',
+              'db': os.path.join(GAME_DIR, 'work', 'nhl27', 'db'),
+              'catalog': os.path.join(GAME_DIR, 'work', 'nhl27', 'catalog', 'textures.csv')},
+}
+SOURCE = (sys.argv[sys.argv.index('--source') + 1] if '--source' in sys.argv else
+          os.environ.get('PHOTOS_SOURCE', 'nhl24'))
+if SOURCE not in SOURCES:
+    sys.exit(f'--source: {", ".join(SOURCES)}')
+os.environ['FB_GAME'] = SOURCE                              # дамп для модулей fb (импортируются позже)
+SRC = SOURCES[SOURCE]
+LABEL, SUB = SRC['label'], SRC['sub']
+CACHE24 = SRC['cache']
+DB24 = SRC['db']
+SRC24 = os.path.join(CACHE24, 'portraits')                 # p<ID EA>.png — как в игре-источнике (512×340)
 FRAME = os.path.join(CACHE24, 'frame')                     # p<ID EA>.png — в кадре НХЛ 336×336
-CATALOG = os.path.join(GAME_DIR, 'work', 'nhl24', 'catalog', 'textures.csv')
+CATALOG = SRC['catalog']
 PORTRAIT_RX = re.compile(r'^ui/textures/common/playerportraits/p(\d+)$')
 VARIANTS = ('out', 'out-ahl32')
 EA_ART_MAX = 12814                  # artid исходной базы Legacy — до 12814 (новые конвейера — с 12815)
@@ -253,9 +272,9 @@ def match_one(p, by_birth, by_art, orig, prow):
         if x is None:
             return a, 'ID EA', None
         if norm(x['last']) == nl:
-            return a, 'ID EA + фамилия NHL 24', x
-        return None, f"ID EA у другого в NHL 24 ({x['first']} {x['last']})", None
-    return None, 'нет в NHL 24', None
+            return a, f'ID EA + фамилия {LABEL}', x
+        return None, f"ID EA у другого в {LABEL} ({x['first']} {x['last']})", None
+    return None, f'нет в {LABEL}', None
 
 
 def cmd_match(variants):
@@ -266,7 +285,7 @@ def cmd_match(variants):
     for x in n24:
         by_birth[tuple(x['birth'])].append(x)
         by_art.setdefault(x['artid'], x)
-    os.makedirs(os.path.join(work(), 'photos24'), exist_ok=True)
+    os.makedirs(os.path.join(work(), SUB), exist_ok=True)
     for variant in variants:
         players = legacy_players(variant)
         art_users = defaultdict(list)
@@ -289,17 +308,17 @@ def cmd_match(variants):
             elif ea is None:
                 rec['status'] = how
             elif ea not in prow:
-                rec['status'] = 'в NHL 24 нет портрета'
+                rec['status'] = f'в {LABEL} нет портрета'
             else:
                 png, st = extract_portrait(ea, prow[ea])
                 if png is None:
-                    rec['status'] = f'портрет NHL 24: {st}'
+                    rec['status'] = f'портрет {LABEL}: {st}'
                 else:
                     from playerhead import png_read
                     w, h, rgba = png_read(png)
-                    rec['status'] = 'силуэт NHL 24' if is_silhouette(rgba, w, h) else 'ok'
+                    rec['status'] = f'силуэт {LABEL}' if is_silhouette(rgba, w, h) else 'ok'
             res.append(rec)
-        path = os.path.join(work(), 'photos24', f'match-{variant}.json')
+        path = os.path.join(work(), SUB, f'match-{variant}.json')
         json.dump(res, open(path, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
         st = Counter(r['status'] if not r['status'].startswith('artid ') else 'artid занят' for r in res)
         print(f'{variant}: игроков {len(players)}, без портрета {len(res)}; найдено {st.get("ok", 0)}; '
@@ -317,7 +336,7 @@ def _build_one(job):
     ea, artid = job
     from roster import photos_other
     ph = photos_other._ph('legacy')
-    cdir = os.path.join(work(), 'photos24', 'cache', f'a{artid}-e{ea}')
+    cdir = os.path.join(work(), SUB, 'cache', f'a{artid}-e{ea}')
     if all(os.path.exists(os.path.join(cdir, f'{k}.big')) for k in ('big', 'small')):
         return artid, ea, 'ok'
     try:
@@ -354,7 +373,7 @@ def cmd_build(variants, jobs):
     ph = photos_other._ph('legacy')
     todo, res_of = set(), {}
     for variant in variants:
-        mp = os.path.join(work(), 'photos24', f'match-{variant}.json')
+        mp = os.path.join(work(), SUB, f'match-{variant}.json')
         res_of[variant] = (mp, json.load(open(mp, encoding='utf-8')))
         todo |= {(r['ea'], r['artid']) for r in res_of[variant][1] if r['status'] == 'ok'}
     t0 = time.time()
@@ -365,7 +384,7 @@ def cmd_build(variants, jobs):
         if st != 'ok':
             print('  ', k, st)
     for variant, (mp, res) in res_of.items():
-        root = os.path.join(work(), 'photos24', variant)
+        root = os.path.join(work(), SUB, variant)
         n = 0
         for r in res:
             r.pop('built', None)
@@ -381,7 +400,7 @@ def cmd_build(variants, jobs):
                 rel = ph.asset_relpath(kind, r['artid'])
                 dst = os.path.join(root, *rel.split('/'))
                 os.makedirs(os.path.dirname(dst), exist_ok=True)
-                shutil.copyfile(os.path.join(work(), 'photos24', 'cache', f"a{r['artid']}-e{r['ea']}", f'{kind}.big'), dst)
+                shutil.copyfile(os.path.join(work(), SUB, 'cache', f"a{r['artid']}-e{r['ea']}", f'{kind}.big'), dst)
                 r['files'].append(rel)
             n += 1
         json.dump(res, open(mp, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
@@ -389,7 +408,7 @@ def cmd_build(variants, jobs):
 
 
 def built(variant):
-    res = json.load(open(os.path.join(work(), 'photos24', f'match-{variant}.json'), encoding='utf-8'))
+    res = json.load(open(os.path.join(work(), SUB, f'match-{variant}.json'), encoding='utf-8'))
     return [r for r in res if r.get('built') == 'ok']
 
 
@@ -427,7 +446,7 @@ def cmd_apply(variants):
     others = {v: owners(v) for v in VARIANTS if os.path.exists(os.path.join(work(), v, 'db', 'nhlng.db'))}
     for variant in variants:
         rs = built(variant)
-        src = os.path.join(work(), 'photos24', variant)
+        src = os.path.join(work(), SUB, variant)
         dst = os.path.join(work(), variant)
         ok, conflict = [], []
         for r in rs:
@@ -452,12 +471,12 @@ def cmd_apply(variants):
         on = set_portraits(db, [(r['row'], r['artid'], r['game_id']) for r, _ in ok])
         subprocess.run([sys.executable, os.path.join(TOOLS, 'legacy_data', 'draft_roster.py'), db,
                         os.path.join(dst, 'db', 'draft_roster.db')], check=True)
-        log = os.path.join(work(), 'photos24', f'applied-{variant}.json')
+        log = os.path.join(work(), SUB, f'applied-{variant}.json')
         prev = {r['game_id']: r for r in json.load(open(log, encoding='utf-8'))} if os.path.exists(log) else {}
         prev.update({r['game_id']: dict(r, applied=time.strftime('%Y-%m-%d %H:%M')) for r, _ in ok})
         json.dump(sorted(prev.values(), key=lambda r: r['row']), open(log, 'w', encoding='utf-8'), ensure_ascii=False,
                   indent=1)
-        print(f'{variant}: файлов {n}, hasportrait = 1 у {on} (портретов NHL 24: {len(ok)}, конфликтов: {len(conflict)}) → {dst}')
+        print(f'{variant}: файлов {n}, hasportrait = 1 у {on} (портретов {LABEL}: {len(ok)}, конфликтов: {len(conflict)}) → {dst}')
         for r, why in conflict:
             print(f"   конфликт: {r['first']} {r['last']} — {why}")
 
@@ -502,7 +521,7 @@ LEAGUE_RU = {'nhl': 'НХЛ', 'ahl': 'АХЛ', 'shl': 'SHL', 'liiga': 'Liiga', '
 
 def cmd_report(variants):
     for variant in variants:
-        res = json.load(open(os.path.join(work(), 'photos24', f'match-{variant}.json'), encoding='utf-8'))
+        res = json.load(open(os.path.join(work(), SUB, f'match-{variant}.json'), encoding='utf-8'))
         tot, ok = Counter(r['league'] for r in res), Counter(r['league'] for r in res if r.get('built', r['status']) == 'ok')
         print(f'{variant}: без портрета {len(res)}, найдено {sum(ok.values())}')
         for lg, n in tot.most_common():
@@ -534,7 +553,7 @@ def cmd_sheet(variant, n, out):
     cols = 4
     sheet = Image.new('RGB', (cols * cw, ((len(pick) + cols - 1) // cols) * chh), (52, 52, 56))
     dr = ImageDraw.Draw(sheet)
-    root = os.path.join(work(), 'photos24', variant)
+    root = os.path.join(work(), SUB, variant)
     for i, r in enumerate(pick):
         x0, y0 = (i % cols) * cw, (i // cols) * chh
         src = Image.open(os.path.join(SRC24, f"p{r['ea']}.png")).convert('RGBA')
@@ -549,7 +568,7 @@ def cmd_sheet(variant, n, out):
         dr.text((x0 + 6, y0 + 128), f"{r['first']} {r['last']}", fill=(255, 255, 255), font=font)
         dr.text((x0 + 6, y0 + 144), f"{LEAGUE_RU.get(r['league'], r['league'])} · {r['birth'][0]}-{r['birth'][1]:02}-"
                                     f"{r['birth'][2]:02} · {r['how']}", fill=(190, 190, 200), font=font)
-        dr.text((x0 + 6, y0 + 160), f"NHL 24 p{r['ea']} → Legacy p{r['artid']}", fill=(150, 150, 160), font=font)
+        dr.text((x0 + 6, y0 + 160), f"{LABEL} p{r['ea']} → Legacy p{r['artid']}", fill=(150, 150, 160), font=font)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     sheet.save(out)
     print(f'лист: {len(pick)} игроков → {out}')
@@ -565,6 +584,7 @@ def main():
     ap.add_argument('--jobs', type=int, default=6)
     ap.add_argument('--n', type=int, default=40)
     ap.add_argument('--out')
+    ap.add_argument('--source', choices=tuple(SOURCES), default=SOURCE, help='игра-источник портретов (по умолчанию nhl24)')
     a = ap.parse_args()
     variants = a.variant or [v for v in VARIANTS if os.path.exists(os.path.join(work(), v, 'db', 'nhlng.db'))]
     if a.cmd == 'match':
@@ -579,7 +599,7 @@ def main():
         cmd_save(a.save, a.write, a.db)
     else:
         v = variants[-1]
-        cmd_sheet(v, a.n, a.out or os.path.join(work(), 'photos24', f'sheet-{v}.png'))
+        cmd_sheet(v, a.n, a.out or os.path.join(work(), SUB, f'sheet-{v}.png'))
 
 
 if __name__ == '__main__':

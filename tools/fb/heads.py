@@ -9,7 +9,12 @@ meshset.py 0xC0), +0x58/+0x5C — размеры буферов индексов
 смещение, поток), +0x8C — шаги потоков. Usage: 1 позиция, 2/3 индексы костей, 4/5 веса, 6 нормаль, 7 касательная,
 8 бинормаль, 0x21/0x22 UV. Форматы: 3 float3, 6 half2, 8 half4, 0x0D ubyte4n, 0x16 ubyte4, 0x17 ushort4.
 
-Только чтение; нужны дамп NHL 24 и каталог (fb.scan, fb.catalog, fb.toc index).
+NHL 27 (PS5, разобрано 21.10.2026 на голове Celebrini): впереди 16 байт, все смещения и указатели — от 0x10 (рамка @0x10,
+LOD — u64 @0x30); LOD: те же +0x08/+0x0C/+0x58/+0x5C, GUID чанка — +0x70; шаг секции 0x170, элементы — +0x70, шаги
+потоков — +0xB0. Вершины не общие: у каждого треугольника свои три (у головы 18 042 = 3 × 6014), индексы подряд. После
+склейки по позиции и UV — 3157 вершин, та же базовая голова, что у NHL 24 и Legacy (weld).
+
+Только чтение; нужны дамп и каталог (fb.scan, fb.catalog, fb.toc index), источник — FB_GAME (fb.source).
 """
 import csv
 import os
@@ -28,14 +33,34 @@ FMT = {3: ("<f4", 3), 6: ("<f2", 2), 8: ("<f2", 4), 0x0D: ("u1", 4), 0x16: ("u1"
        2: ("<f4", 2), 4: ("<f4", 4)}
 USAGE = {1: "pos", 2: "bi0", 3: "bi1", 4: "bw0", 5: "bw1", 6: "nrm", 7: "tan", 8: "binrm", 0x21: "uv0", 0x22: "uv1"}
 SECTION_STEP = 0xE0
+# раскладка MeshSet: (база смещений, где u64 LOD, GUID чанка от LOD, шаг секции, элементы, шаги потоков от секции)
+LAYOUT = {'ps4': (0x00, 0x20, 0x60, 0xE0, 0x4C, 0x8C), 'ps5': (0x10, 0x30, 0x70, 0x170, 0x70, 0xB0)}
+WELD = 5                                     # знаков после запятой при склейке вершин PS5 (позиция и UV)
 
 _res = None
 _tex = None
 
 
+def meshnames():
+    """catalog/meshnames.txt — имена res MeshSet (0x49B156D4) из прохода fb.scan; нет — собирается из scan/*.jsonl."""
+    path = os.path.join(CAT, "meshnames.txt")
+    if not os.path.exists(path):
+        import glob
+        import json
+        names = set()
+        for p in sorted(glob.glob(os.path.join(CAT, "scan", "*.jsonl"))):
+            with open(p, encoding="utf-8") as f:
+                for line in f:
+                    if '"type": 1236358868' in line and '"k": "res"' in line:
+                        names.add(json.loads(line)["name"])
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
+            f.write("\n".join(sorted(names)) + "\n")
+    return open(path, encoding="utf-8").read()
+
+
 def licensed_folders():
     """Папки сканов, у которых в каталоге есть сетка головы head_<папка>_mesh."""
-    txt = open(os.path.join(CAT, "meshnames.txt"), encoding="utf-8").read()
+    txt = meshnames()
     return sorted(set(re.findall(LICENSED + r"/([^/\s]+)/components/head_\1_mesh", txt)))
 
 
@@ -65,11 +90,15 @@ def mesh(name):
     d, _ = cas.read_entry(cas_file(r["cas"]), r["ofs"], r["size"])
     meta = bytes.fromhex(r["meta"])
     hdr, inline = struct.unpack_from("<II", meta, 0)
-    lod = struct.unpack_from("<Q", d, 0x20)[0]
+    from . import source
+    ps5 = source.PLATFORM.lower() == "ps5"
+    base, lod_at, guid_at, step, elem_at, stride_at = LAYOUT["ps5" if ps5 else "ps4"]
+    lod = struct.unpack_from("<Q", d, lod_at)[0] + base
     nsec, sec_ptr = struct.unpack_from("<II", d, lod + 0x08)
+    sec_ptr += base
     ib_size, vb_size = struct.unpack_from("<II", d, lod + 0x58)
-    cid = str(uuid.UUID(bytes_le=bytes(d[lod + 0x60:lod + 0x70])))
-    if inline:
+    cid = str(uuid.UUID(bytes_le=bytes(d[lod + guid_at:lod + guid_at + 16])))
+    if inline and hdr + vb_size + ib_size <= len(d):       # геометрия в самом res (у PS5 meta[1] = 0x4C — не она)
         data = d[hdr:]
     else:
         c = chunks().get(cid)
@@ -81,19 +110,19 @@ def mesh(name):
             data, _ = cas.read_entry(cas_file(c["cas"]), c["ofs"], (c["lo"] or 0) + c["ls"])
     vb = data[:vb_size]
     ib = np.frombuffer(data[vb_size:vb_size + ib_size], dtype="<u2")
-    out = {"bbox": struct.unpack_from("<8f", d, 0), "sections": {}}
+    out = {"bbox": struct.unpack_from("<8f", d, base), "sections": {}}
     for k in range(nsec):
-        s = sec_ptr + k * SECTION_STEP
-        nmp = struct.unpack_from("<Q", d, s + 0x08)[0]
+        s = sec_ptr + k * step
+        nmp = struct.unpack_from("<Q", d, s + 0x08)[0] + base
         sname = d[nmp:d.index(b"\0", nmp)].decode("latin1")
         ntri, first, voff, nv = struct.unpack_from("<4I", d, s + 0x20)
         elems = []
         for e in range(16):
-            usage, fmt, ofs, stream = struct.unpack_from("4B", d, s + 0x4C + 4 * e)
+            usage, fmt, ofs, stream = struct.unpack_from("4B", d, s + elem_at + 4 * e)
             if usage and stream != 0xFF:
                 elems.append((usage, fmt, ofs, stream))
         nstreams = max(e[3] for e in elems) + 1
-        strides = struct.unpack_from(f"<{nstreams}H", d, s + 0x8C)
+        strides = struct.unpack_from(f"<{nstreams}H", d, s + stride_at)
         starts, acc = [], voff
         for st in strides:
             starts.append(acc)
@@ -110,7 +139,27 @@ def mesh(name):
             raw = np.frombuffer(vb, dtype=np.uint8, count=st * nv, offset=starts[stream]).reshape(nv, st)
             sec[USAGE.get(usage, hex(usage))] = raw[:, ofs:ofs + np.dtype(dt).itemsize * n].copy().view(dt).reshape(
                 nv, n).astype(np.float64)
+        if ps5 and "pos" in sec and "uv0" in sec:
+            sec = weld(sec)
         out["sections"][sname] = sec
+    return out
+
+
+def weld(sec):
+    """Секция PS5 (у каждого треугольника свои вершины) → общие вершины по (позиция, UV0), порядок — первое появление;
+    атрибуты — у первого появления, треугольники перенумерованы."""
+    key = np.round(np.hstack([sec["pos"], sec["uv0"]]), WELD)
+    _, first_idx, inv = np.unique(key, axis=0, return_index=True, return_inverse=True)
+    order = np.argsort(first_idx)                    # новые номера — по первому появлению
+    rank = np.empty_like(order)
+    rank[order] = np.arange(len(order))
+    out = {"nv": len(order), "ntri": sec["ntri"], "tri": rank[inv.reshape(-1)][sec["tri"]], "welded_from": sec["nv"]}
+    pick = first_idx[order]
+    for k, v in sec.items():
+        if isinstance(v, np.ndarray) and k != "tri" and len(v) == sec["nv"]:
+            out[k] = v[pick]
+        elif k not in out and k not in ("tri", "nv"):
+            out[k] = v
     return out
 
 
