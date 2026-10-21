@@ -1,34 +1,38 @@
-"""Этап build-all «chl»: составы юниорских лиг CHL (OHL, QMJHL, WHL) — из базы NHL 27, в out и out-ahl32.
+"""Составы лиг из базы NHL 27 → NHL Legacy (out и out-ahl32): этапы build-all «chl» и «europe».
 
-Решение пользователя 21.10.2026: составы CHL обновить целиком по NHL 27 (имена, даты рождения, атрибуты, контракты и
-права, номера, звенья); НХЛ и АХЛ не трогать. До этапа в клубах CHL стояли игроки базы EA 2015 года (1994–1998 г. р.).
+Решения пользователя 21.10.2026: составы CHL обновить целиком по NHL 27 (имена, даты рождения, атрибуты, контракты и
+права, номера, звенья); европейские лиги — там, где у нас ещё составы базы EA 2015 года (SHL, DEL, Extraliga, NL; Liiga
+конвейер уже собрал с liiga.fi, Норвегии в NHL 27 нет); НХЛ и АХЛ не трогать.
 
-    python tools/legacy_data/chl27.py [--only build|write|clubs|draft] [--db27 nhl_game.db]
+    python tools/legacy_data/league27.py chl|europe [--only build|write|clubs|draft] [--db27 nhl_game.db]
 
-Что делается:
-1. **Игроки** (build) — все игроки составов 61 клуба CHL NHL 27 (tools/roster/nhl27.py). Клуб → слот Legacy по
-   аббревиатуре в своей лиге, переехавшие — по RENAMED; Penticton Vees (с 2025 года, 23-й клуб WHL) — слота нет, его
-   игроки пропускаются (в отчёт). Сопоставление с базой — как у конвейера (roster/match.py: имя и дата рождения).
-   Кто в базе в составе клуба НХЛ или АХЛ — остаётся там (НХЛ/АХЛ побеждает, в отчёт).
-2. **Запись** (write) — Chl27Writer (на основе roster/ahl2026_write.py AhlWriter): переписываются только составы клубов
-   CHL. Новый игрок занимает строку прежнего юниора 2015 года (старшие первыми), потом — игрока без клуба; пул
-   свободных агентов и составы НХЛ, АХЛ, Европы и особых команд не трогаются. Прежние юниоры, кому места нет, — без
-   клуба и контракта. У игрока из NHL 27 копируются как есть:
+Пресеты (PRESETS): лиги NHL 27, их лиги в Legacy, слоты Legacy, переехавшие клубы.
+
+1. **Игроки** (build) — все игроки составов клубов этих лиг NHL 27 (tools/roster/nhl27.py). Клуб → слот Legacy своей
+   лиги: явно (`renamed`), по аббревиатуре, по названию; оставшиеся слоты (клуб выбыл из лиги или исчез) — оставшимся
+   клубам NHL 27 по порядку, с новым названием. Клубам NHL 27, кому слота нет (Penticton Vees — 23-й клуб WHL; HC
+   Ajoie и Rapperswil-Jona — 13-й и 14-й клубы NL), игроки идут только в добор (ниже). Сопоставление с базой — как у
+   конвейера (roster/match.py: имя и дата рождения). Кто в базе в составе клуба вне этих лиг (НХЛ, АХЛ, Liiga, CHL…)
+   или в пуле свободных агентов, остаётся там (в отчёт): наши составы уровня НХЛ свежее NHL 27.
+2. **Запись** (write) — League27Writer (на основе roster/ahl2026_write.py AhlWriter): переписываются только составы
+   клубов этих лиг. Новый игрок занимает строку прежнего игрока этих клубов (старшие первыми), потом — игрока без клуба;
+   пул свободных агентов и составы других клубов не трогаются. Прежние игроки, кому места нет, — без клуба и контракта.
+   У игрока из NHL 27 копируются как есть:
    - биография (все поля Legacy, кроме арта и головы): имя, дата и место рождения, гражданство, рост, вес, хват,
-     амплуа, номер, драфт, права (proteam, клубы НХЛ — NHL_SLOT), контракт, игры, новичок; juniorteam/juniorleague —
-     свой клуб и его лига (как у юниоров базы EA 2015 года; в NHL 27 у юниоров они пустые);
+     амплуа, драфт, права (proteam, клубы НХЛ — NHL_SLOT), контракт, игры, новичок; у юниоров CHL juniorteam и
+     juniorleague — свой клуб и его лига (как у юниоров базы EA 2015 года; в NHL 27 у них пусто), у остальных — нет;
    - атрибуты (значение − 36, ratings.BASE), стиль, тенденции, черты, рост (growth*); потенциал — nhl27.POTENTIAL;
-   - звенья, большинство, меньшинство, овертайм, буллиты, одетые — из составов NHL 27 (nhl27.FLAG_MAP); буквы — из
-     NHL 27, недостающие — как у конвейера (Writer.letters).
-   Новым игрокам: artid — свободный (таблица legacy-data/chl27/artid-registry.json, общая у out и out-ahl32), голова —
-   типовая того же тона кожи (skincolor NHL 27), портрета нет (этап портретов NHL 27 — потом).
-3. **Клубы** (clubs) — у переехавших слотов название, город, аббревиатура и строки локализации (по artabbr слота);
-   арены всех клубов CHL — название и город из NHL 27, если строка арены не общая с другим клубом. Логотипы не меняются.
+   - звенья, большинство, меньшинство, овертайм, буллиты, одетые — из составов NHL 27 (nhl27.legacy_flag); буквы — из
+     NHL 27, недостающие — как у конвейера (Writer.letters); номера — по номерам NHL 27 (Writer.numbers).
+   Новым игрокам: artid — свободный (таблица legacy-data/league27/artid-registry.json, общая у out и out-ahl32),
+   голова — типовая того же тона кожи (skincolor NHL 27), портрета нет (этап портретов NHL 27 — потом).
+3. **Клубы** (clubs) — у слотов с другим клубом или названием: название, город, аббревиатура и строки локализации (по
+   artabbr слота); арены — название и город из NHL 27, если строка арены не общая с другим клубом. Логотипы не меняются.
 4. draft_roster.db — заново.
 
 Повторный запуск на той же базе ничего не меняет (сопоставление находит тех же игроков). Рабочие файлы —
-game/work/legacy-data/chl27/<out|out-ahl32>/ (players.json, match.json, write.json, report.json). Документация —
-docs/legacy-data.md, «CHL из NHL 27».
+game/work/legacy-data/league27/<пресет>/<out|out-ahl32>/ (players.json, match.json, write.json). Документация —
+docs/legacy-data.md, «Лиги из NHL 27».
 """
 import json
 import os
@@ -50,21 +54,25 @@ from roster import ovrformula  # noqa: E402
 from roster import write as W  # noqa: E402
 from roster.ahl2026_write import AhlWriter  # noqa: E402
 from roster.common import Paths, fit_utf8, norm, read_json, write_json  # noqa: E402
-from roster.dbview import (B, FLAGS, G, JUNIOR, NHL, POS_NAME, S, SPECIAL, T, View, fld)  # noqa: E402
+from roster.dbview import (B, FLAGS, G, POS_NAME, S, SPECIAL, T, View, fld)  # noqa: E402
 from roster.ratings import BASE, GK, SK, cls  # noqa: E402
 from tdb import Tdb, load_meta  # noqa: E402
 
 W_DIR = os.path.abspath(os.environ.get("LEGACY_DATA_WORK") or os.path.join(REPO, "game", "work", "legacy-data"))
-WORK = os.path.join(W_DIR, 'chl27')
+WORK = os.path.join(W_DIR, 'league27')
 LOC = 'fe/loc/NHL_ENG_US.db'
 LOC_META = os.path.join(REPO, 'game', 'other', 'legacy', 'big', 'cacheboot', 'fe', 'loc', 'nhl_eng_us-meta.xml')
-CHL27 = {11, 12, 13}                              # OHL, QMJHL, WHL в NHL 27
-AHL = range(32, 62)                               # клубы АХЛ Legacy (НХЛ/АХЛ побеждает)
-# переехавшие клубы: аббревиатура NHL 27 → слот Legacy (прежний клуб того же франчайза)
-RENAMED = {'BRAN': 158,   # Hamilton Bulldogs → Brantford Bulldogs (2023)
-           'BRAM': 162,   # Mississauga Steelheads → Brampton Steelheads (2024)
-           'NFLD': 174,   # Acadie-Bathurst Titan → Newfoundland Regiment (2025)
-           'WEN': 198}    # Kootenay Ice → Winnipeg Ice → Wenatchee Wild (2023)
+PRESETS = {
+    # юниоры: OHL, QMJHL, WHL (лиги NHL 27 11–13 → Legacy 9–11), слоты 154–213; переехавшие франшизы — в прежние слоты
+    'chl': {'leagues': {11: 9, 12: 10, 13: 11}, 'slots': range(154, 214), 'junior': True,
+            'renamed': {'BRAN': 158,    # Hamilton Bulldogs → Brantford Bulldogs (2023)
+                        'BRAM': 162,    # Mississauga Steelheads → Brampton Steelheads (2024)
+                        'NFLD': 174,    # Acadie-Bathurst Titan → Newfoundland Regiment (2025)
+                        'WEN': 198}},   # Kootenay Ice → Winnipeg Ice → Wenatchee Wild (2023)
+    # Европа с составами 2015 года: SHL, DEL, Extraliga, NL (номера лиг у NHL 27 и Legacy совпадают); Liiga (3) собрал
+    # конвейер с liiga.fi, Норвегии (7 у Legacy) в NHL 27 нет — не трогаются
+    'europe': {'leagues': {2: 2, 4: 4, 5: 5, 6: 6}, 'slots': range(62, 131), 'junior': False, 'renamed': {}},
+}
 SYNTH = 97_000_000                                # nhl_id игроков NHL 27 в конвейере: SYNTH + game_id NHL 27
 BIO_SKIP = {'game_id', 'jersey', 'artid', 'audioid', 'hasportrait', 'headid', 'skincolor', 'team', 'proteam', 'draftteam',
             'juniorteam', 'juniorleague', 'firstname', 'lastname', 'birthplace'}
@@ -76,16 +84,31 @@ def clamp(x, w):
 
 
 # --- 1. игроки -----------------------------------------------------------------------------------------------------
-def club_slots(db_l, tm27):
-    """{строка команды NHL 27: слот Legacy} для клубов CHL; Penticton и прочие без слота — нет в словаре."""
-    by = {}
-    for t in sorted(JUNIOR):
-        by[(db_l.get(T, 'league', t), db_l.get_string(T, 'abbrname', t))] = t
+def club_slots(db_l, tm27, pr):
+    """{номер команды NHL 27: слот Legacy}: явно (renamed), по аббревиатуре в своей лиге, по названию; оставшиеся слоты
+    лиги — оставшимся клубам NHL 27 по порядку. Клубы NHL 27, кому слота не хватило, — нет в словаре."""
     out = {}
-    for t27, c in tm27.items():
-        slot = RENAMED.get(c['abbr']) or by.get((nhl27.LEGACY_LEAGUE[c['league']], c['abbr']))
-        if slot is not None:
-            out[t27] = slot
+    for lg27, lg in pr['leagues'].items():
+        free = [t for t in pr['slots'] if db_l.get(T, 'league', t) == lg]
+        clubs = sorted(t for t, c in tm27.items() if c['league'] == lg27)
+        key = lambda s: norm(s)
+        for rule in ('renamed', 'abbr', 'name'):
+            for t27 in clubs:
+                if t27 in out:
+                    continue
+                c = tm27[t27]
+                if rule == 'renamed':
+                    slot = pr['renamed'].get(c['abbr'])
+                elif rule == 'abbr':
+                    slot = next((t for t in free if db_l.get_string(T, 'abbrname', t) == c['abbr']), None)
+                else:
+                    slot = next((t for t in free if key(db_l.get_string(T, 'fullname', t)) == key(c['name'])), None)
+                if slot is not None and slot in free:
+                    out[t27] = slot
+                    free.remove(slot)
+        for t27 in clubs:                                # выбывшие слоты — пришедшим клубам, по порядку
+            if t27 not in out and free:
+                out[t27] = free.pop(0)
     return out
 
 
@@ -108,18 +131,19 @@ def to_record(p27, slot):
     }
 
 
-def cmd_build(db_path, work, db27, log):
+def cmd_build(db_path, work, db27, pr, log):
     paths = Paths(None, work)
     db, _ = match_mod.load_db(paths, db_path)
     v = View(db)
-    tm27 = nhl27.teams(db27, CHL27)
-    slots = club_slots(db, tm27)
+    tm27 = nhl27.teams(db27, set(pr['leagues']))
+    slots = club_slots(db, tm27, pr)
+    own = set(slots.values())
     no_slot = sorted({c['abbr'] for t, c in tm27.items() if t not in slots})
     if len(set(slots.values())) != len(slots):
         raise SystemExit(f'два клуба NHL 27 на один слот: {slots}')
     idx = match_mod.index(v)
     recs, skipped, wins = [], [], []
-    for p27 in nhl27.players(db27, CHL27):
+    for p27 in nhl27.players(db27, set(pr['leagues'])):
         slot = slots.get(p27['team'])
         if slot is None:
             skipped.append(f"{p27['bio']['firstname']} {p27['bio']['lastname']} ({p27['club']['abbr']})")
@@ -140,26 +164,28 @@ def cmd_build(db_path, work, db27, log):
     keep = []
     for p in recs:
         row = found[p['nhl_id']][0]
-        if row is not None and any(t in NHL or t in AHL for t in v.teams_of[row]):
-            wins.append({'name': f"{p['first']} {p['last']}", 'chl': p['team'],
-                         'ours': [v.team_name(t) for t in v.teams_of[row] if t in NHL or t in AHL]})
+        other = [v.team_name(t) for t in v.teams_of[row] if t not in own and t not in SPECIAL] if row is not None else []
+        if row is not None and row in v.fa_rows:
+            other.append('пул свободных агентов')
+        if other:                                        # в базе — в клубе вне этих лиг или в пуле FA: остаётся там
+            wins.append({'name': f"{p['first']} {p['last']}", 'nhl27': p['team'], 'ours': other})
             continue
         keep.append(p)
-    fills = fill_rosters(keep, [to_record(p27, None) for p27 in nhl27.players(db27, CHL27) if p27['team'] not in slots],
-                         db, log)
+    fills = fill_rosters(keep, [to_record(p27, None) for p27 in nhl27.players(db27, set(pr['leagues']))
+                                if p27['team'] not in slots], db, log)
     for p in keep:                                       # добор из клуба без слота — тоже через сопоставление
         if p['nhl_id'] not in found:
             found[p['nhl_id']] = match_mod.match_one(v, idx, p)
             row = found[p['nhl_id']][0]
-            if row is not None and any(t in NHL or t in AHL for t in v.teams_of[row]):
-                log(f"  {p['first']} {p['last']} (добор) в базе в НХЛ/АХЛ — строка не трогается, добавлен как новый")
+            if row is not None and (row in v.fa_rows or any(t not in own and t not in SPECIAL for t in v.teams_of[row])):
+                log(f"  {p['first']} {p['last']} (добор) в базе в другом клубе — строка не трогается, добавлен как новый")
                 found[p['nhl_id']] = (None, 'none')
     dropped = fit_donors(keep, found, v, log)
     keep.sort(key=lambda p: (p['slot'], {'C': 0, 'L': 1, 'R': 2, 'D': 3, 'G': 4}[p['pos']], p['last'], p['first']))
     os.makedirs(work, exist_ok=True)
-    write_json(paths.players, {'meta': {'source': 'NHL 27 nhl_game.db, OHL/QMJHL/WHL', 'db': db_path,
+    write_json(paths.players, {'meta': {'source': f'NHL 27 nhl_game.db, лиги {sorted(pr["leagues"])}', 'db': db_path,
                                         'slots': {tm27[t]['abbr']: s for t, s in slots.items()}, 'no_slot': no_slot,
-                                        'skipped': skipped, 'nhl_ahl_wins': wins, 'conflicts': conflicts,
+                                        'skipped': skipped, 'kept_elsewhere': wins, 'conflicts': conflicts,
                                         'fills': fills, 'dropped_no_row': dropped},
                                'players': keep})
     mt = {}
@@ -169,8 +195,8 @@ def cmd_build(db_path, work, db27, log):
         if row is not None:
             mt[str(p['nhl_id'])].update(db_name=v.name(row), db_teams=v.teams_of[row])
     write_json(paths.matched, {'db': db_path, 'counts': dict(Counter(r['how'] for r in mt.values())), 'players': mt})
-    log(f"build: игроков CHL NHL 27 {len(recs) + len(skipped)}, в слотах {len(keep)} ({len(slots)} клубов); "
-        f"сопоставлено с базой {sum(1 for r in mt.values() if r['row'] is not None)}; НХЛ/АХЛ побеждает {len(wins)}; "
+    log(f"build: игроков NHL 27 {len(recs) + len(skipped)}, в слотах {len(keep)} ({len(slots)} клубов); "
+        f"сопоставлено с базой {sum(1 for r in mt.values() if r['row'] is not None)}; остались в своих клубах вне лиг {len(wins)}; "
         f"без слота {no_slot} — {len(skipped)} игроков")
     return keep
 
@@ -254,11 +280,12 @@ def fit_donors(keep, found, v, log):
 
 
 # --- 2. запись -----------------------------------------------------------------------------------------------------
-class Chl27Writer(AhlWriter):
-    ROSTER_MIN, ROSTER_MAX = 20, 32                  # в NHL 27 у клубов CHL 20–30 игроков (все 20 одеты)
+class League27Writer(AhlWriter):
+    ROSTER_MIN, ROSTER_MAX = 20, 36                  # в NHL 27 у клубов CHL 20–30 игроков, у Европы до 32 (одеты 20)
+    junior = True                                    # юниоры CHL: juniorteam/juniorleague — свой клуб
 
     def donor_candidates(self, taken):
-        """Строки прежних юниоров клубов CHL (старшие первыми), потом игроков без клуба; пул свободных агентов, НХЛ,
+        """Строки прежних игроков клубов пресета (старшие первыми), потом игроков без клуба; пул свободных агентов, НХЛ,
         АХЛ, Европа и особые команды — никогда."""
         v = self.v
         out = {'G': [], 'S': []}
@@ -321,8 +348,8 @@ class Chl27Writer(AhlWriter):
         put('proteam', nhl(b['proteam']))
         put('draftteam', nhl(b['draftteam']))
         # юниорский клуб — свой слот и его лига (так у юниоров CHL базы EA 2015 года; в NHL 27 у них пусто)
-        put('juniorteam', p['slot'])
-        put('juniorleague', db.value(T, 'league', p['slot']))
+        put('juniorteam', p['slot'] if self.junior else -1)
+        put('juniorleague', db.value(T, 'league', p['slot']) if self.junior else 0)
         if new:
             db.set(B, 'artid', r, self.artid[p['nhl_id']])
             db.set(B, 'audioid', r, 0)
@@ -400,13 +427,14 @@ class Chl27Writer(AhlWriter):
         return W.lines_mod.build(lp)
 
 
-def cmd_write(db_path, work, out, log):
+def cmd_write(db_path, work, out, pr, log):
     paths = Paths(None, work)
     paths.db_in = os.path.abspath(db_path)
     paths.db_out = os.path.abspath(out)
-    paths.registry = os.path.join(WORK, 'artid-registry.json')
+    paths.registry = os.path.join(WORK, 'artid-registry.json')       # общая у пресетов, out и out-ahl32
     paths.retire_veterans = 2010                    # free_vacancy: моложе 2010 г. р. ушедших из НХЛ нет — без них
-    w = Chl27Writer(paths, log, real_lines=False)
+    w = League27Writer(paths, log, real_lines=False)
+    w.junior = pr['junior']
     bad, crc, removed = w.run()
     if crc:
         raise SystemExit(f'CRC не сходятся: {crc[:3]}')
@@ -427,7 +455,7 @@ def cmd_write(db_path, work, out, log):
                                'sizes': {str(t): n for t, n in sorted(sizes.items())}})
     log(f'write: игроков {len(w.out)} (сопоставлено {len(w.out) - len(w.new)}, в строках доноров {len(w.new)}); '
         f'клубов {len(sizes)} ({min(sizes.values())}–{max(sizes.values())} игроков); звенья {dict(lines)}; '
-        f'без клуба (юниоры 2015) {len(w.teamless)}; новых связей {len(w.new_links)} → {paths.db_out}')
+        f'без клуба (прежние игроки) {len(w.teamless)}; новых связей {len(w.new_links)} → {paths.db_out}')
 
 
 # --- 3. клубы ------------------------------------------------------------------------------------------------------
@@ -436,17 +464,23 @@ LOC_KEYS = {'NHLTeamName': 'name', 'NHLTEAMNAME': 'name', 'NHLCityName': 'city',
             'TXT_NICKNAME': 'nick', 'TXT_NICKNAME_ALT': 'nick', 'NHLTeamName_ABBR3': 'abbr', 'X_XLA_TEAM': 'abbr'}
 
 
-def cmd_clubs(db_path, db27, loc_path, log):
-    """Названия переехавших слотов (база и локализация), арены клубов CHL из NHL 27. → (байты базы, байты лок.)."""
+def cmd_clubs(db_path, db27, pr, loc_path, log):
+    """Названия слотов с другим клубом или названием (база и локализация), арены клубов из NHL 27.
+    → (байты базы, байты локализации)."""
     db = Tdb(open(db_path, 'rb').read(), load_meta(os.path.join(os.path.dirname(db_path), 'nhlng-meta.xml')))
-    tm27 = nhl27.teams(db27, CHL27)
-    slots = club_slots(db, tm27)
+    tm27 = nhl27.teams(db27, set(pr['leagues']))
+    slots = club_slots(db, tm27, pr)
     width = lambda t, f: db.by_name[t]['fields'][f][1] // 8 - 1
     n = 0
+    # буквы, которые уже есть в названиях команд и арен базы (значит, есть в шрифте игры)
+    seen = {ch for t in (T, 'exhibitionarena') for r in range(db.by_name[t]['rows'])
+            for f in (('fullname', 'shortname', 'abbrname') if t == T else ('arenaname', 'cityname'))
+            for ch in db.get_string(t, f, r)}
+    in_font = lambda ch: ord(ch) < 128 or ch in seen
 
     def put(table, field, row, text):
         nonlocal n
-        text = fit_utf8((text or '').replace('’', "'").strip(), width(table, field))
+        text = fit_utf8(safe_text((text or '').replace('’', "'").strip(), in_font), width(table, field))
         if db.get_string(table, field, row) != text:
             db.set_string(table, field, row, text)
             n += 1
@@ -456,7 +490,7 @@ def cmd_clubs(db_path, db27, loc_path, log):
     renamed = []
     for t27, slot in sorted(slots.items(), key=lambda x: x[1]):
         c = tm27[t27]
-        if c['abbr'] in RENAMED or db.get_string(T, 'fullname', slot) != fit_utf8(c['name'], width(T, 'fullname')):
+        if c['abbr'] in pr['renamed'] or db.get_string(T, 'fullname', slot) != fit_utf8(c['name'], width(T, 'fullname')):
             renamed.append((slot, c))
             put(T, 'fullname', slot, c['name'])
             put(T, 'shortname', slot, c['city'])
@@ -482,8 +516,9 @@ def cmd_clubs(db_path, db27, loc_path, log):
             if key.lower() in done or not loc.find_all(key):
                 continue
             done.add(key.lower())
-            if loc.text(loc.text_off_at(loc.find_all(key)[0])) != val[what]:
-                loc.put(key, val[what])
+            text = safe_text(val[what], lambda ch: all(b in loc.codes for b in ch.encode('utf-8')))
+            if loc.text(loc.text_off_at(loc.find_all(key)[0])) != text:
+                loc.put(key, text)
                 m += 1
     bad = loc.check()
     if bad:
@@ -492,6 +527,16 @@ def cmd_clubs(db_path, db27, loc_path, log):
     log(f"clubs: переименовано {len(renamed)} ({', '.join(c['name'] for _, c in renamed)}); значений в базе {n}, "
         f'строк локализации {m}')
     return bytes(db.d), bytes(loc.db.d)
+
+
+def ascii_of(ch):
+    import unicodedata
+    return unicodedata.normalize('NFKD', ch).encode('ascii', 'ignore').decode()
+
+
+def safe_text(text, ok):
+    """Буквы, которых нет в ok (функция «символ можно»), — без диакритики (Ó → O; у EA бывает и кириллица: Malmӧ)."""
+    return ''.join(ch if ok(ch) else ascii_of(ch) for ch in text)
 
 
 def write_if_changed(path, data):
@@ -506,6 +551,9 @@ def write_if_changed(path, data):
 def main():
     sys.stdout.reconfigure(encoding='utf-8')
     args = sys.argv[1:]
+    if not args or args[0] not in PRESETS:
+        sys.exit(__doc__)
+    name_pr, pr = args[0], PRESETS[args[0]]
     only = args[args.index('--only') + 1] if '--only' in args else None
     db27 = nhl27.open_db(args[args.index('--db27') + 1] if '--db27' in args else None)
     for name in ('out-ahl32', 'out'):
@@ -513,7 +561,7 @@ def main():
         final = os.path.join(d, 'db', 'nhlng.db')
         if not os.path.isfile(final):
             continue
-        work = os.path.join(WORK, name)
+        work = os.path.join(WORK, name_pr, name)
         print(f'== {name}')
         # на копии базы в рабочей папке: в out база и локализация попадают только в конце, целиком
         stage = os.path.join(work, 'db')
@@ -523,13 +571,13 @@ def main():
         dbp = os.path.join(stage, 'nhlng.db')
         log = print
         if only in (None, 'build'):
-            cmd_build(dbp, work, db27, log)
+            cmd_build(dbp, work, db27, pr, log)
         if only in (None, 'write'):
-            cmd_write(dbp, work, dbp, log)
+            cmd_write(dbp, work, dbp, pr, log)
         lp = os.path.join(d, *LOC.split('/'))
         loc_data = None
         if only in (None, 'clubs'):
-            data, loc_data = cmd_clubs(dbp, db27, lp, log)
+            data, loc_data = cmd_clubs(dbp, db27, pr, lp, log)
             write_if_changed(dbp, data)
         if only is None or only in ('write', 'clubs'):
             changed = write_if_changed(final, open(dbp, 'rb').read())

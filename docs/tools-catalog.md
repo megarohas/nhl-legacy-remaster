@@ -17,7 +17,7 @@
 |---|---|---|---|
 | **Составы НХЛ** (клубы, звенья, номера, рейтинги, свободные агенты) | `python tools/roster all --game legacy …` (этап `roster`), `registry_from_db.py`, `nhl_attrs.py`, `retire_veterans.py` | [roster-pipeline.md](roster-pipeline.md), [roster-expansion.md](roster-expansion.md), [legacy-data.md](legacy-data.md) | П — сезон одной настройкой `NHL_SEASON` (`tools/season.py`) |
 | **Составы АХЛ** | `python -m roster.ahl_ht`, `roster.ahl2026`, этап `ahl` (`ahl2026_slots.py`) | legacy-data.md | П — сезон из `tools/season.py`; слоты клубов — таблицей под 2026/27 |
-| **Составы других лиг** | `legacy_data/chl27.py` (CHL из NHL 27), `roster/league.py` (Liiga) | legacy-data.md «CHL из NHL 27», roster-expansion.md | И — CHL; — сборные, SHL, DEL, NL, Extraliga |
+| **Составы других лиг** | `legacy_data/league27.py chl\|europe` (CHL, SHL, DEL, Extraliga, NL из NHL 27), `roster/league.py` (Liiga) | legacy-data.md «Лиги из NHL 27», roster-expansion.md | И; — сборные |
 | **Фото игроков** | `photos.py` (НХЛ), `python tools/roster photos` (не из НХЛ), `roster.ht_photos` (АХЛ), `photos24.py` (из NHL 24), `playerhead.py` (формат) | [player-photos.md](player-photos.md), [player-photos-nhl24.md](player-photos-nhl24.md) | И; `photos24` — П (привязан к NHL 24) |
 | **Логотипы** НХЛ и АХЛ | `logos/fetch_nhl.py`, `logos/build.py`, этап `logos`; `teamart.py` (арт ⇄ PNG) | [logos-2026.md](logos-2026.md), [logos-arenas.md](logos-arenas.md) | И (лиги вне НХЛ/АХЛ — нет) |
 | **Новый игрок** (и правка своего) | `legacy_data/add_players.py db БАЗА СПЕКИ`, этап `players` | [add-players.md](add-players.md) | И — база набора; в сохранённый ROSTER не пишет |
@@ -65,7 +65,7 @@
 | 10 | Настройки лиг в файле (дивизионы, число игр для `nhl32`); `tools/brk.py show/set` (rookiegen, worth2, salarydata) | `nhl32.py`, `nhl-legacy-port/analysis/ovr/brk.py` | M–L |
 | 11 | kitport: профиль клуба вместо таблиц MIN; `kitport check` (листы слота, вратаря, LOD, гетр, превью); выбор kitpicker → реестр | `fb/edge_kit.py`, `game/work/nhl24/edgekit/*_check.py` | M–L |
 | 12 | Источник Frostbite через `fb.source` и у переноса: `photos24`, `heads24`, `scans24`, `kit_batch`, `pilot`, `nhl24.py`, проверки `build-all.sh` | `fb/source.py` | M |
-| 13 | ✔ 21.10: составы CHL из базы NHL 27 (`legacy_data/chl27.py`, этап `chl`); осталось: сборные, Европа (тот же `roster/nhl27.py`) | `roster/nhl27.py` | L |
+| 13 | ✔ 21.10: составы CHL и Европы (SHL, DEL, Extraliga, NL) из базы NHL 27 (`legacy_data/league27.py`, этапы `chl`, `europe`); осталось: сборные, Liiga — атрибуты EA | `roster/nhl27.py` | L |
 | 14 | Пульт и прогон в игре: `gameshot.ps1 -Do pad/burst/boot`, без путей `S:\`; `stackpeek --game legacy` | `game/work/natcup-test/pad.sh`, `loop.sh`, `d32pad.ps1`, `stackpeek_legacy.py` | S–M |
 | 15 | `tools/gencode.py` (функция, вызывающие, дерево, строки, хеши полей); «перенести всё в ROSTER»; читалка франшизы (ветка `nations-cup`) | `game/work/natcup-re/*`, `contracts/research/*`, `nhl-legacy-port/analysis/*` | M |
 
