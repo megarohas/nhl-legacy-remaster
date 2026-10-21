@@ -10,8 +10,9 @@ mat_head NHL 24 3157), вершины сопоставляются 1:1 по UV. 
     к NHL 24, без прядей (eyel, eyer, haircap, head, mouthbag);
   * head + mouthbag — позиции NHL 24 (низ шеи y < 1,60 — шаблона, переход до 1,66); нормали и касательные шаблона
     поворачиваются вслед за поверхностью; кости, веса, UV, индексы — шаблона;
-  * глаза шаблона — сдвиг вместе с веками; haircap — полем смещений головы, высота над скальпом — по прядям NHL 24, не
-    больше шаблонной + 4 мм и не больше 12 мм (место под шлемом);
+  * глаза шаблона — сдвиг по поверхности глаза источника, поворот — зрачок в середину разреза век (v7, headeyes.py);
+  * haircap — полем смещений головы, высота над скальпом — по прядям NHL 24, не больше шаблонной + 4 мм и не больше
+    12 мм (место под шлемом);
   * поза привязки файла: лицевые суставы шаблона (отличные от общего скелета) — сдвиг по весам кожи;
   * head_<id>_cm — цвет NHL 24 1024 → 512; hair_<id>_cm — пряди NHL 24, запечённые на развёртку haircap.
 База: headid игрока → ID EA; stockplayerheads (есть у каждой головы игрока, упорядочена по headid) — строка новой головы
@@ -22,7 +23,10 @@ mat_head NHL 24 3157), вершины сопоставляются 1:1 по UV. 
   python tools/scans24.py build [--jobs 6] [--disputed]   # → <work>/scans24/cache/<id>/, ok → out/rendering/player/
   python tools/scans24.py apply            # headid + stockplayerheads в out/db и out-ahl32/db, draft_roster.db заново
   python tools/scans24.py save СЕЙВ [--write] [--variant out-ahl32]   # то же в сейве ROSTER (копия, проверка CRC)
-  python tools/scans24.py sheet [--n 60]   # лист «типовая сейчас | NHL 24 | наш» (+ спорные, + 5 в шлеме)
+  python tools/scans24.py sheet [--n 60] [--names "Имя Фамилия,…"]   # лист «типовая сейчас | NHL 24 | наш»
+                                           # (+ спорные, + 5 в шлеме)
+  python tools/scans24.py check [--ea] [--only папка,…] [--cache ПАПКА]   # глаза: против глаза источника, зрачок,
+                                           # край шапочки (headeyes.py); --ea — эталон по сканам EA
 
 <work> — game/work/legacy-data (LEGACY_DATA_WORK). Нужен питон с numpy, scipy, Pillow (PHOTOS24_PYTHON) и дамп NHL 24 с
 каталогом (tools/fb). Повтор ничего не меняет (кэш голов по версии сборки, apply/save — по applied-<вариант>.json).
@@ -48,16 +52,19 @@ TOOLS = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, TOOLS)
 os.environ.setdefault('NHL_GAME', 'legacy')
 import photos24 as P24  # noqa: E402
+import headeyes as HE  # noqa: E402
 import rw4mesh as R  # noqa: E402
 from tdb import Tdb, SaveFile  # noqa: E402
 from tdb_read import load_meta  # noqa: E402
 
 G = P24.G
 VARIANTS = P24.VARIANTS
-VERSION = 6                                   # версия сборки головы (кэш); 2 — карта вершин шаблона, UV; 3 — поза;
+VERSION = 7                                   # версия сборки головы (кэш); 2 — карта вершин шаблона, UV; 3 — поза;
                                               # 4 — глаза по глазам NHL 24 (вершина роговицы);
                                               # 5 — суставы век/бровей/скул = общий скелет (EYE_BONES);
                                               # 6 — глаза снова вслед за веками (v3), ось взгляда 23/24 — вместе с глазом
+                                              # 7 — яблоко по поверхности глаза источника, зрачок — в середину разреза
+                                              #     век (headeyes.py; 21.10, глаза Селебрини «режут веки»)
 EA_PLAYER = os.path.join(G.big, 'cacherender', 'rendering', 'player')
 COMMON = os.path.join(G.big, 'renderboot', 'rendering', 'player_common', 'texlib_999.rx2')
 BIO, HEADS, PLACE = 'exhibitionplayerbiotable', 'stockplayerheads', 'stockplayerhelmetplacement'
@@ -97,9 +104,27 @@ def lev(a, b):
     return prev[-1]
 
 
-def work():
+def work(src=None):
     """<work>/scans24 (источник NHL 24) или <work>/scans27 (--source nhl27: сетки PS5 читает fb.heads, 21.10.2026)."""
-    return os.path.join(P24.work(), 'scans24' if P24.SOURCE == 'nhl24' else 'scans' + P24.SOURCE[3:])
+    src = src or P24.SOURCE
+    return os.path.join(P24.work(), 'scans24' if src == 'nhl24' else 'scans' + src[3:])
+
+
+def other_sources(v):
+    """Головы, поставленные этим этапом из других источников (applied-<v>.json их папок): {game_id: headid} и номера
+    их файлов в out (out-files.json). Это персональные головы нашей версии — источник их не заменяет (решение
+    пользователя 21.10: «те, которые уже имеют персонализированную голову, не трогать»)."""
+    heads, files = {}, set()
+    for src in P24.SOURCES:
+        if src == P24.SOURCE:
+            continue
+        fn = os.path.join(work(src), f'applied-{v}.json')
+        if os.path.exists(fn):
+            heads.update({r['game_id']: r['new'] for r in json.load(open(fn, encoding='utf-8'))})
+        fn = os.path.join(work(src), 'out-files.json')
+        if os.path.exists(fn):
+            files |= {int(x[7:-4]) for x in json.load(open(fn, encoding='utf-8')) if x.startswith('player_')}
+    return heads, files
 
 
 def norm(s):
@@ -183,12 +208,16 @@ def cmd_match(variants):
         heads_used = defaultdict(set)
         for p in pl:
             heads_used[p['headid']].add(p['game_id'])
+        foreign, foreign_files = other_sources(v)
         ok, disp, conf, nofolder, artid_only = [], [], [], [], []
-        ea_scan = 0
+        ea_scan = ours = 0
         for p in pl:
             h = p['headid']
             if h < TYPICAL and h in ea:
                 ea_scan += 1
+                continue
+            if h < TYPICAL and foreign.get(p['game_id']) == h:
+                ours += 1                              # голова из другого источника (NHL 24) — не трогается
                 continue
             b = tuple(p['birth'])
             nf, nl = norm(p['first']), norm(p['last'])
@@ -227,6 +256,8 @@ def cmd_match(variants):
                     why.append(f'ID EA {new} ≥ 60000')
                 if new in ea:
                     why.append(f'файл player_{new} уже есть в архиве (другая голова)')
+                if new in foreign_files:
+                    why.append(f'файл player_{new} уже собран из другого источника')
                 other = heads_used.get(new, set()) - {p['game_id']}
                 if other and not all(o in matched_same(pl, other, q) for o in other):
                     why.append(f'headid {new} уже у game_id {sorted(other)}')
@@ -244,11 +275,13 @@ def cmd_match(variants):
                 rec['candidates'] = [{'name': f"{players[i]['first']} {players[i]['last']}", 'birth': players[i]['birth'],
                                       'artid': players[i]['artid'], 'folder': folder_of.get(i)} for i in cand]
                 disp.append(rec)
-        out = {'variant': v, 'players': len(pl), 'ea_scans_untouched': ea_scan, 'ok': ok, 'disputed': disp,
+        out = {'variant': v, 'players': len(pl), 'ea_scans_untouched': ea_scan, 'other_source_untouched': ours,
+               'ok': ok, 'disputed': disp,
                'conflict': conf, 'no_folder': nofolder, 'artid_only': artid_only}
         fn = os.path.join(work(), f'match-{v}.json')
         json.dump(out, open(fn, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
-        print(f'{v}: игроков {len(pl)}, со сканом EA (не трогаются) {ea_scan}; сопоставлено {len(ok)} '
+        print(f'{v}: игроков {len(pl)}, со сканом EA (не трогаются) {ea_scan}, с головой другого источника (не '
+              f'трогаются) {ours}; сопоставлено {len(ok)} '
               f'({dict(Counter(r["how"] for r in ok))}, по лигам {dict(Counter(r["league"] for r in ok).most_common())}); '
               f'спорных {len(disp)}, конфликтов {len(conf)}, скан в базе NHL 24 без папки {len(nofolder)}, совпал только номер '
               f'(другой человек, не берётся) {len(artid_only)} → {fn}')
@@ -315,12 +348,25 @@ def joints(inv):
     return np.array([-(m[3, :3] @ np.linalg.inv(m[:3, :3])) for m in inv])
 
 
+_SKEL = None
+
+
 def skeleton_inv():
-    R.use_game('legacy')
-    f = R.Rw4File(R.source(R.SKELETON), R.SKELETON)
-    b = f.body(f.find(R.TYPE_BINDPOSE)[0])
-    n = R.u32(b, 4)
-    return np.array(struct.unpack_from('>%df' % (16 * n), b, 16)).reshape(n, 4, 4)
+    global _SKEL
+    if _SKEL is None:
+        R.use_game('legacy')
+        f = R.Rw4File(R.source(R.SKELETON), R.SKELETON)
+        b = f.body(f.find(R.TYPE_BINDPOSE)[0])
+        n = R.u32(b, 4)
+        _SKEL = np.array(struct.unpack_from('>%df' % (16 * n), b, 16)).reshape(n, 4, 4)
+    return _SKEL.copy()
+
+
+def game_pose(part, pos, inv):
+    """Позиции части (head, mouthbag) в позе игры: игра берёт переносы суставов общего скелета, InvBind — из файла
+    головы, поэтому вершина смещается на Σ w·(J_общий − J_файла) (docs/heads-nhl24.md, «Веки»)."""
+    d = joints(skeleton_inv()) - joints(inv)
+    return pos + (d[part['bones']] * part['w'][..., None]).sum(1)
 
 
 def unit(v):
@@ -423,37 +469,16 @@ def pick_template(npos, lib, digits):
 
 # ------------------------------------------------------------------ сборка одной головы
 
-def build_one(job):
-    """job: {'new', 'folder', 'tpl'} → <work>/scans24/cache/<new>/ (player/texlib + info.json)."""
-    os.environ['KITPAINT_SERIAL'] = '1'
-    from scipy.spatial import cKDTree
-    from fb import heads, kit3d
-    new, folder, tpl = job['new'], job['folder'], job['tpl']
-    out = os.path.join(work(), 'cache', str(new))
-    info_fn = os.path.join(out, 'info.json')
-    key = {'version': VERSION, 'folder': folder, 'tpl': tpl}
-    if os.path.exists(info_fn):
-        info = json.load(open(info_fn, encoding='utf-8'))
-        if all(info.get(k) == v for k, v in key.items()):
-            return info
-    t0 = time.time()
-    rep = dict(key, new=new)
-    raw = bytearray(open(os.path.join(EA_PLAYER, f'player_{tpl}.rx2'), 'rb').read())
-    P, bpo, inv = parse_rx2(raw)
-    N = heads.head(folder)['sections']
+def source_map(P, N, folder, tpl):
+    """Вершины шаблона tpl (head + mouthbag) → вершины mat_head источника и выравнивание черепа источника к шаблону →
+    {'j', 'duv', 'uvdev', 'same_order', 'edges_common'?, 'rigid' (Rm, cx, cy) или None, 'pose', 'npos' (выровненные)}."""
     npos, nuv = N['mat_head']['pos'], N['mat_head']['uv0'][:, :2]
     ref = reference_head()
-    same_order = N['mat_head']['tri'].shape == ref['tri'].shape and (N['mat_head']['tri'] == ref['tri']).all()
-    tx = heads.head_textures(folder)
-    if same_order:
-        uvdev = float(np.abs(nuv - ref['uv0'][:, :2]).max())
-        if uvdev > 0.001:                      # своя правка развёртки у головы NHL 24 — текстура в общую развёртку
-            tx['head'] = warp_uv(tx['head'], nuv, ref['uv0'][:, :2], ref['tri'])
-    rep['nhl24_same_order'] = bool(same_order)
+    same_order = bool(N['mat_head']['tri'].shape == ref['tri'].shape and (N['mat_head']['tri'] == ref['tri']).all())
     nh = P['head']['nv']
-    hair = heads.hair(folder) if tx['hair'] is not None else []
     lpos = np.concatenate([P['head']['pos'], P['mouthbag']['pos']])
     luv = np.concatenate([P['head']['uv'], P['mouthbag']['uv']])
+    out = {'same_order': same_order}
     if same_order:                             # Legacy → NHL 24: порядок вершин у почти всех голов NHL 24 один
         j = templates()[tpl][:, 0].astype(int)
         duv = float(np.abs(luv - ref['uv0'][:, :2][j]).max())
@@ -465,12 +490,11 @@ def build_one(job):
         ltri = np.concatenate([P['head']['tri'], P['mouthbag']['tri'] + nh])
         edges = lambda t: {tuple(e) for e in np.sort(np.concatenate([t[:, [0, 1]], t[:, [1, 2]], t[:, [0, 2]]]), 1).tolist()}
         common = len(edges(j[ltri]) & edges(N['mat_head']['tri'])) / len(edges(N['mat_head']['tri']))
-        rep['edges_common'] = round(common, 3)
+        out['edges_common'] = round(common, 3)
         uvdev = duv
         if duv > 0.004 or common < 0.8:
             raise ValueError(f'{folder}: свой порядок вершин NHL 24 не сводится к общей голове (UV {duv:.4f}, '
                              f'общих рёбер {common:.0%})')
-    rep['nhl24_uv_dev'] = round(uvdev, 4)
     # поза: у части голов NHL 24 череп сдвинут/наклонён относительно шеи (Mark Stone — на 2 см) — тогда жёсткое
     # выравнивание по черепу (y > 1,70) к шаблону; у остальных (и у пилота Макара) — как есть
     m = (lpos[:, 1] > 1.70) & (np.arange(len(lpos)) < nh)
@@ -484,34 +508,77 @@ def build_one(job):
     if np.linalg.det(Rm) > 0 and (ang > POSE_DEG or tr * 1000 > POSE_MM):
         rigid = (Rm, cx, cy)
         npos = (npos - cx) @ Rm.T + cy
-    rep['pose'] = {'deg': round(ang, 2), 'mm': round(tr * 1000, 1), 'aligned': rigid is not None}
+    out.update(j=j, duv=duv, uvdev=uvdev, rigid=rigid, npos=npos,
+               pose={'deg': round(ang, 2), 'mm': round(tr * 1000, 1), 'aligned': rigid is not None})
+    return out
+
+
+def source_eyes(N, rigid):
+    """Вершины глаз источника (mat_eyes, оба глаза; x > 0 — левый), с тем же выравниванием, что голова, или None."""
+    if 'mat_eyes' not in N:
+        return None
+    e = N['mat_eyes']['pos']
+    return (e - rigid[1]) @ rigid[0].T + rigid[2] if rigid is not None else e
+
+
+def build_one(job):
+    """job: {'new', 'folder', 'tpl'} → <work>/scans24/cache/<new>/ (player/texlib + info.json)."""
+    os.environ['KITPAINT_SERIAL'] = '1'
+    from scipy.spatial import cKDTree
+    from fb import heads, kit3d
+    new, folder, tpl = job['new'], job['folder'], job['tpl']
+    out = os.path.join(work(), 'cache', str(new))
+    info_fn = os.path.join(out, 'info.json')
+    key = {'version': VERSION, 'eyes': HE.RULE, 'folder': folder, 'tpl': tpl, 'old_head': job.get('old_head')}
+    if os.path.exists(info_fn):
+        info = json.load(open(info_fn, encoding='utf-8'))
+        if all(info.get(k) == v for k, v in key.items()):
+            return info
+    t0 = time.time()
+    rep = dict(key, new=new)
+    raw = bytearray(open(os.path.join(EA_PLAYER, f'player_{tpl}.rx2'), 'rb').read())
+    P, bpo, inv = parse_rx2(raw)
+    N = heads.head(folder)['sections']
+    tx = heads.head_textures(folder)
+    sm = source_map(P, N, folder, tpl)
+    j, duv, rigid, npos = sm['j'], sm['duv'], sm['rigid'], sm['npos']
+    if sm['same_order'] and sm['uvdev'] > 0.001:     # своя правка развёртки у головы NHL 24 — текстура в общую развёртку
+        ref = reference_head()
+        tx['head'] = warp_uv(tx['head'], N['mat_head']['uv0'][:, :2], ref['uv0'][:, :2], ref['tri'])
+    rep['nhl24_same_order'] = sm['same_order']
+    if 'edges_common' in sm:
+        rep['edges_common'] = sm['edges_common']
+    rep['nhl24_uv_dev'] = round(sm['uvdev'], 4)
+    rep['pose'] = sm['pose']
+    nh = P['head']['nv']
+    hair = heads.hair(folder) if tx['hair'] is not None else []
+    lpos = np.concatenate([P['head']['pos'], P['mouthbag']['pos']])
     w = smoothstep(NECK[0], NECK[1], lpos[:, 1])[:, None]
     newp = lpos + w * (npos[j] - lpos)
     disp = newp - lpos
     rep.update(uv_match_max=duv, shape_change_mm=round(float(np.linalg.norm(disp, axis=1).mean() * 1000), 2))
-    # глаза: шапочка глаза шаблона — сдвиг так, чтобы вершина роговицы совпала с вершиной роговицы глаза NHL 24 (x, y —
-    # середина передних вершин в пределах 1 мм от передней точки, z — передняя точка). До 12.10 (v3) глаз шёл за веками
-    # (смещение ближайших вершин головы) и у части голов вставал не там, где у NHL 24: у Matthews на 3,4 мм ближе к
-    # переносице, у DeBrincat выше/вперёд — глаза «вылуплены» и режут веки (замечание пользователя после проверки в игре)
+    # глаза (v7, headeyes.py): сдвиг шапочки шаблона — по поверхности глаза источника (веки источника сделаны под его
+    # глаз), поворот вокруг центра — зрачок в середину разреза век (ниже, после суставов: разрез — в позе игры).
+    # До v7 (v3, v6) глаз шёл вслед за 24 ближайшими вершинами головы и вставал на 1–3 мм впереди глаза источника
+    # (у Селебрини 2,7, у Matthews ещё и на 3,4 мм ближе к переносице) — «выступает из черепа и режет веки»
+    # (пользователь, 21.10; раньше так же у Matthews и DeBrincat). v4/v5 брали вершину роговицы источника — у голов,
+    # где глаза источника в позе привязки повёрнуты, яблоки уезжали к переносице (Zegras, «косоглазие»).
     th = cKDTree(lpos[:nh])
-    eN = N['mat_eyes']['pos'] if 'mat_eyes' in N else None
-    if eN is not None and rigid is not None:
-        eN = (eN - rigid[1]) @ rigid[0].T + rigid[2]
-    eyes, rep['eyes'], eye_shift = {}, {}, {}
+    eN = source_eyes(N, rigid)
+    eyes, rep['eyes'], eye_shift, eye_rule = {}, {}, {}, {}
     for name, side in (('eyel', 1), ('eyer', -1)):
         q = P[name]['pos']
         d, ii = th.query(q.mean(0), k=24)
         wv = 1.0 / np.maximum(d, 1e-4) ** 2
-        t_old = (disp[:nh][ii] * wv[:, None]).sum(0) / wv.sum()
-        e = eN[np.sign(eN[:, 0]) == side] if eN is not None else np.zeros((0, 3))
-        # v6: глаз — вслед за веками (как v3). Правило v4/v5 «вершина роговицы = передняя точка глаза NHL 24» сводило
-        # яблоки к переносице у голов, где глаза NHL 24 в bind сведены (Matthews, Zegras: 2,5–3,4 мм) — асимметрия
-        # зрачков в разрезах век в покое p95 0,26 (у сканов EA 0,15), по веткам вслед за веками — 0,13
-        t = t_old
+        t_lids = (disp[:nh][ii] * wv[:, None]).sum(0) / wv.sum()            # v6: вслед за веками
+        pts = HE.src_front(eN[np.sign(eN[:, 0]) == side]) if eN is not None else np.zeros((0, 3))
+        t = HE.fit_to_source(q, pts) if len(pts) >= HE.MIN_SRC else None
+        eye_rule[name] = 'lids' if t is None else 'source'
+        t = t_lids if t is None else t
         eyes[name] = q + t
-        rep['eyes'][name] = {'shift_mm': np.round(t * 1000, 2).tolist(),
-                             'vs_nhl24_cornea_mm': np.round((cornea(e) - cornea(q) - t) * 1000, 2).tolist()
-                             if len(e) >= 20 else None}
+        rep['eyes'][name] = {'rule': eye_rule[name], 'src_points': len(pts), 'shift_mm': np.round(t * 1000, 2).tolist(),
+                             'vs_lids_mm': np.round((t - t_lids) * 1000, 2).tolist(),
+                             'ahead_v6_mm': HE.ahead(pts, q + t_lids), 'ahead_mm': HE.ahead(pts, q + t)}
         eye_shift[name] = t
     # haircap: поле смещений + высота по прядям NHL 24
     cap = P['haircap']
@@ -534,6 +601,18 @@ def build_one(job):
     if rigid is not None:                       # волосы — той же жёсткой поправкой, что голова
         Rm_, cx_, cy_ = rigid
         hair = [(n_, dict(s_, pos=(s_['pos'] - cx_) @ Rm_.T + cy_)) for n_, s_ in hair]
+    rep['hair_from'] = 'source' if hair else 'none'
+    if not hair:
+        # своих прядей у источника нет: у NHL 27 так у 261 головы из 293 (причёску собирает шейдер по рецепту материала,
+        # cranium/materials/recipe/<папка>_material_recipe — не разобран). Волосы нарисованы на скальпе (Селебрини) — как
+        # есть; иначе голова вышла бы лысой — волосы с нынешней типовой головы игрока (её подбирали по фото, heads24)
+        painted, rep['scalp_ratio'] = scalp_painted(N['mat_head'], tx['head'])
+        lh = None if painted else legacy_hair(job.get('old_head'))
+        if lh is not None:
+            hair, hair_tex = lh
+            rep['hair_from'] = f"legacy {job['old_head']}"
+        elif painted:
+            rep['hair_from'] = 'painted'
     pts, alp = [], []
     for _, s in hair:
         pos, uv, tri = s['pos'], s['uv0'][:, :2], s['tri']
@@ -578,22 +657,20 @@ def build_one(job):
         hair_rgba, ntris = np.zeros((256, 256, 4), np.uint8), 0
         hair_rgba[..., :3] = 60
     rep['hair_triangles'] = ntris
-    # нормали, касательные; запись вершин
-    newparts = {'head': newp[:nh], 'mouthbag': newp[nh:], 'haircap': cap_new, 'eyel': eyes['eyel'], 'eyer': eyes['eyer']}
-    for name, q in newparts.items():
-        p = P[name]
-        if name.startswith('eye'):
-            nrm, tan = p['nrm'], p['tan']
-        else:
-            gid = weld_ids(p['pos'])
-            a, b = weld_normals(p['pos'], p['tri'], gid), weld_normals(q, p['tri'], gid)
-            nrm, tan = rotate_frames(a, b, p['nrm']), rotate_frames(a, b, p['tan'])
-        e = p['el']
+    # нормали, касательные; запись вершин (глаза — после суставов: поворот к разрезу век считается в позе игры)
+    def put(name, q, nrm, tan):
+        p, e = P[name], P[name]['el']
         for i in range(p['nv']):
             o = p['vo'] + i * p['stride']
             struct.pack_into('>3H', raw, o + e[0].off, *[R.half_enc(float(x)) for x in q[i]])
             struct.pack_into('>I', raw, o + e[3].off, R.dec3n_enc(nrm[i], int(p['nrm_w'][i]) >> 30))
             struct.pack_into('>I', raw, o + e[6].off, R.dec3n_enc(tan[i], int(p['tan_w'][i]) >> 30))
+    newparts = {'head': newp[:nh], 'mouthbag': newp[nh:], 'haircap': cap_new}
+    for name, q in newparts.items():
+        p = P[name]
+        gid = weld_ids(p['pos'])
+        a, b = weld_normals(p['pos'], p['tri'], gid), weld_normals(q, p['tri'], gid)
+        put(name, q, rotate_frames(a, b, p['nrm']), rotate_frames(a, b, p['tan']))
     # поза привязки: лицевые суставы шаблона
     J0, Jt = joints(skeleton_inv()), joints(inv)
     bones = np.concatenate([P['head']['bones'], P['mouthbag']['bones']])
@@ -619,6 +696,19 @@ def build_one(job):
     struct.pack_into('>%df' % inv2.size, raw, bpo + 16, *inv2.reshape(-1))
     rep['joints_moved'] = moved
     rep['eye_bones_global'] = len(EYE_BONES)
+    # глаза: поворот шапочки вокруг центра — зрачок в середину разреза век головы в позе игры (v7)
+    hp_game = game_pose(P['head'], newp[:nh], inv2)
+    for name, side in (('eyel', 1), ('eyer', -1)):
+        p = P[name]
+        nrm, tan = p['nrm'], p['tan']
+        turn = HE.turn_to_aperture(eyes[name], p['uv'], p['tri'], hp_game, P['head']['tri'], side) \
+            if eye_rule[name] == 'source' else None
+        if turn is not None:
+            eyes[name], Re, deg = turn
+            nrm, tan = nrm @ Re.T, tan @ Re.T
+            rep['eyes'][name]['turn_deg'] = round(deg, 1)
+        put(name, eyes[name], nrm, tan)
+        newparts[name] = eyes[name]
     # проверка разбора
     P2, _, inv3 = parse_rx2(raw)
     rep['check_pos_err_mm'] = round(max(float(np.abs(P2[n]['pos'] - newparts[n]).max()) for n in newparts) * 1000, 3)
@@ -708,6 +798,39 @@ def sample(tex, u, v):
     return t[y0, x0] * (1 - fx) * (1 - fy) + t[y0, x1] * fx * (1 - fy) + t[y1, x0] * (1 - fx) * fy + t[y1, x1] * fx * fy
 
 
+SCALP_PAINTED = 0.6           # яркость скальпа / медиана яркости кожи головы ниже — волосы нарисованы на текстуре лица
+
+
+def scalp_painted(mh, tex):
+    """Волосы нарисованы на текстуре лица источника? Яркость текстуры у макушки (вершины выше макушки − 3 см) против
+    медианы по голове: у Селебрини 0,2, у лысых в NHL 27 скальпов (Сорокин, Марченко, Шестёркин) 0,93–1,03 → (да/нет, отношение)."""
+    p, uv = mh['pos'], mh['uv0'][:, :2]
+    H, W = tex.shape[:2]
+    lum = tex[np.clip((uv[:, 1] * H).astype(int), 0, H - 1), np.clip((uv[:, 0] * W).astype(int), 0, W - 1), :3].mean(1)
+    r = float(lum[p[:, 1] > p[:, 1].max() - 0.03].mean() / max(np.median(lum), 1.0))
+    return r < SCALP_PAINTED, round(r, 2)
+
+
+def legacy_hair(headid):
+    """Шапка волос головы Legacy headid (архив игры) как «пряди» для bake_hair → ([(имя, сетка)], RGBA float) или None."""
+    if not headid:
+        return None
+    mesh_fn, tl_fn = (os.path.join(EA_PLAYER, f'{k}_{headid}.rx2') for k in ('player', 'texlib'))
+    if not (os.path.exists(mesh_fn) and os.path.exists(tl_fn)):
+        return None
+    import kitpaint
+    import teamart
+    R.use_game('legacy')
+    P, _, _ = parse_rx2(open(mesh_fn, 'rb').read())
+    rw = teamart.Rw4.load(tl_fn)
+    for t in rw.textures:
+        if t.name.startswith('hair') and 'haircap' in P:
+            w, h, rgba = kitpaint.tex_decode(rw, t)
+            c = P['haircap']
+            return [('legacy_haircap', {'pos': c['pos'], 'uv0': c['uv'], 'tri': c['tri']})],                 np.frombuffer(bytes(rgba), np.uint8).reshape(h, w, 4).astype(np.float32)
+    return None
+
+
 def bake_hair(hair, hair_tex, capmesh, cap_uv, kit3d, size=256, ss=2):
     """Пряди NHL 24 → RGBA size² в развёртке haircap: каждая вершина прядей — на ближайшую точку шапки (UV и высота),
     треугольники — растеризация в UV по высоте снизу вверх, «поверх» (альфа текстуры волос NHL 24)."""
@@ -772,27 +895,30 @@ def cmd_build(jobs, disputed, only=None):
         if not os.path.exists(fn):
             raise SystemExit(f'нет {fn} — сначала match')
         m = json.load(open(fn, encoding='utf-8'))
+        done = {x['game_id']: x for x in json.load(open(applied_fn(v), encoding='utf-8'))}             if os.path.exists(applied_fn(v)) else {}
         for r in m['ok']:
-            want[r['new']] = (r['folder'], 'ok')
+            old = r['old'] if r['old'] >= TYPICAL else (done.get(r['game_id'], {}).get('old') or pilot_old(r))
+            want[r['new']] = (r['folder'], 'ok', old)
         if disputed:
             for r in m['disputed']:
                 for c in r.get('candidates', []):
                     if c.get('folder') and c['artid'] < TYPICAL and c['artid'] not in want:
-                        want[c['artid']] = (c['folder'], 'disputed')
+                        want[c['artid']] = (c['folder'], 'disputed', r['old'] if r['old'] >= TYPICAL else None)
     if only:
         keys = {norm(x) for x in only}
         want = {k: v for k, v in want.items() if norm(v[0]) in keys}
         if not want:
             raise SystemExit(f'--only {only}: нет среди сопоставленных (папки — как в licensed/<папка>)')
-    print(f'голов к сборке: {len(want)} (ok {sum(1 for f, k in want.values() if k == "ok")}); шаблонов {len(lib)}')
+    print(f'голов к сборке: {len(want)} (ok {sum(1 for f, k, _ in want.values() if k == "ok")}); шаблонов {len(lib)}')
     joblist = []
-    for new, (folder, kind) in sorted(want.items()):
+    for new, (folder, kind, old) in sorted(want.items()):
         npos = heads.head(folder)['sections']['mat_head']['pos']
         best = pick_template(npos, lib, len(str(new)))
         if best is None:
             print(f'  {new} {folder}: нет шаблона с {len(str(new))} цифрами — пропуск')
             continue
-        joblist.append({'new': new, 'folder': folder, 'tpl': best[0], 'tpl_dist_mm': round(best[1] * 1000, 2), 'kind': kind})
+        joblist.append({'new': new, 'folder': folder, 'tpl': best[0], 'tpl_dist_mm': round(best[1] * 1000, 2), 'kind': kind,
+                        'old_head': old})
     res, bad = {}, []
     with ProcessPoolExecutor(max_workers=jobs) as ex:
         futs = {ex.submit(build_one, j): j for j in joblist}
@@ -817,6 +943,11 @@ def cmd_build(jobs, disputed, only=None):
             if not os.path.exists(os.path.join(dst, fn)) or md5(os.path.join(dst, fn)) != md5(src):
                 shutil.copyfile(src, os.path.join(dst, fn))
             now.add(fn)
+    built_fn = os.path.join(work(), 'built.json')
+    if only:                                   # частичная сборка — к собранному раньше, прежние файлы в out остаются
+        res = {**({int(k): v for k, v in json.load(open(built_fn, encoding='utf-8')).items()}
+                  if os.path.exists(built_fn) else {}), **res}
+        now |= prev
     stale = sorted(prev - now)
     for fn in stale:
         p = os.path.join(dst, fn)
@@ -824,7 +955,7 @@ def cmd_build(jobs, disputed, only=None):
             os.makedirs(os.path.join(work(), 'stale'), exist_ok=True)
             shutil.move(p, os.path.join(work(), 'stale', fn))
     json.dump(sorted(now), open(man_fn, 'w', encoding='utf-8'), indent=0)
-    json.dump(res, open(os.path.join(work(), 'built.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
+    json.dump({str(k): v for k, v in sorted(res.items())}, open(built_fn, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
     print(f'собрано {len(res)} (ok в out: {len(now) // 2}), ошибок {len(bad)}, убрано из out прежних {len(stale)}')
     for b in bad:
         print('  ошибка:', b)
@@ -1000,6 +1131,80 @@ def cmd_save(save, write, v):
     with open(save, 'wb') as f:
         f.write(out)
     print(f'записано; копия до правки — {bk}')
+
+
+# ------------------------------------------------------------------ проверка глаз
+
+def check_one(a):
+    """(new, folder, tpl, путь к player_<new>.rx2) → метрики глаз (headeyes: ahead, зрачок, под веком, край шапочки)."""
+    new, folder, tpl, path = a
+    from fb import heads
+    B, _, inv = parse_rx2(open(path, 'rb').read())
+    T, _, _ = parse_rx2(open(os.path.join(EA_PLAYER, f'player_{tpl}.rx2'), 'rb').read())
+    N = heads.head(folder)['sections']
+    eN = source_eyes(N, source_map(T, N, folder, tpl)['rigid'])
+    hp, ht = game_pose(B['head'], B['head']['pos'], inv), B['head']['tri']
+    J = joints(inv)
+    piv = {n: J[b] for n, b in GAZE_BONES.items()}
+    eyes = {n: (B[n]['pos'], B[n]['uv'], B[n]['tri']) for n in GAZE_BONES}
+    out = {'new': new, 'folder': folder}
+    for name, side in (('eyel', 1), ('eyer', -1)):
+        pts = HE.src_front(eN[np.sign(eN[:, 0]) == side]) if eN is not None else np.zeros((0, 3))
+        out[f'ahead_{name}'] = HE.ahead(pts, B[name]['pos'])
+    out.update(HE.gaze_check(hp, ht, eyes, piv) or {})
+    out['edge'] = HE.edge_seen(hp, ht, eyes, piv)
+    return out
+
+
+def check_ea(path):
+    try:
+        P, _, inv = parse_rx2(open(path, 'rb').read())
+    except Exception:  # noqa: BLE001
+        return None
+    if 'eyel' not in P or P['head']['nv'] != 2623:
+        return None
+    J = joints(inv)
+    hp, piv = game_pose(P['head'], P['head']['pos'], inv), {n: J[b] for n, b in GAZE_BONES.items()}
+    eyes = {n: (P[n]['pos'], P[n]['uv'], P[n]['tri']) for n in GAZE_BONES}
+    r = HE.gaze_check(hp, P['head']['tri'], eyes, piv)
+    return r and dict(r, edge=HE.edge_seen(hp, P['head']['tri'], eyes, piv))
+
+
+def cmd_check(jobs, only=None, ea=False, cache=None):
+    """Глаза собранных голов (built.json этапа) против глаза источника и разреза век; --ea — те же метрики у сканов EA
+    Legacy (эталон). cache — другая папка с player_<id>.rx2 (например, прежняя версия) вместо cache/<id>/."""
+    built = json.load(open(os.path.join(work(), 'built.json'), encoding='utf-8'))
+    keys = {norm(x) for x in only} if only else None
+    todo = []
+    for k, v in built.items():
+        if v.get('kind') != 'ok' or (keys and norm(v['folder']) not in keys):
+            continue
+        path = os.path.join(cache, f'player_{k}.rx2') if cache else os.path.join(work(), 'cache', k, f'player_{k}.rx2')
+        if os.path.exists(path):
+            todo.append((int(k), v['folder'], v['tpl'], path))
+    with ProcessPoolExecutor(max_workers=jobs) as ex:
+        rows = list(ex.map(check_one, todo, chunksize=2))
+        eas = []
+        if ea:
+            paths = sorted(os.path.join(EA_PLAYER, x) for x in os.listdir(EA_PLAYER)
+                           if x.startswith('player_') and x[7:-4].isdigit() and int(x[7:-4]) < 20000)
+            eas = [r for r in ex.map(check_ea, paths, chunksize=4) if r]
+    pc = lambda a: np.percentile(a, [50, 95, 100]).round(2).tolist() if len(a) else None
+
+    def line(label, rr, src=True):
+        ah = [r[f'ahead_{e}'] for r in rr for e in GAZE_BONES if r.get(f'ahead_{e}') is not None] if src else []
+        print(f'{label}: голов {len(rr)}; ' + (f'глаз впереди глаза источника, мм p50/p95/max {pc(ah)}; ' if src else '') +
+              f'асимметрия зрачков {pc([r["asym"] for r in rr if "asym" in r])}; зрачок под веком при взгляде — у '
+              f'{sum(r.get("hidden", 0) > 0 for r in rr)}; край шапочки на виду {pc([r["edge"] for r in rr])}')
+    if eas:
+        line('сканы EA Legacy', eas, src=False)
+    line(os.path.basename(cache) if cache else f'{os.path.basename(work())} v{VERSION}', rows)
+    worst = sorted(rows, key=lambda r: -max(r.get('ahead_eyel') or 0, r.get('ahead_eyer') or 0))[:8]
+    print('больше всего впереди:', ', '.join(f"{r['folder']} {max(r.get('ahead_eyel') or 0, r.get('ahead_eyer') or 0)}"
+                                             for r in worst))
+    fn = os.path.join(work(), f'check-eyes{"-" + os.path.basename(cache) if cache else ""}.json')
+    json.dump({'rows': rows, 'ea': eas}, open(fn, 'w', encoding='utf-8'), ensure_ascii=False, indent=0, default=float)
+    print('→', fn)
 
 
 # ------------------------------------------------------------------ лист проверки (офлайн-рендер)
@@ -1277,7 +1482,7 @@ def cmd_sheet(n, jobs, variant='out-ahl32', names=None, helmets=5, disputed=True
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('cmd', choices=('match', 'build', 'apply', 'save', 'sheet', 'one'))
+    ap.add_argument('cmd', choices=('match', 'build', 'apply', 'save', 'sheet', 'one', 'check'))
     ap.add_argument('save', nargs='?')
     ap.add_argument('--variant', action='append', choices=VARIANTS)
     ap.add_argument('--write', action='store_true')
@@ -1285,9 +1490,12 @@ def main():
     ap.add_argument('--n', type=int, default=60)
     ap.add_argument('--disputed', action='store_true', help='build: собрать и головы спорных (в кэш, не в out); sheet: и их')
     ap.add_argument('--stars', action='store_true', help='sheet: 15 звёзд (STARS) вместо случайных')
+    ap.add_argument('--names', help='sheet: эти игроки (имя фамилия через запятую) вместо случайных')
     ap.add_argument('--helmets', type=int, default=5)
     ap.add_argument('--source', choices=tuple(P24.SOURCES), default=P24.SOURCE, help='игра-источник сканов (nhl24, nhl27)')
     ap.add_argument('--only', help='build: только эти папки источника через запятую (пилот: --only macklin_celebrini)')
+    ap.add_argument('--ea', action='store_true', help='check: и сканы EA Legacy (эталон)')
+    ap.add_argument('--cache', help='check: папка с player_<id>.rx2 другой версии (например, <work>/scans24/before-v7)')
     a = ap.parse_args()
     variants = a.variant or list(VARIANTS)
     if a.cmd == 'match':
@@ -1301,7 +1509,10 @@ def main():
             raise SystemExit('нужен путь к сейву ROSTER')
         cmd_save(a.save, a.write, (a.variant or ['out-ahl32'])[0])
     elif a.cmd == 'sheet':
-        cmd_sheet(a.n, a.jobs, names=STARS if a.stars else None, helmets=a.helmets, disputed=a.disputed)
+        names = [x.strip() for x in a.names.split(',')] if a.names else STARS if a.stars else None
+        cmd_sheet(a.n, a.jobs, names=names, helmets=a.helmets, disputed=a.disputed)
+    elif a.cmd == 'check':
+        cmd_check(a.jobs, a.only.split(',') if a.only else None, a.ea, a.cache)
     elif a.cmd == 'one':                       # отладка: python scans24.py one 20185:cale_makar
         new, folder = a.save.split(':')
         lib = templates()

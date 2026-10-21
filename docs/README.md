@@ -43,7 +43,7 @@
 
 - [player-photos.md](player-photos.md) — портреты игроков: формат (Apt в BIGF, DXT5), замена на 2026/27, фото не из НХЛ
 - [player-photos-nhl24.md](player-photos-nhl24.md) — портреты из NHL 24 игрокам без фото и типовые головы по фото (этапы `photos24` и `heads`)
-- [heads-nhl24.md](heads-nhl24.md) — сканы голов NHL 24 в Legacy: общая базовая сетка, глаза, суставы лица (этап `scans24`)
+- [heads-nhl24.md](heads-nhl24.md) — сканы голов NHL 24 и NHL 27 в Legacy: общая базовая сетка, глаза (v7, `headeyes.py`, `scans24.py check`), суставы лица (этап `scans24`)
 
 ## Составы, рейтинги, контракты
 
