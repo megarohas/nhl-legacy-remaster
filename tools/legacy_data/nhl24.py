@@ -387,6 +387,8 @@ def build_db(base, man, reg, files):
         later_keys = {(CLUBS[k['club']][0], k.get('style', 1), k['variant']) for k in new if phase_of(k) >= ph}
         rows_mid = [r for r in rows_of(db) if (r['teamid'], r['style'], r['variant']) not in later_keys]
         helmets += add_helmets(db, rows_mid, kits)
+    helmets += add_gloves(db, new)
+    helmets += team_colors(db)
     defaults, old_labels = set_defaults(db, rows, new, n_before)
     import draft_roster                               # накладка не должна менять таблицы draft_roster.db (он — из out)
     base_db = open_db(base)[1]
@@ -542,6 +544,106 @@ def club_equipment(db, low, team, extra=()):
 def _shade(colors):
     r, g, b = colors[:3]                            # зона 1 — каска (красный канал маски helmet_*_tm)
     return 'тёмный' if (r * 3 + g * 6 + b) / 10 < 128 else 'светлый'
+
+
+EQ_GLOVES = 4                                   # equipment краг (в базе — 5): строки брендов краг — только у него
+COLORS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'nhl24_team_colors.json')
+
+
+def glove_colors():
+    """{(клуб, форма): зоны краг (27 чисел)} — поле "gloves" записи формы в nhl24_helmets.json: зоны 1–9 по порядку
+    (у NHL 27 — stockteamequipmenttable, equipment 4: зоны 1–9 те же, что у Legacy, сверено по общим строкам)."""
+    if not os.path.exists(HELMETS):
+        return {}
+    out = {}
+    for club, kits in json.load(open(HELMETS, encoding='utf-8')).items():
+        if club == 'about':
+            continue
+        for kit, val in kits.items():
+            g = val.get('gloves') if isinstance(val, dict) else None
+            if g is None:
+                continue
+            if len(g) != 9 or not all(isinstance(z, list) and len(z) == 3 and all(0 <= c <= 255 for c in z) for z in g):
+                sys.exit(f'{HELMETS}: {club} {kit} gloves — нужно 9 зон [R, G, B]')
+            out[(club, kit)] = tuple(c for z in g for c in z)
+    return out
+
+
+def add_gloves(db, new):
+    """Краги новых форм — своей строкой (equipment 4) с зонами из nhl24_helmets.json ("gloves"), если они заданы
+    (пользователь, 21.10, TBL: у новых форм краги брали общую строку стиля 0 клуба — «чёрный / синий / белый», а у клуба
+    теперь синий и белый). Строка — era формы (стиль 0 → 0, стиль 1 → как у краг стиля 1 клуба), variant формы, brand −1:
+    по компаратору игры (eq_better: era, variant, brand) она лучше и общих строк, и строк брендов (era −1). Сверка на
+    модели: у новой формы — заданные зоны по каждому бренду краг клуба, у прежних форм — как было. → [описание]."""
+    explicit = glove_colors()
+    low = eq_low(db)
+    adds, done = [], []
+    for code in sorted({k['club'] for k in new if (k['club'], k['kit']) in explicit}, key=lambda c: CLUBS[c][0]):
+        team, art = CLUBS[code]
+        recs = club_equipment(db, low, team)
+        gl = [x for x in recs if x[2] == EQ_GLOVES]
+        base = next((x for x in gl if x[3] == -1), None)
+        if base is None:
+            sys.exit(f'{code}: у клуба нет строки краг с brand −1 ({EQ}, equipment {EQ_GLOVES}) — не с чего копировать')
+        brands = sorted({x[3] for x in gl if x[3] != -1})
+        BR = brands + [next(b for b in range(64) if b not in brands)]
+        era1 = 1 if any(x[0] == 1 for x in gl) else -1
+        mine = [r for r in rows_of(db) if r['teamid'] == team]
+        kits = sorted({(r['style'], r['variant']) for r in mine})
+        key = lambda s_, v, b: (era1 if s_ == 1 else 0, v, EQ_GLOVES, b)
+        pre = {(kv, b): eq_lookup(recs, key(*kv, b))[5] for kv in kits for b in BR}
+        club = []
+        for k in [k for k in new if k['club'] == code and (code, k['kit']) in explicit]:
+            st = k.get('style', 1)
+            zones = explicit[(code, k['kit'])]
+            club.append((base, era1 if st == 1 else 0, k['variant'], zones))
+            done.append(f"{code} {k['kit']} {st}_{art}_{k['variant']}: краги {zones[:3]}…{zones[15:21]} — "
+                        f"{os.path.basename(HELMETS)}")
+        post = club_equipment(db, low, team, [(e, v, EQ_GLOVES, -1, None, z) for _, e, v, z in club])
+        new_keys = {}
+        for (_, e, v, z), k in zip(club, [k for k in new if k['club'] == code and (code, k['kit']) in explicit]):
+            new_keys[(k.get('style', 1), v)] = z
+        for kv in kits:
+            for b in BR:
+                got = eq_lookup(post, key(*kv, b))[5]
+                want = new_keys.get(kv, pre[(kv, b)])
+                if got != want:
+                    sys.exit(f'{code} {kv[0]}_{art}_{kv[1]}: по модели краги не те (бренд {b})')
+        adds += club
+    if adds:
+        n = db.by_name[EQ]['rows']
+        db.resize(EQ, n + len(adds))
+        for i, (src, era, v, zones) in enumerate(adds):
+            db.put_record(EQ, n + i, db.record(EQ, src[4]))     # team, equipment 4, brand −1 — как у образца
+            db.set(EQ, 'era', n + i, era - low['era'])
+            db.set(EQ, 'variant', n + i, v - low['variant'])
+            db.set(EQ, 'index', n + i, n + i)
+            for f, c in zip(EQ_ZONES, zones):
+                db.set(EQ, f, n + i, c)
+    return done
+
+
+def team_colors(db):
+    """Палитра клуба (stockteamcolorstable, colorid 0–2) — из nhl24_team_colors.json, если задана (пользователь,
+    21.10, TBL: у клуба с середины 2010-х синий и белый, чёрный из акцентов — убрать; синий — палитра NHL 27). Число
+    строк не меняется: недостающие цвета — последним заданным. → [описание]."""
+    if not os.path.exists(COLORS):
+        return []
+    T_ = 'stockteamcolorstable'
+    out = []
+    for code, rgbs in json.load(open(COLORS, encoding='utf-8')).items():
+        if code == 'about':
+            continue
+        team = CLUBS[code][0]
+        rows = sorted((db.get(T_, 'colorid', r), r) for r in db.live_rows(T_) if db.get(T_, 'team', r) == team)
+        if not rows or not rgbs:
+            sys.exit(f'{COLORS}: {code} — у клуба нет палитры в базе или цвета не заданы')
+        for i, (cid, r) in enumerate(rows):
+            rgb = rgbs[min(i, len(rgbs) - 1)]
+            for c, v in zip('rgb', rgb):
+                db.set(T_, f'color_{c}', r, v)
+        out.append(f'{code}: палитра {[tuple(rgbs[min(i, len(rgbs) - 1)]) for i in range(len(rows))]}')
+    return out
 
 
 def add_helmets(db, rows, new):
