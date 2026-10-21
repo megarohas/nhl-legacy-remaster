@@ -282,6 +282,11 @@ def main():
     s.add_argument("--plain", action="store_true", help="без текстуры (только части тела, высоты, зоны)")
     s.add_argument("--out", default=None)
     sub.add_parser("params", help="каталог параметров формы")
+    s = sub.add_parser("survey", help="обзор форм клубов источника: перед, плечо, ворот (разбор по типам)")
+    s.add_argument("--source", default="nhl27")
+    s.add_argument("--clubs", default="", help="папки клубов через запятую (по умолчанию — все)")
+    s.add_argument("--kits", default="home,away")
+    s.add_argument("--jobs", type=int, default=8)
     a = p.parse_args()
     if a.cmd in ("sheet",):
         from . import sheets
@@ -289,6 +294,9 @@ def main():
     if a.cmd == "uvmap":
         from . import uvmap
         return uvmap.cmd_uvmap(a)
+    if a.cmd == "survey":
+        from . import survey
+        return survey.cmd_survey(a)
     if a.cmd == "params":
         from . import params
         return params.cmd_params(a)
