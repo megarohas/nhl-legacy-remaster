@@ -798,6 +798,9 @@ def sample(tex, u, v):
     return t[y0, x0] * (1 - fx) * (1 - fy) + t[y0, x1] * fx * (1 - fy) + t[y1, x0] * (1 - fx) * fy + t[y1, x1] * fx * fy
 
 
+# Головы без волос источника (hair_from = legacy <id> / none) в out не идут: решение пользователя 21.10 — сначала
+# причёски NHL 27 (рецепты материалов), волосы с типовой головы — только по --legacy-hair
+LEGACY_HAIR = False
 SCALP_PAINTED = 0.6           # яркость скальпа / медиана яркости кожи головы ниже — волосы нарисованы на текстуре лица
 
 
@@ -885,7 +888,7 @@ def bake_hair(hair, hair_tex, capmesh, cap_uv, kit3d, size=256, ss=2):
     return np.dstack([np.clip(col, 0, 255), alpha * 255]).astype(np.uint8), len(tris)
 
 
-def cmd_build(jobs, disputed, only=None):
+def cmd_build(jobs, disputed, only=None, legacy_hair=LEGACY_HAIR):
     """only — папки источника или имена игроков (через запятую): собрать только их (пилот одной головы)."""
     lib = templates()
     from fb import heads
@@ -935,7 +938,12 @@ def cmd_build(jobs, disputed, only=None):
     man_fn = os.path.join(work(), 'out-files.json')
     prev = set(json.load(open(man_fn, encoding='utf-8'))) if os.path.exists(man_fn) else set()
     now = set()
+    no_hair = 0
     for new, r in res.items():
+        hf = r.get('hair_from', 'source')
+        if r['kind'] in ('ok', 'no_hair'):
+            r['kind'] = 'ok' if hf in ('source', 'painted') or (legacy_hair and hf.startswith('legacy')) else 'no_hair'
+            no_hair += r['kind'] == 'no_hair'
         if r['kind'] != 'ok':
             continue
         for fn in (f'player_{new}.rx2', f'texlib_{new}.rx2'):
@@ -956,7 +964,8 @@ def cmd_build(jobs, disputed, only=None):
             shutil.move(p, os.path.join(work(), 'stale', fn))
     json.dump(sorted(now), open(man_fn, 'w', encoding='utf-8'), indent=0)
     json.dump({str(k): v for k, v in sorted(res.items())}, open(built_fn, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
-    print(f'собрано {len(res)} (ok в out: {len(now) // 2}), ошибок {len(bad)}, убрано из out прежних {len(stale)}')
+    print(f'собрано {len(res)} (ok в out: {len(now) // 2}; без волос источника, не в out: {no_hair}), ошибок {len(bad)}, '
+          f'убрано из out прежних {len(stale)}')
     for b in bad:
         print('  ошибка:', b)
 
@@ -1075,7 +1084,7 @@ def cmd_apply(variants):
                         os.path.join(d, 'draft_roster.db')], check=True)
         json.dump(sorted(done.values(), key=lambda r: r['row']), open(applied_fn(v), 'w', encoding='utf-8'),
                   ensure_ascii=False, indent=1)
-        print(f'{v}: headid → скан NHL 24 у {ch}, уже стоял {same}, другая голова (не трогаю) {other}, не собрано {nob}; '
+        print(f'{v}: headid → скан {P24.LABEL} у {ch}, уже стоял {same}, другая голова (не трогаю) {other}, не собрано {nob}; '
               f'{line}; копия до правки — {bk}')
 
 
@@ -1495,13 +1504,15 @@ def main():
     ap.add_argument('--source', choices=tuple(P24.SOURCES), default=P24.SOURCE, help='игра-источник сканов (nhl24, nhl27)')
     ap.add_argument('--only', help='build: только эти папки источника через запятую (пилот: --only macklin_celebrini)')
     ap.add_argument('--ea', action='store_true', help='check: и сканы EA Legacy (эталон)')
+    ap.add_argument('--legacy-hair', action='store_true',
+                    help='build: и головы без волос источника — с волосами нынешней типовой головы (иначе не в out)')
     ap.add_argument('--cache', help='check: папка с player_<id>.rx2 другой версии (например, <work>/scans24/before-v7)')
     a = ap.parse_args()
     variants = a.variant or list(VARIANTS)
     if a.cmd == 'match':
         cmd_match(variants)
     elif a.cmd == 'build':
-        cmd_build(a.jobs, a.disputed, a.only.split(',') if a.only else None)
+        cmd_build(a.jobs, a.disputed, a.only.split(',') if a.only else None, a.legacy_hair or LEGACY_HAIR)
     elif a.cmd == 'apply':
         cmd_apply(variants)
     elif a.cmd == 'save':
