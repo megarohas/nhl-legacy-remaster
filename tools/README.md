@@ -124,6 +124,7 @@
 - `heads.py` — головы-сканы NHL 24
 - `kit3d.py`, `kit_hybrid.py`, `kit_fix.py`, `kit_batch.py`, `kit_models.py`, `sleeve.py`, `relief.py`, `kit_rules.toml` — перенос свитеров на развёртку Legacy и правила нашивок
 - `jersey_mesh.py`, `edge_kit.py` — сетка adidas в слоте стиля 0 и свитер Edge с передом ворота NHL 24 (MIN)
+- `eaimport.py` — **импорт из новой EA NHL** (status, prepare, leagues, stats, portraits, heads, overlay, all), руководство — [docs/import-from-ea.md](../docs/import-from-ea.md)
 - `../kitport/` — **точка входа переноса форм**: `python -m kitport doctor | status | snapshot | build | diff | install | rollback | sheet | uvmap | params` (из `tools/`), руководство — [docs/kitport.md](../docs/kitport.md)
 - `fonts.py`, `helmet.py`, `ice.py`, `stick_map.toml` — шрифты номеров, наклейки на шлем, центр льда, клюшки
 - `gallery.py` — галерея всех комплектов NHL 24
