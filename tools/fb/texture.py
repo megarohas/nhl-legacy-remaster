@@ -1,4 +1,5 @@
-"""Текстуры Frostbite NHL 24 (PS4): заголовок res «Texture» (тип 0x6BDE20BA, 132 Б), детайлинг PS4, PNG.
+"""Текстуры Frostbite NHL 24 (PS4) и NHL 27 (PS5): заголовок res «Texture» (тип 0x6BDE20BA, 132 / 184 Б), детайлинг
+PS4 GNM и PS5 (плитки 4 КБ), PNG.
 
 Заголовок: u32 mipOffset0, u32 mipOffset1, u32 type, u32 pixelFormat, u32 unk, u16 flags,
 u16 width, u16 height, u16 depth, u16 slices, u8 mipCount, u8 firstMip, guid chunkId,
@@ -11,15 +12,24 @@ RES_TEXTURE = 0x6BDE20BA
 
 
 def parse_header(d):
+    """Заголовок Texture: NHL 24 (PS4) — 132 байта, NHL 27 (PS5) — 184: первые 32 байта те же, дальше 8 новых байт,
+    GUID чанка @40 в порядке байт как у GUID оглавлений (не bytes_le), mipSizes @56, размер @116, nameHash @120,
+    группа @132 (21.10.2026)."""
     (mo0, mo1, ttype, fmt, unk, flags, w, h, depth, slices, mips, first) = struct.unpack_from("<5I5H2B", d, 0)
-    chunk = bytes(d[32:48])
-    mip_sizes = list(struct.unpack_from("<15I", d, 48))
-    chunk_size, name_hash = struct.unpack_from("<2I", d, 108)
-    group = bytes(d[116:132]).split(b"\0")[0].decode("ascii", "replace")
+    if len(d) >= 184:
+        chunk = str(uuid.UUID(bytes=bytes(d[40:56])))
+        mip_sizes = list(struct.unpack_from("<15I", d, 56))
+        chunk_size, name_hash = struct.unpack_from("<2I", d, 116)
+        group = bytes(d[132:184]).split(b"\0")[0].decode("ascii", "replace")
+    else:
+        chunk = str(uuid.UUID(bytes_le=bytes(d[32:48])))
+        mip_sizes = list(struct.unpack_from("<15I", d, 48))
+        chunk_size, name_hash = struct.unpack_from("<2I", d, 108)
+        group = bytes(d[116:132]).split(b"\0")[0].decode("ascii", "replace")
     return {"mip_offsets": (mo0, mo1), "type": ttype, "format": fmt, "unk": unk, "flags": flags,
             "width": w, "height": h, "depth": depth, "slices": slices, "mips": mips, "first_mip": first,
-            "chunk": str(uuid.UUID(bytes_le=chunk)), "mip_sizes": mip_sizes[:max(mips, 1)],
-            "chunk_size": chunk_size, "name_hash": name_hash, "group": group}
+            "chunk": chunk, "mip_sizes": mip_sizes[:max(mips, 1)],
+            "chunk_size": chunk_size, "name_hash": name_hash, "group": group, "ps5": len(d) >= 184}
 
 
 # --- детайлинг PS4 -------------------------------------------------------------------------
@@ -54,6 +64,41 @@ def detile_1d_thin(data, w_el, h_el, el_bytes):
     out[:, my, :, mx, :] = t.transpose(2, 0, 1, 3)
     out = out.reshape(ph, pw, el_bytes)[:h_el, :w_el]
     return out.tobytes()
+
+
+# --- детайлинг PS5 -------------------------------------------------------------------------
+# Найдено 21.10.2026 перебором на дампе NHL 27 (логотип Canucks BC1 512×256, BC3 680×548 и 100×100): плитки 4 КБ,
+# по строкам слева направо (число плиток по x — ширина в элементах, выровненная вверх), внутри плитки — биты адреса
+# элемента: (биты x, биты y) по порядку младших. XOR-перестановок нет. Мипы в потоке — от меньшего к большему: мип 0 —
+# последние mip_sizes[0] байт. 4 байта на элемент (RGBA8) пока не встречались — ошибка, а не мусор.
+PS5_TILES = {
+    8: (32, 16, (0, 3, 4, 6, 8), (1, 2, 5, 7)),          # BC1, BC4: a0=x0 a1=y0 a2=y1 a3=x1 a4=x2 a5=y2 a6=x3 a7=y3 a8=x4
+    16: (16, 16, (2, 3, 5, 7), (0, 1, 4, 6)),            # BC2, BC3, BC5, BC7: a0=y0 a1=y1 a2=x0 a3=x1 a4=y2 a5=x2 …
+}
+_PS5_MAP = {}
+
+
+def detile_ps5(data, w_el, h_el, el_bytes):
+    """PS5: плитки 4 КБ (PS5_TILES) → байты линейного изображения w_el×h_el."""
+    if el_bytes not in PS5_TILES:
+        raise ValueError(f"детайлинг PS5 для {el_bytes} байт на элемент не известен (fb/texture.py PS5_TILES)")
+    tw, th, xs, ys = PS5_TILES[el_bytes]
+    n = tw * th
+    if el_bytes not in _PS5_MAP:
+        a = np.arange(n)
+        xb, yb = np.zeros(n, np.int64), np.zeros(n, np.int64)
+        for i, k in enumerate(xs):
+            xb |= ((a >> k) & 1) << i
+        for i, k in enumerate(ys):
+            yb |= ((a >> k) & 1) << i
+        _PS5_MAP[el_bytes] = (xb, yb)
+    xb, yb = _PS5_MAP[el_bytes]
+    tx, ty = -(-w_el // tw), -(-h_el // th)
+    need = tx * ty * n * el_bytes
+    el = np.frombuffer(bytes(data[:need]).ljust(need, b"\0"), dtype=np.uint8).reshape(ty, tx, n, el_bytes)
+    out = np.zeros((ty, th, tx, tw, el_bytes), dtype=np.uint8)
+    out[:, yb, :, xb, :] = el.transpose(2, 0, 1, 3)
+    return out.reshape(ty * th, tx * tw, el_bytes)[:h_el, :w_el].tobytes()
 
 
 # --- форматы (Frostbite RenderFormat) -----------------------------------------------------
@@ -99,16 +144,28 @@ def decode_mip(h, data, level=0, slice_index=0, tiled=True, data_first=0):
     first = data_first
     if level < first:
         raise ValueError(f"мип {level} не в данных (с {first})")
-    ofs = sum(sizes[first:level])
-    per_slice = sum(sizes[first:])
-    ofs += slice_index * per_slice
+    if h.get("ps5"):
+        # PS5: мипы от меньшего к большему, у мелких — общий хвост; поток — все мипы
+        if first or len(data) < sum(sizes) or not sizes[level]:
+            raise ValueError(f"PS5: мип {level} — поток {len(data)} Б при сумме мипов {sum(sizes)} (частичный поток "
+                             "или мип в общем хвосте — не разобрано)")
+        ofs = sum(sizes[level + 1:]) + slice_index * sum(sizes)
+    else:
+        ofs = sum(sizes[first:level])
+        per_slice = sum(sizes[first:])
+        ofs += slice_index * per_slice
     w, hh = mip_dims(h, level)
     if block:
         we, he = (w + 3) // 4, (hh + 3) // 4
     else:
         we, he = w, hh
     raw = data[ofs:ofs + sizes[level]]
-    lin = detile_1d_thin(raw, we, he, eb) if tiled else bytes(raw[:we * he * eb])
+    if not tiled:
+        lin = bytes(raw[:we * he * eb])
+    elif h.get("ps5"):
+        lin = detile_ps5(raw, we, he, eb)
+    else:
+        lin = detile_1d_thin(raw, we, he, eb)
     if block:
         img = Image.frombytes(mode, (we * 4, he * 4), lin, dec, arg)
         if (we * 4, he * 4) != (w, hh):

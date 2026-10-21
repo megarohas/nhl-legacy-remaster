@@ -1,6 +1,7 @@
 """Оглавления (.toc) Frostbite NHL 24 (PS4, Gen4b): бандлы и чанки → места в CAS.
 
 Файл: 0x22C байт заголовка (магия 00D1CE01, подпись, строка-ключ), дальше данные (смещения — от 0x22C), всё BE.
+У NHL 27 (PS5) заголовка нет: файл сразу начинается с данных (u32 0x3C).
 Заголовок данных (15 × u32): [0] 0x3C, [1] смещение записей бандлов, [2] число бандлов, [3] флаги чанков,
 [4] GUID чанков (GUID + u32 индекс×3), [5] число чанков, [6] записи чанков (u8 ?, u8 patch, u8 catalog, u8 cas,
 u32 offset, u32 size), … Сразу за заголовком — u32 × число бандлов (ссылки/хеши).
@@ -39,11 +40,22 @@ def cas_path(catalog, casn, patch=0):
     return source.cas_path(catalog, casn, patch)
 
 
+def wide_loc(d, q):
+    """Место в записи TOC NHL 27 (8 байт): u32 (старшие 16 бит persistentIndex пакета), u16 (младшие), u16 номер CAS
+    → (номер пакета, номер CAS). Неизвестный пакет — 255 (файла не будет, «нет на диске» в fb.probe)."""
+    hi, lo, casn = struct.unpack_from(">IHH", d, q)
+    pkg = source.package_of(((hi & 0xFFFF) << 16) | lo)
+    return (255 if pkg is None else pkg), casn
+
+
 def read_toc(path):
     raw = open(path, "rb").read()
-    if raw[:4] != b"\x00\xd1\xce\x01":
-        raise ValueError(f"{path}: не TOC 00D1CE01")
-    d = raw[BASE:]
+    if raw[:4] == b"\x00\xd1\xce\x01":
+        d, wide = raw[BASE:], False                      # NHL 24 PS4: заголовок с подписью
+    elif raw[:4] == b"\x00\x00\x00\x3c":
+        d, wide = raw, True                              # NHL 27 PS5: без заголовка (21.10.2026)
+    else:
+        raise ValueError(f"{path}: не TOC (нет ни 00D1CE01 + 0x22C, ни данных с 0x3C)")
     hdr = struct.unpack_from(">15I", d, 0)
     (magic, b_ofs, b_cnt, c_flags, c_guids, c_cnt, c_ents) = hdr[:7]
     res = {"hdr": hdr, "bundles": [], "chunks": []}
@@ -58,7 +70,11 @@ def read_toc(path):
             ents = []
             catalog = casn = patch = 0
             for j in range(n):
-                if flags[j] == 1:
+                if wide and flags[j]:                    # NHL 27: флаг 0x84, место 8 байт (wide_loc)
+                    catalog, casn = wide_loc(d, q)
+                    patch = 0
+                    q += 8
+                elif not wide and flags[j] == 1:
                     _u, patch, catalog, casn = struct.unpack_from(">4B", d, q)
                     q += 4
                 eo, es = struct.unpack_from(">II", d, q)
@@ -67,14 +83,22 @@ def read_toc(path):
             res["bundles"].append(ents)
     # чанки
     if c_cnt:
+        # запись чанка: NHL 24 — 12 байт (u8 ?, u8 patch, u8 catalog, u8 cas, u32 offset, u32 size), индекс у GUID — в
+        # u32-словах (÷3); NHL 27 — 16 байт: место 8 байт (wide_loc), offset, size; ÷4
+        ent = 16 if wide else 12
         guids = [None] * c_cnt
         for i in range(c_cnt):
             g = d[c_guids + 20 * i:c_guids + 20 * i + 16]
             idx = struct.unpack_from(">I", d, c_guids + 20 * i + 16)[0] & 0xFFFFFF
-            guids[idx // 3] = str(uuid.UUID(bytes=bytes(g[::-1])))  # GUID в обратном порядке байт
+            guids[idx // (ent // 4)] = str(uuid.UUID(bytes=bytes(g[::-1])))  # GUID в обратном порядке байт
         for i in range(c_cnt):
-            _u, patch, catalog, casn = struct.unpack_from(">4B", d, c_ents + 12 * i)
-            eo, es = struct.unpack_from(">II", d, c_ents + 12 * i + 4)
+            q = c_ents + ent * i
+            if wide:
+                (catalog, casn), patch = wide_loc(d, q), 0
+                q += 4
+            else:
+                _u, patch, catalog, casn = struct.unpack_from(">4B", d, q)
+            eo, es = struct.unpack_from(">II", d, q + 4)
             res["chunks"].append((guids[i], catalog, casn, patch, eo, es))
     return res
 

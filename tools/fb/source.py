@@ -55,6 +55,29 @@ def cas_path(package, casn, patch=0):
     return os.path.join(root, PLATFORM, "superbundlelayout", f"{PACKAGE}{package:02d}", f"cas_{casn:02d}.cas")
 
 
+_PACKAGES = None
+
+
+def package_of(persistent_index):
+    """Номер пакета NN по persistentIndex установочного пакета (installManifest.installChunks в layout.toc). Так
+    записи TOC NHL 27 (PS5) указывают пакет: 6 байт u16 hi + u16 lo = persistentIndex, например 0xF895_01B4 =
+    nhl_installpackage_00 (21.10.2026). Языковые пакеты (…/en и т. п.) сюда не входят. None — не нашёлся."""
+    global _PACKAGES
+    if _PACKAGES is None:
+        _PACKAGES = {}
+        p = os.path.join(DATA, "layout.toc")
+        if os.path.exists(p):
+            from . import dbobject
+            raw = dbobject.strip_toc_header(open(p, "rb").read())
+            lay = dbobject.loads(raw, 0)
+            for ch in (lay.get("installManifest") or {}).get("installChunks") or []:
+                name = ch.get("name", "")
+                tail = name.rsplit("/", 1)[-1]
+                if tail.startswith(PACKAGE) and tail[len(PACKAGE):].isdigit():
+                    _PACKAGES[ch["persistentIndex"] & 0xFFFFFFFF] = int(tail[len(PACKAGE):])
+    return _PACKAGES.get(persistent_index & 0xFFFFFFFF)
+
+
 def describe():
     return {"game": GAME, "data": DATA, "patch": PATCH, "platform": PLATFORM, "layout": LAYOUT, "package": PACKAGE,
             "work": WORK, "catalog": CATALOG, "ooz": OOZ_DLL}

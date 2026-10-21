@@ -103,8 +103,10 @@ def main():
     for p in [x for x in tocs if os.path.basename(x) == "layout.toc"] + sorted(glob.glob(os.path.join(data, "initfs_*"))):
         raw = open(p, "rb").read()
         sig = raw[:4].hex()
-        say(OK if sig == "00d1ce01" else BAD, f"{os.path.basename(p)}: подпись {sig} (NHL 24 — 00d1ce01), {len(raw)} байт")
-        v, s = summarize_dbobject(raw)
+        signed = sig == "00d1ce01"
+        say(OK, f"{os.path.basename(p)}: " + ("подпись 00d1ce01 + заголовок 0x22C (как NHL 24)" if signed else
+                                              f"без подписи (как NHL 27 PS5), начало {sig}") + f", {len(raw)} байт")
+        v, s = summarize_dbobject(raw, 0x22C if signed else 0)
         enc = isinstance(v, dict) and "encrypted" in v
         say(WARN if enc or v is None else OK, s + ("  — зашифрован (у NHL 24 так же)" if enc else ""))
         if isinstance(v, dict) and "superBundles" in v:
