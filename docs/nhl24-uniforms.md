@@ -712,4 +712,5 @@ adidas, сейв ROSTER дописывается в конец). Шорты и �
   тёмной (выше на 0,023, ≈ 2 см), плечевые нашивки на 10 % меньше. Обновились 5 файлов: `rendering/jersey/texlib_0_14_{5,6}.rx2`,
   `rendering/jersey/name_0_14_6_cm.rx2`, `fe/ion/artassets/jerseys/jersey_0_14_{5,6}.big`; база та же (сейвы не
   правились). Прежний пак — `pack-edge-v13`, копия заменённого — `backup-cache/user-20261020-edge11`; лист «было |
+- 21.10 06:47 — составы CHL и Европы, статистика, портреты и голова Селебрини из NHL 27 (`tools/eaimport.py`, docs/import-from-ea.md); формы не менялись, накладка `out-nhl24` пересобрана с `pack-edge`. Обновились 3957 файлов: `db/nhlng.db`, `db/draft_roster.db`, `fe/loc/NHL_ENG_US.db`, 3952 портрета, `rendering/player/*_27101.rx2`. Копия заменённого — `backup-cache/user-20261021-nhl27-leagues`. Сейв ROSTER 20261019132105 — `roster_merge.py` (копия — `backup-saves/roster_merge-20261021-064744`).
   стало» — `compare/brand/sheet_20.png`, плечи — `compare/brand/shoulders_20.png`.
