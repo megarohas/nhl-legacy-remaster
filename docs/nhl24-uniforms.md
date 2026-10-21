@@ -712,6 +712,7 @@ adidas, сейв ROSTER дописывается в конец). Шорты и �
   тёмной (выше на 0,023, ≈ 2 см), плечевые нашивки на 10 % меньше. Обновились 5 файлов: `rendering/jersey/texlib_0_14_{5,6}.rx2`,
   `rendering/jersey/name_0_14_6_cm.rx2`, `fe/ion/artassets/jerseys/jersey_0_14_{5,6}.big`; база та же (сейвы не
   правились). Прежний пак — `pack-edge-v13`, копия заменённого — `backup-cache/user-20261020-edge11`; лист «было |
+  стало» — `compare/brand/sheet_20.png`, плечи — `compare/brand/shoulders_20.png`.
 - 21.10 06:47 — составы CHL и Европы, статистика, портреты и голова Селебрини из NHL 27 (`tools/eaimport.py`, docs/import-from-ea.md); формы не менялись, накладка `out-nhl24` пересобрана с `pack-edge`. Обновились 3957 файлов: `db/nhlng.db`, `db/draft_roster.db`, `fe/loc/NHL_ENG_US.db`, 3952 портрета, `rendering/player/*_27101.rx2`. Копия заменённого — `backup-cache/user-20261021-nhl27-leagues`. Сейв ROSTER 20261019132105 — `roster_merge.py` (копия — `backup-saves/roster_merge-20261021-064744`).
 - 21.10 07:54 — головы. Глаза v7 у 179 голов NHL 24 и у Селебрини: яблоко выступало и резало веки. Плюс 33 новые
   головы NHL 27 со своими волосами (`scans24.py --source nhl27`; 259 голов без прядей ждут разбора причёсок NHL 27).
@@ -723,4 +724,11 @@ adidas, сейв ROSTER дописывается в конец). Шорты и �
   `db/nhlng.db`, `db/draft_roster.db`, 518 новых и 29 изменённых `rendering/player/*`. Копия заменённого —
   `backup-cache/user-20261021-heads27-styles`. Сейв ROSTER 20261021035202 — `roster_merge.py` (копия —
   `backup-saves/roster_merge-20261021-085921`).
-  стало» — `compare/brand/sheet_20.png`, плечи — `compare/brand/shoulders_20.png`.
+- 21.10 10:51 — формы NJD из NHL 27 на крое Edge (профиль `fb/edge_clubs.toml`): «Home (NHL 27)» 0_17_9 и
+  «Away (NHL 27)» 0_17_10 — свитер, гетры, трусы, наклейка и цвет каски из NHL 27; в меню выбора формы, по умолчанию
+  не ставились. У MIN — щит меньше (×0,76). Общее: обод ворота без шнуровки без «отросточков», переход рельефа на
+  груди 8 см вместо 2 (черта поперёк груди). Обновились 18 файлов: `db/nhlng.db`, `fe/loc/NHL_ENG_US.db`,
+  `jersey_0_14_{5,6}.big`, `texlib_0_14_{5,6}.rx2`, 12 новых файлов 0_17_9 / 0_17_10 (свитер, номера, шорты, гетры,
+  наклейка, превью). Копия заменённого — `backup-cache/user-20261021-njd27-min-shield`. Сейв ROSTER 20261021060813 —
+  `nhl24.py save` (+2 формы, +2 шлема: у таблицы шлемов в сейве не было места, `roster_merge.py` такое не пишет;
+  копия — `backup-saves/ROSTER 20261021060813-20261021-105256`), `roster_merge.py` после — 0 таблиц.

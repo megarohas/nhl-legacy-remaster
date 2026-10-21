@@ -126,7 +126,8 @@ def write_table(U, t, records):
     b = tb['block']
     mx, cur, nd, head = U.counts(t)
     if len(records) > mx:
-        raise SystemExit(f'{t}: в новой базе {len(records)} записей, в сейве места {mx} — игра сочтёт сейв damaged')
+        raise SystemExit(f'{t}: в новой базе {len(records)} записей, в сейве места {mx} — игра сочтёт сейв damaged. '
+                         f'Новые формы и шлемы — сначала nhl24.py save СЕЙВ --write (расширяет таблицу), потом повтор')
     for i, raw in enumerate(records):
         U.put_record(t, i, raw)
     start = tb['records'] + len(records) * tb['reclen']
@@ -166,7 +167,8 @@ def run(save, old, new, write, report=None):
                 st['changed'] = True
     for t, st in rep['tables'].items():
         if st.get('changed') or 'слияние' in st.get('how', ''):
-            print(f"  {t:32} {st.get('save')} → {st.get('new')} (место {st.get('max')}): {st['how']}")
+            print(f"  {t:32} {st.get('save')} → {st.get('new')} (место {st.get('max')}): {st['how']}"
+                  + (" — НЕ ВМЕЩАЕТСЯ: сначала nhl24.py save СЕЙВ --write" if (st.get('new') or 0) > st['max'] else ""))
     print(f'{os.path.basename(save)}: таблиц к записи {len(plan)}' + ('' if write else ' (проба, не записано)'))
     if report:
         json.dump(rep, open(report, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)

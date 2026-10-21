@@ -635,9 +635,14 @@ MIN`. Изменения должны быть только там, где жд�
    края кокетки на плече и сбоку, швы у ворота, черта на груди. Если правился общий код — ещё `kitport compare
    --clubs MIN,NJD` против снимка до правки (§5.3). Затем листы `sheet` (трусы, гетры, наклейка, шрифт).
 7. `--stages pack,overlay`.
-8. Установка — только с «да» пользователя, при закрытой игре: `kitport install --tag …`. Затем перенос в сейв ROSTER
-   (`legacy_data/roster_merge.py`, перед этим — копия `nhlng.db` из `cache:`). Строка — в журнал
-   `nhl24-uniforms.md` §15.1.
+8. Установка — только с «да» пользователя, при закрытой игре. Перед ней — копия `nhlng.db` из `cache:` в
+   `game/work/legacy-data/roster-merge/old-cache-nhlng-<время>.db`. Затем `kitport install --tag …`.
+9. Сейв ROSTER — самый свежий по времени (игра пересохраняет его под новым именем): `ls -lt` папки сейвов.
+   - `python tools/legacy_data/nhl24.py save "<ROSTER>" --write` — новые строки форм и шлемов в конец, таблица
+     расширяется. У сейва таблица шлемов без запаса: `roster_merge.py` новые шлемы не впишет («НЕ ВМЕЩАЕТСЯ»).
+   - `python tools/legacy_data/roster_merge.py "<ROSTER>" --old <копия из п. 8> --new
+     game/work/legacy-data/out-nhl24-ahl32/db/nhlng.db` — пробой; если таблиц к записи не 0 — с `--write`.
+10. Строка — в журнал `nhl24-uniforms.md` §15.1 (заготовку печатает `install`).
 
 ### 12.4. Что ещё сделать для гладкого переноса
 
