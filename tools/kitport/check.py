@@ -80,7 +80,15 @@ def shield_y(M, t):
         sil &= (yy < edge) & ~in_trim                  # и не цвета кромки: у белой кромки её край — тоже «серебро»
     low = (yy > 1.59) & (yy < 1.60)                    # ткань под щитом (у белой — тоже «серебро»: TBL выезд)
     if low.any():
-        sil &= np.abs(cc - np.median(cc[low], 0)).max(1) > 20
+        fab = np.median(cc[low], 0)
+        sil &= np.abs(cc - fab).max(1) > 20
+        # край кромки — смесь цвета кромки и ткани: у чёрной кромки на белом (BOS выезд, 21.10) он серый, и замер
+        # принимал его за верх щита («до кромки 1 мм» при 4 мм). Не щит: до 2 мм под кромкой и цвет на отрезке
+        # «кромка — ткань» (у цветной кромки смесь не серая — MIN, NJD, TBL не меняются)
+        seg = fab - trim_c
+        t = np.clip(((cc - trim_c) @ seg) / max(float(seg @ seg), 1e-6), 0, 1)
+        mix = np.linalg.norm(cc - (trim_c + t[:, None] * seg), axis=1) < 12
+        sil &= ~(mix & (yy > edge - 0.002))
     if not sil.any():
         return None, None, float(yy[red].min()) if red.any() else None
     s = np.sort(yy[sil])[::-1]                         # сверху вниз до первого разрыва: светлая ткань ниже — не щит

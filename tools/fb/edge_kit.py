@@ -788,6 +788,13 @@ SLV_PHI = 0.5                      # град — шаг таблиц угла
 # строках подмышки вместе с рукавом тянуло и грудную полосу туловища (бежевое на рукаве, пользователь, 19.10), а швы
 # рельефа оставались на прежнем месте. Здесь — сжатие в самом переносе рукава (SleeveMap): цвет и рельеф вместе.
 SLV_COMPRESS = None                # (k, d_top): задаётся сборкой (cmd_kit) по зоне номера шаблона; None — без сжатия
+SLV_RING_FRAC = 0.8                # граница полосы рукава — смена цвета не меньше чем на такой доле кольца (21.10)
+SLV_TOP_MARGIN = 0.01              # м по средней линии рукава Edge: верх полос ближе к концу рукава (SLV_U[1]) — выше
+#                                    колена сжатия рукав — тканью над полосами (SLV_FILL_S24). 21.10, BOS выезд: верх полос
+#                                    0,2339 при конце 0,234 — от колена до конца источник упирался в конец таблицы рукава
+#                                    (s NHL 24 0,227 — граница золото / белое), верх рукава ~5,5 см заливался золотом
+SLV_FILL_TEXELS = 3                # текселей NHL 24 (2048) над верхней границей полос — цвет ткани для заполнения
+SLV_FILL_S24 = None                # задаёт sleeve_compress: s NHL 24, откуда брать ткань выше колена; None — как было
 # Шов проймы Edge (рукав — реглан): правый край панели рукава EA-формы MIN 1_14_0 на развёртке Edge (левый рукав;
 # правый — 1 − u), (v, u), сглажено. В строках подмышки рукав и туловище делятся по нему (а не по шву NHL 24, у
 # которого рукав втачной: грудная полоса заходила на рукав), там же — шов рельефа.
@@ -954,11 +961,12 @@ class SleeveMap:
         grid = np.arange(-180.0, 180.0, SLV_PHI)
         sel = np.arange(0, len(grid), 10)
         S = tex.shape[0]
-        prof = []
+        prof, rings = [], []
         for j, s_ in enumerate(nn["s"]):
             v = nn["tab"][j, sel]
             cc = kit3d.sample_bilinear(tex, np.full(len(v), s_), v)[:, :3]
             prof.append(np.median(cc, 0))
+            rings.append(cc)
         prof = np.array(prof)
         out = []
         i = 0
@@ -969,7 +977,11 @@ class SleeveMap:
                 k = j                                     # переход — 1–2 столбца: граница — между устойчивыми
                 while k + 1 < n and np.abs(prof[k + 1] - prof[k]).max() > 20:
                     k += 1
-                out.append(0.5 * (nn["s"][i] + nn["s"][min(k, n - 1)]) if k > j else 0.5 * (nn["s"][i] + nn["s"][j]))
+                # граница полосы — смена цвета почти по всему кольцу (нашивка на части окружности — не полоса; 21.10,
+                # BOS: у MIN, NJD, TBL, BOS у всех границ доля 1,00 — правило их не меняет)
+                ring_frac = float((np.abs(rings[min(k, n - 1)] - rings[i]).max(1) > 45).mean())
+                if ring_frac >= SLV_RING_FRAC:
+                    out.append(0.5 * (nn["s"][i] + nn["s"][min(k, n - 1)]) if k > j else 0.5 * (nn["s"][i] + nn["s"][j]))
                 i = k
             else:
                 i = j
@@ -998,6 +1010,8 @@ class SleeveMap:
             q = P[k] - C
             ph = np.degrees(np.arctan2((q * e2).sum(1), (q * e1).sum(1)))
             s24 = np.interp(ss, e["s"], d["s24"])
+            if SLV_FILL_S24 is not None and SLV_COMPRESS is not None:   # над полосами места нет (BOS): выше колена — ткань
+                s24 = np.where(s > SLV_COMPRESS[0] * SLV_COMPRESS[1], SLV_FILL_S24, s24)   # над верхней границей
             # строка NHL 24: билинейно по столбцу (s) и углу
             fj = np.interp(s24, nn["s"], np.arange(len(nn["s"])))
             j0 = np.clip(np.floor(fj).astype(int), 0, len(nn["s"]) - 2)
@@ -1158,6 +1172,7 @@ def use_club(code):
     from . import kitsrc
     global YOKE, YOKE_KIND, INSERT_KITS, SLOT_KITS, LETTER_ZONES_FROM, SOCK_PARTS, BODY_KIND, COLLAR, YOKE_EA_KIND
     global YOKE_SIDE_BLEND, SHIELD_OFFSET_CM, SHIELD_SCALE, SLEEVE_ZONES_FROM, BASE_NM_DECALS, COLLAR_TRIM
+    global SHIELD_GAP_MM, TRIM_WIDTH_FROM
     from . import kit_hybrid
     prof = club_profiles().get(code)
     if prof is None:
@@ -1170,10 +1185,15 @@ def use_club(code):
     BODY_KIND = prof.get("body_color", "light")
     COLLAR = prof.get("collar", "lace")
     COLLAR_TRIM = prof.get("collar_trim", "auto")
+    TRIM_WIDTH_FROM = dict(prof.get("trim_width_from", {}))    # кромка цвета ткани — ширина по другой форме
     YOKE_EA_KIND = prof.get("yoke_shape_color")
     YOKE_SIDE_BLEND = prof.get("yoke_side_blend")
     SHIELD_OFFSET_CM = list(prof.get("shield_offset_cm", _SHIELD_DEFAULT[0]))
     SHIELD_SCALE = float(prof.get("shield_scale", _SHIELD_DEFAULT[1]))
+    # щит по зазору под кромкой (21.10): shield_gap_mm, а без него — у ворота без шнуровки SHIELD_GAP_DEFAULT_MM; задан
+    # shield_offset_cm (MIN, NJD, TBL) — сдвиг как раньше, байт в байт
+    SHIELD_GAP_MM = None if "shield_offset_cm" in prof else \
+        prof.get("shield_gap_mm", SHIELD_GAP_DEFAULT_MM if COLLAR == "plain" else None)
     INSERT_KITS = {(code, k) for k in prof.get("insert", [])}
     SLOT_KITS = {k: dict(v) for k, v in prof.get("slot", {}).items()}
     LETTER_ZONES_FROM = dict(prof.get("letter_zones_from", {}))
@@ -2311,8 +2331,15 @@ class TrimPaint:
         return out
 
 
+TRIM_WIDTH_FROM = {}               # профиль trim_width_from: форма → форма клуба, по чьей кромке мерить ширину. Нужен,
+#                                    когда кромка цвета ткани (BOS дом, 21.10: чёрная на чёрном) — замер по цвету давал
+#                                    3,7 см (вся ткань «кромка»): шов рельефа там же, щит по зазору — на 2 см ниже. Нет
+#                                    поля — как было
+
+
 def trim_rule(code, kit, mesh, with_yoke=False):
-    """TrimPaint: цвет кромки — медиана у края ворота NHL 24, ширина по углу — замер на NHL 24, сглажено, × TRIM_K."""
+    """TrimPaint: цвет кромки — медиана у края ворота NHL 24, ширина по углу — замер на NHL 24, сглажено, × TRIM_K
+    (у формы из TRIM_WIDTH_FROM — по кромке другой формы клуба)."""
     from scipy.sparse.csgraph import connected_components
     n24 = kit3d.load_nhl24()
     src = Hy.clean_color(code, kit)
@@ -2334,7 +2361,13 @@ def trim_rule(code, kit, mesh, with_yoke=False):
     c = src[ys, xs]
     near = d < 0.003
     col = np.median(c[near], axis=0)
-    is_trim = np.linalg.norm(c - col, axis=1) < 60
+    wkit = TRIM_WIDTH_FROM.get(kit)
+    if wkit:                                             # кромка цвета ткани: ширина — по кромке другой формы клуба
+        cw = Hy.clean_color(code, wkit)[ys, xs]
+        is_trim = np.linalg.norm(cw - np.median(cw[near], axis=0), axis=1) < 60
+        print(f"  кромка цвета ткани: ширина — по форме {wkit} (trim_width_from), цвет — свой")
+    else:
+        is_trim = np.linalg.norm(c - col, axis=1) < 60
     prof = trim_profile(d, th, is_trim)
     mode = COLLAR_TRIM if COLLAR_TRIM != "auto" else ("step" if prof["step"] else "smooth")
     ths, wds = [], []
@@ -2410,6 +2443,202 @@ def step_width(prof):
     # разрыв спереди не рисуется: кромка — до середины (пользователь, 21.10: «белый доходит не до конца»); замер
     # «разрыва» у сетки NHL 24 ±24° выходит у всех клубов — это вырез adidas у середины, а не разрыв кромки
     return full, w
+
+
+# ---------------------------------------------------------------- щит NHL по зазору под кромкой (21.10)
+# Профиль shield_gap_mm (вместо shield_offset_cm): верх щита — на столько мм ниже низа кромки ворота посередине переда
+# (та же мера, что «до кромки» у kitport check). Сдвиг щита по высоте считается до сборки — по геометрии кромки
+# (TrimPaint) и посадке нашивки (kit_hybrid.plan_decals), без подбора пересборками (у TBL на подбор ушло 7 сборок по
+# ~6 мин). По умолчанию (ворот без шнуровки, нет ни shield_gap_mm, ни shield_offset_cm) — SHIELD_GAP_DEFAULT_MM.
+# "source" — зазор как у источника на его сетке: у NHL 27 кромки посередине переда нет (вырез adidas), щит — на 5,4 мм
+# ниже края ворота у тёмных форм и на 6,8 мм у белых (замер 21.10: NJD, TBL, BOS; у белых больше — белый край щита на
+# белой ткани не виден). Задан shield_offset_cm — как раньше.
+# 4 мм — решение пользователя по NJD/TBL (21.10): у одобренных форм «до кромки» 3 мм (NJD) и 4–5 мм (TBL, после его
+# «чуть пониже»); у источника больше (5,4–6,8 мм) — его зазор пользователь не взял.
+SHIELD_GAP_DEFAULT_MM = 4.0
+SHIELD_GAP_MM = None              # профиль shield_gap_mm: число, {форма: число} или "source"; None — shield_offset_cm
+SHIELD_GAP_X_CM = 0.41             # x щита при расчёте по зазору — как у всех клубов (середина горловины NHL 24 левее оси)
+SHIELD_GAP_COL = 0.003             # м: середина переда — |x| до стольких (как kitport check)
+SHIELD_GAP_STEP = 0.0002           # м: шаг точек по высоте на середине переда
+SHIELD_GAP_DY = (-0.04, 0.04)      # м: пределы сдвига щита по высоте (в 3D NHL 24) при подборе
+SHIELD_SILVER = (110, 40, 14)      # «серебро» щита, как у kitport check: яркость >, |R − G| <, max − min <
+_SHIELD_GAP_LOG = {}               # форма → расчёт (в info.json и печать)
+
+
+def front_column(mesh, y=(1.55, 1.70), col=SHIELD_GAP_COL, n=7, step=SHIELD_GAP_STEP):
+    """Точки поверхности на середине переда: сечения плоскостями x = const (|x| ≤ col, n штук) через шаг step по
+    длине. -> (P (N×3), UV (N×2), треугольник (N,)). Только перед (z > 0,05) и высоты y."""
+    Pm, T, UVm = mesh["pos"], mesh["tri"], mesh["uv"]
+    out_p, out_uv, out_t = [], [], []
+    for x0 in np.linspace(-col, col, n):
+        s = Pm[T][:, :, 0] - x0
+        for t in np.nonzero((s.min(1) < 0) & (s.max(1) > 0))[0]:
+            a, b, c = T[t]
+            pts = []
+            for i, j in ((a, b), (b, c), (c, a)):
+                si, sj = Pm[i, 0] - x0, Pm[j, 0] - x0
+                if (si < 0) != (sj < 0):
+                    w = si / (si - sj)
+                    pts.append((Pm[i] + w * (Pm[j] - Pm[i]), UVm[i] + w * (UVm[j] - UVm[i])))
+            if len(pts) != 2:
+                continue
+            (p0, u0), (p1, u1) = pts
+            k = max(int(np.ceil(np.linalg.norm(p1 - p0) / step)), 1)
+            w = (np.arange(k) + 0.5)[:, None] / k
+            out_p.append(p0 + w * (p1 - p0))
+            out_uv.append(u0 + w * (u1 - u0))
+            out_t.append(np.full(k, t))
+    P, UV, Tt = np.concatenate(out_p), np.concatenate(out_uv), np.concatenate(out_t)
+    keep = (P[:, 2] > 0.05) & (P[:, 1] > y[0]) & (P[:, 1] < y[1])
+    return P[keep], UV[keep], Tt[keep]
+
+
+def band_bottom(yy, in_band, lo=1.59):
+    """Низ сплошной полосы сверху (как kitport check: окна 1 мм с шагом 0,25 мм, конец — первое окно, где полосы меньше
+    половины). -> y низа (м)."""
+    top = yy.max()
+    b = top
+    while b > lo:
+        m = (yy <= b) & (yy > b - 0.001)
+        if m.sum() >= 3 and in_band[m].mean() < 0.5:
+            break
+        b -= 0.00025
+    above = in_band & (yy >= b)
+    return float(yy[above].min()) if above.any() else float(top)
+
+
+def trim_front_bottom(trim):
+    """Низ кромки (TrimPaint) посередине переда нашей сетки, м — где его найдёт kitport check: по сечениям |x| ≤ 3 мм
+    точки, которые кромка красит (D < ширины; на подвороте — D < TRIM_INNER), сплошной полосой от верха."""
+    w = Hy.Welded(trim.mesh)
+    ring = w.neck()
+    zc = float(w.P[ring, 2].mean())
+    band, lip = Hy.edge_layers(w, ring, zc)
+    fold = Hy.fold_polyline(w, band)
+    edge = Hy.smooth_curve(fold if fold is not None else Hy.lip_polyline(lip), zc, win=2.0)
+    P, _, Tt = front_column(trim.mesh)
+    D = Hy.ring_dist(P, edge)
+    th_w, w_w = trim.width
+    wid = np.interp(Hy.theta_of(P, zc), th_w, w_w, period=360)
+    B = band[w.g[trim.mesh["tri"][Tt]]].all(1)
+    in_trim = np.where(B, (D < TRIM_INNER) & (wid > 1e-4), D < wid)
+    return band_bottom(P[:, 1], in_trim), float(P[:, 1].max())
+
+
+def source_shield_gap(M, col, base):
+    """Зазор «кромка → щит» у источника посередине переда на его сетке (M — наружная оболочка NHL 24, col / base —
+    готовый свитер и основа без нашивок, H×W×3). Кромка — сплошная полоса цвета верха основы; если её нет (у NHL 27
+    посередине — вырез adidas, ткань до края) или щит стоит внутри неё (мыс кокетки NJD) — от края ворота.
+    -> {edge, trim_bottom, shield_top, ref, gap_mm}."""
+    P, UV, _ = front_column(M)
+    yy = P[:, 1]
+    S = col.shape[0]
+    c = kit3d.sample_bilinear(col.astype(np.float64), UV[:, 0], UV[:, 1])[:, :3]
+    b = kit3d.sample_bilinear(base.astype(np.float64), UV[:, 0], UV[:, 1])[:, :3]
+    top = float(yy.max())
+    trim_c = np.median(b[yy > top - 0.002], 0)
+    body = np.median(b[(yy > 1.56) & (yy < 1.58)], 0)
+    in_trim = np.abs(b - trim_c).max(1) < 45
+    tb = band_bottom(yy, in_trim, lo=1.56) if np.abs(trim_c - body).max() >= 45 else top
+    patch = (np.abs(c - b).max(1) > 20) & (yy < top - 0.001) & (yy > 1.58)
+    sh_top = float(yy[patch].max()) if patch.any() else None
+    ref = tb if sh_top is not None and tb > sh_top else top
+    return {"edge": round(top, 4), "trim_bottom": round(tb, 4), "shield_top": sh_top and round(sh_top, 4),
+            "ref": "кромки" if ref == tb and tb != top else "края ворота",
+            "gap_mm": round((ref - sh_top) * 1000, 1) if sh_top is not None else None, "size": S}
+
+
+def source_gap_for(code, kit):
+    """Зазор щита у источника этой формы (выгрузка клуба, source_kits) → мм."""
+    n24 = Hy.outer_shell(kit3d.load_nhl24())
+    col = kit3d.load_tex(J.n24_tex(Hy.CLUB_NAME[code], kit, "color"))[..., :3]
+    base = kit3d.load_tex(J.n24_tex(Hy.CLUB_NAME[code], kit, "base_color"))[..., :3]
+    r = source_shield_gap(n24, col, base)
+    if r["gap_mm"] is None:
+        sys.exit(f"{code} {kit}: щит у источника не найден — задайте shield_gap_mm или shield_offset_cm в профиле")
+    return r
+
+
+def shield_gap_target(code, kit):
+    """Зазор (мм) для формы по профилю: число, {форма: число} или "source" (замер источника). -> (мм, откуда)."""
+    g = SHIELD_GAP_MM
+    if isinstance(g, dict):
+        g = g.get(kit, "source")
+    if g == "source":
+        r = source_gap_for(code, kit)
+        return float(r["gap_mm"]), f"замер источника ({r['ref']} {r['edge'] if r['ref'] == 'края ворота' else r['trim_bottom']}"\
+                                    f" м, щит {r['shield_top']} м)"
+    return float(g), ("SHIELD_GAP_DEFAULT_MM" if g is SHIELD_GAP_DEFAULT_MM else "профиль shield_gap_mm")
+
+
+def shield_frame(pl, src, dst, tid24, dy):
+    """Посадка щита (как kit_hybrid.plan_decals) со сдвигом центра на NHL 24: x — SHIELD_GAP_X_CM, y — dy (м).
+    -> (кадр _frame, p NHL 24, cL)."""
+    from . import kit_hybrid
+    cL0, nL0, pinv0, R, sc, rad, u_c, v_c = pl["_frame"]
+    _, p, Jm, n = kit_hybrid.tri_frame(src, tid24, u_c, v_c)
+    p = p + np.array([SHIELD_GAP_X_CM / 100.0, dy, 0.0])
+    lt, lb, _ = kit3d.project(p[None], n[None], dst, k=32)
+    T = dst["tri"][lt[0]]
+    cL = lb[0] @ dst["pos"][T]
+    nL = kit3d._unit(lb[0] @ dst["nrm"][T])
+    JL = Jm - np.outer(nL, nL @ Jm)
+    return (cL, nL, np.linalg.pinv(JL), R, sc, rad, u_c, v_c), p, cL
+
+
+def shield_top_on(P, frame, soft, comp):
+    """Верх щита на точках P нашей сетки (середина переда): куда наклейка кладёт «серебро» (как рисует decal_post и
+    меряет kitport check). -> y (м) или None."""
+    cL, nL, pinv, R, sc, rad, u_c, v_c = frame
+    d = P - cL
+    duv = ((d @ pinv.T) / sc) @ R.T
+    uu, vv = u_c + duv[:, 0], v_c + duv[:, 1]
+    a = kit3d.sample_bilinear(soft[..., None], uu, vv)[:, 0]
+    col = kit3d.sample_bilinear(comp[..., :3].astype(np.float64), uu, vv)
+    lum_min, rg, spread = SHIELD_SILVER
+    sil = (a > 0.5) & (col.mean(1) > lum_min) & (np.abs(col[:, 0] - col[:, 1]) < rg) & (col.max(1) - col.min(1) < spread)
+    sil &= (np.linalg.norm(d, axis=1) < rad) & (np.abs(d @ nL) < 0.06)
+    return float(P[sil, 1].max()) if sil.any() else None
+
+
+def fit_shield_gap(placed, soft, comp, src, dst, tid24, trim, code, kit):
+    """Щит (placed «neck_shield») — по высоте так, чтобы его верх был на зазор ниже низа кромки (trim_front_bottom).
+    Подбор — делением отрезка SHIELD_GAP_DY по расчёту, без сборки. Меняет placed на месте."""
+    pl = next((p for p in placed if p["name"] == "neck_shield"), None)
+    if pl is None or trim is None:
+        return None
+    gap_mm, why = shield_gap_target(code, kit)
+    edge_y, top_y = trim_front_bottom(trim)
+    target = edge_y - gap_mm / 1000.0
+    P, _, _ = front_column({k: trim.mesh[k] for k in ("pos", "uv", "tri")})
+    m = soft[pl["_lid"]]
+    lo, hi = SHIELD_GAP_DY
+    f = lambda dy: shield_top_on(P, shield_frame(pl, src, dst, tid24, dy)[0], m, comp)
+    t_lo, t_hi = f(lo), f(hi)
+    if t_lo is None or t_hi is None or not (t_lo <= target <= t_hi):
+        print(f"  ! щит по зазору: цель {target:.4f} м вне досягаемого ({t_lo}–{t_hi}) — щит как по shield_offset_cm")
+        return None
+    for _ in range(30):
+        mid = (lo + hi) / 2
+        t = f(mid)
+        if t is None or t < target:
+            lo = mid
+        else:
+            hi = mid
+    dy = (lo + hi) / 2
+    frame, p, cL = shield_frame(pl, src, dst, tid24, dy)
+    pl["_frame"] = frame
+    pl["nhl24_3d"] = np.round(p, 4).tolist()
+    pl["legacy_3d"] = np.round(cL, 4).tolist()
+    pl["rule"] = dict(pl.get("rule", {}), offset_cm=[SHIELD_GAP_X_CM, round(dy * 100, 3), 0.0])
+    top = shield_top_on(P, frame, m, comp)
+    rep = {"gap_mm": gap_mm, "from": why, "trim_bottom": round(edge_y, 4), "shield_top": round(top, 4),
+           "offset_cm_y": round(dy * 100, 3), "scale": SHIELD_SCALE}
+    pl["shield_gap"] = rep
+    _SHIELD_GAP_LOG[kit] = rep
+    print(f"  щит по зазору {gap_mm:.1f} мм ({why}): низ кромки {edge_y:.4f} м → верх щита {top:.4f} м, "
+          f"сдвиг y {dy * 100:+.2f} см (x {SHIELD_GAP_X_CM}), масштаб {SHIELD_SCALE}")
+    return rep
 
 
 def brand_alpha():
@@ -2824,6 +3053,17 @@ def cmd_kit(a):
             + list(pre)
         return orig_decal_post(comp, placed, soft, n_jersey_tri, collar, pre, crest_fit, protect)
     kit_hybrid.decal_post = decal_post
+    orig_plan_decals = kit_hybrid.plan_decals
+    cur_kit = {}
+
+    def plan_decals(comp, lab, patches, rules, defaults, src, dst_, tid24):
+        """Щит по зазору под кромкой (SHIELD_GAP_MM, профиль shield_gap_mm): высота — расчётом по кромке этой формы
+        (yoke_rule["trim"]). Без поля (задан shield_offset_cm) и в первых сборках (кромки ещё нет) — как было."""
+        placed, soft = orig_plan_decals(comp, lab, patches, rules, defaults, src, dst_, tid24)
+        if SHIELD_GAP_MM is not None and yoke_rule.get("trim") is not None:
+            fit_shield_gap(placed, soft, comp, src, dst_, tid24, yoke_rule["trim"], a.club, cur_kit["kit"])
+        return placed, soft
+    kit_hybrid.plan_decals = plan_decals
     orig_sleeve_rule = pilot.sleeve_rule
     sleeve_plan = {}
 
@@ -2847,6 +3087,7 @@ def cmd_kit(a):
         for kit in a.kits.split(","):
             yoke_rule.pop("cur", None)
             globals()["SLV_COMPRESS"] = None             # первая сборка комплекта — без сжатия (план — по ней)
+            globals()["SLV_FILL_S24"] = None
             yr = YOKE.get((a.club, kit))
             global TORSO_DELTA
             TORSO_DELTA = None
@@ -2867,6 +3108,7 @@ def cmd_kit(a):
                 save_yoke_shape(a.club, poly, heights)
             yoke_rule["trim"] = trim_rule(a.club, kit, {k: E2[k] for k in ("pos", "uv", "nrm", "tri")},
                                           with_yoke=yr is not None)
+            cur_kit["kit"] = kit                       # для щита по зазору (plan_decals)
             if (a.club, kit) in INSERT_KITS:
                 if "cur" not in yoke_rule:              # цвета — с первой сборки (как у кокетки)
                     pilot.cmd_build(SimpleNamespace(club=a.club, kits=kit, reuse=False))
@@ -2880,8 +3122,8 @@ def cmd_kit(a):
                 # шли без сжатия — под номер на рукаве («! полосы рукава: нет kit.json»; у первой формы — молча)
                 print("  полосы рукава: первая сборка комплекта — для сжатия к кисти")
                 pilot.cmd_build(SimpleNamespace(club=a.club, kits=kit, reuse=False))
-            global SLV_COMPRESS
-            SLV_COMPRESS = None
+            global SLV_COMPRESS, SLV_FILL_S24
+            SLV_COMPRESS, SLV_FILL_S24 = None, None
             if SLV_PARAM and cmaps:                     # сжатие полос к кисти — по зоне номера шаблона (правило [sleeve])
                 SLV_COMPRESS = sleeve_compress(next(iter(cmaps.values())), a.club, kit,
                                                os.path.join(KITS_OUT, f"{a.club}_{kit}"), sleeve_plan)
@@ -2914,6 +3156,7 @@ def cmd_kit(a):
     finally:
         pilot.sleeve_rule = orig_sleeve_rule
         kit_hybrid.decal_post = orig_decal_post
+        kit_hybrid.plan_decals = orig_plan_decals
         kit3d.transfer = orig_transfer
         kit_hybrid.load_rules = orig_rules
         kit_fix._rules = orig_fix_rules
@@ -2953,6 +3196,13 @@ def sleeve_compress(cmap, code, kit, od, plan_out):
         want = min(d_top * r["base_k"], d_zone - r["gap_min"] - px)
         ks[z] = min(max(want / d_top, r["min_k"]), 1.0)
     k = min(ks.values()) if ks else r["base_k"]
+    global SLV_FILL_S24
+    SLV_FILL_S24 = None
+    margin = sleeve_top_margin(cmap, d_top)
+    if margin < SLV_TOP_MARGIN:                          # над полосами у рукава Edge места нет (BOS): выше колена — ткань
+        SLV_FILL_S24 = float(b24.max()) + SLV_FILL_TEXELS / 2048.0
+        print(f"  ! полосы рукава: верх полос в {margin * 100:.1f} см от конца рукава (< {SLV_TOP_MARGIN * 100:g}) — "
+              f"выше колена {k * d_top:.4f} ткань над полосами (s NHL 24 {SLV_FILL_S24:.4f})")
     plan_out.clear()
     for z, zone in zones.items():
         left = zone[0] < 0.5
@@ -2960,7 +3210,16 @@ def sleeve_compress(cmap, code, kit, od, plan_out):
         plan_out[str(z)] = {"left": bool(left), "d_top": round(d_top, 4), "k": round(k, 3),
                             "gap_before": round(float(d_zone - d_top), 3), "gap_after": round(float(d_zone - d_top * k), 3),
                             "mode": "edge_kit: в переносе рукава"}
+        if SLV_FILL_S24 is not None:
+            plan_out[str(z)].update(top_margin_cm=round(margin * 100, 2), fill_s24=round(SLV_FILL_S24, 4))
     return (k, d_top)
+
+
+def sleeve_top_margin(cmap, d_top):
+    """Сколько м по средней линии рукава Edge от верха полос d_top до конца рукава SLV_U[1] (≤ 0 — полосы до конца)."""
+    e = cmap.sleeve.sides[-1]["e"]
+    L = np.concatenate([[0.0], np.cumsum(np.linalg.norm(np.diff(e["C"], axis=0), axis=1))])
+    return float(np.interp(SLV_U[1], e["s"], L) - np.interp(d_top, e["s"], L))
 
 
 def cmd_preview(a):
@@ -3846,6 +4105,50 @@ def SOURCE_NAME():
     return {"nhl24": "NHL 24", "nhl27": "NHL 27"}[kitsrc.source()]
 
 
+def cmd_shield(a):
+    """Щит NHL без сборки (расчёт, как в kit): где встанет при параметрах профиля, низ кромки посередине переда, зазор
+    (как «до кромки» у kitport check), зазор у источника; при щите по зазору (shield_gap_mm или --gap) — и сдвиг под
+    него. Ничего не пишет. Для проверки расчёта на готовых клубах и для подбора поля профиля:
+
+        python -m fb.edge_kit shield --club TBL --kits away,home [--gap 4]
+    """
+    from . import kit_hybrid, pilot
+    global SHIELD_GAP_MM
+    use_club(a.club)
+    if a.gap is not None:
+        SHIELD_GAP_MM = a.gap
+    pilot.extract_club(Hy.CLUB_NAME[a.club])
+    E2, _ = deform(load(0, 1, 2), n24_ring_for(0, 1, 2))
+    E2 = island().apply(E2)
+    mesh = {k: E2[k] for k in ("pos", "uv", "nrm", "tri")}
+    dst = kit_hybrid.merge(mesh, kit3d.load_legacy(kit_hybrid.LEGACY_SHIRT))
+    src = kit3d.load_nhl24(pilot.MESH["adidas"])
+    tid24, _ = kit3d.raster_uv(src, 1024)
+    P, _, _ = front_column(mesh)
+    for kit in a.kits.split(","):
+        comp = kit3d.load_tex(J.n24_tex(Hy.CLUB_NAME[a.club], kit, "color"))
+        base = kit3d.load_tex(J.n24_tex(Hy.CLUB_NAME[a.club], kit, "base_color"))
+        defaults, rules = kit_hybrid.load_rules(kit_hybrid.RULES, a.club, kit, [])
+        sh = {k: v for k, v in rules["neck_shield"].items() if k != "legacy_uv"}
+        rules["neck_shield"] = dict(sh, offset_cm=SHIELD_OFFSET_CM, scale=SHIELD_SCALE)   # как load_rules в cmd_kit
+        lab, patches = kit_hybrid.find_patches(comp, base, defaults)
+        placed, soft = kit_hybrid.plan_decals(comp, lab, patches, rules, defaults, src, dst, tid24)
+        pl = next((p for p in placed if p["name"] == "neck_shield"), None)
+        trim = trim_rule(a.club, kit, mesh, with_yoke=(a.club, kit) in YOKE)
+        edge_y, top_y = trim_front_bottom(trim)
+        sg = source_gap_for(a.club, kit)
+        print(f"{a.club} {kit}: край ворота посередине {top_y:.4f} м, низ кромки {edge_y:.4f} м; у источника: "
+              f"щит {sg['shield_top']} м, {sg['gap_mm']} мм от {sg['ref']} ({sg['edge']} м)")
+        if pl is None:
+            print("  щит не найден среди нашивок источника")
+            continue
+        t0 = shield_top_on(P, pl["_frame"], soft[pl["_lid"]], comp)
+        print(f"  по shield_offset_cm {SHIELD_OFFSET_CM}, масштаб {SHIELD_SCALE}: верх щита "
+              + (f"{t0:.4f} м, до кромки {(edge_y - t0) * 1000:.1f} мм" if t0 else "не найден"))
+        if SHIELD_GAP_MM is not None:
+            fit_shield_gap(placed, soft, comp, src, dst, tid24, trim, a.club, kit)
+
+
 def cmd_meshes(a):
     """Сетки свитера (24 полевых, 6 вратарских) и затенение — в слот стиля SLOT_STYLE, раскладка cache: в a.out."""
     out = a.out
@@ -3887,8 +4190,13 @@ def main():
     p.add_argument("--club", default="MIN")
     p.add_argument("--src", default=os.path.join(WORK, "slot", "cache"))
     p.add_argument("--out", default=os.path.join(REPO, "game", "work", "nhl24", "out", "pack-edge"))
+    p = sub.add_parser("shield", help="щит NHL без сборки: место, низ кромки, зазор (как kitport check)")
+    p.add_argument("--club", default="MIN")
+    p.add_argument("--kits", default="away,home")
+    p.add_argument("--gap", type=float, default=None, help="мм: и сдвиг щита под этот зазор под кромкой")
     a = ap.parse_args()
-    {"preview": cmd_preview, "kit": cmd_kit, "meshes": cmd_meshes, "slot": cmd_slot, "pack": cmd_pack}[a.cmd](a)
+    {"preview": cmd_preview, "kit": cmd_kit, "meshes": cmd_meshes, "slot": cmd_slot, "pack": cmd_pack,
+     "shield": cmd_shield}[a.cmd](a)
 
 
 if __name__ == "__main__":

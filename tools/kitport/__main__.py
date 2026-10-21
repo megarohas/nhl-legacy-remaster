@@ -315,7 +315,14 @@ def main():
     s.add_argument("--clubs", default="", help="папки клубов через запятую (по умолчанию — все)")
     s.add_argument("--kits", default="default", help="default — дом и выезд по базе источника; или папки через запятую")
     s.add_argument("--jobs", type=int, default=8)
+    s = sub.add_parser("profile", help="генератор профиля клуба из NHL 27: предложение и сравнение (--write — записать)")
+    s.add_argument("--club", required=True, help="код клуба (BOS); без --write — можно через запятую (NJD,TBL)")
+    s.add_argument("--write", action="store_true", help="записать профиль, номера в реестре, каску и краги")
+    s.add_argument("--write-palette", action="store_true", help="и палитру клуба NHL 27 в nhl24_team_colors.json")
     a = p.parse_args()
+    if a.cmd == "profile":
+        from . import profile
+        return profile.cmd_profile(a)
     if a.cmd in ("sheet",):
         from . import sheets
         return sheets.cmd_sheet(a)
