@@ -2354,7 +2354,7 @@ def trim_rule(code, kit, mesh, with_yoke=False):
     wf = wf * TRIM_K
     if mode == "step":
         full, wf = step_width(prof)
-        print(f"  кромка ступенькой ({COLLAR_TRIM}): разрыв ±{prof['gap']:.0f}°, узкая {prof['narrow'] * 100:.2f} см "
+        print(f"  кромка ступенькой ({COLLAR_TRIM}): узкая {prof['narrow'] * 100:.2f} см "
               f"× {TRIM_K}, ступенька {prof['step_at']:.0f}°, сзади — до обода (RING_KNOTS)")
     print("  кромка: цвет", np.round(col).tolist(), "ширина, см:",
           {int(a): round(float(np.interp(a, full, wf, period=360)) * 100, 2) for a in (0, 45, 90, 135, 180)})
@@ -2364,6 +2364,10 @@ def trim_rule(code, kit, mesh, with_yoke=False):
     lining = np.median(src[yl[lin_t], xl[lin_t]], axis=0)
     # ткань у ворота (под кромкой, сзади и с боков): у формы без кокетки — одним цветом
     body_c = np.median(c[(d > 0.02) & (d < 0.035) & (np.abs(np.abs(th) - 120) < 40)], axis=0)
+    if mode == "step":                                   # у широкой кромки (TBL сзади 2,9 см) на 2–3,5 см — сама кромка:
+        wloc = np.interp(np.abs(th), prof["angles"], prof["width"])   # «ткань» была белой, и зачистка за кромкой
+        body_c = np.median(c[(d > wloc + 0.005) & (d < wloc + 0.02) & (np.abs(np.abs(th) - 120) < 40)], axis=0)
+        #                                                  красила ещё 8 мм белым (пользователь, 21.10: «сзади широкий»)
     return TrimPaint(mesh, col, (full, wf), lining, None if with_yoke else body_c)
 
 
@@ -2403,7 +2407,9 @@ def step_width(prof):
     sm = lambda x: np.clip(0.5 + x / (2 * TRIM_STEP_SOFT), 0, 1)
     ring = np.interp(a, *zip(*RING_KNOTS))
     w = prof["narrow"] * TRIM_K + (ring - prof["narrow"] * TRIM_K) * sm(a - prof["step_at"])
-    return full, w * sm(a - prof["gap"])
+    # разрыв спереди не рисуется: кромка — до середины (пользователь, 21.10: «белый доходит не до конца»); замер
+    # «разрыва» у сетки NHL 24 ±24° выходит у всех клубов — это вырез adidas у середины, а не разрыв кромки
+    return full, w
 
 
 def brand_alpha():

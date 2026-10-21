@@ -6,11 +6,14 @@
 
 1. Ткань — перенос base_color (у EA текстура шорт без нашивок) как раньше.
 2. Нашивки — разница color − base_color (> DIFF), каждая связная часть — отдельная наклейка:
-   - место — та же точка шорт: центр нашивки в 3D (сетка источника) → ближайшая точка выровненной сетки Legacy
-     (тот же kit3d.aligned, что у ткани: положение относительно рамки шорт сохраняется);
-   - размер — физический (м на сетке источника) × масштаб по высоте шорт (рамка Legacy / рамка источника), одинаковый
-     по обеим осям — пропорции нашивки не меняются;
-   - верх наклейки — мировая ось y в касательной плоскости (вертикально, как на источнике), без поворота от развёртки.
+   - место и размер — как у EA на шортах Legacy (EA_SLOTS, замер 21.10 по 84 формам EA): щит NHL сзади — рамка
+     развёртки (0,107; 0,338)–(0,148; 0,371) у всех EA, высота 5,5 см; герб спереди — на той ноге, где у источника,
+     в середине рамок EA этой стороны, по диагонали ~11,5 см. Пропорции нашивки — источника (масштаб одинаков по осям).
+     Сначала место бралось по точке источника (центр в 3D → выровненная сетка Legacy): щит выходил мельче EA, герб —
+     ниже и сбоку, на загибе у края штанины, «сплюснутым» (пользователь, 21.10, NJD). Нашивки не сзади и не спереди
+     (полосы, надписи сбоку) — по-прежнему по точке источника, размер × высота шорт Legacy / источника;
+   - верх наклейки — мировая ось y в касательной плоскости (вертикально), без поворота от развёртки: у EA в развёртке
+     гербы повёрнуты по-разному, чтобы на сетке стоять вертикально.
 3. Наклейка ложится по 3D-точкам текселей сетки Legacy (не по UV) — изгиб и швы развёртки её не рвут.
 
     from fb import pant_decals
@@ -25,6 +28,11 @@ MIN_PX = 200                       # меньше текселей (в 2048²) �
 RES = 0.0004                       # м на пиксель наклейки (0,4 мм: у источника 2048² на шорты ~0,3 мм)
 SLAB = 0.04                        # м: тексели Legacy дальше от касательной плоскости центра — не на той же поверхности
 FACING = 0.3                       # косинус: нормаль текселя к нормали центра — не меньше (не другая нога, не изнанка)
+# места нашивок шорт EA (uv развёртки шорт Legacy pant_1_0_0_2; центры рамок): щит — одна рамка у всех 84 форм EA,
+# герб слева — среднее рамок 1_14_0, 1_16_2, 1_1_3, 1_23_0, 1_24_3, справа — 1_20_0, 1_131_0, 1_20_3, 1_23_6
+EA_SLOTS = {"back": {"uv": (0.1275, 0.3545), "h": 0.055},
+            "front_left": {"uv": (0.131, 0.613), "diag": 0.115},
+            "front_right": {"uv": (0.881, 0.586), "diag": 0.115}}
 
 
 def _surface(mesh, size):
@@ -119,8 +127,18 @@ def _sample(img, x, y):
     return out
 
 
-def apply(img, color, base, src_mesh, dst_aligned, dst_mesh, size=512, ss=2, report=None):
-    """Нашивки (color − base) поверх img — переноса base на развёртку dst (size², RGB float) → img и [описание]."""
+def slot_of(c, n):
+    """Место EA для нашивки с центром c и нормалью n на сетке источника: back, front_left, front_right или None."""
+    if n[2] < -0.2:
+        return "back"
+    if n[2] > 0.2:
+        return "front_left" if c[0] < 0 else "front_right"
+    return None
+
+
+def apply(img, color, base, src_mesh, dst_aligned, dst_mesh, size=512, ss=2, report=None, ea=True):
+    """Нашивки (color − base) поверх img — переноса base на развёртку dst (size², RGB float) → img и [описание].
+    ea — места и размеры EA (EA_SLOTS), иначе — по точке источника."""
     from . import kit3d
     S = size * ss
     ok_s, P_s, N_s = _surface(src_mesh, color.shape[0])
@@ -134,16 +152,25 @@ def apply(img, color, base, src_mesh, dst_aligned, dst_mesh, size=512, ss=2, rep
     rep = []
     for m in decals(color, base):
         rgba, c, n, (right, up), x0, y0 = sticker(color, m, ok_s, P_s, N_s)
-        # центр → ближайший тексель выровненной сетки Legacy, повёрнутый так же (не другая нога и не изнанка)
-        dd = np.linalg.norm(P_a - c, axis=-1)
-        dd[~ok_a | ((N_a @ n) < FACING)] = np.inf
-        iy, ix = np.unravel_index(np.argmin(dd), dd.shape)
+        slot = slot_of(c, n) if ea else None
+        k = scale
+        if slot:                                         # место EA: тексель с центром рамки (ближайший на развёртке)
+            u, v = EA_SLOTS[slot]["uv"]
+            yy, xx = np.nonzero(ok_d)
+            j = np.argmin((xx - u * S) ** 2 + (yy - v * S) ** 2)
+            iy, ix = yy[j], xx[j]
+            hw = np.array(rgba.shape[:2]) * RES                  # высота, ширина наклейки, м
+            k = EA_SLOTS[slot]["h"] / hw[0] if "h" in EA_SLOTS[slot] else EA_SLOTS[slot]["diag"] / np.hypot(*hw)
+        else:                                            # центр → ближайший тексель выровненной сетки Legacy,
+            dd = np.linalg.norm(P_a - c, axis=-1)        # повёрнутый так же (не другая нога и не изнанка)
+            dd[~ok_a | ((N_a @ n) < FACING)] = np.inf
+            iy, ix = np.unravel_index(np.argmin(dd), dd.shape)
         cL, nL = P_d[iy, ix], N_d[iy, ix]
         rL, uL = _basis(nL)
         D = P_d - cL
         near = ok_d & (np.abs(D @ nL) < SLAB) & ((N_d @ nL) > FACING)
-        lx = (D @ rL) / scale
-        ly = (D @ uL) / scale
+        lx = (D @ rL) / k
+        ly = (D @ uL) / k
         px = (lx - x0) / RES
         py = (ly - y0) / RES
         near &= (px > -1) & (py > -1) & (px < rgba.shape[1]) & (py < rgba.shape[0])
@@ -151,8 +178,9 @@ def apply(img, color, base, src_mesh, dst_aligned, dst_mesh, size=512, ss=2, rep
         a = s[:, 3].clip(0, 1)
         hi[near] = hi[near] * (1 - a[:, None]) + s[:, :3] * a[:, None]
         a_hi[near] = a_hi[near] + a * (1 - a_hi[near])
-        rep.append({"src_center": np.round(c, 3).tolist(), "dst_uv": [round(ix / S, 3), round(iy / S, 3)],
-                    "size_cm": [round(rgba.shape[1] * RES * scale * 100, 1), round(rgba.shape[0] * RES * scale * 100, 1)]})
+        rep.append({"slot": slot or "source", "src_center": np.round(c, 3).tolist(),
+                    "dst_uv": [round(float(ix) / S, 3), round(float(iy) / S, 3)],
+                    "size_cm": [round(rgba.shape[1] * RES * k * 100, 1), round(rgba.shape[0] * RES * k * 100, 1)]})
     if not rep:
         return img, rep
     box = lambda x: x.reshape(size, ss, size, ss, *x.shape[2:]).mean((1, 3))
