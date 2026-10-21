@@ -75,7 +75,7 @@ def _res_index():
         for p in sorted(glob.glob(os.path.join(CAT, "scan", "*.jsonl"))):
             with open(p, encoding="utf-8") as f:
                 for line in f:
-                    if key in line and "/head/licensed/" in line and '"ofs"' in line:
+                    if key in line and "/shared/head/" in line and '"ofs"' in line:
                         r = json.loads(line)
                         _res.setdefault(r["name"], r)
     return _res
@@ -185,7 +185,7 @@ def _tex_index():
         _tex = {}
         with open(os.path.join(CAT, "textures.csv"), encoding="utf-8") as f:
             for r in csv.DictReader(f):
-                if "/head/licensed/" in r["name"] and r["ofs"] and r["name"] not in _tex:
+                if "/shared/head/" in r["name"] and r["ofs"] and r["name"] not in _tex:
                     _tex[r["name"]] = r
     return _tex
 
