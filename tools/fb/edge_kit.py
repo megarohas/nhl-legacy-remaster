@@ -660,7 +660,7 @@ class CoordMap:
         r = np.hypot(src["pos"][:, 0], src["pos"][:, 2])
         self.g_torso = _raster_multi(src["tri"][body_t], tt, src["pos"][:, 1], r, src["uv"], -180, 180, 0.85,
                                      TORSO_YMAX, GRID_TH, GRID_YT)
-        self.g_hem = hem.hem_grid(src)
+        self.g_hem = hem.hem_grid(src, hem.HEM_H + 0.01)
         # верх плеч — сверху (x, z): по (θ, высоте) почти горизонтальная ткань плеча неоднозначна (на одной высоте —
         # большой участок), граница кокетки у плечевого сустава шла вырезом (пользователь, 19.10)
         nrm_s = kit3d._unit(src["nrm"])
@@ -781,6 +781,9 @@ SLV_V = (0.30, 0.72)               # v развёртки Edge: рукав
 SLV_U24 = (0.03, 0.30)             # u NHL 24: рукав (левый; правый — 1 − u), манжета — у 0,03 (пройма — 0,335)
 SLV_U24_MIN = 0.042                # u NHL 24 — не ближе к манжете (у Edge рукав там уходит в краги)
 SLV_BLEND = 0.007                  # u Edge: у проймы — плавно к прежнему переносу (полосы кончаются у 0,222)
+HEM_H_DEFAULT = 0.09               # м: зона низа «от края» (fb.hem.HEM_H) без поля hem_h в профиле
+SLV_FILL_EXT = 0.035               # u Edge за концом рукава (у проймы): при заполнении тканью (SLV_FILL_S24) — тоже ткань:
+SLV_FILL_BLEND = 0.01              # там ближайшая точка NHL 24 брала его верхнюю полосу — золотая дуга (BOS, 21.10)
 SLV_X = 0.15                       # м: |x| больше — рукав
 SLV_PHI = 0.5                      # град — шаг таблиц угла
 # Полосы — ближе к кисти (правило пользователя 11.10, kit_rules.toml [sleeve]: сжатие рисунка к манжете в k раз, зазор
@@ -998,7 +1001,9 @@ class SleeveMap:
         wt = np.zeros(n)
         for sgn, d in self.sides.items():
             sE = tu if sgn < 0 else 1.0 - tu
-            k = (sE >= SLV_U[0]) & (sE <= SLV_U[1]) & (tv > SLV_V[0]) & (tv < SLV_V[1]) & (P[:, 0] * sgn > SLV_X)
+            fill = SLV_FILL_S24 is not None and SLV_COMPRESS is not None
+            ext = SLV_FILL_EXT if fill else 0.0
+            k = (sE >= SLV_U[0]) & (sE <= SLV_U[1] + ext) & (tv > SLV_V[0]) & (tv < SLV_V[1]) & (P[:, 0] * sgn > SLV_X)
             if not k.any():
                 continue
             e, nn = d["e"], d["n"]
@@ -1028,7 +1033,11 @@ class SleeveMap:
             v24 = np.where(np.abs(vb - va) > 0.02, np.where(wj < 0.5, va, vb), va * (1 - wj) + vb * wj)
             u24 = s24 if sgn < 0 else 1.0 - s24
             out[k, 0], out[k, 1] = u24, v24
-            wt[k] = Hy.smooth((SLV_U[1] - sE[k]) / SLV_BLEND)
+            w_ = Hy.smooth((SLV_U[1] - sE[k]) / SLV_BLEND)
+            if fill:                                     # над полосами — ткань и у проймы (до SLV_FILL_EXT за концом)
+                w_ = np.where(s > SLV_COMPRESS[0] * SLV_COMPRESS[1],
+                              Hy.smooth((SLV_U[1] + ext - sE[k]) / SLV_FILL_BLEND), w_)
+            wt[k] = w_
         return out, wt
 
 
@@ -1173,6 +1182,7 @@ def use_club(code):
     global YOKE, YOKE_KIND, INSERT_KITS, SLOT_KITS, LETTER_ZONES_FROM, SOCK_PARTS, BODY_KIND, COLLAR, YOKE_EA_KIND
     global YOKE_SIDE_BLEND, SHIELD_OFFSET_CM, SHIELD_SCALE, SLEEVE_ZONES_FROM, BASE_NM_DECALS, COLLAR_TRIM
     global SHIELD_GAP_MM, TRIM_WIDTH_FROM
+    from . import hem
     from . import kit_hybrid
     prof = club_profiles().get(code)
     if prof is None:
@@ -1185,6 +1195,10 @@ def use_club(code):
     BODY_KIND = prof.get("body_color", "light")
     COLLAR = prof.get("collar", "lace")
     COLLAR_TRIM = prof.get("collar_trim", "auto")
+    # высота зоны низа «от края» (fb.hem.HEM_H): у NHL 27 BOS / TBL полосы низа — до 13–14 см, а зона — 9 см (переход
+    # 6–9 см): белая полоса BOS попадала в переход и раздувалась посередине (пользователь, 21.10). Профиль hem_h — выше
+    # полос, генератор (kitport profile) ставит по замеру; нет поля — как раньше
+    hem.HEM_H = float(prof.get("hem_h", HEM_H_DEFAULT))
     TRIM_WIDTH_FROM = dict(prof.get("trim_width_from", {}))    # кромка цвета ткани — ширина по другой форме
     YOKE_EA_KIND = prof.get("yoke_shape_color")
     YOKE_SIDE_BLEND = prof.get("yoke_side_blend")

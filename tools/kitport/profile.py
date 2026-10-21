@@ -200,6 +200,29 @@ def differs(a, b):
     return bool(np.abs(np.asarray(a) - np.asarray(b)).max() >= COLOR_DIFF)
 
 
+HEM_MARGIN = 0.04                  # м: зона низа «от края» — выше верха полос (переход fb.hem.HEM_BLEND 3 см + 1 см)
+
+
+def hem_band_top(folder, kit):
+    """Верх полос низа источника над краем низа (м, сетка NHL 24): самое высокое место не цвета ткани у низа."""
+    from fb import hem
+    a = np.load(survey_mesh())
+    m = {"pos": a["pos"], "uv": a["uv"], "tri": a["tri"]}
+    g = n24_outer()
+    P, ys, xs = g["P"], g["ys"], g["xs"]
+    _, dh = hem.hem_coords(P, hem.hem_curve(m))
+    b = tex(folder, kit, "base_color", 1024)[ys, xs, :3]
+    sel = (dh > 0) & (dh < 0.25)
+    body = median_c(b[sel & (dh > 0.18)])
+    diff = sel & (np.abs(b - body).max(1) >= COLOR_DIFF)
+    return float(dh[diff].max()) if diff.any() else 0.0
+
+
+def survey_mesh():
+    from . import survey
+    return survey.mesh_cache()
+
+
 def look_kit(folder, kit):
     """Ворот, кокетка, ткань одной формы источника по основе на сетке NHL 24 -> dict."""
     g = n24_outer()
@@ -467,6 +490,15 @@ def propose(code):
                           not odd, (", ".join(f"{f[0]} uv ({f[1]:.3f}, {f[2]:.3f}), {f[3]} px" for f in sp) or
                                     "на груди рекламы нет") + ("" if not odd else "; не из правил kit_rules.toml: "
                                     + ", ".join(f"uv ({f[1]:.3f}, {f[2]:.3f}), {f[3]} px" for f in odd))))
+    # низ: зона «от края» — выше полос (иначе верхние полосы — в переходе и раздуваются посередине, BOS 21.10)
+    from fb import hem
+    tops = {k: hem_band_top(folder, src[k]) for k in SLOT_KITS}
+    if max(tops.values()) > hem.HEM_H - hem.HEM_BLEND - 0.01:
+        prof["hem_h"] = round(max(tops.values()) + HEM_MARGIN, 3)
+    D.append(Decision("hem_h", prof.get("hem_h", "—"), True,
+                      "верх полос низа над краем, см: " + ", ".join(f"{k} {v * 100:.1f}" for k, v in tops.items())
+                      + f" (зона «от края» без поля — {hem.HEM_H * 100:.0f} см, переход — верхние "
+                      f"{hem.HEM_BLEND * 100:.0f} см)"))
     if max(parts.values()) > 1:
         prof["merge_parts"] = ["crest"]
     D.append(Decision("merge_parts", prof.get("merge_parts", "—"), True,
@@ -575,7 +607,8 @@ def toml_section(code, prof, D, data):
            "# docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.",
            f"[{code}]"]
     for k in ("source", "source_kits", "body_color", "collar", "trim_width_from", "yoke_color", "yoke", "yoke_shape_color",
-              "shield_offset_cm", "shield_scale", "merge_parts", "base_normal_decals", "insert", "letter_zones_from",
+              "shield_offset_cm", "shield_scale", "merge_parts", "base_normal_decals", "hem_h", "insert",
+              "letter_zones_from",
               "sock_parts"):
         if k not in prof:
             continue
@@ -584,7 +617,8 @@ def toml_section(code, prof, D, data):
                                 + " / ".join(f"{g['gap_mm']} мм" for g in data['gaps'].values()) + " (справка)",
                 "sock_parts": "не используется (sock = auto)",
                 "body_color": sure["body_color"].why,
-                "trim_width_from": "кромка цвета ткани — ширина кромки по другой форме (edge_kit.TRIM_WIDTH_FROM)"}.get(k)
+                "trim_width_from": "кромка цвета ткани — ширина кромки по другой форме (edge_kit.TRIM_WIDTH_FROM)",
+                "hem_h": "м: зона низа «от края» выше полос (fb.hem.HEM_H; без поля — 0,09)"}.get(k)
         if k == "collar":
             note = sure["collar"].why
         out.append(line + (f"   # {note}" if note else ""))
