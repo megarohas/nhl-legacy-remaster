@@ -41,6 +41,9 @@ SOCK_N24 = "content/character/skater/player/sock/common/components/player_sock_c
 PANT_L = "rendering/pant/pant_1_0_0_2.rx2"
 SOCK_L = "rendering/sock/playersock_1_2.rx2"
 PANT_WAIST = 1.17  # у NHL 24 шорты с высоким поясом до груди; видимая часть — до ремня ~1,17 м
+# нашивки шорт (герб, щит NHL) — наклейками fb.pant_decals, ткань — перенос base_color: у Legacy шорты шире, перенос по
+# ближайшей точке растягивал и поворачивал их (пользователь, 21.10, NJD: «поехали логотипы» на шортах)
+PANT_DECALS = True
 
 
 def set_roots(out_root=None, pack_root=None):
@@ -86,11 +89,13 @@ def _kits_for(code):
     club, art = club_info(code)
     with open(REGISTRY, encoding="utf-8") as f:
         reg = [r for r in json.load(f)["kits"] if r["club"] == code]
+    from . import kitsrc
     out = []
     src = third_source()
     for label in MAIN_KITS:
         r = next((k for k in reg if k["kit"] == label), None)
-        kit = src.get(code, "three") if label == "three" else label
+        # папка комплекта источника: профиль source_kits (fb.edge_kit.use_club → kitsrc.folder), иначе — метка
+        kit = src.get(code, "three") if label == "three" and kitsrc.folder(label) == label else kitsrc.folder(label)
         out.append((label, "adidas", kit, r["variant"] if r else None, True))
     for r in reg:
         lab = r["kit"]
@@ -518,7 +523,16 @@ def cmd_build(a):
         build_font(rec, folder, ok, p, family, club, kit, od, tpl_kit, own_name)
         # шорты и гетры: точно через 3D (сетки по .toc), выравнивание по рамкам
         pc, sc = p + f"pant_{family}_{club}_{kit}_color", p + f"sock_{family}_{club}_{kit}_color"
-        if pc in ok:
+        pb = p + f"pant_{family}_{club}_{kit}_base_color"
+        if pc in ok and PANT_DECALS and pb in ok:
+            from . import pant_decals
+            pcol, pbase = kit3d.load_tex(png(folder, pc)), kit3d.load_tex(png(folder, pb))
+            pimg = kit3d.transfer(pbase, pN, pLa, 512, 2)[0]
+            pimg, prep = pant_decals.apply(pimg, pcol, pbase, pN, pLa, pL, 512)
+            Image.fromarray(np.clip(pimg, 0, 255).astype(np.uint8)).convert("RGB").save(os.path.join(od, "pant_cm.png"))
+            rec["pant"] = f"ok (3D, нашивок наклейками: {len(prep)})"
+            rec["pant_decals"] = prep
+        elif pc in ok:
             pimg, pm, pd, _ = kit3d.transfer(kit3d.load_tex(png(folder, pc)), pN, pLa, 512, 2)
             Image.fromarray(np.clip(pimg, 0, 255).astype(np.uint8)).convert("RGB").save(os.path.join(od, "pant_cm.png"))
             rec["pant"] = "ok (3D)"
