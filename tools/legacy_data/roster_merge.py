@@ -17,8 +17,10 @@ game/work/legacy-data/backup-saves/roster_merge-<время>/, запись, п�
   одинаковое). Строка, которую поменял только пользователь, — его; только мы — наша; обе — по полям: поля, которые
   поменяли мы, — наши, остальные изменённые пользователем — его. Если у game_id в новой базе другой человек (строка
   донора отдана новому игроку: имя или дата рождения другие), правки пользователя к ней не относятся — строка наша.
-- число записей — как в N; больше места в таблице сейва (max) — останов: такой сейв игра считает «damaged»
-  (docs/legacy-data.md, «ROSTER 1 damaged»). Запас [current, max) заполняется 0xDB, как у игры.
+- число записей — как в N; больше места в таблице сейва (max) — таблица сейва расширяется (Tdb.resize, max = current
+  = N, как у nhl24.py save: так проверено в игре на stockteamjerseys и stockteamequipmenttable); у сложных таблиц
+  (с индексами) — останов: сейв с записями сверх max игра считает «damaged» (docs/legacy-data.md, «ROSTER 1
+  damaged»). Запас [current, max) заполняется 0xDB, как у игры.
 Повтор ничего не меняет. Документация — docs/legacy-data.md, «Перенос в сейв ROSTER».
 """
 import json
@@ -126,8 +128,14 @@ def write_table(U, t, records):
     b = tb['block']
     mx, cur, nd, head = U.counts(t)
     if len(records) > mx:
-        raise SystemExit(f'{t}: в новой базе {len(records)} записей, в сейве места {mx} — игра сочтёт сейв damaged. '
-                         f'Новые формы и шлемы — сначала nhl24.py save СЕЙВ --write (расширяет таблицу), потом повтор')
+        try:
+            U.resize(t, len(records))                    # max = current = записей новой базы (как nhl24.py save)
+        except ValueError as e:
+            raise SystemExit(f'{t}: в новой базе {len(records)} записей, в сейве места {mx}, расширить нельзя ({e}) — '
+                             'игра сочтёт сейв damaged')
+        tb = U.by_name[t]
+        b = tb['block']
+        mx, cur, nd, head = U.counts(t)
     for i, raw in enumerate(records):
         U.put_record(t, i, raw)
     start = tb['records'] + len(records) * tb['reclen']
@@ -168,7 +176,7 @@ def run(save, old, new, write, report=None):
     for t, st in rep['tables'].items():
         if st.get('changed') or 'слияние' in st.get('how', ''):
             print(f"  {t:32} {st.get('save')} → {st.get('new')} (место {st.get('max')}): {st['how']}"
-                  + (" — НЕ ВМЕЩАЕТСЯ: сначала nhl24.py save СЕЙВ --write" if (st.get('new') or 0) > st['max'] else ""))
+                  + (f" — таблица сейва расширится до {st.get('new')}" if (st.get('new') or 0) > st['max'] else ""))
     print(f'{os.path.basename(save)}: таблиц к записи {len(plan)}' + ('' if write else ' (проба, не записано)'))
     if report:
         json.dump(rep, open(report, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)

@@ -739,3 +739,10 @@ adidas, сейв ROSTER дописывается в конец). Шорты и �
   файлов: `db/nhlng.db`, `fe/loc/NHL_ENG_US.db`, `texlib_0_17_9.rx2`, `name_0_17_{9,10}_cm.rx2`. Копия заменённого —
   `backup-cache/user-20261021-njd27-font-defaults`. Сейв ROSTER 20261021075615 (игра пересохранила в 10:56) —
   `roster_merge.py`: `stockteamjerseys` из новой базы (копия — `backup-saves/roster_merge-20261021-112455`), повтор — 0.
+- 21.10 14:12 — TBL из NHL 27 (дом 0_26_6, выезд 0_26_7, без рекламного патча, ворот «ступенькой» до шва обода) —
+  по умолчанию, EA 1_26_3/1_26_4 — «Home (EA)» / «Away (EA)». Шорты NJD и TBL — нашивки наклейками на местах EA
+  (`fb.pant_decals`; герб на 3 см выше рамки EA — пользователь). Обновились 16 файлов: `db/nhlng.db`,
+  `fe/loc/NHL_ENG_US.db`, 12 новых файлов 0_26_6 / 0_26_7, шорты NJD `rendering/pant/texlib_0_17_{9,10}.rx2`. Копия заменённого —
+  `backup-cache/user-20261021-tbl27-pants-ea`. Сейв ROSTER 20261021090720 (игра пересохранила в 12:07) —
+  `roster_merge.py` (таблица шлемов расширена 6134 → 6136; копия — `backup-saves/roster_merge-20261021-141241`),
+  повтор — 0, `nhl24.py save` — «сейв уже совпадает с базой».

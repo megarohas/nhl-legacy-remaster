@@ -31,8 +31,9 @@ FACING = 0.3                       # косинус: нормаль тексел
 # места нашивок шорт EA (uv развёртки шорт Legacy pant_1_0_0_2; центры рамок): щит — одна рамка у всех 84 форм EA,
 # герб слева — среднее рамок 1_14_0, 1_16_2, 1_1_3, 1_23_0, 1_24_3, справа — 1_20_0, 1_131_0, 1_20_3, 1_23_6
 EA_SLOTS = {"back": {"uv": (0.1275, 0.3545), "h": 0.055},
-            "front_left": {"uv": (0.131, 0.613), "diag": 0.115},
-            "front_right": {"uv": (0.881, 0.586), "diag": 0.115}}
+            "front_left": {"uv": (0.131, 0.613), "diag": 0.115, "lift": 0.03},
+            "front_right": {"uv": (0.881, 0.586), "diag": 0.115, "lift": 0.03}}
+# lift — м вверх по шортам от центра рамки EA (пользователь, 21.10: герб на шортах «слишком низко, чуть поднять»)
 
 
 def _surface(mesh, size):
@@ -159,6 +160,13 @@ def apply(img, color, base, src_mesh, dst_aligned, dst_mesh, size=512, ss=2, rep
             yy, xx = np.nonzero(ok_d)
             j = np.argmin((xx - u * S) ** 2 + (yy - v * S) ** 2)
             iy, ix = yy[j], xx[j]
+            lift = EA_SLOTS[slot].get("lift", 0.0)
+            if lift:                                     # выше по той же поверхности: тексель у точки центр + lift·верх
+                c0, n0 = P_d[iy, ix], N_d[iy, ix]
+                q = c0 + lift * _basis(n0)[1]
+                dq = np.linalg.norm(P_d - q, axis=-1)
+                dq[~ok_d | ((N_d @ n0) < FACING)] = np.inf
+                iy, ix = np.unravel_index(np.argmin(dq), dq.shape)
             hw = np.array(rgba.shape[:2]) * RES                  # высота, ширина наклейки, м
             k = EA_SLOTS[slot]["h"] / hw[0] if "h" in EA_SLOTS[slot] else EA_SLOTS[slot]["diag"] / np.hypot(*hw)
         else:                                            # центр → ближайший тексель выровненной сетки Legacy,
