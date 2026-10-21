@@ -4,8 +4,8 @@
 #   bash tools/legacy_data/build-all.sh [ЭТАП…] [--ahl32]
 #   LEGACY_DATA_WORK=папка bash tools/legacy_data/build-all.sh …   # сухой прогон: всё (и out) — в эту папку;
 #        входы, которые этапом не пересобираются (например, составы без сети), — положить туда заранее
-#        этапы: base roster photos equip collect retire fixdb utah ahl europe chl nhlattrs useredits tape players contracts
-#        goaliegear photos24 heads scans24 fonts
+#        этапы: base roster photos equip collect retire fixdb utah ahl europe chl stats27 nhlattrs useredits tape players
+#        contracts goaliegear photos24 heads scans24 fonts
 #        music models art logos menu nhl24
 #        (без этапов — все по порядку;
 #        --ahl32 — ещё вариант «АХЛ на 32», накладка game/work/legacy-data/out-ahl32; nhl24 — накладка out-nhl24
@@ -28,7 +28,7 @@ L=game/other/legacy/big/cacheboot
 AHL32=0
 stages=()
 for a in "$@"; do [ "$a" = "--ahl32" ] && AHL32=1 || stages+=("$a"); done
-[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah ahl europe chl nhlattrs useredits tape players contracts goaliegear photos24
+[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah ahl europe chl stats27 nhlattrs useredits tape players contracts goaliegear photos24
                                   heads scans24 fonts music models art logos menu nhl24)
 want() { for s in "${stages[@]}"; do [ "$s" = "$1" ] && return 0; done; return 1; }
 say() { echo "== $(date +%H:%M:%S) $*"; }
@@ -167,6 +167,17 @@ if want chl; then
     python $T/league27.py chl
   else
     say "CHL: нет базы NHL 27 — этап пропущен"
+  fi
+fi
+if want stats27; then
+  # история статистики из NHL 27 (tools/legacy_data/stats27.py, docs/legacy-data.md, «Статистика из NHL 27»): у игроков,
+  # опознанных по имени и дате рождения, сезоны НХЛ/АХЛ — из NHL 27 (у EA история полная, на 2025/26); у прочих убираются
+  # невозможные сезоны (моложе 18 — чужие строки доноров). После составов (ahl, europe, chl). Повтор ничего не меняет
+  if [ -f "${NHL27_DB:-game/work/nhl27/db/nhl_game.db}" ]; then
+    say "статистика из NHL 27 (stats27.py)"
+    python $T/stats27.py
+  else
+    say "статистика: нет базы NHL 27 — этап пропущен"
   fi
 fi
 if want nhlattrs; then
