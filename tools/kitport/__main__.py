@@ -129,6 +129,19 @@ def cmd_snapshot(a):
     return 0
 
 
+def cmd_compare(a):
+    d = a.before or core.latest_snapshot()
+    if not d or not os.path.isdir(d):
+        say("нет снимка «было» — сначала python -m kitport snapshot")
+        return 1
+    rows, out = core.compare(d, clubs=a.clubs.split(",") if a.clubs else None, th=a.th)
+    for kit, f, r in rows:
+        say(f"{kit:10} {f:14} {r}")
+    say(f"изменено текстур: {sum(1 for *_, r in rows if r.startswith('изменено'))} из {len(rows)}; "
+        f"картинки «было | стало | разница ×4» → {out}")
+    return 0
+
+
 def cmd_diff(a):
     d = core.diff(prefix=a.prefix)
     for kind, rel, p in d:
@@ -261,6 +274,10 @@ def main():
     sub.add_parser("status", help="что стоит в игре против сборки")
     s = sub.add_parser("snapshot", help="снимок «было» файлов слота форм")
     s.add_argument("--tag", default="before")
+    s = sub.add_parser("compare", help="слот форм против снимка «было»: сколько и где изменилось")
+    s.add_argument("--before", default=None, help="папка снимка (по умолчанию — последний)")
+    s.add_argument("--clubs", default="", help="клубы через запятую (MIN,NJD), по умолчанию — все в снимке")
+    s.add_argument("--th", type=int, default=core.COMPARE_TH, help="порог отличия тексела, из 255")
     s = sub.add_parser("diff", help="сборка против cache: игры")
     s.add_argument("--prefix", default="", help="только пути с этим началом (rendering/jersey …)")
     s = sub.add_parser("build", help="стадии сборки формы")
@@ -281,6 +298,9 @@ def main():
     s.add_argument("--kit", default="MIN_away", help="текстура какой собранной формы подложить")
     s.add_argument("--plain", action="store_true", help="без текстуры (только части тела, высоты, зоны)")
     s.add_argument("--out", default=None)
+    s = sub.add_parser("check", help="лист проверки форм слота: ворот, рельеф, превью меню, замер щита")
+    s.add_argument("--clubs", default="", help="клубы через запятую (по умолчанию — все в слоте)")
+    s.add_argument("--out", default=None)
     sub.add_parser("params", help="каталог параметров формы")
     s = sub.add_parser("survey", help="обзор форм клубов источника: перед, плечо, ворот (разбор по типам)")
     s.add_argument("--source", default="nhl27")
@@ -294,13 +314,16 @@ def main():
     if a.cmd == "uvmap":
         from . import uvmap
         return uvmap.cmd_uvmap(a)
+    if a.cmd == "check":
+        from . import check
+        return check.cmd_check(a)
     if a.cmd == "survey":
         from . import survey
         return survey.cmd_survey(a)
     if a.cmd == "params":
         from . import params
         return params.cmd_params(a)
-    return {"doctor": cmd_doctor, "status": cmd_status, "snapshot": cmd_snapshot, "diff": cmd_diff,
+    return {"doctor": cmd_doctor, "status": cmd_status, "snapshot": cmd_snapshot, "compare": cmd_compare, "diff": cmd_diff,
             "build": cmd_build, "install": cmd_install, "rollback": cmd_rollback}[a.cmd](a)
 
 

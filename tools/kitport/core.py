@@ -158,6 +158,54 @@ def snapshot(tag="before"):
     return d, n
 
 
+COMPARE_TH = 8          # из 255: меньше — шум сжатия и сглаживания, не изменение рисунка
+
+
+def compare(before, clubs=None, th=COMPARE_TH):
+    """Слот форм против снимка: [(клуб_форма, файл, итог)], папка картинок «было | стало | разница ×4».
+
+    Итог — «без изменений», «изменено N % … рамка u …, v …» (доли развёртки) или почему не сравнить. Нужен после
+    правки общего кода (fb.edge_kit), чтобы уже готовые клубы собирались как раньше (docs/kitport.md §5.3).
+    """
+    import numpy as np
+    from PIL import Image
+    src = slot_kits_dir()
+    out = os.path.join(before, "diff")
+    rows = []
+    for kit in sorted(os.listdir(before)):
+        if kit == "diff" or not os.path.isdir(os.path.join(before, kit)) or (clubs and kit.split("_")[0] not in clubs):
+            continue
+        for f in sorted(os.listdir(os.path.join(before, kit))):
+            if not f.endswith(".png"):
+                continue
+            cur = os.path.join(src, kit, f)
+            if not os.path.exists(cur):
+                rows.append((kit, f, "нет в слоте"))
+                continue
+            r = Image.open(os.path.join(before, kit, f)).convert("RGBA")
+            c = Image.open(cur).convert("RGBA")
+            if r.size != c.size:
+                rows.append((kit, f, f"изменено: размер {r.size} → {c.size}"))
+                continue
+            d = np.abs(np.asarray(r, np.int16) - np.asarray(c, np.int16)).max(axis=2)
+            m = d > th
+            if not m.any():
+                rows.append((kit, f, f"без изменений (макс {int(d.max())})"))
+                continue
+            ys, xs = np.nonzero(m)
+            h, w = m.shape
+            rows.append((kit, f, f"изменено {m.mean() * 100:.3f} % (макс {int(d.max())}), рамка "
+                                 f"u {xs.min() / w:.3f}–{xs.max() / w:.3f}, v {ys.min() / h:.3f}–{ys.max() / h:.3f}"))
+            heat = Image.fromarray(np.clip(d * 4, 0, 255).astype(np.uint8)).convert("RGB")
+            sheet = Image.new("RGB", (3 * w, h))
+            for k, im in enumerate((r.convert("RGB"), c.convert("RGB"), heat)):
+                sheet.paste(im, (k * w, 0))
+            os.makedirs(os.path.join(out, kit), exist_ok=True)
+            s = min(1.0, 1024 / h)
+            sheet.resize((int(3 * w * s), int(h * s))).save(os.path.join(out, kit, f))
+    return rows, out
+
+
 def latest_snapshot():
     if not os.path.isdir(COMPARE):
         return None
