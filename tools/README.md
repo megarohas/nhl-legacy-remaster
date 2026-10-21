@@ -70,6 +70,7 @@
 
 Рядом со сборкой:
 - `install-legacy-data.sh`, `uninstall-legacy-data.sh` (работает `install_legacy_data.py`) — ставят набор в `cache:` порта и снимают его, только при закрытой игре
+- `roster_merge.py` — переносит новую базу в сейв ROSTER (трёхстороннее слияние, правки пользователя сохраняются)
 - `save_sync_ratings.py` — переносит атрибуты из базы в сохранённый состав (сейв ROSTER) после установки
 - `draft_roster.py` — собирает `db/draft_roster.db` для старта «NHL Entry Draft» из 10 таблиц нашей базы
 - `registry_from_db.py` — восстанавливает таблицу `artid` конвейера по готовой базе

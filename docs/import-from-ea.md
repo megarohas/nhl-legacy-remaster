@@ -19,6 +19,9 @@ python tools/eaimport.py portraits                  # портреты тем, �
 python tools/eaimport.py heads --only macklin_celebrini   # пилот головы; без --only — все сопоставленные
 python tools/eaimport.py overlay                    # накладка out-nhl24 из новых баз (формы pack-edge)
 python tools/legacy_data/install_legacy_data.py status   # что изменит установка; install — при закрытой игре
+cp nhl-legacy-port/userdata/cache/guest/db/nhlng.db game/work/legacy-data/roster-merge/old-cache-nhlng.db   # до установки
+cd tools && python -m kitport install --tag <метка> --yes && cd ..                  # установка с копией заменяемого
+python tools/legacy_data/roster_merge.py "<ROSTER>" --old game/work/legacy-data/roster-merge/old-cache-nhlng.db        --new game/work/legacy-data/out-nhl24-ahl32/db/nhlng.db --write              # перенос в сейв ROSTER
 ```
 
 `all` делает leagues europe → chl → stats → portraits; головы и накладка — отдельно. Те же шаги есть этапами
@@ -62,5 +65,5 @@ python tools/legacy_data/install_legacy_data.py status   # что изменит
 - Листы: `photos24.py sheet --source <игра>` (портреты), `scans24.py`-лист в `legacy-data/scans27/` (головы),
   `python -m kitport sheet` (формы).
 - `python tools/tdb.py dump out/db/nhlng.db exhibitionplayerbiotable --where lastname=…` — игрок в базе.
-- Игра грузит составы из сейва ROSTER, если он загружен: изменения базы видны в новой франшизе и в составе, сохранённом
-  после установки (или после переноса в сейв).
+- Игра грузит составы из сейва ROSTER, если он загружен: после установки — `roster_merge.py` (легаси-данные,
+  «Перенос в сейв ROSTER»), он сохраняет правки пользователя в сейве.
