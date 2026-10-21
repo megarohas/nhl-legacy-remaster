@@ -14,6 +14,9 @@
 # collar_trim       — кромка ворота: auto (по замеру источника, по умолчанию), smooth — плавная по углу (MIN, NJD),
 #                     step — «ступенькой»: спереди узкая (с разрывом посередине, если он у источника), сбоку ступенька,
 #                     сзади — во всю ширину до шва обода (TBL; edge_kit.trim_profile / step_width)
+# trim_width_from   — форма → форма клуба, по чьей кромке мерить ширину кромки ворота (21.10, BOS дом: чёрная кромка
+#                     на чёрной ткани — замер по цвету давал 3,7 см, щит по зазору уезжал на 2 см вниз). Генератор
+#                     ставит сам, если у формы кромка цвета ткани, а у другой — видна. Нет — замер по своей форме
 # body_color        — цвет ткани: light — медиана светлого (lum > 200, MIN), back — середина спины (NJD: дом красный)
 # yoke_shape_color  — цвет кокетки у EA-форм yoke (бока): green | dark; по умолчанию — как yoke_color. Бока задают вид
 #                     кокетки: «до плеча» (кончается на плечевом суставе — MIN 1_14_3, новые NJD) или «на плечо»
@@ -23,6 +26,12 @@
 #                     нет — скачок на боку
 # shield_offset_cm, shield_scale — щит NHL у ворота: сдвиг [x, y, z] (см, y — вверх) от места NHL 24 и масштаб
 #                     (по умолчанию — как у MIN: [0,41; 0,6; 0], 0,88)
+# shield_gap_mm     — щит по зазору под кромкой (21.10, вместо подбора shield_offset_cm): мм от низа кромки ворота
+#                     посередине переда до верха щита (как «до кромки» у kitport check); число, { home = …, away = … }
+#                     или "source" (зазор источника). Сдвиг по высоте edge_kit считает до сборки (fit_shield_gap).
+#                     Нет ни его, ни shield_offset_cm, ворот plain — edge_kit.SHIELD_GAP_DEFAULT_MM (4 мм: решение
+#                     пользователя по NJD/TBL). Задан shield_offset_cm — как раньше
+# Раздел клуба из NHL 27 собирает генератор: python -m kitport profile --club КОД [--write] (docs/kitport.md §12.3)
 # insert            — формы с вставкой под воротом (V-вырез adidas), рисуется заново (InsertPaint)
 # letter_zones_from — форма → форма, с карты номеров которой берутся зоны буквы капитана (MIN: у выездной EA ниже)
 # sleeve_zones_from — форма Legacy, с карты номеров которой зоны номеров на рукавах (2, 3); по умолчанию — домашняя MIN
@@ -146,3 +155,31 @@ sock = "auto"
 pant = "source"
 helmet_logo = "source"
 default = true
+
+# BOS — из NHL 27, профиль собран генератором (python -m kitport profile --club BOS, 21.10.2026).
+# Нынешние формы — thirteen / fourteen (база NHL 27). Решения «проверить» — в выводе генератора и
+# docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.
+[BOS]
+source = "nhl27"
+source_kits = { home = "thirteen", away = "fourteen" }
+body_color = "back"   # середина спины ровная на 100% (back — как NJD, TBL; light — только MIN)
+collar = "plain"   # под щитом посередине переда не цвет ткани: home 0.00, away 0.00 (порог 0.15; шнуровка — больше)
+trim_width_from = { home = "away" }   # кромка цвета ткани — ширина кромки по другой форме (edge_kit.TRIM_WIDTH_FROM)
+shield_scale = 0.68   # щит по зазору под кромкой — edge_kit.SHIELD_GAP_DEFAULT_MM; у источника 5.4 мм / 6.8 мм (справка)
+insert = []
+letter_zones_from = {}
+sock_parts = [[0.0, [0, 0, 0]]]   # не используется (sock = auto)
+
+[BOS.slot.home]
+kit = "edge_home"
+legacy = "1_2_0"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+[BOS.slot.away]
+kit = "edge_away"
+legacy = "1_2_1"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
