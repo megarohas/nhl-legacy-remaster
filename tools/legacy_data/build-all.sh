@@ -275,6 +275,13 @@ if want photos24; then
   else
     say "портреты из NHL 24: нет каталога дампа NHL 24 — этап пропущен"
   fi
+  # затем из NHL 27 (PS5, docs/import-from-ea.md) — тем, у кого портрета всё ещё нет
+  if [ -f game/work/nhl27/catalog/textures.csv ]; then
+    say "портреты из NHL 27 (photos24 --source nhl27)"
+    "$PY24" tools/photos24.py match --source nhl27
+    "$PY24" tools/photos24.py build --source nhl27 --jobs 6
+    "$PY24" tools/photos24.py apply --source nhl27
+  fi
 fi
 if want heads; then
   # типовые головы по фото, осторожный вариант (решение пользователя 12.10; docs/player-photos-nhl24.md, «Головы»): голова EA
@@ -305,6 +312,13 @@ if want scans24; then
     "$PY24" tools/scans24.py apply
   else
     say "сканы голов NHL 24: нет каталога дампа NHL 24 — этап пропущен"
+  fi
+  # затем из NHL 27 — игрокам, у которых нет ни скана EA, ни головы из NHL 24 (их этап не заменяет)
+  if [ -f game/work/nhl27/catalog/textures.csv ]; then
+    say "сканы голов NHL 27 (scans24 --source nhl27)"
+    "$PY24" tools/scans24.py match --source nhl27
+    "$PY24" tools/scans24.py build --source nhl27 --jobs 6
+    "$PY24" tools/scans24.py apply --source nhl27
   fi
 fi
 if want fonts; then

@@ -46,6 +46,10 @@ python tools/legacy_data/roster_merge.py "<ROSTER>" --old game/work/legacy-data/
 - **Сшивка игрока — по человеку** (имя, фамилия, дата рождения, только однозначные пары), не по game_id: конвейер отдаёт
   строки «доноров» новым игрокам.
 - **Портреты — только тем, у кого их нет.** Уже стоящие (NHL.com, NHL 24) не заменяются.
+- **Головы — только тем, у кого нет персональной.** Сканы EA в Legacy и головы, уже поставленные из другого источника
+  (NHL 24, `applied-<вариант>.json` его папки), `scans24.py match` не трогает (решение пользователя 21.10). Глаза у всех
+  голов — по правилу v7 (`tools/headeyes.py`): яблоко по поверхности глаза источника, зрачок — в середину разреза век;
+  проверка — `scans24.py check --source <игра> [--ea]`.
 - **История статистики** у опознанных — целиком из игры-источника (у EA она полная), у прочих убираются только
   невозможные сезоны (моложе 18).
 
@@ -62,7 +66,7 @@ python tools/legacy_data/roster_merge.py "<ROSTER>" --old game/work/legacy-data/
 ## Как проверить результат
 
 - `python tools/legacy_data/install_legacy_data.py status` / `diff` — что поменяется в `cache:`.
-- Листы: `photos24.py sheet --source <игра>` (портреты), `scans24.py`-лист в `legacy-data/scans27/` (головы),
+- Листы: `photos24.py sheet --source <игра>` (портреты), `scans24.py`-лист в `legacy-data/scans27/` и `scans24.py check --source <игра> --ea` (головы, глаза),
   `python -m kitport sheet` (формы).
 - `python tools/tdb.py dump out/db/nhlng.db exhibitionplayerbiotable --where lastname=…` — игрок в базе.
 - Игра грузит составы из сейва ROSTER, если он загружен: после установки — `roster_merge.py` (легаси-данные,
