@@ -16,6 +16,7 @@ NHL27_DB=путь/к/nhl_game.db (схема — рядом).
 - места в звеньях: l*, l4*, pk4_1/2*, pk3_1/2*, s1–s5, x1/x2, g1/g2 — те же имена; большинство pp_N* → ppN*,
   овертайм 4 на 4 ev4_N* → ot_N* (FLAG_MAP); у NHL 27 есть ещё pk4_3*, pk3_3*, ev3_* (3 на 3) — в Legacy их нет;
 - клубы НХЛ 0–31 в том же порядке, кроме VGK (30 у NHL 27, 31 у Legacy) и SEA (31 / 30) → NHL_SLOT;
+- номер команды (exhibitionteams.index, на него ссылаются составы и биография) со строки 159 не равен номеру строки;
 - лиги (stockleagues.leagueid → exhibitionteams.league): у NHL 27 OHL 11, QMJHL 12, WHL 13, у Legacy 9, 10, 11.
 """
 import os
@@ -58,13 +59,15 @@ def values(db, table, row, fields=None):
 
 
 def teams(db, league_ids):
-    """{строка exhibitionteams: {'abbr', 'name', 'city', 'league'}} команд этих лиг."""
+    """{номер команды: {'row', 'abbr', 'name', 'city', 'league'}} команд этих лиг. Номер — поле index (на него ссылаются
+    составы и биография); со строки 159 он не равен номеру строки (у НХЛ и CHL — равен)."""
     out = {}
     for t in db.live_rows(T):
         lg = db.get(T, 'league', t)
         if lg in league_ids:
-            out[t] = {'abbr': db.get_string(T, 'abbrname', t), 'name': db.get_string(T, 'teamname', t),
-                      'city': db.get_string(T, 'cityname', t), 'nick': db.get_string(T, 'nickname', t), 'league': lg}
+            out[db.get(T, 'index', t)] = {'row': t, 'abbr': db.get_string(T, 'abbrname', t),
+                                          'name': db.get_string(T, 'teamname', t), 'city': db.get_string(T, 'cityname', t),
+                                          'nick': db.get_string(T, 'nickname', t), 'league': lg}
     return out
 
 

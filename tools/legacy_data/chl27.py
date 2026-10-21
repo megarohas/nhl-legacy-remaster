@@ -461,7 +461,7 @@ def cmd_clubs(db_path, db27, loc_path, log):
             put(T, 'fullname', slot, c['name'])
             put(T, 'shortname', slot, c['city'])
             put(T, 'abbrname', slot, c['abbr'])
-        a27 = db27.get(nhl27.T, 'arenaid', t27)
+        a27 = db27.get(nhl27.T, 'arenaid', c['row'])
         a = db.get(T, 'arenaid', slot)
         if users[a] == [slot] and a27 in db27.live_rows('exhibitionarena'):
             put('exhibitionarena', 'arenaname', a, db27.get_string('exhibitionarena', 'arenaname', a27))
