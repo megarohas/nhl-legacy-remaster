@@ -152,7 +152,7 @@
    "art": 17,
    "variant": 4,
    "fevariant": 4,
-   "jerseyindex": 12,
+   "jerseyindex": 14,
    "locstring": 6
   },
   {
@@ -295,7 +295,7 @@
    "art": 17,
    "variant": 5,
    "fevariant": 5,
-   "jerseyindex": 13,
+   "jerseyindex": 15,
    "locstring": 6
   },
   {
@@ -306,7 +306,7 @@
    "art": 17,
    "variant": 6,
    "fevariant": 6,
-   "jerseyindex": 14,
+   "jerseyindex": 16,
    "locstring": 6
   },
   {
@@ -1803,6 +1803,28 @@
    "variant": 6,
    "fevariant": 6,
    "jerseyindex": 11,
+   "locstring": 6
+  },
+  {
+   "club": "NJD",
+   "kit": "edge_home",
+   "teamid": 17,
+   "style": 0,
+   "art": 17,
+   "variant": 9,
+   "fevariant": 9,
+   "jerseyindex": 12,
+   "locstring": 6
+  },
+  {
+   "club": "NJD",
+   "kit": "edge_away",
+   "teamid": 17,
+   "style": 0,
+   "art": 17,
+   "variant": 10,
+   "fevariant": 10,
+   "jerseyindex": 13,
    "locstring": 6
   }
  ]

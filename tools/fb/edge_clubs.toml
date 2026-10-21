@@ -1,0 +1,76 @@
+# Профили клубов подхода C (fb.edge_kit, docs/kitport.md §5.3): что у формы клуба своего. Ключ — код клуба
+# (fb.kit_batch.CLUBS). Выбор — `--club` у kit / slot; pack берёт все клубы, у которых собран слот.
+#
+# source            — откуда текстуры (fb.kitsrc): nhl24 | nhl27. Сетки-источники переноса — всегда NHL 24.
+# yoke_color        — как узнавать кокетку по цвету (на текстуре источника, нашей и у EA-формы):
+#                     green — тёмно-зелёная (lum < порога, G > R + 15; MIN), dark — чёрная (lum < порога, max − min < 45)
+# yoke              — формы с цветной кокеткой: форма → EA-форма Legacy того же клуба, с которой берутся бока кокетки на
+#                     развёртке Edge и высота её края сзади (у NHL 24/27 спина выше: «зелёное кончается высоко», MIN 19.10)
+# collar            — ворот: lace — adidas со шнуровкой, красной вставкой и планкой (MIN: их швы, зоны, превью; по умолчанию),
+#                     plain — без них (NJD: кромка по кокетке, спереди мыс кокетки со щитом — высота края от середины)
+# body_color        — цвет ткани: light — медиана светлого (lum > 200, MIN), back — середина спины (NJD: дом красный)
+# insert            — формы с вставкой под воротом (V-вырез adidas), рисуется заново (InsertPaint)
+# letter_zones_from — форма → форма, с карты номеров которой берутся зоны буквы капитана (MIN: у выездной EA ниже)
+# sock_parts        — свои ровные полосы гетр (sock = flat): [доля, [R, G, B]], первая строка — ткань (доля 0)
+# [клуб.slot.<форма>] — форма в игре:
+#   kit         — имя в реестре tools/legacy_data/nhl24_kits.json (nhl24.py alloc КЛУБ edge_home edge_away --style 0)
+#   legacy      — форма-образец Legacy: карта номеров и (по умолчанию) шорты, гетры, наклейка на шлем
+#   sock        — flat (sock_parts), legacy (гетры образца, полоса — в строки flat другой формы клуба),
+#                 auto (ровные полосы по гетрам источника этой формы: цвета и доли — по строкам)
+#   pant        — legacy (шорты образца) | source (шорты источника, 3D-перенос fb.pilot)
+#   helmet_logo — legacy (наклейка образца) | source (helmetlogo источника, 256×128)
+#   label       — подпись в меню
+
+[MIN]
+source = "nhl24"
+yoke_color = "green"
+yoke = { away = "1_14_3" }
+insert = ["away", "home"]
+letter_zones_from = { away = "home" }
+sock_parts = [[0.0, [24, 56, 46]], [30, [214, 203, 165]], [30, [159, 14, 10]], [110, [214, 203, 165]]]
+
+[MIN.slot.home]
+kit = "edge_home"
+legacy = "1_14_4"
+sock = "flat"
+pant = "legacy"
+helmet_logo = "legacy"
+label = "Home (Edge collar 24)"
+
+[MIN.slot.away]
+kit = "edge_away"
+legacy = "1_14_3"
+sock = "legacy"
+pant = "legacy"
+helmet_logo = "legacy"
+label = "Away (Edge collar 24)"
+
+# NJD — из NHL 27 (пользователь, 21.10: «свитер, гетры, трусы, шлем» — всё из NHL 27). Кокетка чёрная у обеих форм, как у
+# EA-форм Legacy 1_17_0 / 1_17_1 (тот же крой Edge, бока — с них). Цвет каски — tools/legacy_data/nhl24_helmets.json
+# (из stockteamequipmenttable NHL 27: дом — чёрная, выезд — светлая).
+[NJD]
+source = "nhl27"
+yoke_color = "dark"
+body_color = "back"
+collar = "plain"
+yoke = { home = "1_17_0", away = "1_17_1" }
+insert = []                         # вставки под воротом у NJD нет (ворот — красная кромка по чёрной кокетке): InsertPaint
+#                                     красил «шнурки» чёрным и закрывал щит NHL у выездной (21.10)
+letter_zones_from = {}
+sock_parts = [[0.0, [0, 0, 0]]]
+
+[NJD.slot.home]
+kit = "edge_home"
+legacy = "1_17_0"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+label = "Home (NHL 27)"
+
+[NJD.slot.away]
+kit = "edge_away"
+legacy = "1_17_1"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+label = "Away (NHL 27)"

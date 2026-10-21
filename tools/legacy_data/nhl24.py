@@ -455,13 +455,18 @@ def helmet_colors():
     if not os.path.exists(HELMETS):
         return {}
     out = {}
+    ok = lambda z: isinstance(z, list) and len(z) == 3 and all(isinstance(c, int) and 0 <= c <= 255 for c in z)
     for club, kits in json.load(open(HELMETS, encoding='utf-8')).items():
         if club == 'about':
             continue
-        for kit, rgb in kits.items():
-            if len(rgb) != 3 or not all(isinstance(c, int) and 0 <= c <= 255 for c in rgb):
-                sys.exit(f'{HELMETS}: {club} {kit} — нужен [R, G, B] 0…255, а не {rgb!r}')
-            out[(club, kit)] = tuple(c for z in (tuple(rgb),) + DARK_TRIM for c in z)
+        for kit, val in kits.items():
+            # [R, G, B] — каска, зоны 2–9 — DARK_TRIM; {"zones": [[R, G, B], …]} — зоны по порядку (до 9, недостающие —
+            # DARK_TRIM): для шлема из базы NHL 27 (stockteamequipmenttable, зоны 1–9 — 21.10, NJD)
+            zones = val.get('zones') if isinstance(val, dict) else [val]
+            if not zones or len(zones) > 9 or not all(ok(z) for z in zones):
+                sys.exit(f'{HELMETS}: {club} {kit} — нужен [R, G, B] 0…255 или {{"zones": [[R, G, B], …]}}, а не {val!r}')
+            full = tuple(tuple(z) for z in zones) + DARK_TRIM[len(zones) - 1:]
+            out[(club, kit)] = tuple(c for z in full for c in z)
     return out
 
 

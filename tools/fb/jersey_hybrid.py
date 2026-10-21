@@ -1110,6 +1110,15 @@ def cmd_preview(a):
 CLUB_NAME = {"MIN": "minnesota"}
 
 
+def _club_names():
+    """Код клуба → папка комплектов в дампе (fb.kit_batch.CLUBS: MIN → minnesota, NJD → newjersey)."""
+    from .kit_batch import CLUBS
+    return {code: club for club, _, code in CLUBS}
+
+
+CLUB_NAME.update(_club_names())
+
+
 def kit_dir(code, kit):
     return os.path.join(WORK, f"kit_{code}_{kit}")
 

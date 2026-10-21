@@ -1128,9 +1128,11 @@ REEBOK_BACK_UV = [0.5, 0.4183]  # 1,663 м — между 0,4205 (1,666: «чу�
 # сделаны плечевые суставы и линии на них у Reebok-формы Legacy, и перенеси»): у EA кокетка на развёртке Edge —
 # четырёхугольник с прямыми краями (бока — по плечевым суставам). Бока — с EA (прямые по краю её кокетки), верх
 # (спина) и низ (грудь) — высоты NHL 24 (прямые на развёртке на высоте линии, перенесённой с NHL 24).
-YOKE = {("MIN", "away"): {"from": "1_14_3"}}
+YOKE = {("MIN", "away"): {"from": "1_14_3"}}       # формы с кокеткой — из профиля клуба (use_club)
+YOKE_KIND = "green"                # как узнавать кокетку по цвету (профиль: yoke_color)
 YOKE_FLAT_X = 0.14                 # м от оси: дальше перед кокетки — ровной высоты
-YOKE_BACK_FROM = "1_14_3"           # спина кокетки — по EA-форме (NHL 24 — 1,648 м: «зелёное кончается высоко»)
+YOKE_BACK_FROM = "1_14_3"           # спина кокетки — по EA-форме (NHL 24 — 1,648 м: «зелёное кончается высоко»);
+#                                    с профилями — EA-форма кокетки этой формы (YOKE[...]["from"])
 YOKE_MIX = 0.0                     # 0 — край кокетки на высотах NHL 24, 1 — перед и спина на средней
 YOKE_SHIFT = 0.0                   # м: сдвиг края кокетки (обоих) по высоте
 YOKE_PAD = 0.05                    # UV: за краем многоугольника — зона перекраски (там — ткань двух цветов;
@@ -1138,6 +1140,60 @@ YOKE_PAD = 0.05                    # UV: за краем многоугольн�
 YOKE_LACE_X, YOKE_LACE_Y = 0.032, 1.615  # м: спереди у середины ниже 1,615 — шнурки (вставку выше рисует InsertPaint)
 YOKE_COLLAR = 0.0                  # (было 0,03) край кокетки — до самой кромки (кромку рисует TrimPaint поверх)
 YOKE_COLLAR_OLD = 0.03                 # м от края ворота — не трогать (кромка, подкладка, вставка)
+
+
+CLUBS_TOML = os.path.join(os.path.dirname(os.path.abspath(__file__)), "edge_clubs.toml")
+
+
+def club_profiles():
+    import tomllib
+    with open(CLUBS_TOML, "rb") as f:
+        return tomllib.load(f)
+
+
+def use_club(code):
+    """Профиль клуба (edge_clubs.toml) → таблицы модуля: источник текстур (fb.kitsrc), кокетка, вставка, слот, гетры."""
+    from . import kitsrc
+    global YOKE, YOKE_KIND, INSERT_KITS, SLOT_KITS, LETTER_ZONES_FROM, SOCK_PARTS, BODY_KIND, COLLAR
+    prof = club_profiles().get(code)
+    if prof is None:
+        sys.exit(f"{code}: нет профиля клуба в {CLUBS_TOML}")
+    kitsrc.use(prof.get("source", "nhl24"))
+    YOKE = {(code, k): {"from": v} for k, v in prof.get("yoke", {}).items()}
+    YOKE_KIND = prof.get("yoke_color", "green")
+    BODY_KIND = prof.get("body_color", "light")
+    COLLAR = prof.get("collar", "lace")
+    INSERT_KITS = {(code, k) for k in prof.get("insert", [])}
+    SLOT_KITS = {k: dict(v) for k, v in prof.get("slot", {}).items()}
+    LETTER_ZONES_FROM = dict(prof.get("letter_zones_from", {}))
+    SOCK_PARTS = tuple((float(w), tuple(c)) for w, c in prof.get("sock_parts", SOCK_PARTS))
+    return prof
+
+
+def yoke_mask(img, lum_max=70, kind=None):
+    """Пиксели кокетки по цвету (img — (..., 3)): green — тёмно-зелёная (MIN), dark — чёрная (NJD)."""
+    kind = kind or YOKE_KIND
+    lum = img.mean(-1)
+    if kind == "green":
+        return (lum < lum_max) & (img[..., 1] > img[..., 0] + 15)
+    return (lum < lum_max) & (img.max(-1) - img.min(-1) < 45)
+
+
+BODY_BOX = (0.42, 0.12, 0.58, 0.28)  # u0, v0, u1, v1 развёртки: середина спины (без кокетки, надписи и номеров)
+COLLAR = "lace"                    # профиль collar: lace — ворот adidas MIN (шнуровка, красная вставка, планка: их
+#                                    швы, зоны и превью), plain — без них (NJD: кромка по кокетке, мыс со щитом)
+BODY_KIND = "light"                # профиль body_color: light — медиана светлого (lum > 200, как у MIN до 21.10),
+#                                    back — середина спины (у NJD дома ткань красная)
+
+
+def body_color(img):
+    """Цвет ткани свитера (BODY_KIND): light — медиана текселей светлее 200, back — медиана середины спины."""
+    if BODY_KIND == "light":
+        return np.median(img.reshape(-1, 3)[img.reshape(-1, 3).mean(-1) > 200], axis=0)
+    S = img.shape[0]
+    u0, v0, u1, v1 = BODY_BOX
+    box = img[int(v0 * S):int(v1 * S), int(u0 * S):int(u1 * S)].reshape(-1, 3)
+    return np.median(box[~yoke_mask(box)], axis=0)
 
 
 def _fit_side(mask, rows, left):
@@ -1164,7 +1220,7 @@ def yoke_polygon(ea_png, ours_png):
     ea = np.asarray(Image.open(ea_png).convert("RGB").resize((S, S))).astype(np.float64)
     ours = np.asarray(Image.open(ours_png).convert("RGB").resize((S, S))).astype(np.float64)
     lum = ea.mean(-1)
-    g_ea = (lum < 70) & (ea[..., 1] > ea[..., 0] + 15)
+    g_ea = yoke_mask(ea, 70)
     lab, _ = ndi.label(g_ea)                             # только сама кокетка (не полосы рукавов)
     g_ea = lab == lab[int(0.53 * S), int(0.37 * S)]
     vv, ul, ur = [], [], []
@@ -1178,9 +1234,9 @@ def yoke_polygon(ea_png, ours_png):
     left = (np.array(vv), gaussian_filter1d(median_filter(np.array(ul), 9, mode="nearest"), 3.0, mode="nearest"))
     right = (np.array(vv), gaussian_filter1d(median_filter(np.array(ur), 9, mode="nearest"), 3.0, mode="nearest"))
     lo = ours.mean(-1)
-    g_o = (lo < 70) & (ours[..., 1] > ours[..., 0] + 15)
+    g_o = yoke_mask(ours, 70)
     green = np.median(ours[g_o & (np.abs(np.arange(S)[None, :] / S - 0.5) > 0.06)], axis=0)
-    white = np.median(ours[(lo > 200)], axis=0)
+    white = body_color(ours)
     lines = {}
     for side, cols in (("l", range(int(U_FIT[0] * S), int(U_FIT[1] * S))),
                        ("r", range(int((1 - U_FIT[1]) * S), int((1 - U_FIT[0]) * S)))):
@@ -1202,27 +1258,48 @@ U_IN = 0.40                        # дальше к середине — кок
 def yoke_heights(code, kit):
     """Высота нижнего края кокетки NHL 24 по |x| (спереди и сзади): самый низ цвета кокетки на её сетке (середина
     горловины — x = 0), сглажено. -> {"front": (x, y), "back": (x, y)}."""
+    from scipy.sparse.csgraph import connected_components
     n24 = kit3d.load_nhl24()
     src = Hy.clean_color(code, kit)
     tid, bar = kit3d.raster_uv(n24, src.shape[0])
     ys, xs = np.nonzero(tid >= 0)
+    w_ = Hy.Welded(n24)                                  # только наружная оболочка: тёмная подкладка ворота смотрит вперёд
+    _, comp = connected_components(w_.A, directed=False)   # и у середины «удлиняла» мыс кокетки до живота (NJD, 21.10)
+    shell = comp[w_.g[n24["tri"][tid[ys, xs], 0]]] == np.bincount(comp).argmax()
+    ys, xs = ys[shell], xs[shell]
     T = n24["tri"][tid[ys, xs]]
     b = bar[ys, xs]
     P = (b[:, :, None] * n24["pos"][T]).sum(1)
     P[:, 0] += 0.0035                                    # середина горловины NHL 24 — на оси (CoordMap.x_fix)
     N = kit3d._unit((b[:, :, None] * n24["nrm"][T]).sum(1))
     c = src[ys, xs]
-    g = (c.mean(1) < 80) & (c[:, 1] > c[:, 0] + 15)
+    g = yoke_mask(c, 80)
+    if YOKE_KIND != "green":                             # чёрная кокетка — только своя связная часть (не контур герба,
+        from scipy import ndimage as ndi                 # полосы, низ): та, в которой больше всего текселей выше 1,62 м
+        lab, _ = ndi.label(yoke_mask(src, 80))
+        lv = lab[ys, xs]
+        hi = np.bincount(lv[g & (P[:, 1] > 1.62)], minlength=lab.max() + 1)
+        hi[0] = 0
+        g = g & (lv == hi.argmax())
     out = {}
     for side, sel in (("front", (P[:, 2] > 0) & (N[:, 2] > 0.3)), ("back", (P[:, 2] < 0) & (N[:, 2] < -0.3))):
         xx, hh = [], []
-        for x0 in np.arange(0.04, 0.27, 0.01):
-            m = sel & g & (np.abs(np.abs(P[:, 0]) - x0) < 0.005) & (P[:, 1] > 1.5) & (P[:, 1] < 1.75)
-            if m.sum() > 20:
+        tab = COLLAR != "lace" and side == "front"      # мыс кокетки спереди (NJD: щит на нём) — от самой середины
+        grid = np.concatenate([np.arange(0.0, 0.04, 0.0025), np.arange(0.04, 0.27, 0.01)]) if tab else \
+            np.arange(0.04, 0.27, 0.01)
+        for x0 in grid:
+            hwid = 0.00125 if x0 < 0.04 else 0.005
+            m = sel & g & (np.abs(np.abs(P[:, 0]) - x0) < hwid) & (P[:, 1] > 1.5) & (P[:, 1] < 1.75)
+            if m.sum() > (5 if x0 < 0.04 else 20):
                 xx.append(x0)
                 hh.append(float(np.percentile(P[m, 1], 1)))
-        hh = np.convolve(np.pad(hh, 2, mode="edge"), np.ones(5) / 5, mode="valid")
-        out[side] = (np.concatenate([[0.0], xx]), np.concatenate([[hh[0]], hh]))
+        xx, hh = np.array(xx), np.array(hh)
+        far = xx >= 0.04                                 # сглаживание — только по прямому участку (мыс — как есть)
+        hh[far] = np.convolve(np.pad(hh[far], 2, mode="edge"), np.ones(5) / 5, mode="valid")
+        if tab:
+            out[side] = (xx, hh)
+        else:
+            out[side] = (np.concatenate([[0.0], xx]), np.concatenate([[hh[0]], hh]))
     # пользователь (19.10): «зелёную полосу спереди поднять, сзади опустить — по швам не сходится»: у NHL 24 перед
     # на 1,8 см ниже спины, у Edge на боку они сходятся на разной высоте; обе — на средней
     x_all = np.union1d(out["front"][0], out["back"][0])
@@ -1240,9 +1317,10 @@ def yoke_heights(code, kit):
     # стороны EA выходил «зубец»)
     hf = np.where(x_all > YOKE_FLAT_X, np.interp(YOKE_FLAT_X, x_all, hf), hf)
     res = {"front": (x_all, hf), "back": (x_all, hb), "delta": delta}
-    if YOKE_BACK_FROM:                                   # спина — как у EA-формы клуба (её край ниже: 1,60 м)
+    back_from = YOKE.get((code, kit), {}).get("from") or YOKE_BACK_FROM
+    if back_from:                                        # спина — как у EA-формы клуба (её край ниже: 1,60 м)
         from . import pilot
-        ea = ea_yoke_heights(os.path.join(pilot.unpack(YOKE_BACK_FROM), "jersey_cm.png"))
+        ea = ea_yoke_heights(os.path.join(pilot.unpack(back_from), "jersey_cm.png"))
         res["back"] = ea["back"]
     return res
 
@@ -1287,6 +1365,8 @@ class YokePaint:
         dmin = np.minimum(dside, dh)
         cov = np.clip(0.5 + dmin, 0, 1)
         lace = (P[..., 2] > 0) & (ax < YOKE_LACE_X) & (P[..., 1] < YOKE_LACE_Y)   # вставка и шнурки — как есть
+        if COLLAR != "lace":
+            lace = np.zeros_like(lace)
         zone = m & msk & (P[..., 1] > 1.45) & (dside > -YOKE_PAD * Ws) & ~lace
         keep = np.asarray(Image.fromarray(self.keep.astype(np.uint8) * 255).resize((Ws, Hs), Image.NEAREST)) > 0
         c = out[..., :3]
@@ -1496,6 +1576,8 @@ def perf_mask(G, yk):
     front = (N[..., 2] > 0.2) & (P[..., 2] > 0.03)
     ins = front & (np.abs(x) < hw + 0.004)
     lace = front & (np.abs(x) < YOKE_LACE_X) & (y < YOKE_LACE_Y)
+    if COLLAR != "lace":
+        ins, lace = np.zeros_like(ins), np.zeros_like(lace)
     out_band = np.isfinite(R) & (D > R + 0.002)
     return m & ~B & (F > 0.001) & out_band & ~ins & ~lace & (y > 1.45)
 
@@ -1794,6 +1876,8 @@ def design_seams(mesh, painters, S=2048, out_S=1024):
     F_i = hw - ax
     in_ins = front & (F_i > 0)
     d_i = np.where(front & (y > INSERT_SEAM_Y0) & (y < ys_[-1]) & (hw > 0), np.abs(F_i) / np.sqrt(1 + slope ** 2), inf)
+    if COLLAR != "lace":
+        in_ins, d_i = np.zeros_like(in_ins), inf
     info = {}
     d_t = inf
     tr = painters.get("trim")
@@ -1806,12 +1890,12 @@ def design_seams(mesh, painters, S=2048, out_S=1024):
     yk = painters.get("cur") or painters.get("yoke_shape")
     if yk is not None:
         F_y = yoke_field(G, yk)
-        lace = (P[..., 2] > 0) & (ax < YOKE_LACE_X) & (y < YOKE_LACE_Y)
+        lace = (P[..., 2] > 0) & (ax < YOKE_LACE_X) & (y < YOKE_LACE_Y) & (COLLAR == "lace")
         d_y = np.where(m & ~B & ~in_ins & ~lace & (D > wid + 0.002) & (y > 1.45), np.abs(F_y), inf)
     # планка под шнуровкой (как у NHL 24: PLACKET_HALF) — отрезки в виде спереди (x, y), середина горловины — x = 0
     d_p = inf.copy()
     pz = m & ~B & (N[..., 2] > 0.2) & (P[..., 2] > 0.03)
-    for (x0, y0), (x1, y1) in placket_segments():
+    for (x0, y0), (x1, y1) in (placket_segments() if COLLAR == "lace" else ()):
         ex, ey = x1 - x0, y1 - y0
         L2 = ex * ex + ey * ey
         tt = np.clip(((x - x0) * ex + (y - y0) * ey) / L2, 0, 1)
@@ -1867,7 +1951,7 @@ def ea_yoke_heights(ea_png):
     E = load(0, 1, 2)
     S = 1024
     ea = np.asarray(Image.open(ea_png).convert("RGB").resize((S, S))).astype(np.float64)
-    g = (ea.mean(-1) < 90) & (ea[..., 1] > ea[..., 0] + 15)
+    g = yoke_mask(ea, 90)
     lab, _ = ndi.label(g)
     g = lab == lab[int(0.53 * S), int(0.37 * S)]
     tid, bar = kit3d.raster_uv(E, S)
@@ -1954,6 +2038,8 @@ def rebuild_relief(nm_path, code, kit, mesh, cmap, n_jt, painters=None):
     Pm = (b[:, :, None] * mesh["pos"][T]).sum(1)
     f = LACE_FADE
     lace = (Pm[:, 2] > 0.03) * Hy.smooth((LACE_ZONE[0] - np.abs(Pm[:, 0])) / f) *         Hy.smooth((Pm[:, 1] - LACE_ZONE[1]) / f) * Hy.smooth((LACE_ZONE[2] - Pm[:, 1]) / f)
+    if COLLAR != "lace":
+        lace = np.zeros_like(lace)
     ins = (painters or {}).get("insert")
     cm_path = os.path.join(os.path.dirname(nm_path), "jersey_cm.png")
     if ins is not None and os.path.exists(cm_path):
@@ -2043,7 +2129,7 @@ def rebuild_relief(nm_path, code, kit, mesh, cmap, n_jt, painters=None):
     yi_, xi_ = G1["P"][ys, xs, 1], np.abs(G1["P"][ys, xs, 0])
     ys_h, hs_h = (np.array(v) for v in zip(*INSERT_HW))
     hw = np.interp(yi_, ys_h, hs_h, left=-1.0, right=-1.0)
-    fr_ = (G1["N"][ys, xs, 2] > 0.2) & (G1["P"][ys, xs, 2] > 0.03) & (yi_ > INSERT_SEAM_Y0)
+    fr_ = (G1["N"][ys, xs, 2] > 0.2) & (G1["P"][ys, xs, 2] > 0.03) & (yi_ > INSERT_SEAM_Y0) & (COLLAR == "lace")
     plain = np.maximum(plain, fr_ * Hy.smooth((hw + 0.001 - xi_) / 0.002))
     wv = wv * (1.0 - plain)[:, None]
     body_xy = low_px + wv + seam24 * keep24[:, None] + gen[ys, xs]
@@ -2255,15 +2341,15 @@ def insert_rule(ours_png, mesh, code, kit):
     red = np.median(c[reds], axis=0)
     ours = np.asarray(Image.open(ours_png).convert("RGB")).astype(np.float64)
     lo = ours.mean(-1)
-    white = np.median(ours[lo > 200], axis=0)
-    g = (lo < 70) & (ours[..., 1] > ours[..., 0] + 15)
+    white = body_color(ours)
+    g = yoke_mask(ours, 70)
     green = np.median(ours[g], axis=0)
     # линия кокетки спереди на нашей сетке: по столбцам |x| 0,05…0,15 — высота перехода «кокетка → ткань»
     t2, b2 = kit3d.raster_uv(mesh, 1024)
     m = t2 >= 0
     Pm = (b2[m][:, :, None] * mesh["pos"][mesh["tri"][t2[m]]]).sum(1)
     cm = ours[m]
-    isg = (cm.mean(-1) < 70) & (cm[:, 1] > cm[:, 0] + 15)
+    isg = yoke_mask(cm, 70)
     front = (Pm[:, 2] > 0.05) & (Pm[:, 1] > 1.55) & (Pm[:, 1] < 1.70)
     xs_, ys_ = [], []
     for x0 in np.arange(0.04, 0.16, 0.01):
@@ -2454,6 +2540,8 @@ def cmd_kit(a):
     щит NHL — на своём месте NHL 24 (без сдвига −4 см под вставку Edge). Папки — KITS_OUT/<КОД>_<форма>."""
     from types import SimpleNamespace
     from . import kit_fix, kit_hybrid, pilot
+    use_club(a.club)
+    pilot.extract_club(Hy.CLUB_NAME[a.club])            # текстуры источника — до замеров кокетки (yoke_heights)
     E = load(0, 1, 2)
     E2, info = deform(E, n24_ring_for(0, 1, 2))
     print("сетка:", info)
@@ -2883,21 +2971,56 @@ SOCK_TOP_V = 0.49                  # верх полос своих гетр (v 
 # уровне, как на домашней»): place_sock растягивает её (74 → 81 строка из 512) на полосу flat_sock домашних
 
 
-def flat_sock(src_png):
-    """Гетры: полоса — там же, где у перенесённых (строки, где медиана строки не цвет ткани), разбита в долях NHL 24,
-    края — с долей покрытия строки (без лесенки)."""
+def sock_parts_auto(src_png, min_rows=2):
+    """Полосы гетр источника (перенесённые fb.pilot, строки — поперёк ноги): ткань — самый частый цвет строк, полоса —
+    от первой до последней строки не цвета ткани, внутри — отрезки одного цвета (≥ min_rows строк, короче — к
+    соседнему). -> ((0, ткань), (строк, цвет), …) — как SOCK_PARTS."""
     from PIL import Image
     a = np.asarray(Image.open(src_png).convert("RGB")).astype(np.float64)
+    med = np.median(a[:, a.shape[1] // 4:3 * a.shape[1] // 4], axis=1)
+    q = np.round(med / 24)
+    _, inv, cnt = np.unique(q, axis=0, return_inverse=True, return_counts=True)
+    base = np.median(med[inv.reshape(-1) == cnt.argmax()], axis=0)
+    band = np.nonzero(np.linalg.norm(med - base, axis=1) > 40)[0]
+    if not len(band):
+        return ((0.0, tuple(base)),)
+    rows = med[band.min():band.max() + 1]
+    segs = []
+    for c in rows:
+        if segs and np.linalg.norm(c - segs[-1][1] / segs[-1][0]) < 40:
+            segs[-1][0] += 1
+            segs[-1][1] += c
+        else:
+            segs.append([1, c.copy()])
+    segs = [[n, s_ / n] for n, s_ in segs]
+    out = []
+    for n, c in segs:
+        if n < min_rows and out:
+            out[-1][0] += n
+        else:
+            out.append([n, c])
+    if len(out) > 1 and out[0][0] < min_rows:            # строка-переход сверху (сглаживание края) — к следующей полосе
+        out[1][0] += out[0][0]
+        out = out[1:]
+    return ((0.0, tuple(np.round(base))),) + tuple((float(n), tuple(np.round(c))) for n, c in out)
+
+
+def flat_sock(src_png, parts=None):
+    """Гетры: полоса — там же, где у перенесённых (строки, где медиана строки не цвет ткани), разбита в долях parts
+    (по умолчанию SOCK_PARTS), края — с долей покрытия строки (без лесенки)."""
+    from PIL import Image
+    parts = parts or SOCK_PARTS
+    a = np.asarray(Image.open(src_png).convert("RGB")).astype(np.float64)
     H, W = a.shape[:2]
-    base = np.array(SOCK_PARTS[0][1], np.float64)
+    base = np.array(parts[0][1], np.float64)
     med = np.median(a, axis=1)
     band = np.nonzero(np.linalg.norm(med - base, axis=1) > 40)[0]
     y0, y1 = float(band.min()), float(band.max() + 1)
     if SOCK_TOP_V is not None:                           # своя высота полосы (ширина — как у перенесённых)
         y0, y1 = SOCK_TOP_V * H, SOCK_TOP_V * H + (y1 - y0)
-    tot = sum(w for w, _ in SOCK_PARTS[1:])
+    tot = sum(w for w, _ in parts[1:])
     edges, cols = [y0], []
-    for w_, c in SOCK_PARTS[1:]:
+    for w_, c in parts[1:]:
         edges.append(edges[-1] + (y1 - y0) * w_ / tot)
         cols.append(np.array(c, np.float64))
     out = np.zeros((H, 3))
@@ -3100,7 +3223,7 @@ def _fe_collar(out, m, A, isl_png, Jmap, front, perr, depth=None):
     in_ins = (ax < hw - 0.002) & (y3 > 1.60)
     red = np.median(c[in_ins], 0) if in_ins.sum() > 20 else np.array([160.0, 15.0, 10.0])
     drawn = np.zeros(len(c), bool)                     # нарисованное на превью (шнурки, «V») — поверх щита
-    if FE_NO_LACES:                                     # шнуровка и люверсы — ткань свитера, во вставке — красный
+    if FE_NO_LACES and COLLAR == "lace":                # шнуровка и люверсы — ткань свитера, во вставке — красный
         body_m = (ax > FE_LACE_X + 0.006) & (ax < FE_LACE_X + 0.035) & (y3 > 1.52) & (y3 < 1.575)
         body = np.median(c[body_m], 0) if body_m.sum() > 20 else np.median(c, 0)
         col_z = (ax < FE_LACE_X) & (y3 > FE_LACE_Y[0]) & (y3 < FE_LACE_Y[1])
@@ -3137,7 +3260,7 @@ def _fe_collar(out, m, A, isl_png, Jmap, front, perr, depth=None):
     Cs = np.zeros((Hp * ss, Wp * ss, 5))
     Cs[hit] = np.c_[c, w_sub, rel]
     _fe_collar.shield = None
-    if FE_SHIELD:                                       # щит — спрайтом: крупнее и ниже, на его месте — красный
+    if FE_SHIELD and COLLAR == "lace":                  # щит — спрайтом: крупнее и ниже, на его месте — красный
         s_sh, d_sh, m_sh = FE_SHIELD
         sg = np.zeros(hit.shape, bool)
         sg[hit] = (ax < hw - 0.0005) & (y3 > 1.612) & ~drawn & (np.linalg.norm(c - red, axis=1) > 70)
@@ -3349,10 +3472,11 @@ def cmd_slot(a):
     import subprocess
     from PIL import Image
     from . import pilot
+    use_club(a.club)
     reg = json.load(open(os.path.join(REPO, "tools", "legacy_data", "nhl24_kits.json"), encoding="utf-8"))
     regmap = {(k["club"], k["kit"]): k for k in reg["kits"]}
     cur = os.path.join(WORK, "cur_kits")
-    flat_kit = next(k for k, sp in SLOT_KITS.items() if sp["sock"] == "flat")
+    flat_kit = next((k for k, sp in SLOT_KITS.items() if sp["sock"] == "flat"), None)
     for kit, spec in SLOT_KITS.items():
         r = regmap.get((a.club, spec["kit"]))
         if r is None or r.get("style", 1) != SLOT_STYLE:
@@ -3368,14 +3492,22 @@ def cmd_slot(a):
             shutil.copy2(os.path.join(src, f + ".png"), os.path.join(d, f + ".png"))
         for f in ("name_cm", "pant_cm", "pant_nm", "pant_sm"):
             shutil.copy2(os.path.join(leg, f + ".png"), os.path.join(d, f + ".png"))
+        if spec.get("pant", "legacy") == "source":       # шорты источника (fb.pilot: 3D-перенос), рельеф — образца
+            shutil.copy2(os.path.join(src, "pant_cm.png"), os.path.join(d, "pant_cm.png"))
         if kit in LETTER_ZONES_FROM:
             ref = os.path.join(cur, SLOT_KITS[LETTER_ZONES_FROM[kit]]["legacy"])
             if not os.path.exists(os.path.join(ref, "kit.json")):
                 J.unpack_kit(SLOT_KITS[LETTER_ZONES_FROM[kit]]["legacy"], ref)
             print(f"  буква капитана {kit}: зоны {LETTER_ZONES} — как у {LETTER_ZONES_FROM[kit]}:",
                   copy_zones(os.path.join(d, "name_cm.png"), os.path.join(ref, "name_cm.png"), LETTER_ZONES))
-        flat_src = os.path.join(KITS_OUT, f"{a.club}_{flat_kit}", "sock_cm.png")
-        if spec["sock"] == "flat":
+        flat_src = os.path.join(KITS_OUT, f"{a.club}_{flat_kit or kit}", "sock_cm.png")
+        if spec["sock"] == "auto":                       # ровные полосы по гетрам источника этой формы
+            parts = sock_parts_auto(os.path.join(src, "sock_cm.png"))
+            im, info = flat_sock(os.path.join(src, "sock_cm.png"), parts)
+            im.save(os.path.join(d, "sock_cm.png"))
+            print(f"  гетры {kit}: ткань {parts[0][1]}, полосы {[(int(w), c) for w, c in parts[1:]]}, строки "
+                  f"{info[0]:.1f}–{info[1]:.1f}")
+        elif spec["sock"] == "flat":
             im, info = flat_sock(flat_src)
             im.save(os.path.join(d, "sock_cm.png"))
             print(f"  гетры {kit}: полоса строк {info[0]:.1f}–{info[1]:.1f}, края {[round(e, 1) for e in info[2]]}")
@@ -3397,14 +3529,71 @@ def cmd_slot(a):
             J.unpack_kit(tpl, tdir)
         shutil.copy2(os.path.join(tdir, "kit.json"), os.path.join(d, "kit.json"))
         cmd = [sys.executable, os.path.join(REPO, "tools", "kitpaint.py"), "--game", "legacy", "pack", d, new, a.out]
+        if len(tpl) != len(new):                         # номер другой длины (0_17_10): контейнер — форма стиля 0 из архива
+            cont = slot_container(len(new))             # с номером той же длины (имена растров переписываются на месте)
+            if cont:
+                cmd += ["--container", cont]
         rr = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
         print(rr.stdout[-800:], rr.stderr[-800:])
         if rr.returncode:
             sys.exit(f"{kit}: kitpaint pack — ошибка")
         ls = spec["legacy"].split("_")
-        h = J.helmet_copy(ls[1], ls[2], r["art"], r["variant"], a.out)
+        if spec.get("helmet_logo", "legacy") == "source":
+            h = helmet_from_source(a.club, kit, ls[1], ls[2], r["art"], r["variant"], a.out)
+        else:
+            h = J.helmet_copy(ls[1], ls[2], r["art"], r["variant"], a.out)
         print(f"{a.club} {spec['kit']} → {new}: шаблон {tpl}, превью (перед ворота на uv0: {n} текселей), "
               f"наклейка на шлем {h}")
+
+
+def slot_container(n):
+    """Форма стиля SLOT_STYLE из архива Legacy с номером длины n («0_108_0» под «0_17_10») — контейнер kitpaint."""
+    d = os.path.join(REPO, "game", "other", "legacy", "big", "nocacherender", "rendering", "jersey")
+    tags = sorted(f[7:-4] for f in os.listdir(d) if f.startswith(f"texlib_{SLOT_STYLE}_") and f.endswith(".rx2"))
+    return next((t for t in tags if len(t) == n), None)
+
+
+HELMET_CONTAINERS = ("0_1_0", "10_1_0", "127_1_0")   # наклейки EA по длине «A_1_V» (5, 6, 7 знаков, docs/kitport.md §2.3)
+
+
+def helmet_from_source(code, kit, leg_art, leg_v, art, v, dst_root):
+    """Наклейка на шлем формы стиля SLOT_STYLE — helmetlogo источника (у NHL 27 — реклама на шлеме, 1024×512) в
+    контейнере наклейки EA той же длины имени (образец формы или HELMET_CONTAINERS), 256×128 DXT5. -> путь или None."""
+    from PIL import Image
+    from . import kitsrc
+    from .jersey_hybrid import CLUB_NAME
+    import kitpaint as kp
+    import teamart as ta
+    club = CLUB_NAME[code]
+    png = os.path.join(kitsrc.extract_root(), f"club_{club}", "character", "skater", "league", "nhl", club, "adidas", kit,
+                       f"helmetlogo_adidas_{club}_{kit}_0_color.png")
+    if not os.path.exists(png):
+        print(f"  наклейка {kit}: нет {png} — как у образца")
+        return J.helmet_copy(leg_art, leg_v, art, v, dst_root)
+    want = len(f"{art}_{SLOT_STYLE}_{v}")
+    rel = None
+    for tag in (f"{leg_art}_1_{leg_v}",) + HELMET_CONTAINERS:
+        if len(tag) == want:
+            ta_, _, tv = tag.split("_")
+            rel = J.helmet_copy(ta_, tv, art, v, dst_root)
+            if rel:
+                break
+    if rel is None:
+        return None
+    path = os.path.join(dst_root, *rel.split("/"))
+    rwf = ta.Rw4.load(path)
+    t = next(t for t in rwf.textures if t.name.endswith("_0.Raster") or t.name.endswith("_0"))
+    w, h, _ = kp.tex_decode(rwf, t)
+    img = Image.open(png).convert("RGBA")
+    a = np.asarray(img).astype(np.float64)
+    a[..., :3] *= a[..., 3:4] / 255.0                    # уменьшение с премультипликацией (кайма без тёмного ореола)
+    small = np.asarray(Image.fromarray(np.clip(a, 0, 255).astype(np.uint8)).resize((w, h), Image.LANCZOS)).astype(np.float64)
+    al = np.asarray(img.getchannel("A").resize((w, h), Image.LANCZOS)).astype(np.float64)
+    small[..., :3] = np.where(al[..., None] > 0, small[..., :3] * 255.0 / np.maximum(al[..., None], 1), 0)
+    small[..., 3] = al
+    kp.tex_replace(rwf, t, np.clip(np.round(small), 0, 255).astype(np.uint8).tobytes(), w, h)
+    open(path, "wb").write(rwf.bytes())
+    return rel
 
 
 PACK_BASE = os.path.join(REPO, "game", "work", "nhl24", "out", "pack-adidas")   # установленный пакет (16.10)
@@ -3449,8 +3638,21 @@ def cmd_pack(a):
         if rel in have:
             man["files"] = [x for x in man["files"] if x["file"] != rel]
         man["files"].append(e)
+    clubs = [c for c in club_profiles() if all(os.path.isdir(os.path.join(WORK, "slot", "kits", f"{c}_{k}"))
+                                               for k in club_profiles()[c].get("slot", {}))]
+    print("клубы пакета (профиль и собранный слот):", clubs)
+    for code in clubs:
+        use_club(code)
+        pack_club(a, code, regmap, man, have, put)
+    with open(os.path.join(a.out, "manifest.json"), "w", encoding="utf-8", newline="\n") as f:
+        json.dump(man, f, ensure_ascii=False, indent=1)
+    print(f"{a.out}: сеток заменено {n_mesh}, форм {len(man['kits'])}, файлов {len(man['files'])}")
+
+
+def pack_club(a, code, regmap, man, have, put):
+    """Формы клуба code (SLOT_KITS профиля) в пакет: файлы слота и строки manifest."""
     for kit, spec in SLOT_KITS.items():
-        r = regmap[(a.club, spec["kit"])]
+        r = regmap[(code, spec["kit"])]
         new = f"{SLOT_STYLE}_{r['art']}_{r['variant']}"
         files = {"jersey": f"rendering/jersey/texlib_{new}.rx2", "name": f"rendering/jersey/name_{new}_cm.rx2",
                  "pant": f"rendering/pant/texlib_{new}.rx2", "sock": f"rendering/sock/sock_{new}_cm.rx2",
@@ -3458,25 +3660,30 @@ def cmd_pack(a):
                  "helmet": f"rendering/logo/texlib_{r['art']}_{SLOT_STYLE}_{r['variant']}.rx2"}
         notes = {"jersey": "свитер Edge с передом ворота NHL 24 (fb.edge_kit) и шрифт NHL 24",
                  "name": f"карта номера и фамилии — как у формы {spec['legacy']}",
-                 "pant": f"шорты — как у основной формы {spec['legacy']}",
-                 "sock": ("гетры — полосы гетр NHL 24 ровными строками" if spec["sock"] == "flat"
-                          else f"гетры — как у основной формы {spec['legacy']}"),
+                 "pant": (f"шорты — источника ({SOURCE_NAME()}, 3D-перенос)" if spec.get("pant") == "source"
+                          else f"шорты — как у основной формы {spec['legacy']}"),
+                 "sock": ({"flat": "гетры — свои полосы ровными строками", "auto": f"гетры — полосы гетр {SOURCE_NAME()} "
+                           "ровными строками"}.get(spec["sock"], f"гетры — как у основной формы {spec['legacy']}")),
                  "fe": "превью меню в позе EA (fb.pilot.fe_preview_ea)",
-                 "helmet": f"наклейка на шлем — как у формы {spec['legacy']}"}
+                 "helmet": (f"наклейка на шлем — {SOURCE_NAME()} (helmetlogo)" if spec.get("helmet_logo") == "source"
+                            else f"наклейка на шлем — как у формы {spec['legacy']}")}
         for typ, rel in files.items():
             if rel in have:
                 sys.exit(f"{rel}: уже в пакете")
             md, sz = put(rel)
             man["files"].append({"file": rel, "type": typ, "md5": md, "size": sz, "action": "add", "note": notes[typ],
-                                 "club": a.club, "kit": spec["kit"]})
-        man["kits"].append({"club": a.club, "kit": spec["kit"], "variant": r["variant"],
+                                 "club": code, "kit": spec["kit"]})
+        man["kits"].append({"club": code, "kit": spec["kit"], "variant": r["variant"],
                             "islightcolor": 0 if kit == "home" else 1, "label": spec["label"], "helmet": kit,
                             "phase": 2})    # nhl24.py: строки и шлемы — после adidas (сейв дописывается в конец)
-    man["note"] = (man.get("note", "") + f" {a.club}: формы «{SLOT_KITS['home']['label']}» / «{SLOT_KITS['away']['label']}» "
-                   "на своей сетке Edge с передом ворота NHL 24 в слоте стиля 0 (сетки adidas сняты, пользователь 19.10).")
-    with open(os.path.join(a.out, "manifest.json"), "w", encoding="utf-8", newline="\n") as f:
-        json.dump(man, f, ensure_ascii=False, indent=1)
-    print(f"{a.out}: сеток заменено {n_mesh}, форм {len(man['kits'])}, файлов {len(man['files'])}")
+    man["note"] = (man.get("note", "") + f" {code}: формы «{SLOT_KITS['home']['label']}» / «{SLOT_KITS['away']['label']}» "
+                   f"({SOURCE_NAME()}) на своей сетке Edge с передом ворота NHL 24 в слоте стиля 0 (сетки adidas сняты, "
+                   "пользователь 19.10).")
+
+
+def SOURCE_NAME():
+    from . import kitsrc
+    return {"nhl24": "NHL 24", "nhl27": "NHL 27"}[kitsrc.source()]
 
 
 def cmd_meshes(a):

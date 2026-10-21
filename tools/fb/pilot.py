@@ -150,14 +150,16 @@ def unpack(kit):
 
 
 def extract_club(club, force=False):
-    folder = os.path.join(NHL24, "extract", f"club_{club}")
+    """Текстуры комплектов клуба из дампа источника (fb.kitsrc: NHL 24 или NHL 27) → (папка, имена выгруженных)."""
+    from . import kitsrc
+    folder = os.path.join(kitsrc.extract_root(), f"club_{club}")
     if not force and os.path.exists(os.path.join(folder, "_index.csv")):  # уже выгружено — не повторяем
         with open(os.path.join(folder, "_index.csv"), encoding="utf-8") as f:
             return folder, {r["name"] for r in csv.DictReader(f) if r["status"] == "ok"}
     rx = (f"^content/character/skater/league/nhl/{club}/(adidas/[a-z]+|nineties/[a-z]+)/"
           f"(jersey|font|pant|sock|helmetlogo)_(adidas|nineties)_{club}_[a-z]+_(base_)?(color|normal|[0-9]_color)$")
-    subprocess.run([sys.executable, "-m", "fb.extract", rx, "--out", f"club_{club}"], check=True, cwd=TOOLS)
-    folder = os.path.join(NHL24, "extract", f"club_{club}")
+    subprocess.run([sys.executable, "-m", "fb.extract", rx, "--out", f"club_{club}"], check=True, cwd=TOOLS,
+                   env=dict(os.environ, FB_GAME=kitsrc.source()))
     with open(os.path.join(folder, "_index.csv"), encoding="utf-8") as f:
         ok = {r["name"] for r in csv.DictReader(f) if r["status"] == "ok"}
     return folder, ok
