@@ -19,6 +19,8 @@
 #                     (по умолчанию — как у MIN: [0,41; 0,6; 0], 0,88)
 # insert            — формы с вставкой под воротом (V-вырез adidas), рисуется заново (InsertPaint)
 # letter_zones_from — форма → форма, с карты номеров которой берутся зоны буквы капитана (MIN: у выездной EA ниже)
+# sleeve_zones_from — форма Legacy, с карты номеров которой зоны номеров на рукавах (2, 3); по умолчанию — домашняя MIN
+#                     1_14_4 (общее правило 21.10: номер на плече — там же, где у MIN), "own" — с карты образца
 # sock_parts        — свои ровные полосы гетр (sock = flat): [доля, [R, G, B]], первая строка — ткань (доля 0)
 # [клуб.slot.<форма>] — форма в игре:
 #   kit         — имя в реестре tools/legacy_data/nhl24_kits.json (nhl24.py alloc КЛУБ edge_home edge_away --style 0)
@@ -27,7 +29,9 @@
 #                 auto (ровные полосы по гетрам источника этой формы: цвета и доли — по строкам)
 #   pant        — legacy (шорты образца) | source (шорты источника, 3D-перенос fb.pilot)
 #   helmet_logo — legacy (наклейка образца) | source (helmetlogo источника, 256×128)
-#   label       — подпись в меню
+#   label       — подпись в меню; по умолчанию «Home (NHL 27)» / «Away (NHL 24)» — форма и источник (правило 21.10)
+#   default     — true: одобрена пользователем — форма по умолчанию дома (выезда); прежняя по умолчанию — в список
+#                 с подписью (правило 21.10: «одобрил — сразу по умолчанию»). Подпись тогда в меню стандартная Home / Away
 
 [MIN]
 source = "nhl24"
@@ -35,6 +39,7 @@ yoke_color = "green"
 yoke = { away = "1_14_3" }
 insert = ["away", "home"]
 letter_zones_from = { away = "home" }
+sleeve_zones_from = "own"           # номера на рукавах — с карт своих образцов (они и есть образец для остальных)
 # щит меньше и чуть ниже (пользователь, 21.10: «для Миннесоты тоже можно уменьшить, довольно большой»; было 0,88, y 0,6:
 # щит 1,617–1,643 м, кромка с 1,644)
 shield_offset_cm = [0.41, 0.45, 0.0]
@@ -47,7 +52,7 @@ legacy = "1_14_4"
 sock = "flat"
 pant = "legacy"
 helmet_logo = "legacy"
-label = "Home (Edge collar 24)"
+default = true                      # одобрено (пользователь, 21.10)
 
 [MIN.slot.away]
 kit = "edge_away"
@@ -55,7 +60,7 @@ legacy = "1_14_3"
 sock = "legacy"
 pant = "legacy"
 helmet_logo = "legacy"
-label = "Away (Edge collar 24)"
+default = true
 
 # NJD — из NHL 27 (пользователь, 21.10: «свитер, гетры, трусы, шлем» — всё из NHL 27). Кокетка чёрная у обеих форм. Цвет каски — tools/legacy_data/nhl24_helmets.json
 # (из stockteamequipmenttable NHL 27: дом — чёрная, выезд — светлая).
@@ -84,7 +89,7 @@ legacy = "1_17_0"
 sock = "auto"
 pant = "source"
 helmet_logo = "source"
-label = "Home (NHL 27)"
+default = true                      # одобрено (пользователь, 21.10: «формы готовы», после правок — по умолчанию)
 
 [NJD.slot.away]
 kit = "edge_away"
@@ -92,4 +97,4 @@ legacy = "1_17_1"
 sock = "auto"
 pant = "source"
 helmet_logo = "source"
-label = "Away (NHL 27)"
+default = true

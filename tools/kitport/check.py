@@ -1,5 +1,5 @@
 """Лист проверки форм слота (подход C) на сетке Edge слота: по строке на форму — ворот спереди и в 3/4, рельеф без
-цвета спереди и сзади, превью меню. Плюс замер щита NHL по середине переда (у ворота без шнуровки: у ворота со
+цвета спереди и сзади, сбоку — контур зон номеров на рукаве, шрифт на цвете свитера под фамилией, превью меню. Плюс замер щита NHL по середине переда (у ворота без шнуровки: у ворота со
 шнуровкой щит на вставке того же цвета, что кромка). docs/kitport.md §12.3, п. 6.
 
     python -m kitport check [--clubs MIN,NJD] [--out FILE]
@@ -20,7 +20,35 @@ VIEWS = (                          # (что, угол вокруг оси те�
     ("color", 35, 300, (-0.14, 0.14, 1.56, 1.70)),
     ("relief", 0, 420, (-0.32, 0.32, 1.38, 1.74)),
     ("relief", 180, 420, (-0.32, 0.32, 1.38, 1.74)),
+    ("zones", 90, 300, (-0.35, 0.35, 1.30, 1.75)),     # сбоку: контур зон номеров на рукаве (карта номеров)
 )
+SLEEVE_ZONES = (2, 3)              # зоны номеров на рукавах (docs/kitport.md §2.4)
+
+
+def zone_outline(t, name_png, zones=SLEEVE_ZONES, color=(255, 220, 40)):
+    """Текстура свитера с контуром зон карты номеров (R, G > 128, B = зона) — видно, где игра рисует номер."""
+    from PIL import Image
+    from scipy import ndimage as ndi
+    a = np.asarray(Image.open(name_png).convert("RGBA").resize(t.shape[1::-1], Image.NEAREST))
+    out = t.copy()
+    for z in zones:
+        m = (a[..., 0] > 128) & (a[..., 1] > 128) & (a[..., 2] == z)
+        out[m & ~ndi.binary_erosion(m, iterations=3), :3] = color
+    return out
+
+
+def font_panel(d, t, h):
+    """Атлас шрифта (буквы фамилии и крупные цифры, верх атласа) на цвете свитера под фамилией (зона 0 карты номеров):
+    видно обводку и читаемость фамилии."""
+    from PIL import Image
+    f = Image.open(os.path.join(d, "font_cm.png")).convert("RGBA")
+    a = np.asarray(Image.open(os.path.join(d, "name_cm.png")).convert("RGBA").resize(t.shape[1::-1], Image.NEAREST))
+    z = (a[..., 0] > 128) & (a[..., 1] > 128) & (a[..., 2] == 0)
+    c = tuple(int(x) for x in np.median(t[z][:, :3], 0)) if z.any() else (128, 128, 128)
+    crop = f.crop((0, 0, f.size[0], int(f.size[1] * 0.56)))
+    bg = Image.new("RGBA", crop.size, c + (255,))
+    bg.alpha_composite(crop)
+    return bg.convert("RGB").resize((round(crop.size[0] * h / crop.size[1]), h))
 
 
 def shield_y(M, t):
@@ -67,8 +95,12 @@ def cmd_check(a):
         t = np.asarray(Image.open(os.path.join(d, "jersey_cm.png")).convert("RGBA"))
         nm = np.asarray(Image.open(os.path.join(d, "jersey_nm.png")).convert("RGB").resize(t.shape[1::-1])).astype(np.float64)
         part = {"color": {"pos": pos, "nrm": nrm, "uv": uv, "tri": tri, "tex": t, "twosided": True},
-                "relief": {"pos": pos, "nrm": nrm, "uv": uv, "tri": tri, "tex": gray, "nmap": nm, "twosided": True}}
+                "relief": {"pos": pos, "nrm": nrm, "uv": uv, "tri": tri, "tex": gray, "nmap": nm, "twosided": True},
+                "zones": {"pos": pos, "nrm": nrm, "uv": uv, "tri": tri, "twosided": True,
+                          "tex": zone_outline(t, os.path.join(d, "name_cm.png"))}}
         ims = [S.render([dict(part[what])], np.radians(ang), w, frame=fr) for what, ang, w, fr in VIEWS]
+        h = max(i.size[1] for i in ims)
+        ims.append(font_panel(d, t, h))
         fe = os.path.join(d, "fe.png")
         if os.path.exists(fe):
             im = Image.open(fe).convert("RGB")

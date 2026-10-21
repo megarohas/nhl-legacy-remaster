@@ -1157,7 +1157,7 @@ def use_club(code):
     """Профиль клуба (edge_clubs.toml) → таблицы модуля: источник текстур (fb.kitsrc), кокетка, вставка, слот, гетры."""
     from . import kitsrc
     global YOKE, YOKE_KIND, INSERT_KITS, SLOT_KITS, LETTER_ZONES_FROM, SOCK_PARTS, BODY_KIND, COLLAR, YOKE_EA_KIND
-    global YOKE_SIDE_BLEND, SHIELD_OFFSET_CM, SHIELD_SCALE
+    global YOKE_SIDE_BLEND, SHIELD_OFFSET_CM, SHIELD_SCALE, SLEEVE_ZONES_FROM
     prof = club_profiles().get(code)
     if prof is None:
         sys.exit(f"{code}: нет профиля клуба в {CLUBS_TOML}")
@@ -1173,6 +1173,9 @@ def use_club(code):
     INSERT_KITS = {(code, k) for k in prof.get("insert", [])}
     SLOT_KITS = {k: dict(v) for k, v in prof.get("slot", {}).items()}
     LETTER_ZONES_FROM = dict(prof.get("letter_zones_from", {}))
+    SLEEVE_ZONES_FROM = prof.get("sleeve_zones_from", SLEEVE_ZONES_REF)
+    for kit, spec in SLOT_KITS.items():                  # подпись в меню — «Home (NHL 27)»: форма и источник
+        spec.setdefault("label", f"{'Home' if kit == 'home' else 'Away'} ({SOURCE_NAME()})")
     SOCK_PARTS = tuple((float(w), tuple(c)) for w, c in prof.get("sock_parts", SOCK_PARTS))
     return prof
 
@@ -2992,6 +2995,12 @@ SLOT_KITS = {
 # том же месте герба — на светлой букву почти прижимало к гербу (пользователь, 20.10). Зоны букв — с карты этой формы.
 LETTER_ZONES = (5, 7)
 LETTER_ZONES_FROM = {"away": "home"}
+# Номера на рукавах (зоны 2 и 3 карты номеров) — там же, где у MIN, у всех клубов (пользователь, 21.10: у NJD «чуть
+# повыше нужно, как у Миннесоты», общее правило). С карты EA 1_17_0 верх зоны — 1,551 м и зона короче; у MIN дом
+# (1_14_4) — 1,566 м, у MIN выезд (1_14_3) — 1,600 м. Образец — домашняя MIN; у самой MIN — свои (профиль "own").
+SLEEVE_ZONES = (2, 3)
+SLEEVE_ZONES_REF = "1_14_4"
+SLEEVE_ZONES_FROM = SLEEVE_ZONES_REF   # профиль sleeve_zones_from: форма Legacy, с карты которой зоны, или "own"
 SOCK_PARTS = ((0.0, (24, 56, 46)), (30, (214, 203, 165)), (30, (159, 14, 10)), (110, (214, 203, 165)))
 SOCK_TOP_V = 0.49                  # верх полос своих гетр (v развёртки гетр: 0 — у колена): у EA MIN 0,48–0,50;
 #                                    перенесённые с NHL 24 — 0,576 (на ~6,5 см ниже — «повыше», пользователь, 19.10)
@@ -3528,6 +3537,12 @@ def cmd_slot(a):
                 J.unpack_kit(SLOT_KITS[LETTER_ZONES_FROM[kit]]["legacy"], ref)
             print(f"  буква капитана {kit}: зоны {LETTER_ZONES} — как у {LETTER_ZONES_FROM[kit]}:",
                   copy_zones(os.path.join(d, "name_cm.png"), os.path.join(ref, "name_cm.png"), LETTER_ZONES))
+        if SLEEVE_ZONES_FROM not in ("own", spec["legacy"]):
+            ref = os.path.join(cur, SLEEVE_ZONES_FROM)
+            if not os.path.exists(os.path.join(ref, "kit.json")):
+                J.unpack_kit(SLEEVE_ZONES_FROM, ref)
+            print(f"  номера на рукавах {kit}: зоны {SLEEVE_ZONES} — как у {SLEEVE_ZONES_FROM}:",
+                  copy_zones(os.path.join(d, "name_cm.png"), os.path.join(ref, "name_cm.png"), SLEEVE_ZONES))
         flat_src = os.path.join(KITS_OUT, f"{a.club}_{flat_kit or kit}", "sock_cm.png")
         if spec["sock"] == "auto":                       # ровные полосы по гетрам источника этой формы
             parts = sock_parts_auto(os.path.join(src, "sock_cm.png"))
@@ -3666,9 +3681,13 @@ def cmd_pack(a):
         if rel in have:
             man["files"] = [x for x in man["files"] if x["file"] != rel]
         man["files"].append(e)
-    clubs = [c for c in club_profiles() if all(os.path.isdir(os.path.join(WORK, "slot", "kits", f"{c}_{k}"))
-                                               for k in club_profiles()[c].get("slot", {}))]
-    print("клубы пакета (профиль и собранный слот):", clubs)
+    # в пакет (в игру) — только одобренные клубы: все формы слота с default = true (правило 21.10); черновики — нет
+    prof = club_profiles()
+    built = [c for c in prof if all(os.path.isdir(os.path.join(WORK, "slot", "kits", f"{c}_{k}"))
+                                    for k in prof[c].get("slot", {}))]
+    clubs = [c for c in built if prof[c].get("slot") and all(s.get("default") for s in prof[c]["slot"].values())]
+    print("клубы пакета (профиль, собранный слот, одобрены):", clubs,
+          f"; не одобрены (default) — не в пакете: {sorted(set(built) - set(clubs))}" if set(built) - set(clubs) else "")
     for code in clubs:
         use_club(code)
         pack_club(a, code, regmap, man, have, put)
@@ -3703,7 +3722,8 @@ def pack_club(a, code, regmap, man, have, put):
                                  "club": code, "kit": spec["kit"]})
         man["kits"].append({"club": code, "kit": spec["kit"], "variant": r["variant"],
                             "islightcolor": 0 if kit == "home" else 1, "label": spec["label"], "helmet": kit,
-                            "phase": 2})    # nhl24.py: строки и шлемы — после adidas (сейв дописывается в конец)
+                            "phase": 2,     # nhl24.py: строки и шлемы — после adidas (сейв дописывается в конец)
+                            "default": bool(spec.get("default"))})   # одобрена — форма по умолчанию (дом / выезд)
     man["note"] = (man.get("note", "") + f" {code}: формы «{SLOT_KITS['home']['label']}» / «{SLOT_KITS['away']['label']}» "
                    f"({SOURCE_NAME()}) на своей сетке Edge с передом ворота NHL 24 в слоте стиля 0 (сетки adidas сняты, "
                    "пользователь 19.10).")

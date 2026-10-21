@@ -317,6 +317,8 @@ def check_manifest(pack, man, reg):
         lab = k.get('label')
         if lab is not None and (not isinstance(lab, str) or not 0 < len(lab) <= 32):
             bad.append(f'новая форма {key}: label {lab!r} — строка до 32 символов')
+        if k.get('default') not in (None, True, False):
+            bad.append(f'новая форма {key}: default {k.get("default")!r} — true, false или без поля')
         if k.get('helmet') not in (None, 'home', 'away'):
             bad.append(f'новая форма {key}: helmet {k.get("helmet")!r} — home, away или без поля')
         if k.get('kit') in DEFAULT_KITS and k.get('islightcolor') != DEFAULT_KITS[k['kit']]:
@@ -339,12 +341,14 @@ def build_db(base, man, reg, files):
     tie = []
     regmap = {(k['club'], k['kit']): k for k in reg['kits']}
     new = [regmap[(k['club'], k['kit'])] | {'islightcolor': k['islightcolor'], 'label': k.get('label'),
-                                             'helmet': k.get('helmet'), 'phase': k.get('phase')}
+                                             'helmet': k.get('helmet'), 'phase': k.get('phase'),
+                                             'default': k.get('default')}
            for k in man.get('kits', [])]
     # строки — по клубу и порядку в меню; свитера adidas (ad_*, 16.10) — после всех прежних форм пакета: строки уже
     # поставленных форм (и их шлемов) остаются на своих местах — так их хранит и сейв ROSTER (nhl24.py save)
     # очередь (phase_of): поле phase манифеста — ещё позже adidas (19.10: формы Edge MIN — 2), сейв дописывается только в конец
     new.sort(key=lambda k: (phase_of(k), CLUBS[k['club']][0], k['jerseyindex']))
+    default_roles(new)
     # jerseyindex у клуба — подряд 0…N−1, как у всех 224 команд EA (с дырой игра не проверялась): форма из реестра
     # может не попасть в пакет, только если за ней в реестре нет форм этого клуба, которые в пакет попали
     for code in sorted({k['club'] for k in new}):
@@ -407,23 +411,38 @@ def phase_of(k):
     return k['phase'] if k.get('phase') is not None else int(k['kit'].startswith('ad_'))
 
 
+def default_roles(new):
+    """Какие формы пакета встают по умолчанию: home / away по имени (DEFAULT_KITS, правило 10.10) и одобренные — с полем
+    default манифеста (правило 21.10: «одобрил — сразу по умолчанию», формы Edge MIN и NJD). Роль — по islightcolor
+    (дом — тёмная). На клуб и роль — последняя в очереди строк (new уже отсортирован по phase): одобренная форма Edge
+    главнее формы NHL 24 того же пакета, та остаётся в списке со своей подписью. → в каждую форму k['role']: home,
+    away или None."""
+    win = {}
+    for k in new:
+        if k['kit'] in DEFAULT_KITS or k.get('default'):
+            win[(k['club'], k['islightcolor'])] = k
+    for k in new:
+        k['role'] = ('home', 'away')[k['islightcolor']] if win.get((k['club'], k['islightcolor'])) is k else None
+
+
 def final_loc(k):
-    """locstring новой строки: у новых home/away (они — по умолчанию) — 0/1, у остальных — из реестра (6)."""
-    return DEFAULT_LOC.get(k['kit'], k['locstring'])
+    """locstring новой строки: у форм по умолчанию (default_roles) — 0/1, у остальных — из реестра (6)."""
+    return DEFAULT_LOC[k['role']] if k.get('role') else k['locstring']
 
 
 def set_defaults(db, rows, new, n_before):
-    """Правило 10.10 (05:53): по умолчанию — формы NHL 24. Новый дом (тёмный) и выезд (светлый) — isdefault 1 (их
+    """Правило 10.10 (05:53): по умолчанию — формы NHL 24; 21.10 — одобренные формы пакета (default_roles). Новый дом
+    (тёмный) и выезд (светлый) — isdefault 1 (их
     locstring 0/1 — final_loc), прежняя строка по умолчанию того же цвета у клуба (EA; у SEA/VGK — наши 1_100_0/1,
     1_101_0/1) — isdefault 0 и locstring 6 с подписью «Home (EA)» / «Away (EA)» (ТЕСТ CHI3). Нового дома (выезда) нет — у
     клуба остаётся прежний. Новые строки — в [n_before, конец). → ([описание], {ключ Vintage_…: подпись})."""
     out, labels = [], {}
-    added = {(k['club'], k['kit']): n_before + i for i, k in enumerate(new)}
-    for (code, kit), r_new in sorted(added.items(), key=lambda kv: kv[1]):
-        if kit not in DEFAULT_KITS:
+    added = {(k['club'], k['kit']): (n_before + i, k) for i, k in enumerate(new)}
+    for (code, kit), (r_new, k) in sorted(added.items(), key=lambda kv: kv[1][0]):
+        if not k.get('role'):
             continue
         team = CLUBS[code][0]
-        light = DEFAULT_KITS[kit]
+        light = k['islightcolor']
         old = [r for r in rows if r['teamid'] == team and r['isdefault'] and r['islightcolor'] == light]
         if len(old) != 1:
             sys.exit(f'{code}: прежних форм по умолчанию с islightcolor {light} — {len(old)}, ждал одну')
@@ -435,7 +454,8 @@ def set_defaults(db, rows, new, n_before):
         jersey = f"rendering/jersey/texlib_{o['style']}_{o['teamartid']}_{o['variant']}.rx2"
         ea = os.path.exists(os.path.join(REF, 'nocacherender', *jersey.split('/')))   # свитер в архивах EA — форма EA
         labels[key] = (OLD_DEFAULT_LABELS if ea else OLD_OURS_LABELS)[light]
-        out.append(f"{code} {kit}: по умолчанию 1_{db.get(T, 'teamartid', r_new)}_{db.get(T, 'variant', r_new)} "
+        out.append(f"{code} {kit}: по умолчанию {db.get(T, 'style', r_new)}_{db.get(T, 'teamartid', r_new)}_"
+                   f"{db.get(T, 'variant', r_new)} "
                    f"(строка {r_new}, locstring {db.get(T, 'locstring', r_new)}) вместо {o['style']}_{o['teamartid']}_"
                    f"{o['variant']} (строка {o['row']}: isdefault 0, locstring {o['locstring']} → 6, «{labels[key]}»)")
     return out, labels
