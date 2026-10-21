@@ -13,6 +13,7 @@
 
   python -m fb.edge_kit build [--out DIR] [--style 0]   # сетки jersey_* → DIR/rendering/jersey/
   python -m fb.edge_kit preview OUT.png                  # ворот: Edge | изогнутая копия | NHL 24 (шашки)
+  python -m fb.edge_kit kit --club NJD                    # текстуры формы клуба (профиль fb/edge_clubs.toml) → WORK/out
 """
 import argparse
 import os
@@ -1510,6 +1511,8 @@ def collar_keep_mask(mesh, size=1024):
 # тем же координатам, что и рисунок, с пересчётом касательного базиса). Рукава — прежний рельеф (там швы Edge на месте).
 RELIEF_REBUILD = True
 Y_SUPPRESS = 1.50                  # м: выше — швы NHL 24 не берутся (там цвет рисуется здесь — свои швы по границам)
+Y_SUPPRESS_FADE = 0.08             # м: переход «рельеф источника → свой» (1,44–1,52); при 2 см на груди была видна
+#                                    поперечная черта (пользователь, 21.10, NJD; у MIN — та же)
 LACE_ZONE = (0.029, 1.580, 1.617)  # |x|, y от, y до: шнуровка — рельеф NHL 24 (шнурки, люверсы; 0,034 — в зону
 #                                    попадал контур планки NHL 24: шов без смены цвета)
 LACE_FADE = 0.003                  # м: край зоны — мягкий
@@ -1527,6 +1530,8 @@ PLACKET_CENTER = ((0.0, 1.5634), (0.0, 1.581))   # шов посередине �
 # до ~36° — по линии NHL 24 в виде спереди (расстояния — её точки на нашей сетке), дальше — полоса за кромкой как у
 # NHL 24 (кромка + 1,8–2,2 см: у Edge плечи не как у NHL 24, вид спереди там прижал бы обод к кромке), сзади — 3 см
 RING = True
+RING_PLAIN_TH = 35.0               # град: у ворота без шнуровки обод — только дальше от середины переда (там он встречает
+#                                    шов кокетки); спуск к верху планки (S) — «отросточки» (пользователь, 21.10, NJD)
 RING_KNOTS = ((23.7, 0.0502), (26.5, 0.0455), (32.0, 0.0355), (35.3, 0.0318), (40.0, 0.0305), (45.0, 0.0298),
               (50.0, 0.0295), (60.0, 0.0297), (75.0, 0.0300), (90.0, 0.0310), (120.0, 0.0320), (150.0, 0.0310),
               (180.0, 0.0305))
@@ -1855,6 +1860,8 @@ def ring_field(G):
         dd = np.where(k_, np.hypot(x - sgn * Sx, y - Sy), np.inf)
         i_ = np.unravel_index(np.argmin(dd), dd.shape)
         thS, DS = abs(float(TH[i_])), float(D[i_])
+        if COLLAR != "lace":                             # без планки: обод — с RING_PLAIN_TH по таблице, без спуска
+            thS, DS = RING_PLAIN_TH, float(np.interp(RING_PLAIN_TH, *zip(*RING_KNOTS)))
         kn = [(thS, DS)] + [(a, d_) for a, d_ in RING_KNOTS if a > thS + 1.0]
         f = PchipInterpolator([a for a, _ in kn], [d_ for _, d_ in kn])
         ta = np.clip(np.abs(TH), thS, 180.0)
@@ -2074,7 +2081,7 @@ def rebuild_relief(nm_path, code, kit, mesh, cmap, n_jt, painters=None):
         img_l[yy_, xx_] = ((dr > 60) & (dg > 60)).astype(np.float64)
         img_l = ndi.gaussian_filter(ndi.binary_dilation(img_l > 0.5, iterations=2).astype(np.float64), 1.0)
         lace = lace * np.clip(img_l[yy_, xx_] * 1.5, 0, 1)
-    keep24 = np.maximum(1.0 - Hy.smooth((Pm[:, 1] - Y_SUPPRESS + 0.01) / 0.02), lace)
+    keep24 = np.maximum(1.0 - Hy.smooth((Pm[:, 1] - Y_SUPPRESS + Y_SUPPRESS_FADE * 0.75) / Y_SUPPRESS_FADE), lace)
     painters = dict(painters or {})
     if getattr(cmap, "sleeve", None) is not None:
         tex24 = np.asarray(Image.open(J.n24_tex(Hy.CLUB_NAME[code], kit, "base_color")).convert("RGB")).astype(np.float64)
