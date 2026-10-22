@@ -57,6 +57,9 @@ def rect_gap(u, v, rects):
     return g
 
 
+CREST_FIT_OVERRIDE = {}           # поля [crest_fit] клуба поверх kit_rules.toml (edge_kit.use_club: профиль crest_fit)
+
+
 def crest_fit(name_png, path=RULES):
     """Правило [crest_fit] с зонами букв шаблона → словарь для kit_hybrid.decal_post (None — правила нет)."""
     r = _rules(path).get("crest_fit")
@@ -65,6 +68,7 @@ def crest_fit(name_png, path=RULES):
     rects = zone_rects(name_png, r.get("zones", [5]))
     if not rects:
         return None
+    r = dict(r, **CREST_FIT_OVERRIDE)
     return {"rects": rects, "gap_min": float(r.get("gap_min", 0.02)), "min_scale": float(r.get("min_scale", 0.6)),
             "anchor": r.get("anchor", "bottom"), "max_bottom": float(r.get("max_bottom", 0.85))}
 

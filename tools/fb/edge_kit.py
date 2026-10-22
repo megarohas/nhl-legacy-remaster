@@ -1199,6 +1199,8 @@ def use_club(code):
     COLLAR_TRIM = prof.get("collar_trim", "auto")
     TRIM_MEASURE = prof.get("trim_measure", "percentile")
     FONT_NAME_SCALE = float(prof.get("font_name_scale", 1.0))
+    from . import kit_fix                                # герб не на букву: свои поля [crest_fit] (gap_min …) клуба
+    kit_fix.CREST_FIT_OVERRIDE = dict(prof.get("crest_fit", {}))
     FONT_CAPTAIN_X = float(prof.get("font_captain_x", 1.0))
     # высота зоны низа «от края» (fb.hem.HEM_H): у NHL 27 BOS / TBL полосы низа — до 13–14 см, а зона — 9 см (переход
     # 6–9 см): белая полоса BOS попадала в переход и раздувалась посередине (пользователь, 21.10). Профиль hem_h — выше

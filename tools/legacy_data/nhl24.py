@@ -592,23 +592,28 @@ def add_gloves(db, new):
         kits = sorted({(r['style'], r['variant']) for r in mine})
         key = lambda s_, v, b: (era1 if s_ == 1 else 0, v, EQ_GLOVES, b)
         pre = {(kv, b): eq_lookup(recs, key(*kv, b))[5] for kv in kits for b in BR}
-        club = []
-        for k in [k for k in new if k['club'] == code and (code, k['kit']) in explicit]:
+        mine_new = [k for k in new if k['club'] == code and (code, k['kit']) in explicit]
+        new_keys = {(k.get('style', 1), k['variant']): explicit[(code, k['kit'])] for k in mine_new}
+        # era строки: сначала как у краг стиля формы (стиль 0 → 0), если она перехватывает прежние формы клуба (у DET нет
+        # общей строки краг era 0: строка новой формы era 0 по компаратору лучше строк era −1 и для 0_10_3 — 22.10), —
+        # era −1 («любая») с variant формы; берётся первая, при которой модель сходится
+        for era_new in ("form", -1):
+            club = []
+            for k in mine_new:
+                st = k.get('style', 1)
+                era = (era1 if st == 1 else 0) if era_new == "form" else -1
+                club.append((base, era, k['variant'], explicit[(code, k['kit'])]))
+            post = club_equipment(db, low, team, [(e, v, EQ_GLOVES, -1, None, z) for _, e, v, z in club])
+            bad = [(kv, b) for kv in kits for b in BR
+                   if eq_lookup(post, key(*kv, b))[5] != new_keys.get(kv, pre[(kv, b)])]
+            if not bad:
+                break
+        else:
+            sys.exit(f'{code} {bad[0][0][0]}_{art}_{bad[0][0][1]}: по модели краги не те (бренд {bad[0][1]})')
+        for (_, e, v, z), k in zip(club, mine_new):
             st = k.get('style', 1)
-            zones = explicit[(code, k['kit'])]
-            club.append((base, era1 if st == 1 else 0, k['variant'], zones))
-            done.append(f"{code} {k['kit']} {st}_{art}_{k['variant']}: краги {zones[:3]}…{zones[15:21]} — "
-                        f"{os.path.basename(HELMETS)}")
-        post = club_equipment(db, low, team, [(e, v, EQ_GLOVES, -1, None, z) for _, e, v, z in club])
-        new_keys = {}
-        for (_, e, v, z), k in zip(club, [k for k in new if k['club'] == code and (code, k['kit']) in explicit]):
-            new_keys[(k.get('style', 1), v)] = z
-        for kv in kits:
-            for b in BR:
-                got = eq_lookup(post, key(*kv, b))[5]
-                want = new_keys.get(kv, pre[(kv, b)])
-                if got != want:
-                    sys.exit(f'{code} {kv[0]}_{art}_{kv[1]}: по модели краги не те (бренд {b})')
+            done.append(f"{code} {k['kit']} {st}_{art}_{k['variant']}: краги {z[:3]}…{z[15:21]} — "
+                        f"{os.path.basename(HELMETS)} (era {e})")
         adds += club
     if adds:
         n = db.by_name[EQ]['rows']
