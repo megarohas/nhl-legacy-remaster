@@ -56,6 +56,11 @@ LACE_FRAC = 0.15                 # доля «не ткани» под щито�
 COLOR_DIFF = 45                  # max |ΔR, ΔG, ΔB| — другой цвет (как у kitport check и edge_kit.trim_profile)
 YOKE_TOP_X = (0.12, 0.17)        # |x| верха плеч (у шеи — кромка, дальше — сустав): цвет кокетки
 YOKE_ARM_X = (0.25, 0.30)        # |x| верха рукава за плечевым суставом: кокетка «на плечо»
+UNDER_Y = (1.50, 1.56)           # м: спина у середины под кокеткой и над полосами груди — с ней сравнивается цвет кокетки и
+#                                  рукава (22.10, MTL дом: на 1,30–1,45 м синяя полоса — генератор видел кокетку и «другой» рукав)
+YOKE_SIDE_BLEND = 0.10           # м: кокетка «на плечо» — край на руке прямой наискосок (edge_kit.YOKE_SIDE_BLEND; MTL, BUF, DAL)
+LAPEL_SRC = ((30.0, 60.0), (120.0, 150.0), (0.020, 0.026))   # |θ| спереди сбоку, сзади; м от края: лацканы у шнуровки
+#                                  (edge_kit.LAPEL_SRC) — один цвет и спереди, и сзади, не цвет за ободом (4,5–6 см)
 SLEEVE_X = (0.30, 0.34)          # |x| кольца рукава ниже плечевого сустава (до полос у локтя): цвет рукава. Не цвет ткани —
 #                                  armhole_split = "full" (VGK 22.10: серые рукава, по полю шва NHL 24 граница зубцами)
 EQ_HELMET, EQ_GLOVES = 7, 4      # equipment шлема и краг (значения с rangelow, как в nhl24.py)
@@ -66,6 +71,12 @@ NEUTRAL = 25                     # max − min меньше — серый (чё
 BNM_SIGMA = 2.0                  # px 2048: сглаживание _base_normal перед замером наклона (плетение ткани — мельче)
 BNM_RATIO = (4.0, 6.0)           # наклон у края нашивок / у ткани: больше второго — рельеф нашивок «запечён» (TBL ten — 7,8;
 #                                  без него 0,9–3,4: NJD, TBL eleven, BOS, 21.10); между — проверить
+LETTER_EA_PX = 24                # px карты номеров 256²: место буквы (зона 5) у EA 15 × 15–17, у заготовок Custom SEA и VGK
+#                                  36 × 34 (зоны MIN — name_zones_from); у наших форм Юты 1_104_x — 15 × 16 (карта EA PIT)
+MERGE_NEAR = 0.02                # доля развёртки: часть вне правил ближе к гербу — его часть (merge_near; UTA выезд «UTAH»:
+#                                  между буквами 0,005–0,010, до прочих нашивок — от 0,05)
+MERGE_NEAR_MIN_PX = 2000         # px 2048²: меньше — не буква (обрезки, черта у края развёртки)
+CLEAR_FRONT, CLEAR_BACK = (30, 60), (120, 180)   # |θ|: бока спереди и спина — ткань за кромкой (trim_clear)
 
 
 def say(*a):
@@ -84,11 +95,24 @@ def nhl24_mod():
 
 
 def club_folder(code):
-    from fb.kit_batch import CLUBS
-    f = next((club for club, _, c in CLUBS if c == code), None)
+    from fb.kit_batch import club                   # CLUBS и NEW_CLUBS (UTA → utah: клуба нет в NHL 24)
+    f = club(code)
     if f is None:
-        sys.exit(f"{code}: не знаю клуба (fb.kit_batch.CLUBS)")
-    return f
+        sys.exit(f"{code}: не знаю клуба (fb.kit_batch.CLUBS, NEW_CLUBS)")
+    return f[0]
+
+
+def letter_zone_px(kit):
+    """Место буквы капитана (зона 5 карты номеров 256²) формы Legacy kit (S_A_V: из cache: игры, иначе из архивов —
+    fb.jersey_mesh.unpack_kit, в edgekit/cur_kits, как у стадии slot) -> (ширина, высота) px или None."""
+    from PIL import Image
+    from fb import jersey_mesh as J
+    d = os.path.join(core.EDGE_WORK, "cur_kits", kit)
+    if not os.path.exists(os.path.join(d, "kit.json")):
+        J.unpack_kit(kit, d)
+    a = np.asarray(Image.open(os.path.join(d, "name_cm.png")).convert("RGBA"))
+    ys, xs = np.nonzero((a[..., 0] > 128) & (a[..., 1] > 128) & (a[..., 2] == 5))
+    return (int(xs.max() - xs.min() + 1), int(ys.max() - ys.min() + 1)) if len(xs) else None
 
 
 def nhl27_db():
@@ -273,11 +297,79 @@ def look_kit(folder, kit):
     yoke_c, yoke_u = top_of(YOKE_TOP_X)
     arm_c, _ = top_of(YOKE_ARM_X)
     sleeve_c = median_c(b[(np.abs(x) > SLEEVE_X[0]) & (np.abs(x) < SLEEVE_X[1])])
+    # ткань под кокеткой (UNDER_Y): с ней сравниваются кокетка и рукав — середина спины ниже бывает полосой груди (MTL дом)
+    under = median_c(b[(z < -0.05) & (np.abs(x) < 0.08) & (y > UNDER_Y[0]) & (y < UNDER_Y[1])])
+    yoke_on = differs(yoke_c, under) and yoke_u > 0.7
+    # полоса под кокеткой (BUF выезд, 22.10: золотая) — 2–8 мм под нижним краем цвета кокетки у середины спины
+    stripe_c = np.full(3, np.nan)
+    if yoke_on:
+        bk_ = (z < -0.05) & (np.abs(x) < 0.10) & (y > 1.50)
+        yl = y[bk_ & (np.abs(b - yoke_c).max(1) < COLOR_DIFF)]
+        if len(yl):
+            y0_ = float(np.percentile(yl, 2))
+            stripe_c = median_c(b[bk_ & (y < y0_ - 0.002) & (y > y0_ - 0.008)])
+    stripe = yoke_on and bool(np.isfinite(stripe_c).all()) and differs(stripe_c, yoke_c) and differs(stripe_c, under)
     return {"xc": xc, "lace_frac": lace_frac, "ref": ref_c, "body": body, "body_uniform": body_uniform,
-            "sleeve_c": sleeve_c, "sleeve_other": differs(sleeve_c, body),
+            "sleeve_c": sleeve_c, "sleeve_other": differs(sleeve_c, under), "under": under,
             "yoke_c": yoke_c, "yoke_uniform": yoke_u, "arm_c": arm_c,
-            "yoke": differs(yoke_c, body) and yoke_u > 0.7, "on_arm": not differs(arm_c, yoke_c),
+            "yoke": yoke_on, "on_arm": not differs(arm_c, yoke_c), "stripe": stripe, "stripe_c": stripe_c,
             "trim_c": trim_top, "trim_below": trim_below, "trim_visible": differs(trim_top, trim_below)}
+
+
+def lapel_look(folder, kit):
+    """Лацканы ворота со шнуровкой (edge_kit.collar_lapel): цвет между кромкой и ободом спереди сбоку и сзади (LAPEL_SRC)
+    и за ободом. -> (цвет спереди, сзади, за ободом)."""
+    from fb import jersey_hybrid as Hy
+    g = n24_outer()
+    if "ring" not in g:
+        w = Hy.Welded(g["M"])
+        ring = w.neck()
+        zc = float(w.P[ring, 2].mean())
+        g["ring"] = (Hy.ring_dist(g["P"], Hy.ring_polyline(w, ring)), Hy.theta_of(g["P"], zc))
+    d, th = g["ring"]
+    ath = np.abs(th)
+    b = tex(folder, kit, "base_color", 1024)[g["ys"], g["xs"], :3]
+    (f0, f1), (b0, b1), (d0, d1) = LAPEL_SRC
+    lap = (d > d0) & (d < d1)
+    return (median_c(b[lap & (ath > f0) & (ath < f1)]), median_c(b[lap & (ath > b0) & (ath < b1)]),
+            median_c(b[(d > 0.045) & (d < 0.06) & (ath > f0) & (ath < b1)]))
+
+
+def ea_yoke_rgb(kit):
+    """Цвет кокетки EA-формы Legacy у её семени (edge_kit.yoke_polygon: строка 0,53, столбец 0,37 развёртки 1024), если он
+    не цвет середины спины (edge_kit.BODY_BOX); у формы нет кокетки — None."""
+    from PIL import Image
+    from fb import edge_kit as E, pilot
+    if not kit:
+        return None
+    im = np.asarray(Image.open(os.path.join(pilot.unpack(kit), "jersey_cm.png")).convert("RGB")
+                    .resize((1024, 1024))).astype(np.float64)
+    seed = im[int(0.53 * 1024), int(0.37 * 1024)]
+    u0, v0, u1, v1 = E.BODY_BOX
+    body = np.median(im[int(v0 * 1024):int(v1 * 1024), int(u0 * 1024):int(u1 * 1024)].reshape(-1, 3), axis=0)
+    return [int(round(v)) for v in seed] if differs(seed, body) else None
+
+
+def beyond_trim(folder, kit):
+    """Ткань сразу за кромкой источника (сетка NHL 24, основа) — спереди сбоку (|θ| CLEAR_FRONT) и сзади (CLEAR_BACK):
+    медианы от edge_kit.TRIM_CLEAR_GAP за кромкой (сплошная полоса цвета кромки или полоса шаблона ворота
+    edge_kit.BAND_KNOTS — что шире) и на TRIM_CLEAR дальше, как замер edge_kit.trim_body_by_angle. -> {front, back}."""
+    from fb import edge_kit as E, jersey_hybrid as Hy
+    g = n24_outer()
+    if "ring" not in g:
+        w = Hy.Welded(g["M"])
+        ring = w.neck()
+        zc = float(w.P[ring, 2].mean())
+        g["ring"] = (Hy.ring_dist(g["P"], Hy.ring_polyline(w, ring)), Hy.theta_of(g["P"], zc))
+    d, th = g["ring"]
+    b = tex(folder, kit, "base_color", 1024)[g["ys"], g["xs"], :3]
+    col = median_c(b[d < 0.003])
+    pr = E.trim_profile(d, th, np.linalg.norm(b - col, axis=1) < 60)
+    ath = np.abs(th)
+    w0 = np.maximum(np.interp(ath, pr["angles"], pr["width"]), np.interp(ath, *zip(*E.BAND_KNOTS))) + E.TRIM_CLEAR_GAP
+    ring_ok = (d > w0) & (d < w0 + E.TRIM_CLEAR)
+    return {what: median_c(b[ring_ok & (ath >= a0) & (ath <= a1)])
+            for what, (a0, a1) in (("front", CLEAR_FRONT), ("back", CLEAR_BACK))}
 
 
 def yoke_kind(c):
@@ -304,6 +396,12 @@ def crest_parts(code, folder, kit):
         found.append((kit_hybrid._match(lab, lid, sl, rules, defaults), (xx.mean() + sl[1].start) / H,
                       (yy.mean() + sl[0].start) / H, int(area)))
     n = sum(1 for f in found if f[0] == "crest")
+    # части вне правил рядом с гербом (UTA выезд, 22.10: «UTAH» — четыре буквы, U и H дальше match_radius) — «crest~»
+    grp = [p for p, f in zip(patches, found) if f[0] == "crest"]
+    free = [p for p, f in zip(patches, found) if f[0] is None and p[2] >= MERGE_NEAR_MIN_PX]
+    if grp and free:
+        near_ids = {p[0] for p in kit_hybrid.near_parts(lab, grp, free, MERGE_NEAR)} - {p[0] for p in grp}
+        found = [("crest~",) + f[1:] if p[0] in near_ids else f for p, f in zip(patches, found)]
     sponsors = {k for k, r in rules.items() if r.get("sponsor")}
     try:
         nm = tex(folder, kit, "base_normal")[..., :2] / 127.5 - 1.0
@@ -460,18 +558,45 @@ def propose(code):
         D.append(Decision(f"кокетка {k}", ("на плечо" if L_["on_arm"] else "до плеча") if L_["yoke"] else "нет",
                           not L_["yoke"] or L_["yoke_uniform"] > 0.85,
                           f"верх плеч {np.round(L_['yoke_c']).astype(int).tolist()} (однороден на "
-                          f"{L_['yoke_uniform']:.0%}), ткань {np.round(L_['body']).astype(int).tolist()}, верх рукава "
-                          f"{np.round(L_['arm_c']).astype(int).tolist()}"))
+                          f"{L_['yoke_uniform']:.0%}), ткань под кокеткой {np.round(L_['under']).astype(int).tolist()}, "
+                          f"верх рукава {np.round(L_['arm_c']).astype(int).tolist()}"))
         if L_["yoke"]:
             yk[k] = yoke_kind(L_["yoke_c"])
     prof = {"source": "nhl27", "source_kits": src}
-    if any(yoke.values()):
+    arm = any(look[k]["on_arm"] for k in SLOT_KITS if yoke[k])
+    if any(yoke.values()) and arm:
+        # кокетка «на плечо» (22.10, MTL, BUF, DAL; агент yoke, docs/kitport.md §12): цвет — RGB источника (green / dark
+        # узнают не все), край спины — по своей EA-форме клуба (у неё кокетка тоже на плече; как MIN и NJD — спина по EA),
+        # боков EA нет — шапка на руке кончается краем, прямой наискосок от переда к спине (yoke_side_blend)
+        yc = np.median([look[k]["yoke_c"] for k in SLOT_KITS if yoke[k]], axis=0)
+        prof["yoke_color"] = [int(round(v)) for v in yc]
+        ea = {k: ea_yoke_rgb(legacy[k]) for k in SLOT_KITS if yoke[k]}
+        prof["yoke"] = {k: (legacy[k] if v is not None else "1_14_3") for k, v in ea.items()}
+        got = [v for v in ea.values() if v is not None]
+        prof["yoke_shape_color"] = got[0] if got else "green"
+        prof["yoke_side_blend"] = YOKE_SIDE_BLEND
+        # «проверить» всегда: у NHL 27 кокетка adidas одна и та же (NJD, BUF, MTL, DAL — шапка до одного места на руке), а у
+        # NJD пользователь выбрал «до плеча» (бока MIN 1_14_3, 21.10) — решение по листу, не по текстуре
+        D.append(Decision("yoke", prof["yoke"], False,
+                          f"кокетка «на плечо» (тип MTL, §12.1): цвет {prof['yoke_color']}, край спины — EA-форма "
+                          f"{prof['yoke']} (её кокетка {prof['yoke_shape_color']}), край на руке — прямая "
+                          f"(yoke_side_blend {YOKE_SIDE_BLEND})" + ("" if len(got) == len(ea) else
+                                                                   " — у EA-формы кокетки нет: спина по MIN 1_14_3")
+                          + "; «до плеча», как NJD, — yoke = 1_14_3, yoke_shape_color = green, без yoke_side_blend"))
+        st = [k for k in SLOT_KITS if yoke[k] and look[k]["stripe"]]
+        if st:
+            prof["yoke_stripe"] = "source"
+        D.append(Decision("yoke_stripe", prof.get("yoke_stripe", "—"), True, ", ".join(
+            f"{k}: под кокеткой сзади {np.round(look[k]['stripe_c']).astype(int).tolist()}" for k in SLOT_KITS if yoke[k])
+            + (" — полоса другого цвета (BUF выезд): цвет и ширина по источнику" if st else "")))
+    elif any(yoke.values()):
         kinds = {v for v in yk.values() if v}
         kind = kinds.pop() if len(kinds) == 1 else None
-        prof["yoke_color"] = kind or "dark"
+        prof["yoke_color"] = kind or [int(round(v)) for v in np.median([look[k]["yoke_c"] for k in SLOT_KITS if yoke[k]],
+                                                                       axis=0)]
         D.append(Decision("yoke_color", prof["yoke_color"], kind is not None,
-                          f"цвет кокетки {yk}: green — тёмно-зелёная (MIN), dark — чёрная (NJD); другого edge_kit.yoke_mask "
-                          "не умеет" if kind is None else f"цвет кокетки — {kind}"))
+                          f"цвет кокетки {yk}: green — тёмно-зелёная (MIN), dark — чёрная (NJD); другой — [R, G, B] "
+                          "источника (edge_kit.yoke_mask, 22.10)" if kind is None else f"цвет кокетки — {kind}"))
         prof["yoke"] = {k: "1_14_3" for k in SLOT_KITS if yoke[k]}
         prof["yoke_shape_color"] = "green"
         arm = any(look[k]["on_arm"] for k in SLOT_KITS if yoke[k])
@@ -488,39 +613,71 @@ def propose(code):
                           f"{np.round(look[k]['body']).astype(int).tolist()}" for k in SLOT_KITS)
                       + (" — рукав другого цвета: граница по шву проймы целиком (VGK, DET 22.10: по полю шва — зубцы)"
                          if other else "")))
-    # фамилия, номер, буква: у заготовок Custom (SEA, VGK — art ≥ 100) зоны крупнее EA — как у MIN; шрифт — расчётом
-    if art >= 100:
+    # фамилия, номер, буква: у заготовок Custom (SEA, VGK — art ≥ 100) зоны крупнее EA — как у MIN; шрифт — расчётом.
+    # Наш арт ≥ 100 — не всегда Custom: у Юты (UTA 1_104_x, docs/utah.md) карта номеров — EA PIT 1_23_0, свои зоны
+    # (22.10). Замер — место буквы на карте образца: больше LETTER_EA_PX — Custom
+    lz = letter_zone_px(legacy["home"]) if art >= 100 and legacy["home"] else None
+    custom = art >= 100 and (lz is None or max(lz) > LETTER_EA_PX)
+    if custom:
         prof["name_zones_from"] = "1_14_4"
+    elif lz:                             # наш арт ≥ 100 с картой EA (UTA): зоны — свои, но явно: шаблон стадии kit у 3-значного
+        prof["name_zones_from"] = legacy["home"]   # арта — 1_131_0 (fb.pilot.home_template), места буквы у него ниже, без
+        #                                            зоны 7 — герб [crest_fit] мерил бы не по тем местам, что в слоте
     prof["font_name_fit"] = "auto"
+    lz_s = f"буква {lz[0]} × {lz[1]}" if lz else "буква —"
     D.append(Decision("name_zones_from", prof.get("name_zones_from", "—"), True,
-                      "заготовка Custom: фамилия и номер на 15–17 % крупнее EA, буква 36 × 34 против 15 × 15 — зоны MIN"
-                      if art >= 100 else "зоны EA-формы клуба"))
+                      f"заготовка Custom: фамилия и номер на 15–17 % крупнее EA, {lz_s} против 15 × 15 — зоны MIN"
+                      if custom else f"зоны образца {legacy['home']} ({lz_s}) — как у EA; явно, чтобы [crest_fit] на "
+                      "стадии kit мерил по ним, а не по шаблону 1_131_0" if lz else "зоны EA-формы клуба"))
     prof["body_color"] = "back"
     bu = min(look[k]["body_uniform"] for k in SLOT_KITS)
     D.append(Decision("body_color", "back", bu > 0.9,
                       f"середина спины ровная на {bu:.0%} (back — как NJD, TBL; light — только MIN)"))
     prof["collar"] = collar
-    if collar == "plain" and not any(yoke.values()):     # шов вставки под воротом (U вокруг щита) — как у NHL 27 (VGK 22.10)
-        prof["collar_panel"] = True
+    if collar == "plain":                                # шов вставки под воротом (U вокруг щита) — как у NHL 27 (VGK 22.10);
+        prof["collar_panel"] = True                      # с 22.10 и у формы с кокеткой: мыс со щитом — V шаблона (BUF)
     prof["crest_fit"] = {"gap_min": 0.008}   # герб крупнее, до буквы капитана 0,6 см (пользователь, 22.10: TBL, BOS, DET)
     prof["crest_size_cm"] = 27               # герб не меньше 27 см (22.10, VGK: «лого побольше»; EA NHL 13 — медиана 27)
     prof["trim_measure"] = "contiguous"   # ширина кромки — сплошной полосой по основе (с DET 22.10: у широких кромок
     #                                       прежний замер давал 3,7 см по кругу, а мыс спереди — мельче источника)
     vis = {k: look[k]["trim_visible"] for k in SLOT_KITS}
+    bt = {k: beyond_trim(folder, src[k]) for k in SLOT_KITS}
+    # двухцветный ворот (UTA выезд, 22.10): у края полоса цвета ткани, за ней — кромка другого цвета по всему кругу (и
+    # спереди — V со щитом): collar_band, а не ширина по другой форме
+    band2 = [k for k in SLOT_KITS if not vis[k] and differs(bt[k]["front"], look[k]["body"])
+             and not differs(bt[k]["front"], bt[k]["back"])]
+    if band2:
+        prof["collar_band"] = {k: "full" for k in band2}
+    D.append(Decision("collar_band", prof.get("collar_band", "—"), True,
+                      "у края — цвет ткани, за полосой спереди сбоку / сзади: " + ", ".join(
+                          f"{k} {np.round(bt[k]['front']).astype(int).tolist()} / "
+                          f"{np.round(bt[k]['back']).astype(int).tolist()}" for k in SLOT_KITS if not vis[k])
+                      + (" — двухцветный ворот: полоса у края цвета ткани, кромка во весь V" if band2 else "")
+                      if not all(vis.values()) else "кромка у края видна (не цвета ткани)"))
     seen = [k for k in SLOT_KITS if vis[k]]
-    if not all(vis.values()) and seen:
-        prof["trim_width_from"] = {k: seen[0] for k in SLOT_KITS if not vis[k]}
+    if not all(vis.values()) and seen and [k for k in SLOT_KITS if not vis[k] and k not in band2]:
+        prof["trim_width_from"] = {k: seen[0] for k in SLOT_KITS if not vis[k] and k not in band2}
     D.append(Decision("trim_width_from", prof.get("trim_width_from", "—"), all(vis.values()) or bool(seen),
                       "кромка у ворота сзади против ткани ниже: " + ", ".join(
                           f"{k} {np.round(look[k]['trim_c']).astype(int).tolist()} / "
                           f"{np.round(look[k]['trim_below']).astype(int).tolist()}" for k in SLOT_KITS)
                       + ("" if all(vis.values()) else " — кромка цвета ткани: ширина — по форме, где она видна"
                          + ("" if seen else "; у обеих не видна — ширина по цвету будет неверной, проверить"))))
+    # за кромкой сбоку и сзади — вторая полоса, спереди — ткань (CHI 22.10): зачистка за кромкой — по углу
+    two = [k for k in SLOT_KITS if differs(bt[k]["front"], bt[k]["back"])]
+    if two:
+        prof["trim_clear"] = "angle"
+    D.append(Decision("trim_clear", prof.get("trim_clear", "—"), True,
+                      "ткань за кромкой спереди сбоку / сзади: " + ", ".join(
+                          f"{k} {np.round(bt[k]['front']).astype(int).tolist()} / "
+                          f"{np.round(bt[k]['back']).astype(int).tolist()}" for k in SLOT_KITS)
+                      + (" — сбоку и сзади вторая полоса: зачистка цветом источника по углу" if two else "")))
     # нашивки: герб из частей, рельеф нашивок в основе
-    parts, relief = {}, {}
+    parts, relief, near = {}, {}, {}
     for k in SLOT_KITS:
         n, s_e, s_f, found, sponsors = crest_parts(code, folder, src[k])
         parts[k], relief[k] = n, (s_e, s_f)
+        near[k] = sum(1 for f in found if f[0] == "crest~")
         sp = [f for f in found if f[0] in sponsors]
         # нашивка на груди не из правил (не герб, не щит, не плечевые): перенесётся как есть — реклама останется
         odd = [f for f in found if f[0] is None and f[3] > 2000 and 0.30 < f[1] < 0.70 and 0.55 < f[2] < 0.80]
@@ -537,10 +694,15 @@ def propose(code):
                       "верх полос низа над краем, см: " + ", ".join(f"{k} {v * 100:.1f}" for k, v in tops.items())
                       + f" (зона «от края» без поля — {hem.HEM_H * 100:.0f} см, переход — верхние "
                       f"{hem.HEM_BLEND * 100:.0f} см)"))
-    if max(parts.values()) > 1:
+    if max(parts.values()) > 1 or any(near.values()):
         prof["merge_parts"] = ["crest"]
     D.append(Decision("merge_parts", prof.get("merge_parts", "—"), True,
                       f"частей герба у источника: {parts} (больше одной — одной нашивкой, как TBL)"))
+    if any(near.values()):
+        prof["merge_near"] = MERGE_NEAR
+    D.append(Decision("merge_near", prof.get("merge_near", "—"), True,
+                      f"частей вне правил ближе {MERGE_NEAR} развёртки к гербу: {near}"
+                      + (" — буквы надписи-герба одной нашивкой (как «UTAH» UTA)" if any(near.values()) else "")))
     ratio = {k: (s / max(f, 1e-6) if s is not None else None) for k, (s, f) in relief.items()}
     flat = any(r is not None and r > BNM_RATIO[1] for r in ratio.values())
     if flat:
@@ -570,6 +732,18 @@ def propose(code):
     prof["insert"] = ["home", "away"] if collar == "lace" else []
     if collar == "lace":
         D.append(Decision("insert", prof["insert"], False, "ворот со шнуровкой — вставка, как у MIN: проверить по листу"))
+        prof["insert_color"] = "source"                  # у NHL 27 вставка бывает не красной (TOR, MTL, DAL, 22.10)
+        # лацканы другого цвета (MTL, DAL: белые) — один цвет спереди сбоку и сзади, не цвет за ободом (у TOR дома белое
+        # только сзади — там collar_band = "back")
+        lp = {k: lapel_look(folder, src[k]) for k in SLOT_KITS}
+        lap = [k for k in SLOT_KITS if not differs(lp[k][0], lp[k][1]) and differs(lp[k][0], lp[k][2])]
+        if lap and len(lap) == len(SLOT_KITS):
+            prof["collar_lapel"] = "source"
+        D.append(Decision("collar_lapel", prof.get("collar_lapel", "—"), len(lap) in (0, len(SLOT_KITS)), ", ".join(
+            f"{k}: лацкан спереди / сзади {np.round(lp[k][0]).astype(int).tolist()} / "
+            f"{np.round(lp[k][1]).astype(int).tolist()}, за ободом {np.round(lp[k][2]).astype(int).tolist()}"
+            for k in SLOT_KITS) + (" — лацканы другого цвета, от кромки до шва обода (edge_kit.LapelPaint)" if
+                                   "collar_lapel" in prof else "")))
     prof["letter_zones_from"] = {}
     prof["sock_parts"] = [[0.0, [0, 0, 0]]]
     prof["slot"] = {k: {"kit": EDGE_KIT[k], "legacy": legacy[k], "sock": "auto", "pant": "source",
@@ -644,9 +818,10 @@ def toml_section(code, prof, D, data):
            f"# Нынешние формы — {src['home']} / {src['away']} (база NHL 27). Решения «проверить» — в выводе генератора и",
            "# docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.",
            f"[{code}]"]
-    for k in ("source", "source_kits", "body_color", "collar", "trim_measure", "trim_width_from", "crest_fit", "crest_size_cm", "yoke_color", "yoke", "yoke_shape_color",
-              "shield_offset_cm", "shield_scale", "merge_parts", "base_normal_decals", "hem_h", "insert",
-              "letter_zones_from", "collar_panel", "armhole_split", "name_zones_from", "font_name_fit",
+    for k in ("source", "source_kits", "body_color", "collar", "trim_measure", "trim_width_from", "collar_band", "crest_fit", "crest_size_cm", "yoke_color", "yoke", "yoke_shape_color",
+              "yoke_side_blend", "yoke_stripe", "shield_offset_cm", "shield_scale", "merge_parts", "merge_near",
+              "base_normal_decals", "hem_h", "insert", "insert_color", "collar_lapel",
+              "letter_zones_from", "collar_panel", "trim_clear", "armhole_split", "name_zones_from", "font_name_fit",
               "sock_parts"):
         if k not in prof:
             continue
@@ -663,9 +838,22 @@ def toml_section(code, prof, D, data):
                 "crest_size_cm": "герб не меньше 27 см (√ ширина × высота), как EA-гербы NHL 13 (edge_kit.crest_to_size)",
                 "armhole_split": "рукав другого цвета: граница с тканью по шву проймы Edge целиком (VGK, DET)",
                 "name_zones_from": "заготовка Custom: зоны фамилии, номера и буквы — как у MIN",
-                "font_name_fit": "фамилия: высота как у MIN, промежуток ≤ 0,23 высоты буквы (edge_kit.name_font_fit)"}.get(k)
+                "font_name_fit": "фамилия: высота как у MIN, промежуток ≤ 0,23 высоты буквы (edge_kit.name_font_fit)",
+                "collar_band": "двухцветный ворот: у края полоса цвета ткани, за ней кромка во весь V (щит на ней) "
+                               "(edge_kit.COLLAR_BAND)",
+                "trim_clear": "за кромкой сбоку и сзади — вторая полоса: зачистка цветом источника по углу "
+                              "(edge_kit.trim_body_by_angle)",
+                "merge_near": "буквы надписи-герба рядом с гербом — одной нашивкой (kit_hybrid.near_parts)",
+                "yoke_side_blend": "кокетка «на плечо»: край на руке — прямая наискосок от переда к спине (рисунок "
+                                   "пользователя 21.10), боков EA нет",
+                "yoke_stripe": "полоса под кокеткой — цвет и ширина по источнику (edge_kit.yoke_stripe_source)",
+                "insert_color": "вставка цвета источника (edge_kit.INSERT_COLOR)",
+                "collar_lapel": "лацканы другого цвета — от кромки до шва обода (edge_kit.LapelPaint)"}.get(k)
         if k == "collar":
             note = sure["collar"].why
+        if k == "name_zones_from" and prof[k] != "1_14_4":
+            note = ("зоны образца (карта EA): шаблон стадии kit у 3-значного арта — 1_131_0, [crest_fit] — по местам "
+                    "буквы слота")
         out.append(line + (f"   # {note}" if note else ""))
     for kit in SLOT_KITS:
         s = prof["slot"][kit]

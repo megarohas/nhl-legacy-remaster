@@ -310,6 +310,28 @@ def main():
     s.add_argument("--number", default="", help="номер (по умолчанию — звезды клуба)")
     s.add_argument("--letter", default="C", choices=("C", "A", ""), help="буква капитана (C, A; пусто — без буквы)")
     s.add_argument("--out", default=None, help="папка листов (по умолчанию — compare/kitport/)")
+    s = sub.add_parser("collar", help="ворот крупно: наш и источник (цвет, основа + рельеф, сверху) — шнуровка или нет")
+    s.add_argument("--clubs", required=True, help="коды клубов через запятую (TOR,MIN)")
+    s.add_argument("--kits", default="home,away", help="формы через запятую")
+    s.add_argument("--source-only", action="store_true", help="только источник (слот ещё не собран)")
+    s.add_argument("--tilt", type=float, default=35.0, help="наклон камеры сверху, град")
+    s.add_argument("--out", default=None, help="файл листа (по умолчанию — compare/kitport/collar-…png)")
+    s = sub.add_parser("yoke", help="кокетка и плечи: наш и источник в одних видах с линиями высот, замер края кокетки")
+    s.add_argument("--clubs", required=True, help="коды клубов через запятую (MTL,BUF)")
+    s.add_argument("--kits", default="", help="формы через запятую (по умолчанию — с кокеткой в профиле)")
+    s.add_argument("--source-only", action="store_true", help="только источник (слот ещё не собран)")
+    s.add_argument("--views", default="", help="углы видов, град (по умолчанию 0,90,180,45,135)")
+    s.add_argument("--frame", default="", help="кадр x0,x1,y0,y1, м (по умолчанию -0.42,0.42,1.38,1.76)")
+    s.add_argument("--out", default=None, help="файл листа (по умолчанию — compare/kitport/yoke-…png)")
+    s = sub.add_parser("backs", help="спины всех форм слота одним листом: фамилия и номер клетками атласа, как в игре")
+    s.add_argument("--clubs", default="", help="клубы через запятую (по умолчанию — все в слоте)")
+    s.add_argument("--name", default="MACKINNON", help="фамилия")
+    s.add_argument("--number", default="88", help="номер")
+    s.add_argument("--cols", type=int, default=8, help="форм в ряду")
+    s.add_argument("--out", default=None, help="файл листа (по умолчанию — compare/kitport/backs-….png)")
+    s = sub.add_parser("lettering", help="фамилия, номер и промежутки букв на спине (см) против эталона")
+    s.add_argument("--clubs", default="", help="клубы через запятую (по умолчанию — все в слоте)")
+    s.add_argument("--ref", default="MIN,NJD,TBL,BOS,DET,LAK,SEA,VGK", help="эталон — одобренные клубы")
     s = sub.add_parser("survey", help="обзор форм клубов источника: перед, плечо, ворот (разбор по типам)")
     s.add_argument("--source", default="nhl27")
     s.add_argument("--clubs", default="", help="папки клубов через запятую (по умолчанию — все)")
@@ -335,6 +357,18 @@ def main():
     if a.cmd == "check":
         from . import check
         return check.cmd_check(a)
+    if a.cmd == "collar":
+        from . import collar
+        return collar.cmd_collar(a)
+    if a.cmd == "yoke":
+        from . import yoke
+        return yoke.cmd_yoke(a)
+    if a.cmd == "backs":
+        from . import backs
+        return backs.cmd_backs(a)
+    if a.cmd == "lettering":
+        from . import lettering
+        return lettering.cmd_lettering(a)
     if a.cmd == "survey":
         from . import survey
         return survey.cmd_survey(a)

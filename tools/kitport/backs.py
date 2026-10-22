@@ -1,0 +1,142 @@
+"""Спины всех форм слота одним листом — фамилия и номер так, как их рисует игра: знак берётся клеткой атласа целиком
+(с полями клетки), клетка вписывается в зону карты номеров по высоте. Видно размер букв и номера, промежутки и
+отступы (от кокетки сверху, до полос снизу) у всех клубов сразу.
+
+    python -m kitport backs [--clubs MIN,BUF] [--name ABCDEFGH] [--number 88] [--out FILE]
+
+Отличие от kitport present: там буквы вписаны в зону по своему габариту с условной разрядкой (LETTER_GAP) —
+крупнее и плотнее, чем в игре.
+"""
+import datetime
+import os
+import sys
+
+import numpy as np
+
+from . import core
+
+NAME_ROWS = ((1, 48), (49, 98))
+DIGIT_ROWS = ((115, 238), (242, 367))
+DIGIT_PITCH = 84
+FRAME = (-0.30, 0.30, 1.05, 1.72)             # x0, x1, y0, y1, м — спина
+CELL_W = {"I": 16, "M": 48, "W": 48}           # ширина клетки буквы, px атласа (по раскладке EA; как у игры — не
+#                                                разбиралось, docs/kitport.md §2.5)
+
+
+def _only_main(cell):
+    """Клетка атласа без соседних знаков (у EA между буквами — ' . -, у цифр — край соседней): оставить связные
+    части, что пересекают средние 40 % ширины клетки."""
+    from scipy import ndimage as ndi
+    a = cell[..., 3] > 40
+    lab, n = ndi.label(a)
+    w = cell.shape[1]
+    keep = np.zeros_like(a)
+    mid = slice(int(w * 0.3), int(w * 0.7) + 1)
+    for i in range(1, n + 1):
+        m = lab == i
+        if m[:, mid].any():
+            keep |= m
+    out = cell.copy()
+    out[~ndi.binary_dilation(keep, iterations=2)] = 0
+    return out
+
+
+def cell_name(font, name):
+    """Фамилия из клеток атласа (RGBA): клетка буквы — от середины до середины соседей (fb.jersey_mesh.FONT_SLOTS),
+    высота — строка атласа целиком; соседние знаки в клетке убраны."""
+    from fb import jersey_mesh as J
+    from fb.fonts import CAPTAIN_BOX
+    parts = []
+    for ch in name:
+        row = 0 if ch in J.FONT_ROWS[0][0] else 1
+        letters = J.FONT_ROWS[row][0]
+        if ch not in letters:
+            continue
+        cx = J.FONT_SLOTS[row]
+        i = letters.index(ch)
+        if i >= len(cx):
+            continue
+        w = CELL_W.get(ch, 32)                         # клетки разной ширины: у EA I смещена (центр 264 между H 240 и
+        x0, x1 = cx[i] - w // 2, cx[i] + w // 2        # J 304), M и W — через 48 px: I — 16, M и W — 48, прочие — 32
+        right_end = 512 if row == 0 else CAPTAIN_BOX[0]
+        x0, x1 = max(0, x0), min(right_end, x1)
+        y0, y1 = NAME_ROWS[row]
+        parts.append(_only_main(font[y0:y1, x0:x1]))
+    h = max(p.shape[0] for p in parts)
+    return np.concatenate([np.pad(p, ((0, h - p.shape[0]), (0, 0), (0, 0))) for p in parts], 1)
+
+
+def _digit_centres(font, y0, y1):
+    """Середины цифр строки атласа (по разрывам столбцов), слева направо."""
+    cols = (font[y0:y1, :420, 3] > 40).any(0)
+    out, x = [], 0
+    while x < len(cols):
+        if cols[x]:
+            s0 = x
+            while x < len(cols) and cols[x]:
+                x += 1
+            if x - s0 > 8:
+                out.append((s0 + x) / 2)
+        else:
+            x += 1
+    return out
+
+
+def cell_number(font, number):
+    """Номер из клеток цифр (шаг DIGIT_PITCH вокруг середины цифры), соседние знаки убраны."""
+    parts = []
+    for ch in number:
+        d = int(ch)
+        y0, y1 = DIGIT_ROWS[0 if d < 5 else 1]
+        cs = _digit_centres(font, y0, y1)
+        c = cs[d % 5] if len(cs) == 5 else (d % 5 + 0.5) * DIGIT_PITCH
+        x0 = int(round(c - DIGIT_PITCH / 2))
+        cell = np.zeros((y1 - y0, DIGIT_PITCH, 4), np.uint8)
+        a0, a1 = max(0, x0), min(font.shape[1], x0 + DIGIT_PITCH)
+        cell[:, a0 - x0:a1 - x0] = font[y0:y1, a0:a1]
+        parts.append(_only_main(cell))
+    h = max(p.shape[0] for p in parts)
+    return np.concatenate([np.pad(p, ((0, h - p.shape[0]), (0, 0), (0, 0))) for p in parts], 1)
+
+
+def cmd_backs(a):
+    os.environ.setdefault("PHOTOS_SOURCE", "nhl24")
+    sys.path.insert(0, core.TOOLS)
+    import scans24 as S
+    from PIL import Image, ImageDraw, ImageFont
+    from fb import edge_kit as E, jersey_mesh as J
+    from .present import zone_rects
+    src = core.slot_kits_dir()
+    kits = sorted(k for k in os.listdir(src) if os.path.isdir(os.path.join(src, k)) and
+                  os.path.exists(os.path.join(src, k, "font_cm.png")))
+    if a.clubs:
+        kits = [k for k in kits if k.split("_")[0] in a.clubs.split(",")]
+    M = E.mesh_for(0, 1, 2)
+    nrm = S.weld_normals(M["pos"], M["tri"], S.weld_ids(M["pos"]))
+    font_ = ImageFont.truetype(os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts", "segoeui.ttf"), 16)
+    tiles = []
+    for kit in kits:
+        d = os.path.join(src, kit)
+        t = np.asarray(Image.open(os.path.join(d, "jersey_cm.png")).convert("RGB")).astype(np.float64)
+        f = np.asarray(Image.open(os.path.join(d, "font_cm.png")).convert("RGBA"))
+        rects = zone_rects(os.path.join(d, "name_cm.png"))
+        if 0 in rects:
+            t = J.stamp(t, M, rects[0], cell_name(f, a.name.upper()))
+        if 1 in rects:
+            t = J.stamp(t, M, rects[1], cell_number(f, a.number))
+        im = S.render([{"pos": M["pos"], "nrm": nrm, "uv": M["uv"], "tri": M["tri"], "tex": t, "twosided": True}],
+                      np.radians(180), 300, frame=FRAME)
+        tile = Image.new("RGB", (im.size[0], im.size[1] + 22), (24, 24, 28))
+        tile.paste(im, (0, 22))
+        ImageDraw.Draw(tile).text((4, 2), kit, fill=(255, 220, 140), font=font_)
+        tiles.append(tile)
+    cols = a.cols
+    w, h = tiles[0].size
+    rows = (len(tiles) + cols - 1) // cols
+    sheet = Image.new("RGB", (cols * (w + 4), rows * (h + 4)), (10, 10, 12))
+    for i, tl in enumerate(tiles):
+        sheet.paste(tl, ((i % cols) * (w + 4), (i // cols) * (h + 4)))
+    out = a.out or os.path.join(core.COMPARE, f"backs-{datetime.datetime.now():%Y%m%d-%H%M}.png")
+    sheet.save(out)
+    print("лист →", out)
+    return 0

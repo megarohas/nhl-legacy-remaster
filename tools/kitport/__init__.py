@@ -20,5 +20,9 @@
     python -m kitport present [--clubs TBL]   # лист «ставим или правим»: наша и оригинал, «одетый» свитер, игрок,
                                               # каска, наклейка, шрифт — по листу на форму
     python -m kitport survey [--clubs boston] # обзор форм клубов источника (перед, плечо, ворот) — разбор по типам
+    python -m kitport collar --clubs TOR [--source-only]   # ворот крупно: наш и источник с рельефом, прямо и сверху
+    python -m kitport yoke --clubs MTL      # кокетка: наша и источник в одних видах, замер края
+    python -m kitport lettering [--clubs CHI]   # фамилия, номер и промежутки букв на спине (см) против эталона
+    python -m kitport backs [--clubs MIN,BUF]   # спины всех форм слота одним листом — фамилия и номер, как в игре
     python -m kitport profile --club BOS [--write]   # генератор профиля клуба из NHL 27: профиль, номера, каска
 """
