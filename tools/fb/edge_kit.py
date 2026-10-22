@@ -1201,7 +1201,8 @@ def use_club(code):
     COLLAR = prof.get("collar", "lace")
     COLLAR_TRIM = prof.get("collar_trim", "auto")
     TRIM_MEASURE = prof.get("trim_measure", "percentile")
-    FONT_NAME_SCALE = float(prof.get("font_name_scale", 1.0))
+    FONT_NAME_SCALE = prof.get("font_name_scale", 1.0)   # число или [ширина, высота] (LAK 22.10: мельче и плотнее)
+    FONT_NAME_SCALE = float(FONT_NAME_SCALE) if np.isscalar(FONT_NAME_SCALE) else tuple(map(float, FONT_NAME_SCALE))
     from . import kit_fix                                # герб не на букву: свои поля [crest_fit] (gap_min …) клуба
     kit_fix.CREST_FIT_OVERRIDE = dict(prof.get("crest_fit", {}))
     FONT_CAPTAIN_X = float(prof.get("font_captain_x", 1.0))

@@ -188,6 +188,28 @@ def ea_head_files():
     return {int(x[7:-4]) for x in os.listdir(EA_PLAYER) if x.startswith('player_') and x[7:-4].isdigit()}
 
 
+def edit1(a, b):
+    """Расстояние Левенштейна между a и b не больше 1."""
+    if abs(len(a) - len(b)) > 1:
+        return False
+    if len(a) > len(b):
+        a, b = b, a
+    i = 0
+    while i < len(a) and a[i] == b[i]:
+        i += 1
+    return a[i + (len(a) == len(b)):] == b[i + 1:]
+
+
+def folder_typo(key, flat, taken):
+    """Папка головы с опечаткой EA: имя отличается на одну букву (вставка, пропуск, замена), имя длиннее 8 букв, первая
+    буква та же, кандидат один и не занят. -> папка или None (пользователь, 22.10: у Панарина в NHL 24 и NHL 27 папка
+    «artemi_parnarin» — лица не было)."""
+    if len(key) < 9:
+        return None
+    c = [f for k, f in flat.items() if k[:1] == key[:1] and k != key and edit1(k, key) and f not in taken]
+    return c[0] if len(c) == 1 else None
+
+
 def cmd_match(variants):
     players, folder_of, unsure_f = nhl24_scans()
     unsure_idx = {i: c for i, c in unsure_f}
@@ -240,6 +262,10 @@ def cmd_match(variants):
                                   'headid': q['headid']}, how=how)
                 if i not in folder_of and i not in unsure_idx:
                     f = flat.get(nf + nl)                      # папка по имени из базы Legacy (Gabriel / Gabe)
+                    if f is None:                              # опечатка EA в имени папки (artemi_parnarin, 22.10):
+                        f = folder_typo(nf + nl, flat, folder_set_taken)   # одна буква — единственная папка
+                        if f:
+                            rec['folder_typo'] = f
                     if f and f not in folder_set_taken:
                         folder_of[i] = f
                         folder_set_taken.add(f)

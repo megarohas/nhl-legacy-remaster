@@ -97,7 +97,8 @@ def scale_glyphs(slot_dir, name=1.0, captain_x=1.0, log=None, name_anchor="cente
         raise SystemExit(f"{slot_dir}: атлас {cm.shape[1]}×{cm.shape[0]}, ждал 512²")
     fills = ((0, 0, 0, 0), (128, 128, 255, 255))
     rep = []
-    if name != 1.0:
+    nx, ny = (name, name) if np.isscalar(name) else (float(name[0]), float(name[1]))   # [ширина, высота] — раздельно
+    if (nx, ny) != (1.0, 1.0):
         n = 0
         from .jersey_mesh import FONT_SLOTS             # центры клеток букв EA (шаг не везде 32 px: L 368, M 416)
         for row, (y0, y1) in enumerate(NAME_ROWS):
@@ -112,10 +113,13 @@ def scale_glyphs(slot_dir, name=1.0, captain_x=1.0, log=None, name_anchor="cente
                 else:                                    # ' . - между клетками — в пределах своего места
                     bx = (cx - 8, cx + 8)
                 w, h = box[2] - box[0], box[3] - box[1]
-                s = min(name, (bx[1] - bx[0] - 2) / max(w, 1), (y1 - y0 - 1) / max(h, 1))
-                _scale_box([cm, nm], box, s, s, (bx[0], y0, bx[1], y1), fills, name_anchor)
+                sx_ = min(nx, (bx[1] - bx[0] - 2) / max(w, 1))
+                sy_ = min(ny, (y1 - y0 - 1) / max(h, 1))
+                if nx == ny:                             # одинаково — как раньше (масштаб — меньший из пределов)
+                    sx_ = sy_ = min(sx_, sy_)
+                _scale_box([cm, nm], box, sx_, sy_, (bx[0], y0, bx[1], y1), fills, name_anchor)
                 n += 1
-        rep.append(f"буквы фамилии ×{name} (в пределах клетки, привязка — {name_anchor}): {n} знаков")
+        rep.append(f"буквы фамилии ×{nx}×{ny} (ширина×высота, в пределах клетки, привязка — {name_anchor}): {n} знаков")
     if captain_x != 1.0:
         for y0, y1 in CAPTAIN_ROWS:
             for box in _glyph_boxes(cm[..., 3], *CAPTAIN_BOX, y0, y1, min_h=40):
