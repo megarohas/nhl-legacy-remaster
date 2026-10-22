@@ -603,6 +603,8 @@ def propose(code):
         D.append(Decision("yoke", prof["yoke"], not arm,
                           "бока кокетки «до плеча» — с EA MIN 1_14_3 (как NJD, пользователь 21.10)" if not arm else
                           "кокетка заходит на руку (тип MTL, §12.1): бока 1_14_3 — заготовка, нужен yoke_side_blend"))
+    if any(yoke.values()):                               # у NHL 27 в кокетке сетки ямок нет (MTL, DAL, BUF, 22.10)
+        prof["yoke_mesh"] = False
     # рукав другого цвета, чем ткань (VGK: серые рукава; DET выезд: красные) — граница по шву проймы Edge целиком
     other = [k for k in SLOT_KITS if look[k]["sleeve_other"]]
     if other:
@@ -821,7 +823,7 @@ def toml_section(code, prof, D, data):
     for k in ("source", "source_kits", "body_color", "collar", "trim_measure", "trim_width_from", "collar_band", "crest_fit", "crest_size_cm", "yoke_color", "yoke", "yoke_shape_color",
               "yoke_side_blend", "yoke_stripe", "shield_offset_cm", "shield_scale", "merge_parts", "merge_near",
               "base_normal_decals", "hem_h", "insert", "insert_color", "collar_lapel",
-              "letter_zones_from", "collar_panel", "trim_clear", "armhole_split", "name_zones_from", "font_name_fit",
+              "letter_zones_from", "yoke_mesh", "collar_panel", "trim_clear", "armhole_split", "name_zones_from", "font_name_fit",
               "sock_parts"):
         if k not in prof:
             continue
@@ -834,6 +836,7 @@ def toml_section(code, prof, D, data):
                 "hem_h": "м: зона низа «от края» выше полос (fb.hem.HEM_H; без поля — 0,09)",
                 "trim_measure": "ширина кромки — сплошной полосой от края по основе (edge_kit.TRIM_MEASURE)",
                 "crest_fit": "герб крупнее: до буквы капитана 0,008 развёртки (~0,6 см), как TBL, BOS, DET",
+                "yoke_mesh": "у NHL 27 в кокетке сетки ямок нет (edge_kit.YOKE_MESH)",
                 "collar_panel": "шаблон ворота NHL 27: полоса, вставка со щитом, V, обод — одинаково у всех (edge_kit.panel_v)",
                 "crest_size_cm": "герб не меньше 27 см (√ ширина × высота), как EA-гербы NHL 13 (edge_kit.crest_to_size)",
                 "armhole_split": "рукав другого цвета: граница с тканью по шву проймы Edge целиком (VGK, DET)",

@@ -673,3 +673,674 @@ sock = "auto"
 pant = "source"
 helmet_logo = "source"
 default = true
+
+# PIT — из NHL 27, профиль собран генератором (python -m kitport profile --club PIT, 22.10.2026).
+# Нынешние формы — ten / eleven (база NHL 27). Решения «проверить» — в выводе генератора и
+# docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.
+[PIT]
+source = "nhl27"
+source_kits = { home = "ten", away = "eleven" }
+body_color = "back"   # середина спины ровная на 100% (back — как NJD, TBL; light — только MIN)
+collar = "plain"   # под щитом посередине переда не цвет ткани: home 0.00, away 0.00 (порог 0.15; шнуровка — больше)
+trim_measure = "contiguous"   # ширина кромки — сплошной полосой от края по основе (edge_kit.TRIM_MEASURE)
+crest_fit = { gap_min = 0.008 }   # герб крупнее: до буквы капитана 0,008 развёртки (~0,6 см), как TBL, BOS, DET
+crest_size_cm = 27   # герб не меньше 27 см (√ ширина × высота), как EA-гербы NHL 13 (edge_kit.crest_to_size)
+shield_scale = 0.68   # щит по зазору под кромкой — edge_kit.SHIELD_GAP_DEFAULT_MM; у источника 5.4 мм / 6.8 мм (справка)
+hem_h = 0.205   # м: зона низа «от края» выше полос (fb.hem.HEM_H; без поля — 0,09)
+insert = []
+letter_zones_from = {}
+collar_panel = true   # шаблон ворота NHL 27: полоса, вставка со щитом, V, обод — одинаково у всех (edge_kit.panel_v)
+armhole_split = "full"   # рукав другого цвета: граница с тканью по шву проймы Edge целиком (VGK, DET)
+font_name_fit = "auto"   # фамилия: высота как у MIN, промежуток ≤ 0,23 высоты буквы (edge_kit.name_font_fit)
+sock_parts = [[0.0, [0, 0, 0]]]   # не используется (sock = auto)
+
+[PIT.slot.home]
+kit = "edge_home"
+legacy = "1_23_0"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+[PIT.slot.away]
+kit = "edge_away"
+legacy = "1_23_1"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+# VAN — из NHL 27, профиль собран генератором (python -m kitport profile --club VAN, 22.10.2026).
+# Нынешние формы — ten / eleven (база NHL 27). Решения «проверить» — в выводе генератора и
+# docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.
+[VAN]
+source = "nhl27"
+source_kits = { home = "ten", away = "eleven" }
+body_color = "back"   # середина спины ровная на 100% (back — как NJD, TBL; light — только MIN)
+collar = "plain"   # под щитом посередине переда не цвет ткани: home 0.00, away 0.00 (порог 0.15; шнуровка — больше)
+trim_measure = "contiguous"   # ширина кромки — сплошной полосой от края по основе (edge_kit.TRIM_MEASURE)
+trim_width_from = { home = "away" }   # кромка цвета ткани — ширина кромки по другой форме (edge_kit.TRIM_WIDTH_FROM)
+crest_fit = { gap_min = 0.008 }   # герб крупнее: до буквы капитана 0,008 развёртки (~0,6 см), как TBL, BOS, DET
+crest_size_cm = 27   # герб не меньше 27 см (√ ширина × высота), как EA-гербы NHL 13 (edge_kit.crest_to_size)
+shield_scale = 0.68   # щит по зазору под кромкой — edge_kit.SHIELD_GAP_DEFAULT_MM; у источника 5.4 мм / 6.8 мм (справка)
+hem_h = 0.225   # м: зона низа «от края» выше полос (fb.hem.HEM_H; без поля — 0,09)
+insert = []
+letter_zones_from = {}
+collar_panel = true   # шаблон ворота NHL 27: полоса, вставка со щитом, V, обод — одинаково у всех (edge_kit.panel_v)
+trim_clear = "angle"   # за кромкой сбоку и сзади — вторая полоса: зачистка цветом источника по углу (edge_kit.trim_body_by_angle)
+font_name_fit = "auto"   # фамилия: высота как у MIN, промежуток ≤ 0,23 высоты буквы (edge_kit.name_font_fit)
+sock_parts = [[0.0, [0, 0, 0]]]   # не используется (sock = auto)
+
+[VAN.slot.home]
+kit = "edge_home"
+legacy = "1_28_0"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+[VAN.slot.away]
+kit = "edge_away"
+legacy = "1_28_1"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+# CAR — из NHL 27, профиль собран генератором (python -m kitport profile --club CAR, 22.10.2026).
+# Нынешние формы — ten / thirteen (база NHL 27). Решения «проверить» — в выводе генератора и
+# docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.
+[CAR]
+source = "nhl27"
+source_kits = { home = "ten", away = "thirteen" }
+body_color = "back"   # середина спины ровная на 100% (back — как NJD, TBL; light — только MIN)
+collar = "plain"   # под щитом посередине переда не цвет ткани: home 0.00, away 0.00 (порог 0.15; шнуровка — больше)
+trim_measure = "contiguous"   # ширина кромки — сплошной полосой от края по основе (edge_kit.TRIM_MEASURE)
+trim_width_from = { away = "home" }   # кромка цвета ткани — ширина кромки по другой форме (edge_kit.TRIM_WIDTH_FROM)
+crest_fit = { gap_min = 0.008 }   # герб крупнее: до буквы капитана 0,008 развёртки (~0,6 см), как TBL, BOS, DET
+crest_size_cm = 27   # герб не меньше 27 см (√ ширина × высота), как EA-гербы NHL 13 (edge_kit.crest_to_size)
+shield_scale = 0.68   # щит по зазору под кромкой — edge_kit.SHIELD_GAP_DEFAULT_MM; у источника 5.4 мм / 6.9 мм (справка)
+hem_h = 0.16   # м: зона низа «от края» выше полос (fb.hem.HEM_H; без поля — 0,09)
+insert = []
+letter_zones_from = {}
+collar_panel = true   # шаблон ворота NHL 27: полоса, вставка со щитом, V, обод — одинаково у всех (edge_kit.panel_v)
+armhole_split = "full"   # рукав другого цвета: граница с тканью по шву проймы Edge целиком (VGK, DET)
+font_name_fit = "auto"   # фамилия: высота как у MIN, промежуток ≤ 0,23 высоты буквы (edge_kit.name_font_fit)
+sock_parts = [[0.0, [0, 0, 0]]]   # не используется (sock = auto)
+
+[CAR.slot.home]
+kit = "edge_home"
+legacy = "1_5_3"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+[CAR.slot.away]
+kit = "edge_away"
+legacy = "1_5_4"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+# ANA — из NHL 27, профиль собран генератором (python -m kitport profile --club ANA, 22.10.2026).
+# Нынешние формы — ten / eleven (база NHL 27). Решения «проверить» — в выводе генератора и
+# docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.
+[ANA]
+source = "nhl27"
+source_kits = { home = "ten", away = "eleven" }
+body_color = "back"   # середина спины ровная на 100% (back — как NJD, TBL; light — только MIN)
+collar = "plain"   # под щитом посередине переда не цвет ткани: home 0.00, away 0.00 (порог 0.15; шнуровка — больше)
+trim_measure = "contiguous"   # ширина кромки — сплошной полосой от края по основе (edge_kit.TRIM_MEASURE)
+crest_fit = { gap_min = 0.008 }   # герб крупнее: до буквы капитана 0,008 развёртки (~0,6 см), как TBL, BOS, DET
+crest_size_cm = 27   # герб не меньше 27 см (√ ширина × высота), как EA-гербы NHL 13 (edge_kit.crest_to_size)
+yoke_color = [231, 55, 23]
+yoke = { away = "1_0_4" }
+yoke_shape_color = [28, 28, 28]
+yoke_side_blend = 0.1   # кокетка «на плечо»: край на руке — прямая наискосок от переда к спине (рисунок пользователя 21.10), боков EA нет
+shield_scale = 0.68   # щит по зазору под кромкой — edge_kit.SHIELD_GAP_DEFAULT_MM; у источника 5.4 мм / 5.6 мм (справка)
+hem_h = 0.265   # м: зона низа «от края» выше полос (fb.hem.HEM_H; без поля — 0,09)
+insert = []
+letter_zones_from = {}
+yoke_mesh = false   # у NHL 27 в кокетке сетки ямок нет (edge_kit.YOKE_MESH)
+collar_panel = true   # шаблон ворота NHL 27: полоса, вставка со щитом, V, обод — одинаково у всех (edge_kit.panel_v)
+armhole_split = "full"   # рукав другого цвета: граница с тканью по шву проймы Edge целиком (VGK, DET)
+font_name_fit = "auto"   # фамилия: высота как у MIN, промежуток ≤ 0,23 высоты буквы (edge_kit.name_font_fit)
+sock_parts = [[0.0, [0, 0, 0]]]   # не используется (sock = auto)
+
+[ANA.slot.home]
+kit = "edge_home"
+legacy = "1_0_2"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+[ANA.slot.away]
+kit = "edge_away"
+legacy = "1_0_4"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+# CGY — из NHL 27, профиль собран генератором (python -m kitport profile --club CGY, 22.10.2026).
+# Нынешние формы — ten / eleven (база NHL 27). Решения «проверить» — в выводе генератора и
+# docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.
+[CGY]
+source = "nhl27"
+source_kits = { home = "ten", away = "eleven" }
+body_color = "back"   # середина спины ровная на 100% (back — как NJD, TBL; light — только MIN)
+collar = "plain"   # под щитом посередине переда не цвет ткани: home 0.00, away 0.00 (порог 0.15; шнуровка — больше)
+trim_measure = "contiguous"   # ширина кромки — сплошной полосой от края по основе (edge_kit.TRIM_MEASURE)
+crest_fit = { gap_min = 0.008 }   # герб крупнее: до буквы капитана 0,008 развёртки (~0,6 см), как TBL, BOS, DET
+crest_size_cm = 27   # герб не меньше 27 см (√ ширина × высота), как EA-гербы NHL 13 (edge_kit.crest_to_size)
+yoke_color = [159, 15, 11]
+yoke = { away = "1_14_3" }
+yoke_shape_color = "green"
+yoke_side_blend = 0.1   # кокетка «на плечо»: край на руке — прямая наискосок от переда к спине (рисунок пользователя 21.10), боков EA нет
+shield_scale = 0.68   # щит по зазору под кромкой — edge_kit.SHIELD_GAP_DEFAULT_MM; у источника 5.4 мм / 5.4 мм (справка)
+hem_h = 0.24   # м: зона низа «от края» выше полос (fb.hem.HEM_H; без поля — 0,09)
+insert = []
+letter_zones_from = {}
+yoke_mesh = false   # у NHL 27 в кокетке сетки ямок нет (edge_kit.YOKE_MESH)
+collar_panel = true   # шаблон ворота NHL 27: полоса, вставка со щитом, V, обод — одинаково у всех (edge_kit.panel_v)
+font_name_fit = "auto"   # фамилия: высота как у MIN, промежуток ≤ 0,23 высоты буквы (edge_kit.name_font_fit)
+sock_parts = [[0.0, [0, 0, 0]]]   # не используется (sock = auto)
+
+[CGY.slot.home]
+kit = "edge_home"
+legacy = "1_4_0"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+[CGY.slot.away]
+kit = "edge_away"
+legacy = "1_4_1"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+# NSH — из NHL 27, профиль собран генератором (python -m kitport profile --club NSH, 22.10.2026).
+# Нынешние формы — ten / eleven (база NHL 27). Решения «проверить» — в выводе генератора и
+# docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.
+[NSH]
+source = "nhl27"
+source_kits = { home = "ten", away = "eleven" }
+body_color = "back"   # середина спины ровная на 100% (back — как NJD, TBL; light — только MIN)
+collar = "plain"   # под щитом посередине переда не цвет ткани: home 0.00, away 0.00 (порог 0.15; шнуровка — больше)
+trim_measure = "contiguous"   # ширина кромки — сплошной полосой от края по основе (edge_kit.TRIM_MEASURE)
+collar_band = { home = "full" }   # двухцветный ворот: у края полоса цвета ткани, за ней кромка во весь V (щит на ней) (edge_kit.COLLAR_BAND)
+crest_fit = { gap_min = 0.008 }   # герб крупнее: до буквы капитана 0,008 развёртки (~0,6 см), как TBL, BOS, DET
+crest_size_cm = 27   # герб не меньше 27 см (√ ширина × высота), как EA-гербы NHL 13 (edge_kit.crest_to_size)
+yoke_color = [255, 175, 0]
+yoke = { away = "1_14_3" }
+yoke_shape_color = "green"
+yoke_side_blend = 0.1   # кокетка «на плечо»: край на руке — прямая наискосок от переда к спине (рисунок пользователя 21.10), боков EA нет
+yoke_stripe = "source"   # полоса под кокеткой — цвет и ширина по источнику (edge_kit.yoke_stripe_source)
+shield_scale = 0.68   # щит по зазору под кромкой — edge_kit.SHIELD_GAP_DEFAULT_MM; у источника 5.4 мм / 5.4 мм (справка)
+base_normal_decals = "flat"
+hem_h = 0.155   # м: зона низа «от края» выше полос (fb.hem.HEM_H; без поля — 0,09)
+insert = []
+letter_zones_from = {}
+yoke_mesh = false   # у NHL 27 в кокетке сетки ямок нет (edge_kit.YOKE_MESH)
+collar_panel = true   # шаблон ворота NHL 27: полоса, вставка со щитом, V, обод — одинаково у всех (edge_kit.panel_v)
+trim_clear = "angle"   # за кромкой сбоку и сзади — вторая полоса: зачистка цветом источника по углу (edge_kit.trim_body_by_angle)
+font_name_fit = "auto"   # фамилия: высота как у MIN, промежуток ≤ 0,23 высоты буквы (edge_kit.name_font_fit)
+sock_parts = [[0.0, [0, 0, 0]]]   # не используется (sock = auto)
+
+[NSH.slot.home]
+kit = "edge_home"
+legacy = "1_16_3"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+[NSH.slot.away]
+kit = "edge_away"
+legacy = "1_16_4"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+# STL — из NHL 27, профиль собран генератором (python -m kitport profile --club STL, 22.10.2026).
+# Нынешние формы — fourteen / fifteen (база NHL 27). Решения «проверить» — в выводе генератора и
+# docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.
+[STL]
+source = "nhl27"
+source_kits = { home = "fourteen", away = "fifteen" }
+body_color = "back"   # середина спины ровная на 100% (back — как NJD, TBL; light — только MIN)
+collar = "plain"   # под щитом посередине переда не цвет ткани: home 0.00, away 0.00 (порог 0.15; шнуровка — больше)
+trim_measure = "contiguous"   # ширина кромки — сплошной полосой от края по основе (edge_kit.TRIM_MEASURE)
+trim_width_from = { away = "home" }   # кромка цвета ткани — ширина кромки по другой форме (edge_kit.TRIM_WIDTH_FROM)
+crest_fit = { gap_min = 0.008 }   # герб крупнее: до буквы капитана 0,008 развёртки (~0,6 см), как TBL, BOS, DET
+crest_size_cm = 27   # герб не меньше 27 см (√ ширина × высота), как EA-гербы NHL 13 (edge_kit.crest_to_size)
+yoke_color = [23, 99, 191]
+yoke = { away = "1_24_4" }
+yoke_shape_color = [21, 38, 137]
+yoke_side_blend = 0.1   # кокетка «на плечо»: край на руке — прямая наискосок от переда к спине (рисунок пользователя 21.10), боков EA нет
+shield_scale = 0.68   # щит по зазору под кромкой — edge_kit.SHIELD_GAP_DEFAULT_MM; у источника 5.4 мм / 5.4 мм (справка)
+hem_h = 0.2   # м: зона низа «от края» выше полос (fb.hem.HEM_H; без поля — 0,09)
+insert = []
+letter_zones_from = {}
+yoke_mesh = false   # у NHL 27 в кокетке сетки ямок нет (edge_kit.YOKE_MESH)
+collar_panel = true   # шаблон ворота NHL 27: полоса, вставка со щитом, V, обод — одинаково у всех (edge_kit.panel_v)
+trim_clear = "angle"   # за кромкой сбоку и сзади — вторая полоса: зачистка цветом источника по углу (edge_kit.trim_body_by_angle)
+font_name_fit = "auto"   # фамилия: высота как у MIN, промежуток ≤ 0,23 высоты буквы (edge_kit.name_font_fit)
+sock_parts = [[0.0, [0, 0, 0]]]   # не используется (sock = auto)
+
+[STL.slot.home]
+kit = "edge_home"
+legacy = "1_24_3"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+[STL.slot.away]
+kit = "edge_away"
+legacy = "1_24_4"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+# EDM — из NHL 27, профиль собран генератором (python -m kitport profile --club EDM, 22.10.2026).
+# Нынешние формы — ten / eleven (база NHL 27). Решения «проверить» — в выводе генератора и
+# docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.
+[EDM]
+source = "nhl27"
+source_kits = { home = "ten", away = "eleven" }
+body_color = "back"   # середина спины ровная на 100% (back — как NJD, TBL; light — только MIN)
+collar = "plain"   # под щитом посередине переда не цвет ткани: home 0.00, away 0.00 (порог 0.15; шнуровка — больше)
+trim_measure = "contiguous"   # ширина кромки — сплошной полосой от края по основе (edge_kit.TRIM_MEASURE)
+crest_fit = { gap_min = 0.008 }   # герб крупнее: до буквы капитана 0,008 развёртки (~0,6 см), как TBL, BOS, DET
+crest_size_cm = 27   # герб не меньше 27 см (√ ширина × высота), как EA-гербы NHL 13 (edge_kit.crest_to_size)
+yoke_color = [121, 41, 59]
+yoke = { home = "1_11_2", away = "1_11_3" }
+yoke_shape_color = [218, 56, 28]
+yoke_side_blend = 0.1   # кокетка «на плечо»: край на руке — прямая наискосок от переда к спине (рисунок пользователя 21.10), боков EA нет
+yoke_stripe = "source"   # полоса под кокеткой — цвет и ширина по источнику (edge_kit.yoke_stripe_source)
+shield_scale = 0.68   # щит по зазору под кромкой — edge_kit.SHIELD_GAP_DEFAULT_MM; у источника 5.4 мм / 5.4 мм (справка)
+hem_h = 0.23   # м: зона низа «от края» выше полос (fb.hem.HEM_H; без поля — 0,09)
+insert = []
+letter_zones_from = {}
+yoke_mesh = false   # у NHL 27 в кокетке сетки ямок нет (edge_kit.YOKE_MESH)
+collar_panel = true   # шаблон ворота NHL 27: полоса, вставка со щитом, V, обод — одинаково у всех (edge_kit.panel_v)
+font_name_fit = "auto"   # фамилия: высота как у MIN, промежуток ≤ 0,23 высоты буквы (edge_kit.name_font_fit)
+sock_parts = [[0.0, [0, 0, 0]]]   # не используется (sock = auto)
+
+[EDM.slot.home]
+kit = "edge_home"
+legacy = "1_11_2"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+[EDM.slot.away]
+kit = "edge_away"
+legacy = "1_11_3"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+# SJS — из NHL 27, профиль собран генератором (python -m kitport profile --club SJS, 22.10.2026).
+# Нынешние формы — ten / eleven (база NHL 27). Решения «проверить» — в выводе генератора и
+# docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.
+[SJS]
+source = "nhl27"
+source_kits = { home = "ten", away = "eleven" }
+body_color = "back"   # середина спины ровная на 100% (back — как NJD, TBL; light — только MIN)
+collar = "plain"   # под щитом посередине переда не цвет ткани: home 0.00, away 0.00 (порог 0.15; шнуровка — больше)
+trim_measure = "contiguous"   # ширина кромки — сплошной полосой от края по основе (edge_kit.TRIM_MEASURE)
+collar_band = { home = "full" }   # двухцветный ворот: у края полоса цвета ткани, за ней кромка во весь V (щит на ней) (edge_kit.COLLAR_BAND)
+crest_fit = { gap_min = 0.008 }   # герб крупнее: до буквы капитана 0,008 развёртки (~0,6 см), как TBL, BOS, DET
+crest_size_cm = 27   # герб не меньше 27 см (√ ширина × высота), как EA-гербы NHL 13 (edge_kit.crest_to_size)
+shield_scale = 0.68   # щит по зазору под кромкой — edge_kit.SHIELD_GAP_DEFAULT_MM; у источника 5.4 мм / 5.4 мм (справка)
+hem_h = 0.24   # м: зона низа «от края» выше полос (fb.hem.HEM_H; без поля — 0,09)
+insert = []
+letter_zones_from = {}
+collar_panel = true   # шаблон ворота NHL 27: полоса, вставка со щитом, V, обод — одинаково у всех (edge_kit.panel_v)
+font_name_fit = "auto"   # фамилия: высота как у MIN, промежуток ≤ 0,23 высоты буквы (edge_kit.name_font_fit)
+sock_parts = [[0.0, [0, 0, 0]]]   # не используется (sock = auto)
+
+[SJS.slot.home]
+kit = "edge_home"
+legacy = "1_25_3"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+[SJS.slot.away]
+kit = "edge_away"
+legacy = "1_25_4"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+# COL — из NHL 27, профиль собран генератором (python -m kitport profile --club COL, 22.10.2026).
+# Нынешние формы — ten / eleven (база NHL 27). Решения «проверить» — в выводе генератора и
+# docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.
+[COL]
+source = "nhl27"
+source_kits = { home = "ten", away = "eleven" }
+body_color = "back"   # середина спины ровная на 100% (back — как NJD, TBL; light — только MIN)
+collar = "plain"   # под щитом посередине переда не цвет ткани: home 0.00, away 0.00 (порог 0.15; шнуровка — больше)
+trim_measure = "contiguous"   # ширина кромки — сплошной полосой от края по основе (edge_kit.TRIM_MEASURE)
+crest_fit = { gap_min = 0.008 }   # герб крупнее: до буквы капитана 0,008 развёртки (~0,6 см), как TBL, BOS, DET
+crest_size_cm = 27   # герб не меньше 27 см (√ ширина × высота), как EA-гербы NHL 13 (edge_kit.crest_to_size)
+yoke_color = [55, 37, 71]
+yoke = { home = "1_7_0", away = "1_7_1" }
+yoke_shape_color = [27, 57, 112]
+yoke_side_blend = 0.1   # кокетка «на плечо»: край на руке — прямая наискосок от переда к спине (рисунок пользователя 21.10), боков EA нет
+yoke_stripe = "source"   # полоса под кокеткой — цвет и ширина по источнику (edge_kit.yoke_stripe_source)
+shield_scale = 0.68   # щит по зазору под кромкой — edge_kit.SHIELD_GAP_DEFAULT_MM; у источника 5.4 мм / 6.8 мм (справка)
+base_normal_decals = "flat"
+hem_h = 0.195   # м: зона низа «от края» выше полос (fb.hem.HEM_H; без поля — 0,09)
+insert = []
+letter_zones_from = {}
+yoke_mesh = false   # у NHL 27 в кокетке сетки ямок нет (edge_kit.YOKE_MESH)
+collar_panel = true   # шаблон ворота NHL 27: полоса, вставка со щитом, V, обод — одинаково у всех (edge_kit.panel_v)
+trim_clear = "angle"   # за кромкой сбоку и сзади — вторая полоса: зачистка цветом источника по углу (edge_kit.trim_body_by_angle)
+font_name_fit = "auto"   # фамилия: высота как у MIN, промежуток ≤ 0,23 высоты буквы (edge_kit.name_font_fit)
+sock_parts = [[0.0, [0, 0, 0]]]   # не используется (sock = auto)
+
+[COL.slot.home]
+kit = "edge_home"
+legacy = "1_7_0"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+[COL.slot.away]
+kit = "edge_away"
+legacy = "1_7_1"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+# OTT — из NHL 27, профиль собран генератором (python -m kitport profile --club OTT, 22.10.2026).
+# Нынешние формы — ten / eleven (база NHL 27). Решения «проверить» — в выводе генератора и
+# docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.
+[OTT]
+source = "nhl27"
+source_kits = { home = "ten", away = "eleven" }
+body_color = "back"   # середина спины ровная на 100% (back — как NJD, TBL; light — только MIN)
+collar = "plain"   # под щитом посередине переда не цвет ткани: home 0.00, away 0.00 (порог 0.15; шнуровка — больше)
+trim_measure = "contiguous"   # ширина кромки — сплошной полосой от края по основе (edge_kit.TRIM_MEASURE)
+collar_band = { home = "full" }   # двухцветный ворот: у края полоса цвета ткани, за ней кромка во весь V (щит на ней) (edge_kit.COLLAR_BAND)
+crest_fit = { gap_min = 0.008 }   # герб крупнее: до буквы капитана 0,008 развёртки (~0,6 см), как TBL, BOS, DET
+crest_size_cm = 27   # герб не меньше 27 см (√ ширина × высота), как EA-гербы NHL 13 (edge_kit.crest_to_size)
+shield_scale = 0.68   # щит по зазору под кромкой — edge_kit.SHIELD_GAP_DEFAULT_MM; у источника 5.4 мм / 5.4 мм (справка)
+base_normal_decals = "flat"
+hem_h = 0.145   # м: зона низа «от края» выше полос (fb.hem.HEM_H; без поля — 0,09)
+insert = []
+letter_zones_from = {}
+collar_panel = true   # шаблон ворота NHL 27: полоса, вставка со щитом, V, обод — одинаково у всех (edge_kit.panel_v)
+armhole_split = "full"   # рукав другого цвета: граница с тканью по шву проймы Edge целиком (VGK, DET)
+font_name_fit = "auto"   # фамилия: высота как у MIN, промежуток ≤ 0,23 высоты буквы (edge_kit.name_font_fit)
+sock_parts = [[0.0, [0, 0, 0]]]   # не используется (sock = auto)
+
+[OTT.slot.home]
+kit = "edge_home"
+legacy = "1_20_0"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+[OTT.slot.away]
+kit = "edge_away"
+legacy = "1_20_1"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+# PHI — из NHL 27, профиль собран генератором (python -m kitport profile --club PHI, 22.10.2026).
+# Нынешние формы — ten / eleven (база NHL 27). Решения «проверить» — в выводе генератора и
+# docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.
+[PHI]
+source = "nhl27"
+source_kits = { home = "ten", away = "eleven" }
+body_color = "back"   # середина спины ровная на 100% (back — как NJD, TBL; light — только MIN)
+collar = "plain"   # под щитом посередине переда не цвет ткани: home 0.00, away 0.00 (порог 0.15; шнуровка — больше)
+trim_measure = "contiguous"   # ширина кромки — сплошной полосой от края по основе (edge_kit.TRIM_MEASURE)
+crest_fit = { gap_min = 0.008 }   # герб крупнее: до буквы капитана 0,008 развёртки (~0,6 см), как TBL, BOS, DET
+crest_size_cm = 27   # герб не меньше 27 см (√ ширина × высота), как EA-гербы NHL 13 (edge_kit.crest_to_size)
+yoke_color = [223, 143, 129]
+yoke = { home = "1_14_3", away = "1_14_3" }
+yoke_shape_color = "green"
+yoke_side_blend = 0.1   # кокетка «на плечо»: край на руке — прямая наискосок от переда к спине (рисунок пользователя 21.10), боков EA нет
+shield_scale = 0.68   # щит по зазору под кромкой — edge_kit.SHIELD_GAP_DEFAULT_MM; у источника 5.4 мм / 5.4 мм (справка)
+hem_h = 0.095   # м: зона низа «от края» выше полос (fb.hem.HEM_H; без поля — 0,09)
+insert = []
+letter_zones_from = {}
+yoke_mesh = false   # у NHL 27 в кокетке сетки ямок нет (edge_kit.YOKE_MESH)
+collar_panel = true   # шаблон ворота NHL 27: полоса, вставка со щитом, V, обод — одинаково у всех (edge_kit.panel_v)
+font_name_fit = "auto"   # фамилия: высота как у MIN, промежуток ≤ 0,23 высоты буквы (edge_kit.name_font_fit)
+sock_parts = [[0.0, [0, 0, 0]]]   # не используется (sock = auto)
+
+[PHI.slot.home]
+kit = "edge_home"
+legacy = "1_21_0"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+[PHI.slot.away]
+kit = "edge_away"
+legacy = "1_21_3"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+# NYI — из NHL 27, профиль собран генератором (python -m kitport profile --club NYI, 22.10.2026).
+# Нынешние формы — ten / eleven (база NHL 27). Решения «проверить» — в выводе генератора и
+# docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.
+[NYI]
+source = "nhl27"
+source_kits = { home = "ten", away = "eleven" }
+body_color = "back"   # середина спины ровная на 100% (back — как NJD, TBL; light — только MIN)
+collar = "plain"   # под щитом посередине переда не цвет ткани: home 0.40, away 0.07 (порог 0.15; шнуровка — больше) — у форм по-разному, профиль один: проверить
+trim_measure = "contiguous"   # ширина кромки — сплошной полосой от края по основе (edge_kit.TRIM_MEASURE)
+crest_fit = { gap_min = 0.008 }   # герб крупнее: до буквы капитана 0,008 развёртки (~0,6 см), как TBL, BOS, DET
+crest_size_cm = 27   # герб не меньше 27 см (√ ширина × высота), как EA-гербы NHL 13 (edge_kit.crest_to_size)
+shield_scale = 0.68   # щит по зазору под кромкой — edge_kit.SHIELD_GAP_DEFAULT_MM; у источника 5.4 мм / 5.4 мм (справка)
+base_normal_decals = "flat"
+hem_h = 0.235   # м: зона низа «от края» выше полос (fb.hem.HEM_H; без поля — 0,09)
+insert = []
+letter_zones_from = {}
+collar_panel = true   # шаблон ворота NHL 27: полоса, вставка со щитом, V, обод — одинаково у всех (edge_kit.panel_v)
+font_name_fit = "auto"   # фамилия: высота как у MIN, промежуток ≤ 0,23 высоты буквы (edge_kit.name_font_fit)
+sock_parts = [[0.0, [0, 0, 0]]]   # не используется (sock = auto)
+
+[NYI.slot.home]
+kit = "edge_home"
+legacy = "1_18_2"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+[NYI.slot.away]
+kit = "edge_away"
+legacy = "1_18_3"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+# NYR — из NHL 27, профиль собран генератором (python -m kitport profile --club NYR, 22.10.2026).
+# Нынешние формы — ten / eleven (база NHL 27). Решения «проверить» — в выводе генератора и
+# docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.
+[NYR]
+source = "nhl27"
+source_kits = { home = "ten", away = "eleven" }
+body_color = "back"   # середина спины ровная на 100% (back — как NJD, TBL; light — только MIN)
+collar = "plain"   # под щитом посередине переда не цвет ткани: home 0.40, away 0.07 (порог 0.15; шнуровка — больше) — у форм по-разному, профиль один: проверить
+trim_measure = "contiguous"   # ширина кромки — сплошной полосой от края по основе (edge_kit.TRIM_MEASURE)
+collar_band = { away = "full" }   # двухцветный ворот: у края полоса цвета ткани, за ней кромка во весь V (щит на ней) (edge_kit.COLLAR_BAND)
+crest_fit = { gap_min = 0.008 }   # герб крупнее: до буквы капитана 0,008 развёртки (~0,6 см), как TBL, BOS, DET
+crest_size_cm = 27   # герб не меньше 27 см (√ ширина × высота), как EA-гербы NHL 13 (edge_kit.crest_to_size)
+yoke_color = [30, 36, 133]
+yoke = { away = "1_19_1" }
+yoke_shape_color = [24, 66, 140]
+yoke_side_blend = 0.1   # кокетка «на плечо»: край на руке — прямая наискосок от переда к спине (рисунок пользователя 21.10), боков EA нет
+shield_scale = 0.68   # щит по зазору под кромкой — edge_kit.SHIELD_GAP_DEFAULT_MM; у источника 5.4 мм / 5.4 мм (справка)
+merge_parts = ["crest"]
+merge_near = 0.02   # буквы надписи-герба рядом с гербом — одной нашивкой (kit_hybrid.near_parts)
+hem_h = 0.23   # м: зона низа «от края» выше полос (fb.hem.HEM_H; без поля — 0,09)
+insert = []
+letter_zones_from = {}
+yoke_mesh = false   # у NHL 27 в кокетке сетки ямок нет (edge_kit.YOKE_MESH)
+collar_panel = true   # шаблон ворота NHL 27: полоса, вставка со щитом, V, обод — одинаково у всех (edge_kit.panel_v)
+font_name_fit = "auto"   # фамилия: высота как у MIN, промежуток ≤ 0,23 высоты буквы (edge_kit.name_font_fit)
+sock_parts = [[0.0, [0, 0, 0]]]   # не используется (sock = auto)
+
+[NYR.slot.home]
+kit = "edge_home"
+legacy = "1_19_0"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+[NYR.slot.away]
+kit = "edge_away"
+legacy = "1_19_1"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+# WPG — из NHL 27, профиль собран генератором (python -m kitport profile --club WPG, 22.10.2026).
+# Нынешние формы — ten / eleven (база NHL 27). Решения «проверить» — в выводе генератора и
+# docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.
+[WPG]
+source = "nhl27"
+source_kits = { home = "ten", away = "eleven" }
+body_color = "back"   # середина спины ровная на 100% (back — как NJD, TBL; light — только MIN)
+collar = "plain"   # под щитом посередине переда не цвет ткани: home 0.03, away 0.02 (порог 0.15; шнуровка — больше)
+trim_measure = "contiguous"   # ширина кромки — сплошной полосой от края по основе (edge_kit.TRIM_MEASURE)
+crest_fit = { gap_min = 0.008 }   # герб крупнее: до буквы капитана 0,008 развёртки (~0,6 см), как TBL, BOS, DET
+crest_size_cm = 27   # герб не меньше 27 см (√ ширина × высота), как EA-гербы NHL 13 (edge_kit.crest_to_size)
+yoke_color = [24, 30, 48]
+yoke = { away = "1_1_4" }
+yoke_shape_color = [24, 25, 54]
+yoke_side_blend = 0.1   # кокетка «на плечо»: край на руке — прямая наискосок от переда к спине (рисунок пользователя 21.10), боков EA нет
+shield_scale = 0.68   # щит по зазору под кромкой — edge_kit.SHIELD_GAP_DEFAULT_MM; у источника 5.7 мм / 5.7 мм (справка)
+hem_h = 0.16   # м: зона низа «от края» выше полос (fb.hem.HEM_H; без поля — 0,09)
+insert = []
+letter_zones_from = {}
+yoke_mesh = false   # у NHL 27 в кокетке сетки ямок нет (edge_kit.YOKE_MESH)
+collar_panel = true   # шаблон ворота NHL 27: полоса, вставка со щитом, V, обод — одинаково у всех (edge_kit.panel_v)
+armhole_split = "full"   # рукав другого цвета: граница с тканью по шву проймы Edge целиком (VGK, DET)
+font_name_fit = "auto"   # фамилия: высота как у MIN, промежуток ≤ 0,23 высоты буквы (edge_kit.name_font_fit)
+sock_parts = [[0.0, [0, 0, 0]]]   # не используется (sock = auto)
+
+[WPG.slot.home]
+kit = "edge_home"
+legacy = "1_1_3"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+[WPG.slot.away]
+kit = "edge_away"
+legacy = "1_1_4"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+# FLA — из NHL 27, профиль собран генератором (python -m kitport profile --club FLA, 22.10.2026).
+# Нынешние формы — ten / eleven (база NHL 27). Решения «проверить» — в выводе генератора и
+# docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.
+[FLA]
+source = "nhl27"
+source_kits = { home = "ten", away = "eleven" }
+body_color = "back"   # середина спины ровная на 100% (back — как NJD, TBL; light — только MIN)
+collar = "lace"   # под щитом посередине переда не цвет ткани: home 0.22, away 0.19 (порог 0.15; шнуровка — больше)
+trim_measure = "contiguous"   # ширина кромки — сплошной полосой от края по основе (edge_kit.TRIM_MEASURE)
+crest_fit = { gap_min = 0.008 }   # герб крупнее: до буквы капитана 0,008 развёртки (~0,6 см), как TBL, BOS, DET
+crest_size_cm = 27   # герб не меньше 27 см (√ ширина × высота), как EA-гербы NHL 13 (edge_kit.crest_to_size)
+shield_offset_cm = [0.41, 0.45, 0.0]
+shield_scale = 0.76   # щит по зазору под кромкой — edge_kit.SHIELD_GAP_DEFAULT_MM; у источника 5.6 мм / 6.8 мм (справка)
+insert = ["home", "away"]
+insert_color = "source"   # вставка цвета источника (edge_kit.INSERT_COLOR)
+letter_zones_from = {}
+font_name_fit = "auto"   # фамилия: высота как у MIN, промежуток ≤ 0,23 высоты буквы (edge_kit.name_font_fit)
+sock_parts = [[0.0, [0, 0, 0]]]   # не используется (sock = auto)
+
+[FLA.slot.home]
+kit = "edge_home"
+legacy = "1_12_3"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+[FLA.slot.away]
+kit = "edge_away"
+legacy = "1_12_4"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+# CBJ — из NHL 27, профиль собран генератором (python -m kitport profile --club CBJ, 22.10.2026).
+# Нынешние формы — ten / eleven (база NHL 27). Решения «проверить» — в выводе генератора и
+# docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.
+[CBJ]
+source = "nhl27"
+source_kits = { home = "ten", away = "eleven" }
+body_color = "back"   # середина спины ровная на 100% (back — как NJD, TBL; light — только MIN)
+collar = "plain"   # под щитом посередине переда не цвет ткани: home 0.00, away 0.00 (порог 0.15; шнуровка — больше)
+trim_measure = "contiguous"   # ширина кромки — сплошной полосой от края по основе (edge_kit.TRIM_MEASURE)
+collar_band = { away = "full" }   # двухцветный ворот: у края полоса цвета ткани, за ней кромка во весь V (щит на ней) (edge_kit.COLLAR_BAND)
+crest_fit = { gap_min = 0.008 }   # герб крупнее: до буквы капитана 0,008 развёртки (~0,6 см), как TBL, BOS, DET
+crest_size_cm = 27   # герб не меньше 27 см (√ ширина × высота), как EA-гербы NHL 13 (edge_kit.crest_to_size)
+yoke_color = [23, 27, 47]
+yoke = { away = "1_8_1" }
+yoke_shape_color = [21, 34, 57]
+yoke_side_blend = 0.1   # кокетка «на плечо»: край на руке — прямая наискосок от переда к спине (рисунок пользователя 21.10), боков EA нет
+shield_scale = 0.68   # щит по зазору под кромкой — edge_kit.SHIELD_GAP_DEFAULT_MM; у источника 5.4 мм / 6.8 мм (справка)
+insert = []
+letter_zones_from = {}
+yoke_mesh = false   # у NHL 27 в кокетке сетки ямок нет (edge_kit.YOKE_MESH)
+collar_panel = true   # шаблон ворота NHL 27: полоса, вставка со щитом, V, обод — одинаково у всех (edge_kit.panel_v)
+font_name_fit = "auto"   # фамилия: высота как у MIN, промежуток ≤ 0,23 высоты буквы (edge_kit.name_font_fit)
+sock_parts = [[0.0, [0, 0, 0]]]   # не используется (sock = auto)
+
+[CBJ.slot.home]
+kit = "edge_home"
+legacy = "1_8_0"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+[CBJ.slot.away]
+kit = "edge_away"
+legacy = "1_8_1"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+# WSH — из NHL 27, профиль собран генератором (python -m kitport profile --club WSH, 22.10.2026).
+# Нынешние формы — ten / eleven (база NHL 27). Решения «проверить» — в выводе генератора и
+# docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.
+[WSH]
+source = "nhl27"
+source_kits = { home = "ten", away = "eleven" }
+body_color = "back"   # середина спины ровная на 100% (back — как NJD, TBL; light — только MIN)
+collar = "plain"   # под щитом посередине переда не цвет ткани: home 0.00, away 0.00 (порог 0.15; шнуровка — больше)
+trim_measure = "contiguous"   # ширина кромки — сплошной полосой от края по основе (edge_kit.TRIM_MEASURE)
+crest_fit = { gap_min = 0.008 }   # герб крупнее: до буквы капитана 0,008 развёртки (~0,6 см), как TBL, BOS, DET
+crest_size_cm = 27   # герб не меньше 27 см (√ ширина × высота), как EA-гербы NHL 13 (edge_kit.crest_to_size)
+shield_scale = 0.68   # щит по зазору под кромкой — edge_kit.SHIELD_GAP_DEFAULT_MM; у источника 5.4 мм / 6.8 мм (справка)
+merge_parts = ["crest"]
+merge_near = 0.02   # буквы надписи-герба рядом с гербом — одной нашивкой (kit_hybrid.near_parts)
+hem_h = 0.105   # м: зона низа «от края» выше полос (fb.hem.HEM_H; без поля — 0,09)
+insert = []
+letter_zones_from = {}
+collar_panel = true   # шаблон ворота NHL 27: полоса, вставка со щитом, V, обод — одинаково у всех (edge_kit.panel_v)
+font_name_fit = "auto"   # фамилия: высота как у MIN, промежуток ≤ 0,23 высоты буквы (edge_kit.name_font_fit)
+sock_parts = [[0.0, [0, 0, 0]]]   # не используется (sock = auto)
+
+[WSH.slot.home]
+kit = "edge_home"
+legacy = "1_29_0"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+[WSH.slot.away]
+kit = "edge_away"
+legacy = "1_29_1"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
