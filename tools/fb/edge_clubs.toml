@@ -195,3 +195,35 @@ sock = "auto"
 pant = "source"
 helmet_logo = "source"
 default = true
+
+# DET — из NHL 27, профиль собран генератором (python -m kitport profile --club DET, 22.10.2026).
+# Нынешние формы — ten / eleven (база NHL 27). Решения «проверить» — в выводе генератора и
+# docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.
+[DET]
+source = "nhl27"
+source_kits = { home = "ten", away = "eleven" }
+body_color = "back"   # середина спины ровная на 100% (back — как NJD, TBL; light — только MIN)
+collar = "plain"   # под щитом посередине переда не цвет ткани: home 0.00, away 0.00 (порог 0.15; шнуровка — больше)
+trim_width_from = { home = "away" }   # кромка цвета ткани — ширина кромки по другой форме (edge_kit.TRIM_WIDTH_FROM)
+shield_scale = 0.68   # щит по зазору под кромкой — edge_kit.SHIELD_GAP_DEFAULT_MM; у источника 5.4 мм / 5.4 мм (справка)
+hem_h = 0.188   # м: зона низа «от края» выше полос (fb.hem.HEM_H; без поля — 0,09)
+trim_measure = "contiguous"   # ширина кромки — сплошной полосой от края (у DET спереди мыс 5,9 см, по бокам 3 см)
+shield_offset_cm = [0.41, -0.10, 0.0]   # щит — там же, где у NJD (пользователь, 22.10: «шильдик NHL должен быть выше,
+#                                         там же, где у Нью-Джерси»): сдвиг и масштаб NJD, верх щита ~1,637 м
+insert = []
+letter_zones_from = {}
+sock_parts = [[0.0, [0, 0, 0]]]   # не используется (sock = auto)
+
+[DET.slot.home]
+kit = "edge_home"
+legacy = "1_10_0"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+[DET.slot.away]
+kit = "edge_away"
+legacy = "1_10_1"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"

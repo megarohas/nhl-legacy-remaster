@@ -468,6 +468,8 @@ def propose(code):
     D.append(Decision("body_color", "back", bu > 0.9,
                       f"середина спины ровная на {bu:.0%} (back — как NJD, TBL; light — только MIN)"))
     prof["collar"] = collar
+    prof["trim_measure"] = "contiguous"   # ширина кромки — сплошной полосой по основе (с DET 22.10: у широких кромок
+    #                                       прежний замер давал 3,7 см по кругу, а мыс спереди — мельче источника)
     vis = {k: look[k]["trim_visible"] for k in SLOT_KITS}
     seen = [k for k in SLOT_KITS if vis[k]]
     if not all(vis.values()) and seen:
@@ -606,7 +608,7 @@ def toml_section(code, prof, D, data):
            f"# Нынешние формы — {src['home']} / {src['away']} (база NHL 27). Решения «проверить» — в выводе генератора и",
            "# docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.",
            f"[{code}]"]
-    for k in ("source", "source_kits", "body_color", "collar", "trim_width_from", "yoke_color", "yoke", "yoke_shape_color",
+    for k in ("source", "source_kits", "body_color", "collar", "trim_measure", "trim_width_from", "yoke_color", "yoke", "yoke_shape_color",
               "shield_offset_cm", "shield_scale", "merge_parts", "base_normal_decals", "hem_h", "insert",
               "letter_zones_from",
               "sock_parts"):
@@ -618,7 +620,8 @@ def toml_section(code, prof, D, data):
                 "sock_parts": "не используется (sock = auto)",
                 "body_color": sure["body_color"].why,
                 "trim_width_from": "кромка цвета ткани — ширина кромки по другой форме (edge_kit.TRIM_WIDTH_FROM)",
-                "hem_h": "м: зона низа «от края» выше полос (fb.hem.HEM_H; без поля — 0,09)"}.get(k)
+                "hem_h": "м: зона низа «от края» выше полос (fb.hem.HEM_H; без поля — 0,09)",
+                "trim_measure": "ширина кромки — сплошной полосой от края по основе (edge_kit.TRIM_MEASURE)"}.get(k)
         if k == "collar":
             note = sure["collar"].why
         out.append(line + (f"   # {note}" if note else ""))

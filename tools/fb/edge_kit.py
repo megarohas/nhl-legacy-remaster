@@ -1183,7 +1183,7 @@ def use_club(code):
     from . import kitsrc
     global YOKE, YOKE_KIND, INSERT_KITS, SLOT_KITS, LETTER_ZONES_FROM, SOCK_PARTS, BODY_KIND, COLLAR, YOKE_EA_KIND
     global YOKE_SIDE_BLEND, SHIELD_OFFSET_CM, SHIELD_SCALE, SLEEVE_ZONES_FROM, BASE_NM_DECALS, COLLAR_TRIM
-    global SHIELD_GAP_MM, TRIM_WIDTH_FROM, FONT_NAME_SCALE, FONT_CAPTAIN_X
+    global SHIELD_GAP_MM, TRIM_WIDTH_FROM, FONT_NAME_SCALE, FONT_CAPTAIN_X, TRIM_MEASURE
     from . import hem
     from . import kit_hybrid
     prof = club_profiles().get(code)
@@ -1197,6 +1197,7 @@ def use_club(code):
     BODY_KIND = prof.get("body_color", "light")
     COLLAR = prof.get("collar", "lace")
     COLLAR_TRIM = prof.get("collar_trim", "auto")
+    TRIM_MEASURE = prof.get("trim_measure", "percentile")
     FONT_NAME_SCALE = float(prof.get("font_name_scale", 1.0))
     FONT_CAPTAIN_X = float(prof.get("font_captain_x", 1.0))
     # высота зоны низа «от края» (fb.hem.HEM_H): у NHL 27 BOS / TBL полосы низа — до 13–14 см, а зона — 9 см (переход
@@ -1467,6 +1468,9 @@ TRIM_SMOOTH = 25.0                 # град: сглаживание ширин
 # сбоку — ступенька, сзади широкая — во всю ширину до шва обода (RING_KNOTS), не шире. Профиль collar_trim:
 # auto — по замеру источника (trim_profile: широкая / узкая ≥ TRIM_STEP_RATIO), step, smooth (как у MIN и NJD).
 COLLAR_TRIM = "auto"
+TRIM_MEASURE = "percentile"        # профиль trim_measure: percentile — прежний замер ширины кромки (MIN, NJD, TBL, BOS),
+#                                    contiguous — сплошная полоса от края по углу (trim_profile; генератор — с DET 22.10)
+TRIM_K_MAX_ADD = 0.004             # м: прибавка TRIM_K при contiguous — не больше (узкой «чуть шире», широкой — нет)
 TRIM_STEP_RATIO = 2.0              # широкая часть во столько раз шире узкой — «ступенька»
 TRIM_STEP_SOFT = 1.5               # град: переход ступеньки и концов у разрыва (≈ 1–2 текселя)
 AA_PX = 2.0                        # ширина сглаживания краёв — в текселях сверхвыборки (×2): ≈ 1 тексель карты
@@ -2403,6 +2407,33 @@ def trim_rule(code, kit, mesh, with_yoke=False):
     ker /= ker.sum()
     wf = np.convolve(np.concatenate([wf[-2 * k:], wf, wf[:2 * k]]), ker, mode="valid")
     wf = wf * TRIM_K
+    if TRIM_MEASURE == "contiguous" and mode != "step":   # сплошная полоса от края по углу (trim_profile), как у источника:
+        # по основе без нашивок (base_color): в clean_color щит у середины стёрт вместе с кромкой под ним (у DET мыс
+        # обрывался на 1,3 см вместо 5,9)
+        bfn = J.n24_tex(Hy.CLUB_NAME[code], kit, "base_color")
+        if os.path.exists(bfn):
+            bt = kit3d.load_tex(bfn, src.shape[0])[..., :3]
+            cb = bt[ys, xs]
+            prof_b = trim_profile(d, th, np.linalg.norm(cb - np.median(cb[near], axis=0), axis=1) < 60)
+        else:
+            prof_b = prof
+        a_, w_ = prof_b["angles"], prof_b["width"].copy()   # у DET спереди мыс 5,9 см, по бокам и сзади 3 см; старый
+        nz = np.nonzero(w_ > 0.003)[0]                    # (95-й процентиль цвета кромки в 3 см) — 3,7 по кругу
+        if len(nz):
+            w_[: nz[0]] = w_[nz[0]]                       # «разрыв» у середины (вырез adidas у сетки NHL 24) — соседним
+            wf_ = np.interp(np.abs(full), a_, w_)
+            k_ = int(TRIM_SMOOTH)
+            ker = np.exp(-0.5 * (np.arange(-2 * k_, 2 * k_ + 1) / k_) ** 2)
+            ker /= ker.sum()
+            wf_ = np.convolve(np.concatenate([wf_[-2 * k_:], wf_, wf_[:2 * k_]]), ker, mode="valid")
+            wf = wf_ + np.minimum(wf_ * (TRIM_K - 1), TRIM_K_MAX_ADD)   # узкой — «чуть шире» (TRIM_K), широкой — нет
+    # кромка не шире шва обода (пользователь, 21.10, TBL: «не шире обода»; 22.10, DET: у широкой кромки выезда старый
+    # замер давал 3,7 см при ободе 3,0) — там, где обод есть (у ворота без шнуровки — с RING_PLAIN_TH, спереди мыс
+    # кромки не ограничен). У узких кромок (MIN, NJD — до 1,3 см) ничего не меняется
+    ring_w = np.interp(np.abs(full), *zip(*RING_KNOTS))
+    if COLLAR != "lace":
+        ring_w = np.where(np.abs(full) >= RING_PLAIN_TH, ring_w, np.inf)
+    wf = np.minimum(wf, ring_w)
     if mode == "step":
         full, wf = step_width(prof)
         print(f"  кромка ступенькой ({COLLAR_TRIM}): узкая {prof['narrow'] * 100:.2f} см "
@@ -2479,6 +2510,9 @@ SHIELD_GAP_X_CM = 0.41             # x щита при расчёте по за�
 SHIELD_GAP_COL = 0.003             # м: середина переда — |x| до стольких (как kitport check)
 SHIELD_GAP_STEP = 0.0002           # м: шаг точек по высоте на середине переда
 SHIELD_GAP_DY = (-0.04, 0.04)      # м: пределы сдвига щита по высоте (в 3D NHL 24) при подборе
+SHIELD_H = 0.031                   # м: высота щита при масштабе 1 (0,68 → 2,1 см); щит на кромке — если на ней по высоте
+SHIELD_ON_TRIM_PAD = 0.003         # хватает места на щит, зазор источника от края ворота и ещё столько (DET 22.10: у NHL 27
+#                                    щит на красном мысе в 5,4 мм от края; «под кромкой» уводило его на 2 см вниз)
 SHIELD_SILVER = (110, 40, 14)      # «серебро» щита, как у kitport check: яркость >, |R − G| <, max − min <
 _SHIELD_GAP_LOG = {}               # форма → расчёт (в info.json и печать)
 
@@ -2628,6 +2662,15 @@ def fit_shield_gap(placed, soft, comp, src, dst, tid24, trim, code, kit):
     gap_mm, why = shield_gap_target(code, kit)
     edge_y, top_y = trim_front_bottom(trim)
     target = edge_y - gap_mm / 1000.0
+    if SHIELD_GAP_MM is SHIELD_GAP_DEFAULT_MM or SHIELD_GAP_MM == "source":
+        r = source_gap_for(code, kit)                     # широкая кромка: щит на ней, как у источника
+        need = SHIELD_H * SHIELD_SCALE + r["gap_mm"] / 1000.0 + SHIELD_ON_TRIM_PAD
+        wid0 = float(np.interp(0.0, trim.width[0], trim.width[1], period=360))   # ширина кромки посередине, м
+        if r["ref"] == "края ворота" and wid0 >= need:
+            gap_mm = float(r["gap_mm"])
+            why = f"на кромке ({wid0 * 100:.1f} см посередине) — зазор источника от края ворота"
+            edge_y = top_y
+            target = top_y - gap_mm / 1000.0
     P, _, _ = front_column({k: trim.mesh[k] for k in ("pos", "uv", "tri")})
     m = soft[pl["_lid"]]
     lo, hi = SHIELD_GAP_DY
