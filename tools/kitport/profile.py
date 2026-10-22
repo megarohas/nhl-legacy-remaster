@@ -200,6 +200,10 @@ def differs(a, b):
     return bool(np.abs(np.asarray(a) - np.asarray(b)).max() >= COLOR_DIFF)
 
 
+HEM_WIN = 0.40                     # м над краем низа — окно замера полос
+HEM_BODY = (0.30, 0.40)            # м: здесь — ткань (её цвет); ниже — полосы низа (LAK — до 22 см: серебро, белое, серебро)
+HEM_RING = 0.5                     # доля круга туловища другого цвета — полоса низа
+HEM_TORSO_X = 0.20                 # м: |x| — туловище (рукава в замер полос низа не берутся)
 HEM_MARGIN = 0.04                  # м: зона низа «от края» — выше верха полос (переход fb.hem.HEM_BLEND 3 см + 1 см)
 
 
@@ -212,10 +216,17 @@ def hem_band_top(folder, kit):
     P, ys, xs = g["P"], g["ys"], g["xs"]
     _, dh = hem.hem_coords(P, hem.hem_curve(m))
     b = tex(folder, kit, "base_color", 1024)[ys, xs, :3]
-    sel = (dh > 0) & (dh < 0.25)
-    body = median_c(b[sel & (dh > 0.18)])
+    sel = (dh > 0) & (dh < HEM_WIN) & (np.abs(P[:, 0]) < HEM_TORSO_X)   # только туловище: рукава висят у низа (LAK: 25 см)
+    body = median_c(b[sel & (dh > HEM_BODY[0]) & (dh < HEM_BODY[1])])   # ткань — выше полос (у LAK полосы до 22 см)
     diff = sel & (np.abs(b - body).max(1) >= COLOR_DIFF)
-    return float(dh[diff].max()) if diff.any() else 0.0
+    # полоса — то, что опоясывает туловище (не меньше HEM_RING по кругу): герб или нашивка спереди — не полоса (LAK:
+    # без этого «верх полос» — 25 см)
+    k = (dh[sel] / 0.005).astype(int)
+    tot = np.bincount(k, minlength=int(HEM_WIN / 0.005) + 1)
+    hit = np.bincount(k, weights=diff[sel].astype(float), minlength=int(HEM_WIN / 0.005) + 1)
+    tot[int(HEM_BODY[0] / 0.005):] = 0                   # выше начала зоны ткани полос не ищем
+    ring = np.nonzero((tot > 20) & (hit >= HEM_RING * np.maximum(tot, 1)))[0]
+    return float((ring.max() + 1) * 0.005) if len(ring) else 0.0
 
 
 def survey_mesh():
@@ -468,6 +479,7 @@ def propose(code):
     D.append(Decision("body_color", "back", bu > 0.9,
                       f"середина спины ровная на {bu:.0%} (back — как NJD, TBL; light — только MIN)"))
     prof["collar"] = collar
+    prof["crest_fit"] = {"gap_min": 0.008}   # герб крупнее, до буквы капитана 0,6 см (пользователь, 22.10: TBL, BOS, DET)
     prof["trim_measure"] = "contiguous"   # ширина кромки — сплошной полосой по основе (с DET 22.10: у широких кромок
     #                                       прежний замер давал 3,7 см по кругу, а мыс спереди — мельче источника)
     vis = {k: look[k]["trim_visible"] for k in SLOT_KITS}
@@ -608,7 +620,7 @@ def toml_section(code, prof, D, data):
            f"# Нынешние формы — {src['home']} / {src['away']} (база NHL 27). Решения «проверить» — в выводе генератора и",
            "# docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.",
            f"[{code}]"]
-    for k in ("source", "source_kits", "body_color", "collar", "trim_measure", "trim_width_from", "yoke_color", "yoke", "yoke_shape_color",
+    for k in ("source", "source_kits", "body_color", "collar", "trim_measure", "trim_width_from", "crest_fit", "yoke_color", "yoke", "yoke_shape_color",
               "shield_offset_cm", "shield_scale", "merge_parts", "base_normal_decals", "hem_h", "insert",
               "letter_zones_from",
               "sock_parts"):
@@ -621,7 +633,8 @@ def toml_section(code, prof, D, data):
                 "body_color": sure["body_color"].why,
                 "trim_width_from": "кромка цвета ткани — ширина кромки по другой форме (edge_kit.TRIM_WIDTH_FROM)",
                 "hem_h": "м: зона низа «от края» выше полос (fb.hem.HEM_H; без поля — 0,09)",
-                "trim_measure": "ширина кромки — сплошной полосой от края по основе (edge_kit.TRIM_MEASURE)"}.get(k)
+                "trim_measure": "ширина кромки — сплошной полосой от края по основе (edge_kit.TRIM_MEASURE)",
+                "crest_fit": "герб крупнее: до буквы капитана 0,008 развёртки (~0,6 см), как TBL, BOS, DET"}.get(k)
         if k == "collar":
             note = sure["collar"].why
         out.append(line + (f"   # {note}" if note else ""))

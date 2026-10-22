@@ -237,3 +237,33 @@ sock = "auto"
 pant = "source"
 helmet_logo = "source"
 default = true
+
+# LAK — из NHL 27, профиль собран генератором (python -m kitport profile --club LAK, 22.10.2026).
+# Нынешние формы — ten / eleven (база NHL 27). Решения «проверить» — в выводе генератора и
+# docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.
+[LAK]
+source = "nhl27"
+source_kits = { home = "ten", away = "eleven" }
+body_color = "back"   # середина спины ровная на 100% (back — как NJD, TBL; light — только MIN)
+collar = "plain"   # под щитом посередине переда не цвет ткани: home 0.00, away 0.00 (порог 0.15; шнуровка — больше)
+trim_measure = "contiguous"   # ширина кромки — сплошной полосой от края по основе (edge_kit.TRIM_MEASURE)
+crest_fit = { gap_min = 0.008 }   # герб крупнее: до буквы капитана 0,008 развёртки (~0,6 см), как TBL, BOS, DET
+shield_scale = 0.68   # щит по зазору под кромкой — edge_kit.SHIELD_GAP_DEFAULT_MM; у источника 5.4 мм / 6.8 мм (справка)
+hem_h = 0.26   # м: зона низа «от края» выше полос (fb.hem.HEM_H; без поля — 0,09)
+insert = []
+letter_zones_from = {}
+sock_parts = [[0.0, [0, 0, 0]]]   # не используется (sock = auto)
+
+[LAK.slot.home]
+kit = "edge_home"
+legacy = "1_13_2"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"
+
+[LAK.slot.away]
+kit = "edge_away"
+legacy = "1_13_4"
+sock = "auto"
+pant = "source"
+helmet_logo = "source"

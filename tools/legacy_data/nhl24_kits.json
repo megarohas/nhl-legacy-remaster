@@ -581,7 +581,7 @@
    "art": 13,
    "variant": 7,
    "fevariant": 7,
-   "jerseyindex": 14,
+   "jerseyindex": 16,
    "locstring": 6
   },
   {
@@ -592,7 +592,7 @@
    "art": 13,
    "variant": 8,
    "fevariant": 8,
-   "jerseyindex": 15,
+   "jerseyindex": 17,
    "locstring": 6
   },
   {
@@ -603,7 +603,7 @@
    "art": 13,
    "variant": 9,
    "fevariant": 9,
-   "jerseyindex": 16,
+   "jerseyindex": 18,
    "locstring": 6
   },
   {
@@ -1891,6 +1891,28 @@
    "variant": 6,
    "fevariant": 6,
    "jerseyindex": 10,
+   "locstring": 6
+  },
+  {
+   "club": "LAK",
+   "kit": "edge_home",
+   "teamid": 13,
+   "style": 0,
+   "art": 13,
+   "variant": 9,
+   "fevariant": 9,
+   "jerseyindex": 14,
+   "locstring": 6
+  },
+  {
+   "club": "LAK",
+   "kit": "edge_away",
+   "teamid": 13,
+   "style": 0,
+   "art": 13,
+   "variant": 10,
+   "fevariant": 10,
+   "jerseyindex": 15,
    "locstring": 6
   }
  ]
