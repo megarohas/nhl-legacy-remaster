@@ -59,7 +59,7 @@ def _glyph_boxes(alpha, x0, x1, y0, y1, min_h=4):
     return out
 
 
-def _scale_box(layers, box, sx, sy, bounds, fills):
+def _scale_box(layers, box, sx, sy, bounds, fills, anchor="center"):
     """Знак в рамке box — в sx × sy вокруг его середины, в пределах bounds (x0, y0, x1, y1); layers — массивы одного
     размера (font_cm RGBA — с премультипликацией, font_nm), fills — фон каждого вне знака."""
     bx0, by0, bx1, by1 = box
@@ -67,7 +67,7 @@ def _scale_box(layers, box, sx, sy, bounds, fills):
     cx, cy = (bx0 + bx1) / 2, (by0 + by1) / 2
     nw, nh = max(1, round(w * sx)), max(1, round(h * sy))
     nx0 = int(round(min(max(cx - nw / 2, bounds[0]), bounds[2] - nw)))
-    ny0 = int(round(min(max(cy - nh / 2, bounds[1]), bounds[3] - nh)))
+    ny0 = int(round(min(max(cy - nh / 2 if anchor == "center" else by0, bounds[1]), bounds[3] - nh)))
     cm = layers[0]
     a = cm[by0:by1, bx0:bx1, 3:4].astype(np.float32) / 255.0
     crops = [np.concatenate([cm[by0:by1, bx0:bx1, :3] * a, cm[by0:by1, bx0:bx1, 3:4]], -1).astype(np.float32)]
@@ -84,7 +84,7 @@ def _scale_box(layers, box, sx, sy, bounds, fills):
         L[ny0:ny0 + nh, nx0:nx0 + nw] = np.clip(r * m + np.array(fill, np.float32) * (1 - m), 0, 255).astype(np.uint8)
 
 
-def scale_glyphs(slot_dir, name=1.0, captain_x=1.0, log=None):
+def scale_glyphs(slot_dir, name=1.0, captain_x=1.0, log=None, name_anchor="center"):
     """Знаки атласа шрифта слота (font_cm / font_nm / font_sm) крупнее в своих клетках: буквы фамилии — в name раз (в
     пределах клетки: игра берёт знак из клетки атласа — крупнее знак, крупнее и плотнее фамилия), буквы капитана C и
     A — шире в captain_x раз (высота у них и так во всю клетку). Пользователь, 22.10, BOS: у атласа NHL 27 буквы
@@ -113,9 +113,9 @@ def scale_glyphs(slot_dir, name=1.0, captain_x=1.0, log=None):
                     bx = (cx - 8, cx + 8)
                 w, h = box[2] - box[0], box[3] - box[1]
                 s = min(name, (bx[1] - bx[0] - 2) / max(w, 1), (y1 - y0 - 1) / max(h, 1))
-                _scale_box([cm, nm], box, s, s, (bx[0], y0, bx[1], y1), fills)
+                _scale_box([cm, nm], box, s, s, (bx[0], y0, bx[1], y1), fills, name_anchor)
                 n += 1
-        rep.append(f"буквы фамилии ×{name} (в пределах клетки): {n} знаков")
+        rep.append(f"буквы фамилии ×{name} (в пределах клетки, привязка — {name_anchor}): {n} знаков")
     if captain_x != 1.0:
         for y0, y1 in CAPTAIN_ROWS:
             for box in _glyph_boxes(cm[..., 3], *CAPTAIN_BOX, y0, y1, min_h=40):

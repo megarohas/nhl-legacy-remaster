@@ -660,7 +660,7 @@ class CoordMap:
         r = np.hypot(src["pos"][:, 0], src["pos"][:, 2])
         self.g_torso = _raster_multi(src["tri"][body_t], tt, src["pos"][:, 1], r, src["uv"], -180, 180, 0.85,
                                      TORSO_YMAX, GRID_TH, GRID_YT)
-        self.g_hem = hem.hem_grid(src, hem.HEM_H + 0.01)
+        self.g_hem = hem.hem_grid(src, hem.HEM_H + HEM_SHIFT + 0.01)
         # верх плеч — сверху (x, z): по (θ, высоте) почти горизонтальная ткань плеча неоднозначна (на одной высоте —
         # большой участок), граница кокетки у плечевого сустава шла вырезом (пользователь, 19.10)
         nrm_s = kit3d._unit(src["nrm"])
@@ -754,7 +754,7 @@ class CoordMap:
         out = _mix(out, u_c, w_c)
         # низ
         phi, dh = hem.hem_coords(P, self.hem_curve)
-        u_h, ok_h = hem.lookup(self.g_hem, phi, dh)
+        u_h, ok_h = hem.lookup(self.g_hem, phi, dh + HEM_SHIFT)   # полосы ниже на HEM_SHIFT (профиль hem_shift_cm)
         w_h = Hy.smooth((hem.HEM_H - dh) / hem.HEM_BLEND) * ok_h * (dh < hem.HEM_H)
         out = _mix(out, u_h, w_h)
         # рукава — прежний перенос (правило полос рукава — на нём)
@@ -782,8 +782,11 @@ SLV_U24 = (0.03, 0.30)             # u NHL 24: рукав (левый; прав�
 SLV_U24_MIN = 0.042                # u NHL 24 — не ближе к манжете (у Edge рукав там уходит в краги)
 SLV_BLEND = 0.007                  # u Edge: у проймы — плавно к прежнему переносу (полосы кончаются у 0,222)
 HEM_H_DEFAULT = 0.09               # м: зона низа «от края» (fb.hem.HEM_H) без поля hem_h в профиле
+HEM_SHIFT = 0.0                    # м: профиль hem_shift_cm — полосы низа ниже на столько (точка на высоте d над краем
+#                                    берёт рисунок источника с d + сдвиг; LAK 22.10: «полоску внизу — пониже»)
 FONT_NAME_SCALE = 1.0              # профиль font_name_scale: буквы фамилии в атласе крупнее в клетках (fb.fonts.scale_glyphs)
 FONT_CAPTAIN_X = 1.0               # профиль font_captain_x: буквы капитана C и A шире
+FONT_NAME_ANCHOR = "center"        # профиль font_name_anchor: center | top — верх букв на месте (мельче — место до номера, LAK)
 SLV_FILL_EXT = 0.035               # u Edge за концом рукава (у проймы): при заполнении тканью (SLV_FILL_S24) — тоже ткань:
 SLV_FILL_BLEND = 0.01              # там ближайшая точка NHL 24 брала его верхнюю полосу — золотая дуга (BOS, 21.10)
 SLV_X = 0.15                       # м: |x| больше — рукав
@@ -1202,10 +1205,14 @@ def use_club(code):
     from . import kit_fix                                # герб не на букву: свои поля [crest_fit] (gap_min …) клуба
     kit_fix.CREST_FIT_OVERRIDE = dict(prof.get("crest_fit", {}))
     FONT_CAPTAIN_X = float(prof.get("font_captain_x", 1.0))
+    global FONT_NAME_ANCHOR
+    FONT_NAME_ANCHOR = prof.get("font_name_anchor", "center")
     # высота зоны низа «от края» (fb.hem.HEM_H): у NHL 27 BOS / TBL полосы низа — до 13–14 см, а зона — 9 см (переход
     # 6–9 см): белая полоса BOS попадала в переход и раздувалась посередине (пользователь, 21.10). Профиль hem_h — выше
     # полос, генератор (kitport profile) ставит по замеру; нет поля — как раньше
     hem.HEM_H = float(prof.get("hem_h", HEM_H_DEFAULT))
+    global HEM_SHIFT
+    HEM_SHIFT = float(prof.get("hem_shift_cm", 0.0)) / 100.0
     TRIM_WIDTH_FROM = dict(prof.get("trim_width_from", {}))    # кромка цвета ткани — ширина по другой форме
     YOKE_EA_KIND = prof.get("yoke_shape_color")
     YOKE_SIDE_BLEND = prof.get("yoke_side_blend")
@@ -3962,7 +3969,7 @@ def cmd_slot(a):
             shutil.copy2(os.path.join(src, f + ".png"), os.path.join(d, f + ".png"))
         if FONT_NAME_SCALE != 1.0 or FONT_CAPTAIN_X != 1.0:   # знаки атласа крупнее в клетках (профиль; BOS 22.10)
             from .fonts import scale_glyphs
-            print(f"  шрифт {kit}:", "; ".join(scale_glyphs(d, FONT_NAME_SCALE, FONT_CAPTAIN_X)))
+            print(f"  шрифт {kit}:", "; ".join(scale_glyphs(d, FONT_NAME_SCALE, FONT_CAPTAIN_X, name_anchor=FONT_NAME_ANCHOR)))
         for f in ("name_cm", "pant_cm", "pant_nm", "pant_sm"):
             shutil.copy2(os.path.join(leg, f + ".png"), os.path.join(d, f + ".png"))
         if spec.get("pant", "legacy") == "source":       # шорты источника (fb.pilot: 3D-перенос), рельеф — образца
