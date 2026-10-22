@@ -786,6 +786,7 @@ HEM_SHIFT = 0.0                    # м: профиль hem_shift_cm — пол�
 #                                    берёт рисунок источника с d + сдвиг; LAK 22.10: «полоску внизу — пониже»)
 FONT_NAME_SCALE = 1.0              # профиль font_name_scale: буквы фамилии в атласе крупнее в клетках (fb.fonts.scale_glyphs)
 FONT_CAPTAIN_X = 1.0               # профиль font_captain_x: буквы капитана C и A шире
+NAME_ZONE_SCALE = 1.0              # профиль name_zone_scale: зона фамилии в карте номеров ниже в столько раз (верх на месте)
 FONT_NAME_ANCHOR = "center"        # профиль font_name_anchor: center | top — верх букв на месте (мельче — место до номера, LAK)
 SLV_FILL_EXT = 0.035               # u Edge за концом рукава (у проймы): при заполнении тканью (SLV_FILL_S24) — тоже ткань:
 SLV_FILL_BLEND = 0.01              # там ближайшая точка NHL 24 брала его верхнюю полосу — золотая дуга (BOS, 21.10)
@@ -1206,8 +1207,9 @@ def use_club(code):
     from . import kit_fix                                # герб не на букву: свои поля [crest_fit] (gap_min …) клуба
     kit_fix.CREST_FIT_OVERRIDE = dict(prof.get("crest_fit", {}))
     FONT_CAPTAIN_X = float(prof.get("font_captain_x", 1.0))
-    global FONT_NAME_ANCHOR
+    global FONT_NAME_ANCHOR, NAME_ZONE_SCALE
     FONT_NAME_ANCHOR = prof.get("font_name_anchor", "center")
+    NAME_ZONE_SCALE = float(prof.get("name_zone_scale", 1.0))
     # высота зоны низа «от края» (fb.hem.HEM_H): у NHL 27 BOS / TBL полосы низа — до 13–14 см, а зона — 9 см (переход
     # 6–9 см): белая полоса BOS попадала в переход и раздувалась посередине (пользователь, 21.10). Профиль hem_h — выше
     # полос, генератор (kitport profile) ставит по замеру; нет поля — как раньше
@@ -3537,6 +3539,34 @@ def place_sock(src_png, dst_png, top_v, bot_v):
     return (y0, y1), (Y0, Y1)
 
 
+def scale_name_zone(png, k, zone=0):
+    """Зона фамилии карты номеров (R, G > 128, B = зона) ниже в k раз по столбцам: верх фамилии на свитере — край зоны с
+    большим v (на спине развёртка перевёрнута: номер — выше по v), он на месте, низ поднимается — до номера свободнее.
+    Дуга (DET) — по каждому столбцу. Игра вписывает фамилию в зону: мельче и буквы, и промежутки (пользователь, 22.10,
+    LAK и DET: «фамилии меньше, и не забывай про интервалы»). -> (высота было, стало) по середине, в долях."""
+    from PIL import Image
+    a = np.asarray(Image.open(png).convert("RGBA")).copy()
+    m = (a[..., 0] > 128) & (a[..., 1] > 128) & (a[..., 2] == zone)
+    if not m.any():
+        return None
+    color = a[m][0].copy()
+    H = a.shape[0]
+    xs = np.nonzero(m.any(0))[0]
+    mid = xs[len(xs) // 2]
+    h0 = h1 = 0
+    for x in xs:
+        ys = np.nonzero(m[:, x])[0]
+        top, bot = ys.max(), ys.min()                 # top — край зоны с большим v (верх фамилии на свитере)
+        h = top - bot + 1
+        nh = max(1, int(round(h * k)))
+        a[ys, x] = (255, 255, 255, 255)
+        a[top - nh + 1:top + 1, x] = color
+        if x == mid:
+            h0, h1 = h / H, nh / H
+    Image.fromarray(a, "RGBA").save(png)
+    return round(h0, 3), round(h1, 3)
+
+
 def copy_zones(dst_png, ref_png, zones):
     """Зоны карты номеров (R, G > 128, B = номер зоны) — с карты ref: у dst зона стирается (фон — белый), из ref
     переносится как есть. -> {зона: (v0 было, v0 стало)}."""
@@ -3981,6 +4011,9 @@ def cmd_slot(a):
                 J.unpack_kit(SLOT_KITS[LETTER_ZONES_FROM[kit]]["legacy"], ref)
             print(f"  буква капитана {kit}: зоны {LETTER_ZONES} — как у {LETTER_ZONES_FROM[kit]}:",
                   copy_zones(os.path.join(d, "name_cm.png"), os.path.join(ref, "name_cm.png"), LETTER_ZONES))
+        if NAME_ZONE_SCALE != 1.0:                      # зона фамилии ниже (профиль name_zone_scale; LAK, DET 22.10)
+            print(f"  фамилия {kit}: зона ×{NAME_ZONE_SCALE} по высоте (было, стало):",
+                  scale_name_zone(os.path.join(d, "name_cm.png"), NAME_ZONE_SCALE))
         if SLEEVE_ZONES_FROM not in ("own", spec["legacy"]):
             ref = os.path.join(cur, SLEEVE_ZONES_FROM)
             if not os.path.exists(os.path.join(ref, "kit.json")):
