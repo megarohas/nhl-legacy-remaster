@@ -56,6 +56,8 @@ LACE_FRAC = 0.15                 # доля «не ткани» под щито�
 COLOR_DIFF = 45                  # max |ΔR, ΔG, ΔB| — другой цвет (как у kitport check и edge_kit.trim_profile)
 YOKE_TOP_X = (0.12, 0.17)        # |x| верха плеч (у шеи — кромка, дальше — сустав): цвет кокетки
 YOKE_ARM_X = (0.25, 0.30)        # |x| верха рукава за плечевым суставом: кокетка «на плечо»
+SLEEVE_X = (0.30, 0.34)          # |x| кольца рукава ниже плечевого сустава (до полос у локтя): цвет рукава. Не цвет ткани —
+#                                  armhole_split = "full" (VGK 22.10: серые рукава, по полю шва NHL 24 граница зубцами)
 EQ_HELMET, EQ_GLOVES = 7, 4      # equipment шлема и краг (значения с rangelow, как в nhl24.py)
 EQ_NEAR_PAL = 6.0                # ближе к цвету палитры — тот же цвет
 EQ_FAR_PAL = 60.0                # дальше — не оттенок этого цвета палитры
@@ -270,7 +272,9 @@ def look_kit(folder, kit):
         return c, float((np.abs(cc - c).max(1) < COLOR_DIFF).mean())
     yoke_c, yoke_u = top_of(YOKE_TOP_X)
     arm_c, _ = top_of(YOKE_ARM_X)
+    sleeve_c = median_c(b[(np.abs(x) > SLEEVE_X[0]) & (np.abs(x) < SLEEVE_X[1])])
     return {"xc": xc, "lace_frac": lace_frac, "ref": ref_c, "body": body, "body_uniform": body_uniform,
+            "sleeve_c": sleeve_c, "sleeve_other": differs(sleeve_c, body),
             "yoke_c": yoke_c, "yoke_uniform": yoke_u, "arm_c": arm_c,
             "yoke": differs(yoke_c, body) and yoke_u > 0.7, "on_arm": not differs(arm_c, yoke_c),
             "trim_c": trim_top, "trim_below": trim_below, "trim_visible": differs(trim_top, trim_below)}
@@ -474,12 +478,30 @@ def propose(code):
         D.append(Decision("yoke", prof["yoke"], not arm,
                           "бока кокетки «до плеча» — с EA MIN 1_14_3 (как NJD, пользователь 21.10)" if not arm else
                           "кокетка заходит на руку (тип MTL, §12.1): бока 1_14_3 — заготовка, нужен yoke_side_blend"))
+    # рукав другого цвета, чем ткань (VGK: серые рукава; DET выезд: красные) — граница по шву проймы Edge целиком
+    other = [k for k in SLOT_KITS if look[k]["sleeve_other"]]
+    if other:
+        prof["armhole_split"] = "full"
+    D.append(Decision("armhole_split", prof.get("armhole_split", "—"), True,
+                      "рукав ниже плеча / ткань: " + ", ".join(
+                          f"{k} {np.round(look[k]['sleeve_c']).astype(int).tolist()} / "
+                          f"{np.round(look[k]['body']).astype(int).tolist()}" for k in SLOT_KITS)
+                      + (" — рукав другого цвета: граница по шву проймы целиком (VGK, DET 22.10: по полю шва — зубцы)"
+                         if other else "")))
+    # фамилия, номер, буква: у заготовок Custom (SEA, VGK — art ≥ 100) зоны крупнее EA — как у MIN; шрифт — расчётом
+    if art >= 100:
+        prof["name_zones_from"] = "1_14_4"
+    prof["font_name_fit"] = "auto"
+    D.append(Decision("name_zones_from", prof.get("name_zones_from", "—"), True,
+                      "заготовка Custom: фамилия и номер на 15–17 % крупнее EA, буква 36 × 34 против 15 × 15 — зоны MIN"
+                      if art >= 100 else "зоны EA-формы клуба"))
     prof["body_color"] = "back"
     bu = min(look[k]["body_uniform"] for k in SLOT_KITS)
     D.append(Decision("body_color", "back", bu > 0.9,
                       f"середина спины ровная на {bu:.0%} (back — как NJD, TBL; light — только MIN)"))
     prof["collar"] = collar
     prof["crest_fit"] = {"gap_min": 0.008}   # герб крупнее, до буквы капитана 0,6 см (пользователь, 22.10: TBL, BOS, DET)
+    prof["crest_size_cm"] = 27               # герб не меньше 27 см (22.10, VGK: «лого побольше»; EA NHL 13 — медиана 27)
     prof["trim_measure"] = "contiguous"   # ширина кромки — сплошной полосой по основе (с DET 22.10: у широких кромок
     #                                       прежний замер давал 3,7 см по кругу, а мыс спереди — мельче источника)
     vis = {k: look[k]["trim_visible"] for k in SLOT_KITS}
@@ -620,9 +642,9 @@ def toml_section(code, prof, D, data):
            f"# Нынешние формы — {src['home']} / {src['away']} (база NHL 27). Решения «проверить» — в выводе генератора и",
            "# docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.",
            f"[{code}]"]
-    for k in ("source", "source_kits", "body_color", "collar", "trim_measure", "trim_width_from", "crest_fit", "yoke_color", "yoke", "yoke_shape_color",
+    for k in ("source", "source_kits", "body_color", "collar", "trim_measure", "trim_width_from", "crest_fit", "crest_size_cm", "yoke_color", "yoke", "yoke_shape_color",
               "shield_offset_cm", "shield_scale", "merge_parts", "base_normal_decals", "hem_h", "insert",
-              "letter_zones_from",
+              "letter_zones_from", "armhole_split", "name_zones_from", "font_name_fit",
               "sock_parts"):
         if k not in prof:
             continue
@@ -634,7 +656,11 @@ def toml_section(code, prof, D, data):
                 "trim_width_from": "кромка цвета ткани — ширина кромки по другой форме (edge_kit.TRIM_WIDTH_FROM)",
                 "hem_h": "м: зона низа «от края» выше полос (fb.hem.HEM_H; без поля — 0,09)",
                 "trim_measure": "ширина кромки — сплошной полосой от края по основе (edge_kit.TRIM_MEASURE)",
-                "crest_fit": "герб крупнее: до буквы капитана 0,008 развёртки (~0,6 см), как TBL, BOS, DET"}.get(k)
+                "crest_fit": "герб крупнее: до буквы капитана 0,008 развёртки (~0,6 см), как TBL, BOS, DET",
+                "crest_size_cm": "герб не меньше 27 см (√ ширина × высота), как EA-гербы NHL 13 (edge_kit.crest_to_size)",
+                "armhole_split": "рукав другого цвета: граница с тканью по шву проймы Edge целиком (VGK, DET)",
+                "name_zones_from": "заготовка Custom: зоны фамилии, номера и буквы — как у MIN",
+                "font_name_fit": "фамилия: высота как у MIN, промежуток ≤ 0,23 высоты буквы (edge_kit.name_font_fit)"}.get(k)
         if k == "collar":
             note = sure["collar"].why
         out.append(line + (f"   # {note}" if note else ""))

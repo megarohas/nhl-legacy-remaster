@@ -787,6 +787,7 @@ HEM_SHIFT = 0.0                    # м: профиль hem_shift_cm — пол�
 FONT_NAME_SCALE = 1.0              # профиль font_name_scale: буквы фамилии в атласе крупнее в клетках (fb.fonts.scale_glyphs)
 FONT_CAPTAIN_X = 1.0               # профиль font_captain_x: буквы капитана C и A шире
 NAME_ZONE_SCALE = 1.0              # профиль name_zone_scale: зона фамилии в карте номеров ниже в столько раз (верх на месте)
+FONT_NAME_FIT = None               # профиль font_name_fit = "auto": шрифт и зона фамилии — расчётом (name_font_fit)
 NAME_ZONE_LIFT = 0.0               # см: профиль name_zone_lift_cm — зона фамилии выше на спине на столько (SEA 22.10)
 FONT_NAME_ANCHOR = "center"        # профиль font_name_anchor: center | top — верх букв на месте (мельче — место до номера, LAK)
 SLV_FILL_EXT = 0.035               # u Edge за концом рукава (у проймы): при заполнении тканью (SLV_FILL_S24) — тоже ткань:
@@ -817,21 +818,70 @@ ARMHOLE_UV = ((0.27, 0.2237), (0.28, 0.2274), (0.29, 0.2321), (0.30, 0.2383), (0
 ARMHOLE_ZONES = ((0.27, 0.385), (0.575, 0.73))   # v: низ проймы (спина, грудь) — деление цвета и шов
 ARMHOLE_FADE = 0.015               # v: к плечу шов сходит на нет
 ARMHOLE_X = 0.15                   # м: |x| больше — сторона рукава/бока
+# деление цвета рукав / туловище по шву Edge — в этих зонах v; между ними (верх плеча) — по полю шва NHL 24 (seam_v).
+# Профиль armhole_split = "full" — по шву Edge на всей пройме: у рукава другого цвета (VGK, 22.10: серые рукава на
+# золоте и белом) граница по полю шва шла зубцами и ступеньками на стыке зон — «неровные линии на плече»
+ARMHOLE_SPLIT_ZONES = ARMHOLE_ZONES
+ARMHOLE_SPLIT_FULL = ((ARMHOLE_ZONES[0][0], ARMHOLE_ZONES[-1][1]),)
+
+
+ARMHOLE_FULL_SIGMA = 0.012         # v: сглаживание шва проймы для armhole_split = "full" — у MIN 1_14_0 на 0,57 мыс (u
+#                                    0,3350 → 0,3447 → 0,3418): спереди у верха плеча граница рукава шла углом (VGK 22.10)
+
+
+def _armhole_full():
+    from scipy.ndimage import gaussian_filter1d
+    vs, us = zip(*ARMHOLE_UV)
+    v = np.arange(vs[0], vs[-1] + 1e-9, 0.0025)
+    return v, gaussian_filter1d(np.interp(v, vs, us), ARMHOLE_FULL_SIGMA / 0.0025, mode="nearest")
 
 
 def armhole_u(v):
-    vs, us = zip(*ARMHOLE_UV)
+    if ARMHOLE_SPLIT_ZONES is ARMHOLE_SPLIT_FULL:      # рукав другого цвета: шов сглажен (граница цвета — по нему)
+        vs, us = _armhole_full()
+    else:
+        vs, us = zip(*ARMHOLE_UV)
     return np.interp(v, vs, us)
 
 
 def armhole_sleeve(tu, tv, x):
     """Тексели (tu, tv) с точками x: (в зоне деления, сторона рукава)."""
     zone = np.zeros(len(tu), bool)
-    for v0, v1 in ARMHOLE_ZONES:
+    for v0, v1 in ARMHOLE_SPLIT_ZONES:
         zone |= (tv >= v0) & (tv <= v1)
     zone &= np.abs(x) > ARMHOLE_X
     sE = np.where(x < 0, tu, 1.0 - tu)
     return zone, zone & (sE < armhole_u(tv))
+
+
+ARMHOLE_CLEAN = 0.02               # u: у armhole_split = "full" полоса у шва проймы, где цвет — с той же строки дальше от шва
+
+
+def armhole_clean(png, mesh, du=ARMHOLE_CLEAN):
+    """Граница рукава и туловища — ровно по шву проймы (armhole_u): у шва (|sE − шов| < du) цвет рукава — с той же строки
+    на du от шва внутрь рукава, цвет ткани — на du внутрь туловища. Деление по шву (ARMHOLE_SPLIT_FULL) ставит сторону, а
+    цвет у шва берётся ближайшей точкой источника — у края его острова рукава (VGK 22.10: золото верха плеча NHL 27
+    заходит на кромку рукава) граница шла волной и зубцами. -> текселей перекрашено."""
+    from PIL import Image
+    a = np.asarray(Image.open(png).convert("RGB"))
+    S = a.shape[0]
+    tid, bar = kit3d.raster_uv(mesh, S)
+    m = tid >= 0
+    ys, xs = np.nonzero(m)
+    P = (bar[ys, xs][:, :, None] * mesh["pos"][mesh["tri"][tid[ys, xs]]]).sum(1)
+    tu, tv = (xs + 0.5) / S, (ys + 0.5) / S
+    zone, _ = armhole_sleeve(tu, tv, P[:, 0])
+    left = P[:, 0] < 0
+    sE = np.where(left, tu, 1.0 - tu)
+    au = armhole_u(tv)
+    near = zone & (np.abs(sE - au) < du)
+    tgt = np.where(sE < au, au - du - 1.5 / S, au + du + 1.5 / S)
+    xs_src = np.clip(np.round(np.where(left, tgt, 1.0 - tgt) * S - 0.5).astype(int), 0, S - 1)
+    ok = near & m[ys, xs_src]
+    out = a.copy()
+    out[ys[ok], xs[ok]] = a[ys[ok], xs_src[ok]]
+    Image.fromarray(out).save(png)
+    return int(ok.sum())
 
 
 def armhole_dist(G):
@@ -1207,8 +1257,15 @@ def use_club(code):
     FONT_NAME_SCALE = float(FONT_NAME_SCALE) if np.isscalar(FONT_NAME_SCALE) else tuple(map(float, FONT_NAME_SCALE))
     from . import kit_fix                                # герб не на букву: свои поля [crest_fit] (gap_min …) клуба
     kit_fix.CREST_FIT_OVERRIDE = dict(prof.get("crest_fit", {}))
+    global CREST_SIZE_CM
+    CREST_SIZE_CM = prof.get("crest_size_cm")
     FONT_CAPTAIN_X = float(prof.get("font_captain_x", 1.0))
-    global FONT_NAME_ANCHOR, NAME_ZONE_SCALE, NAME_ZONE_LIFT
+    global FONT_NAME_ANCHOR, NAME_ZONE_SCALE, NAME_ZONE_LIFT, FONT_NAME_FIT
+    FONT_NAME_FIT = prof.get("font_name_fit")
+    if FONT_NAME_FIT not in (None, "auto"):
+        sys.exit(f"[{code}] font_name_fit = {FONT_NAME_FIT!r} — только \"auto\"")
+    if FONT_NAME_FIT and ("font_name_scale" in prof or "name_zone_scale" in prof):
+        sys.exit(f"[{code}] font_name_fit = \"auto\" считает font_name_scale и name_zone_scale сам — уберите их из профиля")
     FONT_NAME_ANCHOR = prof.get("font_name_anchor", "center")
     NAME_ZONE_SCALE = float(prof.get("name_zone_scale", 1.0))
     NAME_ZONE_LIFT = float(prof.get("name_zone_lift_cm", 0.0))
@@ -1231,6 +1288,12 @@ def use_club(code):
     SLOT_KITS = {k: dict(v) for k, v in prof.get("slot", {}).items()}
     LETTER_ZONES_FROM = dict(prof.get("letter_zones_from", {}))
     SLEEVE_ZONES_FROM = prof.get("sleeve_zones_from", SLEEVE_ZONES_REF)
+    global NAME_ZONES_FROM, ARMHOLE_SPLIT_ZONES
+    NAME_ZONES_FROM = prof.get("name_zones_from")
+    split = prof.get("armhole_split", "zones")
+    if split not in ("zones", "full"):
+        sys.exit(f"[{code}] armhole_split = {split!r} — zones или full")
+    ARMHOLE_SPLIT_ZONES = ARMHOLE_SPLIT_FULL if split == "full" else ARMHOLE_ZONES
     for kit, spec in SLOT_KITS.items():                  # подпись в меню — «Home (NHL 27)»: форма и источник
         spec.setdefault("label", f"{'Home' if kit == 'home' else 'Away'} ({SOURCE_NAME()})")
     SOCK_PARTS = tuple((float(w), tuple(c)) for w, c in prof.get("sock_parts", SOCK_PARTS))
@@ -1628,6 +1691,29 @@ BASE_NM_DECALS = None              # профиль base_normal_decals: "flat" �
 DECAL_FLAT_GROW = 20               # текселей 2048 (≈ 1,6 см): рельеф нашивки шире её цвета (TBL ten: фаска — до 8 px, след
 #                                    тени — до ~20; при 6 и 12 у герба оставался контур, 21.10)
 DECAL_FLAT_FEATHER = 10            # текселей: дальше — плавный переход к рельефу источника (без ступеньки по контуру)
+
+
+CREST_SIZE_CM = None               # профиль crest_size_cm: герб не меньше (√(ширина × высота) рамки, см); [crest_fit] после —
+#                                    не на букву. Правило 22.10 (замер kitport/docs: EA-гербы NHL 13 — 23–29 см, медиана 27;
+#                                    у TBL, DET, VGK ~22–23 — пользователь просил крупнее; NJD 26, BOS 27, LAK 28,5 — норм)
+
+
+def crest_to_size(placed):
+    """Герб (нашивка crest) — не меньше CREST_SIZE_CM: рамка нашивки источника (pl["_box"], uv NHL 24) через якобиан у
+    центра (обратный к pinv) → ширина и высота в см; меньше — масштаб рамки (sc и радиус) больше. Только крупнее."""
+    for pl in placed:
+        if pl["name"] != "crest":
+            continue
+        cL, nL, pinv, R, sc, rad, u_c, v_c = pl["_frame"]
+        JL = np.linalg.pinv(pinv)
+        b0, b1, b2, b3 = pl["_box"]
+        w = np.linalg.norm(JL[:, 0]) * (b2 - b0) * sc * 100
+        h = np.linalg.norm(JL[:, 1]) * (b3 - b1) * sc * 100
+        size = float(np.sqrt(w * h))
+        k = max(1.0, CREST_SIZE_CM / max(size, 1e-6))
+        pl["_frame"] = (cL, nL, pinv, R, sc * k, rad * k, u_c, v_c)
+        pl["crest_size_cm"] = [round(w, 1), round(h, 1), round(size, 1), round(k, 3)]
+        print(f"  герб: {w:.1f} × {h:.1f} см (√ {size:.1f}) → ×{k:.3f} (не меньше {CREST_SIZE_CM} см)")
 
 
 def decal_mask(code, kit, size):
@@ -3163,6 +3249,8 @@ def cmd_kit(a):
         """Щит по зазору под кромкой (SHIELD_GAP_MM, профиль shield_gap_mm): высота — расчётом по кромке этой формы
         (yoke_rule["trim"]). Без поля (задан shield_offset_cm) и в первых сборках (кромки ещё нет) — как было."""
         placed, soft = orig_plan_decals(comp, lab, patches, rules, defaults, src, dst_, tid24)
+        if CREST_SIZE_CM:
+            crest_to_size(placed)
         if SHIELD_GAP_MM is not None and yoke_rule.get("trim") is not None:
             fit_shield_gap(placed, soft, comp, src, dst_, tid24, yoke_rule["trim"], a.club, cur_kit["kit"])
         return placed, soft
@@ -3177,6 +3265,9 @@ def cmd_kit(a):
         raw = os.path.join(od, "jersey_cm_raw.png")
         if os.path.exists(raw):
             shutil.copyfile(raw, os.path.join(od, "jersey_cm.png"))
+        if ARMHOLE_SPLIT_ZONES is ARMHOLE_SPLIT_FULL:     # рукав другого цвета: граница ровно по шву (VGK, DET 22.10)
+            print("  пройма: граница рукава по шву, перекрашено текселей:",
+                  armhole_clean(os.path.join(od, "jersey_cm.png"), E2))
         return dict(sleeve_plan)
     pilot.sleeve_rule = sleeve_rule
     keep = collar_keep_mask({k: E2[k] for k in ("pos", "uv", "nrm", "tri")}, 1024)
@@ -3473,6 +3564,10 @@ LETTER_ZONES_FROM = {"away": "home"}
 # (1_14_4) — 1,566 м, у MIN выезд (1_14_3) — 1,600 м. Образец — домашняя MIN; у самой MIN — свои (профиль "own").
 SLEEVE_ZONES = (2, 3)
 SLEEVE_ZONES_REF = "1_14_4"
+NAME_ZONES = (0, 1, 5, 7)          # фамилия, номер на спине, места буквы капитана
+NAME_ZONES_FROM = None             # профиль name_zones_from: форма Legacy, с карты которой зоны NAME_ZONES (VGK 22.10 —
+#                                    MIN 1_14_4: у заготовок Custom SEA/VGK фамилия и номер на 15–17 % крупнее, буква
+#                                    капитана — 36 × 34 текселей против 15 × 15 у EA)
 SLEEVE_ZONES_FROM = SLEEVE_ZONES_REF   # профиль sleeve_zones_from: форма Legacy, с карты которой зоны, или "own"
 SOCK_PARTS = ((0.0, (24, 56, 46)), (30, (214, 203, 165)), (30, (159, 14, 10)), (110, (214, 203, 165)))
 SOCK_TOP_V = 0.49                  # верх полос своих гетр (v развёртки гетр: 0 — у колена): у EA MIN 0,48–0,50;
@@ -3605,6 +3700,48 @@ def back_m_per_v():
     back = (pos[:, 2] < 0) & (np.abs(pos[:, 0]) < 0.04) & (pos[:, 1] > 1.2)
     k = np.polyfit(uv[back, 1], pos[back, 1], 1)
     return float(k[0]), float(k[1])
+
+
+NAME_FIT_REF = (14, 39)            # образец высоты фамилии — MIN 1_14_4: зона 14 строк карты 256², буквы атласа 39 px
+NAME_FIT_GAP = 0.23                # промежуток в клетке к высоте буквы — не больше (пользователь просил плотнее у SEA,
+#                                    LAK, BOS: после правок 0,22–0,23; NJD, DET 0,19 — без просьб; MIN 0,31 — образец не трогаем)
+NAME_ROW_H, NAME_CELL_W = 47, 32   # px атласа: высота строки букв фамилии, шаг клеток
+
+
+def name_zone_rows(png, zone=0):
+    """Высота зоны (строк карты) по среднему столбцу — у дуги (DET) по середине."""
+    from PIL import Image
+    a = np.asarray(Image.open(png).convert("RGBA"))
+    m = (a[..., 0] > 128) & (a[..., 1] > 128) & (a[..., 2] == zone)
+    xs = np.nonzero(m.any(0))[0]
+    return int(m[:, xs[len(xs) // 2]].sum()) if len(xs) else 0
+
+
+def name_font_fit(slot_dir):
+    """Профиль font_name_fit = "auto" (22.10, правило пользователя по SEA и VGK: «расстояние между буквами меньше»,
+    «фамилии не крупнее»): буквы фамилии в клетках атласа — во всю высоту строки (sy) и шире, пока промежуток не станет
+    ≤ NAME_FIT_GAP высоты буквы (sx), зона фамилии — ниже в k раз, чтобы высота букв в игре была как у MIN (игра
+    вписывает клетку в зону: крупнее знак в клетке — крупнее и буква, и в той же мере меньше промежуток).
+    -> (sx, sy, k, замер: ширина и высота букв, высота зоны)."""
+    from PIL import Image
+    from .fonts import NAME_ROWS, CAPTAIN_BOX
+    a = np.asarray(Image.open(os.path.join(slot_dir, "font_cm.png")).convert("RGBA"))[..., 3] > 40
+    ws, hs = [], []
+    for row, (y0, y1) in enumerate(NAME_ROWS):
+        cx = J.FONT_SLOTS[row]
+        b = [0] + [(cx[i] + cx[i + 1]) // 2 for i in range(len(cx) - 1)] + [CAPTAIN_BOX[0]]
+        for i in range(len(cx)):
+            sub = a[y0:y1, b[i]:b[i + 1]]
+            cols, rows_ = np.nonzero(sub.any(0))[0], np.nonzero(sub.any(1))[0]
+            if len(cols):
+                ws.append(cols[-1] - cols[0] + 1)
+                hs.append(rows_[-1] - rows_[0] + 1)
+    w, h, hmax = float(np.median(ws)), float(np.median(hs)), float(np.percentile(hs, 90))
+    sy = max(1.0, (NAME_ROW_H - 1) / hmax)
+    sx = min(max(sy, (NAME_CELL_W - NAME_FIT_GAP * h * sy) / w), (NAME_CELL_W - 2) / w)
+    zh = name_zone_rows(os.path.join(slot_dir, "name_cm.png"))
+    k = min(1.0, NAME_FIT_REF[0] * NAME_FIT_REF[1] / max(zh * h * sy, 1))
+    return round(sx, 2), round(sy, 2), round(k, 2), (w, h, zh)
 
 
 def lift_name_zone(png, cm, zone=0):
@@ -4071,12 +4208,25 @@ def cmd_slot(a):
             shutil.copy2(os.path.join(leg, f + ".png"), os.path.join(d, f + ".png"))
         if spec.get("pant", "legacy") == "source":       # шорты источника (fb.pilot: 3D-перенос), рельеф — образца
             shutil.copy2(os.path.join(src, "pant_cm.png"), os.path.join(d, "pant_cm.png"))
+        if NAME_ZONES_FROM:                             # фамилия, номер, буква — как у формы Legacy (профиль; VGK)
+            ref = os.path.join(cur, NAME_ZONES_FROM)
+            if not os.path.exists(os.path.join(ref, "kit.json")):
+                J.unpack_kit(NAME_ZONES_FROM, ref)
+            print(f"  фамилия, номер, буква {kit}: зоны {NAME_ZONES} — как у {NAME_ZONES_FROM}:",
+                  copy_zones(os.path.join(d, "name_cm.png"), os.path.join(ref, "name_cm.png"), NAME_ZONES))
         if kit in LETTER_ZONES_FROM:
             ref = os.path.join(cur, SLOT_KITS[LETTER_ZONES_FROM[kit]]["legacy"])
             if not os.path.exists(os.path.join(ref, "kit.json")):
                 J.unpack_kit(SLOT_KITS[LETTER_ZONES_FROM[kit]]["legacy"], ref)
             print(f"  буква капитана {kit}: зоны {LETTER_ZONES} — как у {LETTER_ZONES_FROM[kit]}:",
                   copy_zones(os.path.join(d, "name_cm.png"), os.path.join(ref, "name_cm.png"), LETTER_ZONES))
+        if FONT_NAME_FIT == "auto":                     # шрифт и зона фамилии расчётом (профиль font_name_fit; VGK 22.10)
+            from .fonts import scale_glyphs
+            sx, sy, k_, (w_, h_, zh_) = name_font_fit(d)
+            print(f"  фамилия {kit}: буквы {w_:.0f}×{h_:.0f} px, зона {zh_} строк → буквы ×{sx}×{sy}, зона ×{k_}")
+            print(f"  шрифт {kit}:", "; ".join(scale_glyphs(d, (sx, sy))))   # буквы капитана — выше, своим полем
+            print(f"  фамилия {kit}: зона ×{k_} по высоте (было, стало):",
+                  scale_name_zone(os.path.join(d, "name_cm.png"), k_))
         if NAME_ZONE_SCALE != 1.0:                      # зона фамилии ниже (профиль name_zone_scale; LAK, DET 22.10)
             print(f"  фамилия {kit}: зона ×{NAME_ZONE_SCALE} по высоте (было, стало):",
                   scale_name_zone(os.path.join(d, "name_cm.png"), NAME_ZONE_SCALE))
