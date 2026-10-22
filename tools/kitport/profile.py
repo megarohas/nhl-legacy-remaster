@@ -500,6 +500,8 @@ def propose(code):
     D.append(Decision("body_color", "back", bu > 0.9,
                       f"середина спины ровная на {bu:.0%} (back — как NJD, TBL; light — только MIN)"))
     prof["collar"] = collar
+    if collar == "plain" and not any(yoke.values()):     # шов вставки под воротом (U вокруг щита) — как у NHL 27 (VGK 22.10)
+        prof["collar_panel"] = True
     prof["crest_fit"] = {"gap_min": 0.008}   # герб крупнее, до буквы капитана 0,6 см (пользователь, 22.10: TBL, BOS, DET)
     prof["crest_size_cm"] = 27               # герб не меньше 27 см (22.10, VGK: «лого побольше»; EA NHL 13 — медиана 27)
     prof["trim_measure"] = "contiguous"   # ширина кромки — сплошной полосой по основе (с DET 22.10: у широких кромок
@@ -644,7 +646,7 @@ def toml_section(code, prof, D, data):
            f"[{code}]"]
     for k in ("source", "source_kits", "body_color", "collar", "trim_measure", "trim_width_from", "crest_fit", "crest_size_cm", "yoke_color", "yoke", "yoke_shape_color",
               "shield_offset_cm", "shield_scale", "merge_parts", "base_normal_decals", "hem_h", "insert",
-              "letter_zones_from", "armhole_split", "name_zones_from", "font_name_fit",
+              "letter_zones_from", "collar_panel", "armhole_split", "name_zones_from", "font_name_fit",
               "sock_parts"):
         if k not in prof:
             continue
@@ -657,6 +659,7 @@ def toml_section(code, prof, D, data):
                 "hem_h": "м: зона низа «от края» выше полос (fb.hem.HEM_H; без поля — 0,09)",
                 "trim_measure": "ширина кромки — сплошной полосой от края по основе (edge_kit.TRIM_MEASURE)",
                 "crest_fit": "герб крупнее: до буквы капитана 0,008 развёртки (~0,6 см), как TBL, BOS, DET",
+                "collar_panel": "шов вставки под воротом — U вокруг щита NHL, как у NHL 27 (edge_kit.PANEL_KNOTS)",
                 "crest_size_cm": "герб не меньше 27 см (√ ширина × высота), как EA-гербы NHL 13 (edge_kit.crest_to_size)",
                 "armhole_split": "рукав другого цвета: граница с тканью по шву проймы Edge целиком (VGK, DET)",
                 "name_zones_from": "заготовка Custom: зоны фамилии, номера и буквы — как у MIN",

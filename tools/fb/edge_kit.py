@@ -1290,7 +1290,8 @@ def use_club(code):
     SLEEVE_ZONES_FROM = prof.get("sleeve_zones_from", SLEEVE_ZONES_REF)
     global NAME_ZONES_FROM, ARMHOLE_SPLIT_ZONES
     NAME_ZONES_FROM = prof.get("name_zones_from")
-    global LETTER_SHIFT_CM
+    global LETTER_SHIFT_CM, COLLAR_PANEL
+    COLLAR_PANEL = bool(prof.get("collar_panel", False))
     LETTER_SHIFT_CM = tuple(map(float, prof["letter_zone_shift_cm"])) if "letter_zone_shift_cm" in prof else None
     split = prof.get("armhole_split", "zones")
     if split not in ("zones", "full"):
@@ -1664,6 +1665,12 @@ PLACKET_CENTER = ((0.0, 1.5634), (0.0, 1.581))   # шов посередине �
 # до ~36° — по линии NHL 24 в виде спереди (расстояния — её точки на нашей сетке), дальше — полоса за кромкой как у
 # NHL 24 (кромка + 1,8–2,2 см: у Edge плечи не как у NHL 24, вид спереди там прижал бы обод к кромке), сзади — 3 см
 RING = True
+# Вставка под воротом adidas (U, щит NHL внутри): у NHL 27 — шов в ~6 см от края ворота посередине, к ~35° поднимается
+# к ободу. У широкой кромки (DET выезд, SEA) он и есть край кромки; у узкой (VGK, LAK, BOS) его не было — пользователь,
+# 22.10, VGK: «проебались швы вокруг зоны с шильдиком». Замер — край красного мыса DET выезда на сетке Edge (10–30°:
+# 6,2 → 5,6 см), у 0° — как у 10° (там щит). Профиль collar_panel = true — обод спереди по этой линии (ring_field)
+PANEL_KNOTS = ((0.0, 0.062), (10.0, 0.062), (20.0, 0.059), (30.0, 0.056), (32.0, 0.050), (34.0, 0.038))
+COLLAR_PANEL = False
 RING_PLAIN_TH = 35.0               # град: у ворота без шнуровки обод — только дальше от середины переда (там он встречает
 #                                    шов кокетки); спуск к верху планки (S) — «отросточки» (пользователь, 21.10, NJD)
 RING_KNOTS = ((23.7, 0.0502), (26.5, 0.0455), (32.0, 0.0355), (35.3, 0.0318), (40.0, 0.0305), (45.0, 0.0298),
@@ -2069,6 +2076,9 @@ def ring_field(G):
         if COLLAR != "lace":                             # без планки: обод — с RING_PLAIN_TH по таблице, без спуска
             thS, DS = RING_PLAIN_TH, float(np.interp(RING_PLAIN_TH, *zip(*RING_KNOTS)))
         kn = [(thS, DS)] + [(a, d_) for a, d_ in RING_KNOTS if a > thS + 1.0]
+        if COLLAR != "lace" and COLLAR_PANEL:            # вставка под воротом: обод спереди — по её шву (U)
+            thS = 0.0
+            kn = list(PANEL_KNOTS) + [(a, d_) for a, d_ in RING_KNOTS if a > PANEL_KNOTS[-1][0] + 1.0]
         f = PchipInterpolator([a for a, _ in kn], [d_ for _, d_ in kn])
         ta = np.clip(np.abs(TH), thS, 180.0)
         side = m & ~B & (TH * sgn > 0) & (np.abs(TH) >= thS)
@@ -2430,8 +2440,9 @@ class TrimPaint:
     цветом кромки NHL 24, край сглажен по текселю (пользователь, 19.10: «окантовка у шильдика неровная»). Ширина — как
     у NHL 24 по углу (сглажено ±TRIM_SMOOTH°) × TRIM_K."""
 
-    def __init__(self, mesh, color, width, lining=None, body=None):
+    def __init__(self, mesh, color, width, lining=None, body=None, clear_to=None):
         self.mesh, self.color, self.width, self.lining, self.body = mesh, color, width, lining, body
+        self.clear_to = clear_to                       # (|θ|, м): зачистка за кромкой — не ближе этого (кромка источника)
         self._geo = {}
 
     def geo(self, shape):
@@ -2472,7 +2483,10 @@ class TrimPaint:
         # кокеткой YokePaint там уже перекрасил — body = None). Раньше — копия ближайшего пикселя дальше: от неё
         # шли полосы «бахромой» (пользователь, 19.10: «вот тут прям говно»)
         if self.body is not None:
-            bad = m & msk & ~B & (D > wid) & (D < wid + TRIM_CLEAR) &                 (np.linalg.norm(c - self.body[None, None], axis=-1) > 20)
+            lim = wid + TRIM_CLEAR
+            if self.clear_to is not None:                 # у ступеньки мыса (DET выезд, 22.10: красная чёрточка за
+                lim = np.maximum(lim, np.interp(np.abs(TH), *self.clear_to))   # углом) кромка источника шире 8 мм зачистки
+            bad = m & msk & ~B & (D > wid) & (D < lim) &                 (np.linalg.norm(c - self.body[None, None], axis=-1) > 20)
             c = c.copy()
             c[bad] = self.body
         if self.lining is not None:                       # подворот ниже кромки — ровной подкладкой (были пятна)
@@ -2576,11 +2590,15 @@ def trim_rule(code, kit, mesh, with_yoke=False):
     lining = np.median(src[yl[lin_t], xl[lin_t]], axis=0)
     # ткань у ворота (под кромкой, сзади и с боков): у формы без кокетки — одним цветом
     body_c = np.median(c[(d > 0.02) & (d < 0.035) & (np.abs(np.abs(th) - 120) < 40)], axis=0)
-    if mode == "step":                                   # у широкой кромки (TBL сзади 2,9 см) на 2–3,5 см — сама кромка:
-        wloc = np.interp(np.abs(th), prof["angles"], prof["width"])   # «ткань» была белой, и зачистка за кромкой
+    wide = mode == "step" or (TRIM_MEASURE == "contiguous" and float(np.max(wf)) > 0.02)
+    if wide:                                             # у широкой кромки (TBL сзади 2,9 см, DET выезд 3,0) на 2–3,5 см —
+        pr = prof if mode == "step" else prof_b          # сама кромка: «ткань» была её цветом, и зачистка за кромкой
+        wloc = np.interp(np.abs(th), pr["angles"], pr["width"])   # (TRIM_CLEAR) красила ещё 8 мм — у TBL белым
         body_c = np.median(c[(d > wloc + 0.005) & (d < wloc + 0.02) & (np.abs(np.abs(th) - 120) < 40)], axis=0)
-        #                                                  красила ещё 8 мм белым (пользователь, 21.10: «сзади широкий»)
-    return TrimPaint(mesh, col, (full, wf), lining, None if with_yoke else body_c)
+        #                                                  (21.10: «сзади широкий»), у DET выезда — красным за швом
+        #                                                  обода (пользователь, 22.10: «красная обводка за швами»)
+    clear_to = (pr["angles"], pr["width"] + TRIM_CLEAR) if wide else None
+    return TrimPaint(mesh, col, (full, wf), lining, None if with_yoke else body_c, clear_to)
 
 
 def trim_profile(d, th, is_trim):
