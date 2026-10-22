@@ -659,7 +659,7 @@ def toml_section(code, prof, D, data):
                 "hem_h": "м: зона низа «от края» выше полос (fb.hem.HEM_H; без поля — 0,09)",
                 "trim_measure": "ширина кромки — сплошной полосой от края по основе (edge_kit.TRIM_MEASURE)",
                 "crest_fit": "герб крупнее: до буквы капитана 0,008 развёртки (~0,6 см), как TBL, BOS, DET",
-                "collar_panel": "шов вставки под воротом — U вокруг щита NHL, как у NHL 27 (edge_kit.PANEL_KNOTS)",
+                "collar_panel": "шаблон ворота NHL 27: полоса, вставка со щитом, V, обод — одинаково у всех (edge_kit.panel_v)",
                 "crest_size_cm": "герб не меньше 27 см (√ ширина × высота), как EA-гербы NHL 13 (edge_kit.crest_to_size)",
                 "armhole_split": "рукав другого цвета: граница с тканью по шву проймы Edge целиком (VGK, DET)",
                 "name_zones_from": "заготовка Custom: зоны фамилии, номера и буквы — как у MIN",

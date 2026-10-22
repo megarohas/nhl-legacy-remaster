@@ -1292,6 +1292,8 @@ def use_club(code):
     NAME_ZONES_FROM = prof.get("name_zones_from")
     global LETTER_SHIFT_CM, COLLAR_PANEL
     COLLAR_PANEL = bool(prof.get("collar_panel", False))
+    if COLLAR_PANEL and COLLAR != "lace":                # шаблон ворота: щит как у NHL 27 — размер и место по V
+        SHIELD_SCALE, SHIELD_GAP_MM = SHIELD_PANEL_SCALE, "panel"
     LETTER_SHIFT_CM = tuple(map(float, prof["letter_zone_shift_cm"])) if "letter_zone_shift_cm" in prof else None
     split = prof.get("armhole_split", "zones")
     if split not in ("zones", "full"):
@@ -1665,18 +1667,113 @@ PLACKET_CENTER = ((0.0, 1.5634), (0.0, 1.581))   # шов посередине �
 # до ~36° — по линии NHL 24 в виде спереди (расстояния — её точки на нашей сетке), дальше — полоса за кромкой как у
 # NHL 24 (кромка + 1,8–2,2 см: у Edge плечи не как у NHL 24, вид спереди там прижал бы обод к кромке), сзади — 3 см
 RING = True
-# Вставка под воротом adidas (U, щит NHL внутри): у NHL 27 — шов в ~6 см от края ворота посередине, к ~35° поднимается
-# к ободу. У широкой кромки (DET выезд, SEA) он и есть край кромки; у узкой (VGK, LAK, BOS) его не было — пользователь,
-# 22.10, VGK: «проебались швы вокруг зоны с шильдиком». Замер — край красного мыса DET выезда на сетке Edge (10–30°:
-# 6,2 → 5,6 см), у 0° — как у 10° (там щит). Профиль collar_panel = true — обод спереди по этой линии (ring_field)
-PANEL_KNOTS = ((0.0, 0.062), (10.0, 0.062), (20.0, 0.059), (30.0, 0.056), (32.0, 0.050), (34.0, 0.038))
+# Ворот adidas NHL 27 спереди — V: шов от острия посередине переда прямыми к ободу, щит NHL — внутри (у всех клубов
+# одинаково: DET, TBL, LAK, BOS, VGK — замер по рельефу base_normal на сетке NHL 24, вид спереди: острие y 1,603–1,607,
+# стороны — dy/d|x| 0,43–0,45). У узкой кромки (VGK, LAK, BOS, TBL) шва не было (пользователь, 22.10, VGK: «проебались
+# швы вокруг зоны с шильдиком»), у широкой (DET выезд, SEA) край кромки шёл по углу плоским «корытом» — первая
+# попытка (по мысу DET) вышла кривой: «зона со щитом слишком широкая, нет заострённости внизу». Профиль
+# collar_panel = true: обод спереди — по V (ring_field, panel_v); у широкой кромки спереди и край цвета — по V (trim_rule)
+PANEL_TIP_Y = 1.605                # м: острие V посередине переда
+PANEL_SLOPE = 0.44                 # dy/d|x| сторон V в виде спереди
+PANEL_BLEND = (22.0, 45.0)         # град: переход V → обод (стороны V к плечам загибаются вверх, как у NHL 27)
 COLLAR_PANEL = False
+# Шаблон ворота без шнуровки — один у всех клубов (пользователь, 22.10: «швы должны быть у всех одинаковые»): полоса
+# ворота (шов вдоль края, сужается к спине — замер узких кромок VGK и BOS: 1,41/1,26 спереди, 0,88/0,79 сзади), боковины
+# вставки со щитом (от конца полосы у |x| 3 см вниз-наружу к V у |x| 4,4 см — NHL 27, все клубы), V, обод. Края цвета
+# кромки — на эти швы (trim_rule: ближе к полосе — по полосе, иначе — по V/ободу), внутри вставки полосы нет
+BAND_KNOTS = ((0.0, 0.0133), (45.0, 0.0127), (90.0, 0.0113), (135.0, 0.0094), (180.0, 0.0083))
+TRAP_X = (0.030, 0.044)            # м: |x| боковин вставки — вверху (у шва полосы) и внизу (у V)
+# «половинчатый» ворот (collar_trim = "half"): спереди узкая полоса, сзади — до обода, переход скосом на HALF_STEP_AT
+# (пользователь, 22.10, VGK: «скосы — как у Лос-Анджелеса и Тампы», у них ступенька кромки источника на 79°)
+HALF_STEP_AT = 79.0
+# щит NHL в шаблоне ворота — как у NHL 27 (пользователь, 22.10: «увеличить шильдик, чтобы подходил под NHL 27»): размер
+# источника (масштаб 1 — у NHL 27 VGK 3,3 × 2,6 см; прежние 0,68 — под узкую кромку без вставки) и верх на 3,8 см выше
+# острия V (NHL 27: острие 1,607, верх щита 1,645 на сетке NHL 24). Профильные shield_scale / shield_offset_cm у шаблона
+# не действуют
+SHIELD_PANEL_SCALE = 1.0
+SHIELD_PANEL_TOP = 0.038           # м: верх щита над острием V
+
+
+def band_w(th):
+    return np.interp(np.abs(th), *zip(*BAND_KNOTS))
+
+
+def trap_geometry(P, D, TH, front):
+    """Боковины вставки в виде спереди: (y верха — шов полосы у |x| = TRAP_X[0], y низа — V у TRAP_X[1])."""
+    x, y = P[..., 0], P[..., 1]
+    k = front & (np.abs(np.abs(x) - TRAP_X[0]) < 0.002) & (np.abs(D - band_w(TH)) < 0.001)
+    y_top = float(np.median(y[k])) if k.any() else PANEL_TIP_Y + 0.035
+    return y_top, PANEL_TIP_Y + PANEL_SLOPE * TRAP_X[1]
+
+
+def trap_cover(P, front, geo, texel):
+    """Доля текселя внутри вставки (0…1, край — сглажен по текселю): по боковинам (|x| против боковины на этой высоте)
+    и по V снизу."""
+    x, y = P[..., 0], P[..., 1]
+    y_top, y_bot = geo
+    t = np.clip((y_top - y) / max(y_top - y_bot, 1e-6), 0, 1)
+    xs = TRAP_X[0] + (TRAP_X[1] - TRAP_X[0]) * t
+    k = np.hypot(1.0, (TRAP_X[1] - TRAP_X[0]) / max(y_top - y_bot, 1e-6))   # расстояние по нормали к боковине
+    side = (xs - np.abs(x)) / k
+    above = (y - (PANEL_TIP_Y + PANEL_SLOPE * np.abs(x))) / np.hypot(1.0, PANEL_SLOPE)
+    return np.where(front, np.clip(0.5 + np.minimum(side, above) / texel, 0, 1), 0.0)
+
+
+def trap_inside(P, front, geo):
+    """Внутри вставки (вид спереди): |x| меньше боковины на этой высоте, выше V."""
+    x, y = P[..., 0], P[..., 1]
+    y_top, y_bot = geo
+    t = np.clip((y_top - y) / max(y_top - y_bot, 1e-6), 0, 1)
+    xs = TRAP_X[0] + (TRAP_X[1] - TRAP_X[0]) * t
+    return front & (np.abs(x) < xs) & (y > PANEL_TIP_Y + PANEL_SLOPE * np.abs(x))
+
+
+def edge_collar_geo(mesh, S=1024):
+    """Растр сетки Edge: P, D (от края ворота), TH, перед без подворота — для шаблона ворота в trim_rule."""
+    tE, bE = kit3d.raster_uv(mesh, S)
+    mE = tE >= 0
+    PE = (bE[mE][:, :, None] * mesh["pos"][mesh["tri"][tE[mE]]]).sum(1)
+    wE = Hy.Welded(mesh)
+    rE = wE.neck()
+    zE = float(wE.P[rE, 2].mean())
+    bandE, lipE = Hy.edge_layers(wE, rE, zE)
+    foldE = Hy.fold_polyline(wE, bandE)
+    edgeE = Hy.smooth_curve(foldE if foldE is not None else Hy.lip_polyline(lipE), zE, win=2.0)
+    DE, THE = Hy.ring_dist(PE, edgeE), Hy.theta_of(PE, zE)
+    frontE = (PE[:, 2] > 0.03) & ~bandE[wE.g[mesh["tri"][tE[mE]]]].all(1)
+    return PE, DE, THE, frontE
+
+
+def panel_v(P, D, TH, front):
+    """V ворота на растре (P, D — от края ворота, TH — угол): тексели у линии y = PANEL_TIP_Y + PANEL_SLOPE·|x| (вид
+    спереди) → D по |θ| (медиана по 1°); с PANEL_BLEND[0] до PANEL_BLEND[1] — плавно (smoothstep) к ободу: у NHL 27
+    стороны V к плечам загибаются вверх и переходят в обод (22.10: стык V на 4 см и обода 3,2 см давал ступеньку).
+    V дальше замера — прямая по 15–33°. -> (θ, D, θ_J — дальше обод RING_KNOTS)."""
+    x, y = P[..., 0], P[..., 1]
+    on = front & (np.abs(y - (PANEL_TIP_Y + PANEL_SLOPE * np.abs(x))) < 0.0015)
+    th, d = np.abs(TH[on]), D[on]
+    ths, ds = [], []
+    for b in np.arange(0.0, 40.0, 1.0):
+        k = (th >= b - 0.5) & (th < b + 0.5)
+        if k.sum() >= 3:
+            ths.append(b)
+            ds.append(float(np.median(d[k])))
+    ths, ds = np.array(ths), np.array(ds)
+    fit = (ths >= 15) & (ths <= 33)
+    kf = np.polyfit(ths[fit], ds[fit], 1)
+    a = np.arange(0.0, PANEL_BLEND[1] + 0.5, 1.0)
+    v = np.where(a <= ths.max(), np.interp(a, ths, ds), np.polyval(kf, a))
+    ring = np.interp(np.maximum(a, RING_PLAIN_TH), *zip(*RING_KNOTS))   # обод ворота без шнуровки — с 35° (ближе к
+    #                                                  середине RING_KNOTS — спуск к планке шнуровки, 5 см)
+    t = np.clip((a - PANEL_BLEND[0]) / (PANEL_BLEND[1] - PANEL_BLEND[0]), 0, 1)
+    sm = t * t * (3 - 2 * t)
+    return a, v * (1 - sm) + ring * sm, float(PANEL_BLEND[1])
+
 RING_PLAIN_TH = 35.0               # град: у ворота без шнуровки обод — только дальше от середины переда (там он встречает
 #                                    шов кокетки); спуск к верху планки (S) — «отросточки» (пользователь, 21.10, NJD)
 RING_KNOTS = ((23.7, 0.0502), (26.5, 0.0455), (32.0, 0.0355), (35.3, 0.0318), (40.0, 0.0305), (45.0, 0.0298),
               (50.0, 0.0295), (60.0, 0.0297), (75.0, 0.0300), (90.0, 0.0310), (120.0, 0.0320), (150.0, 0.0310),
               (180.0, 0.0305))
-
 
 def placket_segments():
     """Отрезки планки в виде спереди (x, y): обе половины и шов посередине."""
@@ -2076,9 +2173,12 @@ def ring_field(G):
         if COLLAR != "lace":                             # без планки: обод — с RING_PLAIN_TH по таблице, без спуска
             thS, DS = RING_PLAIN_TH, float(np.interp(RING_PLAIN_TH, *zip(*RING_KNOTS)))
         kn = [(thS, DS)] + [(a, d_) for a, d_ in RING_KNOTS if a > thS + 1.0]
-        if COLLAR != "lace" and COLLAR_PANEL:            # вставка под воротом: обод спереди — по её шву (U)
+        if COLLAR != "lace" and COLLAR_PANEL:            # ворот V: обод спереди — по V (острие посередине)
+            if "panel" not in G:
+                G["panel"] = panel_v(P, D, TH, pz)
+            pth, pd, thJ = G["panel"]
             thS = 0.0
-            kn = list(PANEL_KNOTS) + [(a, d_) for a, d_ in RING_KNOTS if a > PANEL_KNOTS[-1][0] + 1.0]
+            kn = list(zip(pth, pd)) + [(a, d_) for a, d_ in RING_KNOTS if a > thJ + 1.0]   # V до θ_J, дальше обод
         f = PchipInterpolator([a for a, _ in kn], [d_ for _, d_ in kn])
         ta = np.clip(np.abs(TH), thS, 180.0)
         side = m & ~B & (TH * sgn > 0) & (np.abs(TH) >= thS)
@@ -2130,6 +2230,19 @@ def design_seams(mesh, painters, S=2048, out_S=1024):
         d_t = np.where(m & ~B & ~in_ins, np.abs(wid - D), inf)
     else:
         wid = np.zeros((S, S))
+    d_tz = inf
+    template = COLLAR_PANEL and COLLAR != "lace"
+    if template:                                         # шаблон ворота: шов полосы (не по кромке клуба), боковины вставки
+        geo = trap_geometry(P, D, TH, front)
+        inside = trap_inside(P, front, geo)
+        d_t = np.where(m & ~B & ~inside, np.abs(band_w(TH) - D), inf)
+        y_top, y_bot = geo
+        d_tz = inf.copy()
+        for sgn in (-1.0, 1.0):
+            x0, y0, x1, y1 = sgn * TRAP_X[0], y_top, sgn * TRAP_X[1], y_bot
+            ex, ey = x1 - x0, y1 - y0
+            tt = np.clip(((x - x0) * ex + (y - y0) * ey) / (ex * ex + ey * ey), 0, 1)
+            d_tz = np.where(front, np.minimum(d_tz, np.hypot(x - (x0 + tt * ex), y - (y0 + tt * ey))), d_tz)
     d_y = inf
     yk = painters.get("cur") or painters.get("yoke_shape")
     if yk is not None:
@@ -2151,7 +2264,7 @@ def design_seams(mesh, painters, S=2048, out_S=1024):
     if RING:
         R, dR, rinfo = ring_field(G)
         info.update(rinfo)
-        side = np.isfinite(R) & ~in_ins & (D > wid + 0.004)
+        side = np.isfinite(R) & ~in_ins & (D > (band_w(TH) if template else wid) + 0.004)
         d_r = np.where(side, np.abs(D - np.where(side, R, 0.0)) / np.sqrt(1.0 + dR ** 2), inf)
     # полосы рукава (пользователь, 19.10: «полосы на руках — ровно по шву»): швы по их границам — кольца по столбцам
     # развёртки рукава Edge (SleeveMap: полоса — столбец u)
@@ -2165,7 +2278,8 @@ def design_seams(mesh, painters, S=2048, out_S=1024):
             dd = np.min(np.abs(sE[..., None] - np.asarray(sb)[None, None, :]), axis=-1) * G["MPU"]
             d_s = np.where(k_, np.minimum(d_s, dd), d_s)
     d_a = np.where(m & ~B, armhole_dist(G), inf)          # шов проймы Edge (низ, где делится цвет)
-    d = np.minimum(np.minimum(np.minimum(np.minimum(np.minimum(np.minimum(d_i, d_t), d_y), d_p), d_r), d_s), d_a)
+    d = np.minimum(np.minimum(np.minimum(np.minimum(np.minimum(np.minimum(np.minimum(d_i, d_t), d_y), d_p), d_r), d_s), d_a),
+                   d_tz)
     t = d / np.maximum(ts, 1e-6)
     H = np.where(np.isfinite(t), seam_height(np.where(np.isfinite(t), t, 99.0)), 0.0)
     H = np.where(m, H, 0.0)
@@ -2183,7 +2297,7 @@ def design_seams(mesh, painters, S=2048, out_S=1024):
     f = S // out_S
     xy = xy.reshape(out_S, f, out_S, f, 2).mean((1, 3))
     for nm_, dd in (("insert", d_i), ("trim", d_t), ("yoke", d_y), ("placket", d_p), ("ring", d_r),
-                    ("sleeve", d_s), ("armhole", d_a)):
+                    ("sleeve", d_s), ("armhole", d_a), ("panel_sides", d_tz)):
         info[nm_] = int((np.isfinite(dd) & (dd < 0.002)).sum())
     return xy, info
 
@@ -2440,9 +2554,11 @@ class TrimPaint:
     цветом кромки NHL 24, край сглажен по текселю (пользователь, 19.10: «окантовка у шильдика неровная»). Ширина — как
     у NHL 24 по углу (сглажено ±TRIM_SMOOTH°) × TRIM_K."""
 
-    def __init__(self, mesh, color, width, lining=None, body=None, clear_to=None):
+    def __init__(self, mesh, color, width, lining=None, body=None, clear_to=None, trap=None):
         self.mesh, self.color, self.width, self.lining, self.body = mesh, color, width, lining, body
         self.clear_to = clear_to                       # (|θ|, м): зачистка за кромкой — не ближе этого (кромка источника)
+        self.trap = trap                               # шаблон ворота: вставка со щитом (trap_geometry) — без полосы
+        self._P = {}
         self._geo = {}
 
     def geo(self, shape):
@@ -2463,7 +2579,10 @@ class TrimPaint:
             B = np.zeros(shape, bool)
             B[m] = band[w.g[self.mesh["tri"][tid[m]]]].all(1)
             G = px_size(D, m & ~B)
+            PP = np.zeros(shape + (3,))
+            PP[m] = P
             self._geo[shape] = (D, TH, B, m, G)
+            self._P[shape] = PP
         return self._geo[shape]
 
     def __call__(self, out, msk):
@@ -2474,6 +2593,12 @@ class TrimPaint:
         texel = 0.0021 * 1024 / Ws
         cov = np.clip(0.5 + (wid - D) / G, 0, 1)
         cov = np.where(B, ((D < TRIM_INNER) & (wid > 1e-4)).astype(float), cov)   # в разрыве кромки — и подворот без неё
+        a_in = None
+        if self.trap is not None:                       # шаблон ворота: во вставке со щитом полосы нет (как у NHL 27)
+            PP = self._P[(Hs, Ws)]
+            narrow = wid < band_w(TH) + 0.002
+            a_in = trap_cover(PP, m & ~B & (PP[..., 2] > 0.03), self.trap, texel) * narrow
+            cov = cov * (1 - a_in)                      # край полосы по боковине — сглажен
         zone = m & msk & (D < wid + 3 * texel)
         out = out.copy()
         c = out[..., :3]
@@ -2492,6 +2617,10 @@ class TrimPaint:
         if self.lining is not None:                       # подворот ниже кромки — ровной подкладкой (были пятна)
             c = c.copy()
             c[m & msk & B] = self.lining
+        pc = getattr(self, "panel_c", None)
+        if a_in is not None and pc is not None:         # вставка — цветом ткани: у источника полоса кончается не там, где
+            c = c * (1 - a_in[..., None]) + pc[None, None] * a_in[..., None]   # у шаблона (VGK выезд, 22.10:
+            zone = zone | (msk & (a_in > 0))            # чёрный хвост полосы во вставке и ступенька у её края)
         new = c * (1 - cov[..., None]) + self.color[None, None] * cov[..., None]
         out[..., :3] = np.where((zone | (m & msk & B))[..., None], new, c)
         return out
@@ -2582,6 +2711,21 @@ def trim_rule(code, kit, mesh, with_yoke=False):
         full, wf = step_width(prof)
         print(f"  кромка ступенькой ({COLLAR_TRIM}): узкая {prof['narrow'] * 100:.2f} см "
               f"× {TRIM_K}, ступенька {prof['step_at']:.0f}°, сзади — до обода (RING_KNOTS)")
+    trap = None
+    if COLLAR_PANEL and COLLAR != "lace":                # шаблон ворота: край кромки — на шов (полоса или V/обод)
+        PE, DE, THE, frontE = edge_collar_geo(mesh)
+        pth, pd, thJ = panel_v(PE, DE, THE, frontE)
+        a_full = np.abs(full)
+        outer = np.where(a_full < thJ, np.interp(a_full, pth, pd), np.interp(a_full, *zip(*RING_KNOTS)))
+        band = band_w(full)
+        if COLLAR_TRIM == "half":                        # половинчатый: полоса спереди, скос на HALF_STEP_AT, сзади — обод
+            sm_ = np.clip(0.5 + (a_full - HALF_STEP_AT) / (2 * TRIM_STEP_SOFT), 0, 1)
+            wf = band + (outer - band) * sm_
+        else:
+            wf = np.where(wf < (band + outer) / 2, band, outer)
+        trap = trap_geometry(PE, DE, THE, frontE)
+        print(f"  кромка по шаблону ворота: полоса {band.max() * 100:.2f}–{band.min() * 100:.2f} см, V — острие "
+              f"{PANEL_TIP_Y} м, до {thJ:.0f}°, дальше обод; вставка — y {trap[0]:.3f}…{trap[1]:.3f}")
     print("  кромка: цвет", np.round(col).tolist(), "ширина, см:",
           {int(a): round(float(np.interp(a, full, wf, period=360)) * 100, 2) for a in (0, 45, 90, 135, 180)})
     tl, bl = kit3d.raster_uv(n24, src.shape[0])
@@ -2594,11 +2738,18 @@ def trim_rule(code, kit, mesh, with_yoke=False):
     if wide:                                             # у широкой кромки (TBL сзади 2,9 см, DET выезд 3,0) на 2–3,5 см —
         pr = prof if mode == "step" else prof_b          # сама кромка: «ткань» была её цветом, и зачистка за кромкой
         wloc = np.interp(np.abs(th), pr["angles"], pr["width"])   # (TRIM_CLEAR) красила ещё 8 мм — у TBL белым
-        body_c = np.median(c[(d > wloc + 0.005) & (d < wloc + 0.02) & (np.abs(np.abs(th) - 120) < 40)], axis=0)
-        #                                                  (21.10: «сзади широкий»), у DET выезда — красным за швом
+        body_c = np.median(c[(d > wloc + 0.005) & (d < wloc + 0.02) & (np.abs(np.abs(th) - 160) < 20)], axis=0)
+        #                                                  (21.10: «сзади широкий»), у DET выезда — красным за швом;
+        #                                                  мера — у середины спины: сбоку у VGK — серый рукав (22.10)
         #                                                  обода (пользователь, 22.10: «красная обводка за швами»)
     clear_to = (pr["angles"], pr["width"] + TRIM_CLEAR) if wide else None
-    return TrimPaint(mesh, col, (full, wf), lining, None if with_yoke else body_c, clear_to)
+    panel_c = None
+    if trap is not None:                                 # вставка — цветом груди под острием V (сбоку у ворота бывает
+        fr_ = (P[:, 2] > 0.03) & (np.abs(P[:, 0]) < 0.03) & (P[:, 1] > 1.57) & (P[:, 1] < 1.595)   # рукав: VGK выезд
+        panel_c = np.median(c[fr_], axis=0) if fr_.any() else body_c                               # — серый, 22.10)
+    tp = TrimPaint(mesh, col, (full, wf), lining, None if with_yoke else body_c, clear_to, trap)
+    tp.panel_c = panel_c
+    return tp
 
 
 def trim_profile(d, th, is_trim):
@@ -2807,9 +2958,13 @@ def fit_shield_gap(placed, soft, comp, src, dst, tid24, trim, code, kit):
     pl = next((p for p in placed if p["name"] == "neck_shield"), None)
     if pl is None or trim is None:
         return None
-    gap_mm, why = shield_gap_target(code, kit)
-    edge_y, top_y = trim_front_bottom(trim)
-    target = edge_y - gap_mm / 1000.0
+    if SHIELD_GAP_MM == "panel":                         # шаблон ворота: верх щита — над острием V, как у NHL 27
+        target = PANEL_TIP_Y + SHIELD_PANEL_TOP
+        gap_mm, why, edge_y = 0.0, f"шаблон ворота: верх на {SHIELD_PANEL_TOP * 100:.1f} см над острием V", target
+    else:
+        gap_mm, why = shield_gap_target(code, kit)
+        edge_y, top_y = trim_front_bottom(trim)
+        target = edge_y - gap_mm / 1000.0
     if SHIELD_GAP_MM is SHIELD_GAP_DEFAULT_MM or SHIELD_GAP_MM == "source":
         r = source_gap_for(code, kit)                     # широкая кромка: щит на ней, как у источника
         need = SHIELD_H * SHIELD_SCALE + r["gap_mm"] / 1000.0 + SHIELD_ON_TRIM_PAD
