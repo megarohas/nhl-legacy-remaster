@@ -596,32 +596,47 @@ def add_gloves(db, new):
         new_keys = {(k.get('style', 1), k['variant']): explicit[(code, k['kit'])] for k in mine_new}
         # era строки: сначала как у краг стиля формы (стиль 0 → 0), если она перехватывает прежние формы клуба (у DET нет
         # общей строки краг era 0: строка новой формы era 0 по компаратору лучше строк era −1 и для 0_10_3 — 22.10), —
-        # era −1 («любая») с variant формы; берётся первая, при которой модель сходится
-        for era_new in ("form", -1):
+        # era −1 («любая») с variant формы; берётся первая, при которой модель сходится. У SEA (22.10) не сходится ни то,
+        # ни другое: era 0 перехватывает формы adidas 0_100_0/1 (стиль 0, своих строк нет), era −1 — 1_100_2 (variant 2,
+        # как у edge_home 0_100_2). Тогда — era формы и охранные строки перехваченных форм: их era и variant, зоны —
+        # те, что они брали до накладки (brand −1; бренды, у которых было иначе, — своей строкой)
+        guards = []
+        for era_new in ("form", -1, "guard"):
             club = []
             for k in mine_new:
                 st = k.get('style', 1)
-                era = (era1 if st == 1 else 0) if era_new == "form" else -1
-                club.append((base, era, k['variant'], explicit[(code, k['kit'])]))
-            post = club_equipment(db, low, team, [(e, v, EQ_GLOVES, -1, None, z) for _, e, v, z in club])
+                era = -1 if era_new == -1 else (era1 if st == 1 else 0)
+                club.append((base, era, k['variant'], explicit[(code, k['kit'])], -1))
+            if era_new == "guard":
+                club += guards
+            post = club_equipment(db, low, team, [(e, v, EQ_GLOVES, b, None, z) for _, e, v, z, b in club])
             bad = [(kv, b) for kv in kits for b in BR
                    if eq_lookup(post, key(*kv, b))[5] != new_keys.get(kv, pre[(kv, b)])]
             if not bad:
                 break
+            if era_new == "form":
+                for kv in sorted({kv for kv, _ in bad if kv not in new_keys}):
+                    e = era1 if kv[0] == 1 else 0
+                    z0 = pre[(kv, BR[-1])]                 # бренд без своих строк — как brand −1
+                    guards.append((base, e, kv[1], z0, -1))
+                    guards += [(base, e, kv[1], pre[(kv, b)], b) for b in BR[:-1] if pre[(kv, b)] != z0]
         else:
             sys.exit(f'{code} {bad[0][0][0]}_{art}_{bad[0][0][1]}: по модели краги не те (бренд {bad[0][1]})')
-        for (_, e, v, z), k in zip(club, mine_new):
+        for (_, e, v, z, _b), k in zip(club, mine_new):
             st = k.get('style', 1)
             done.append(f"{code} {k['kit']} {st}_{art}_{k['variant']}: краги {z[:3]}…{z[15:21]} — "
                         f"{os.path.basename(HELMETS)} (era {e})")
+        for _, e, v, z, b in club[len(mine_new):]:
+            done.append(f"{code} era {e} variant {v} brand {b}: охранная строка краг — как до накладки {tuple(z[:3])}")
         adds += club
     if adds:
         n = db.by_name[EQ]['rows']
         db.resize(EQ, n + len(adds))
-        for i, (src, era, v, zones) in enumerate(adds):
+        for i, (src, era, v, zones, brand) in enumerate(adds):
             db.put_record(EQ, n + i, db.record(EQ, src[4]))     # team, equipment 4, brand −1 — как у образца
             db.set(EQ, 'era', n + i, era - low['era'])
             db.set(EQ, 'variant', n + i, v - low['variant'])
+            db.set(EQ, 'brand', n + i, brand - low['brand'])
             db.set(EQ, 'index', n + i, n + i)
             for f, c in zip(EQ_ZONES, zones):
                 db.set(EQ, f, n + i, c)
