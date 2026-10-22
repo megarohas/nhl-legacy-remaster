@@ -716,13 +716,26 @@ def write_profile(code, lines, prof):
 
 
 def write_helmets(code, helmets, about_note):
+    """Каска и краги edge-форм клуба — в nhl24_helmets.json. У клуба уже есть запись других форм (SEA 22.10: «home»
+    прежней формы NHL 24) — edge-формы дописываются в неё, прежние ключи — как были; те же формы — отказ."""
     raw = open(HELMETS, "rb").read().decode("utf-8")
     data = json.loads(raw)
-    if code in data:
-        sys.exit(f"{HELMETS}: у {code} запись уже есть — не трогаю")
-    body = ",\n         ".join(f'"{kit}": ' + json.dumps(ent, ensure_ascii=False) for kit, ent in helmets.items())
-    i = raw.rstrip().rindex("}")
-    new = raw[:i].rstrip() + f',\n "{code}": {{{body}}}\n' + raw[i:]
+    old = data.get(code, {})
+    if set(old) & set(helmets):
+        sys.exit(f"{HELMETS}: у {code} формы {sorted(set(old) & set(helmets))} уже есть — не трогаю")
+    body = ",\n         ".join(f'"{kit}": ' + json.dumps(ent, ensure_ascii=False)
+                               for kit, ent in list(old.items()) + list(helmets.items()))
+    if old:                                            # объект клуба — от '"КОД": {' до парной скобки
+        i = raw.index(f'\n "{code}": {{') + 1
+        depth = 0
+        for j in range(raw.index("{", i), len(raw)):
+            depth += {"{": 1, "}": -1}.get(raw[j], 0)
+            if depth == 0:
+                break
+        new = raw[:i] + f' "{code}": {{{body}}}' + raw[j + 1:]
+    else:
+        i = raw.rstrip().rindex("}")
+        new = raw[:i].rstrip() + f',\n "{code}": {{{body}}}\n' + raw[i:]
     old_about = ' "about": ' + json.dumps(data["about"], ensure_ascii=False) + ","
     if old_about in new:
         new = new.replace(old_about, ' "about": ' + json.dumps(data["about"] + " " + about_note, ensure_ascii=False) + ",")
@@ -780,8 +793,9 @@ def cmd_profile(a):
             import tomllib
             if code in tomllib.load(open(CLUBS_TOML, "rb")):
                 sys.exit(f"[{code}] в edge_clubs.toml уже есть — генератор не переписывает готовый профиль")
-            if code in json.load(open(HELMETS, encoding="utf-8")):
-                sys.exit(f"{code} в nhl24_helmets.json уже есть — не трогаю")
+            had = set(json.load(open(HELMETS, encoding="utf-8")).get(code, {})) & set(data["helmets"])
+            if had:
+                sys.exit(f"{code}: формы {sorted(had)} в nhl24_helmets.json уже есть — не трогаю")
             if rchanged:
                 L.save_registry(reg)
                 say(f"записано: реестр {L.REGISTRY}")
