@@ -319,6 +319,9 @@ def main():
     s.add_argument("--club", required=True, help="код клуба (BOS); без --write — можно через запятую (NJD,TBL)")
     s.add_argument("--write", action="store_true", help="записать профиль, номера в реестре, каску и краги")
     s.add_argument("--write-palette", action="store_true", help="и палитру клуба NHL 27 в nhl24_team_colors.json")
+    s.add_argument("--no-head-check", action="store_true",
+                   help="не сверять прочие разделы с git HEAD (параллельная работа: у других клубов правки не закоммичены);"
+                        "сверка с файлом до записи остаётся")
     a = p.parse_args()
     if a.cmd == "profile":
         from . import profile

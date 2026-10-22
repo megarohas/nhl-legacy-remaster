@@ -722,7 +722,7 @@ def head_profiles():
     return tomllib.loads(r.stdout.decode("utf-8")) if r.returncode == 0 else None
 
 
-def write_profile(code, lines, prof):
+def write_profile(code, lines, prof, head_check=True):
     """Раздел клуба — в конец edge_clubs.toml (окончания строк — как у файла). До замены файла — сверка: все разделы,
     кроме нового, разбираются в то же, что в git HEAD (и что в файле до записи); новый — в предложенное (21.10: без
     заголовка [КОД] ключи BOS легли в [TBL.slot.away]). Не сошлось — запись отменяется."""
@@ -731,7 +731,7 @@ def write_profile(code, lines, prof):
     nl = b"\r\n" if b"\r\n" in raw else b"\n"
     txt = raw.rstrip(b"\r\n") + nl + nl + nl.join(l.encode("utf-8") for l in lines) + nl
     before, after = tomllib.loads(raw.decode("utf-8")), tomllib.loads(txt.decode("utf-8"))
-    head = head_profiles()
+    head = head_profiles() if head_check else None   # --no-head-check: агенты параллельно правят свои разделы
     for ref, what in ((before, "файле до записи"), (head, "git HEAD")):
         if ref is None:
             continue
@@ -828,7 +828,7 @@ def cmd_profile(a):
             if rchanged:
                 L.save_registry(reg)
                 say(f"записано: реестр {L.REGISTRY}")
-            write_profile(code, lines, prof)
+            write_profile(code, lines, prof, head_check=not getattr(a, "no_head_check", False))
             say(f"записано: профиль [{code}] → {CLUBS_TOML}")
             fixes = [d.why for d in D if d.field.startswith("каска") and "→" in d.why]
             note = (f"{code} edge_home/edge_away ({__import__('datetime').date.today():%d.%m}, kitport profile) — зоны 1–9 из "
