@@ -138,6 +138,50 @@ def scale_glyphs(slot_dir, name=1.0, captain_x=1.0, log=None, name_anchor="cente
     return rep
 
 
+DIGIT_ROWS = ((115, 238), (242, 367))   # крупные цифры номера на спине: 0–4 и 5–9
+DIGIT_CELL = 80                    # шаг клеток цифр (центры 40, 120, 200, 280, 360 — замер атласов EA и NHL 27)
+
+
+def fit_digits(slot_dir, gap=0.08, log=None):
+    """Цифры номера ближе друг к другу (пользователь, 22.10: «цифры в номере далеко, особенно на светлых формах со
+    светлой обводкой»): игра берёт цифру клеткой атласа (DIGIT_CELL) — промежуток между цифрами = поля клетки. Цифры
+    шире в своих клетках (высота та же), пока поле не станет ≤ gap высоты цифры (MIN: 64 из 80 px — промежуток 16 px,
+    4 см при номере 30 см). -> [описание]."""
+    p = lambda f: os.path.join(slot_dir, f + ".png")
+    cm = np.asarray(Image.open(p("font_cm")).convert("RGBA")).copy()
+    nm = np.asarray(Image.open(p("font_nm")).convert("RGBA")).copy()
+    al = cm[..., 3] > 40
+    boxes = []
+    for y0, y1 in DIGIT_ROWS:
+        for i in range(5):
+            x0 = i * DIGIT_CELL
+            sub = al[y0:y1, x0:x0 + DIGIT_CELL]
+            cols, rows = np.nonzero(sub.any(0))[0], np.nonzero(sub.any(1))[0]
+            if len(cols):
+                boxes.append(((x0 + cols[0], y0 + rows[0], x0 + cols[-1] + 1, y0 + rows[-1] + 1), (x0, y0, x0 + DIGIT_CELL, y1)))
+    if not boxes:
+        return []
+    ws = sorted(b[2] - b[0] for b, _ in boxes)
+    w = float(np.median(ws[len(ws) // 5:]))            # без узкой «1»
+    h = float(np.median([b[3] - b[1] for b, _ in boxes]))
+    sx = min(max(1.0, (DIGIT_CELL - gap * h) / w), (DIGIT_CELL - 2) / w)
+    if sx <= 1.0:
+        return [f"цифры номера: {w:.0f}×{h:.0f} px, промежуток {DIGIT_CELL - w:.0f} px — уже плотно"]
+    fills = ((0, 0, 0, 0), (128, 128, 255, 255))
+    for box, cell in boxes:
+        _scale_box([cm, nm], box, sx, 1.0, (cell[0] + 1, cell[1], cell[2] - 1, cell[3]), fills)
+    sm = np.zeros((512, 512, 4), np.uint8)
+    sm[..., :3] = 21
+    sm[..., 3] = np.where(cm[..., 3] > 128, 255, 0)
+    Image.fromarray(cm).save(p("font_cm"))
+    Image.fromarray(nm).save(p("font_nm"))
+    Image.fromarray(sm).save(p("font_sm"))
+    rep = [f"цифры номера: {w:.0f}×{h:.0f} px, промежуток {DIGIT_CELL - w:.0f} → {DIGIT_CELL - w * sx:.0f} px (шире ×{sx:.2f})"]
+    if log is not None:
+        log.extend(rep)
+    return rep
+
+
 def normal_map(path, size):
     n = np.asarray(Image.open(path).convert("RGB")).astype(np.float32) / 255.0 * 2 - 1
     x, y = n[..., 0], n[..., 1]

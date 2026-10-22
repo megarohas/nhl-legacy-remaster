@@ -1326,7 +1326,8 @@ def use_club(code):
     SLEEVE_ZONES_FROM = prof.get("sleeve_zones_from", SLEEVE_ZONES_REF)
     global NAME_ZONES_FROM, ARMHOLE_SPLIT_ZONES
     NAME_ZONES_FROM = prof.get("name_zones_from")
-    global LETTER_SHIFT_CM, COLLAR_PANEL, LETTERING
+    global LETTER_SHIFT_CM, COLLAR_PANEL, LETTERING, INSERT_HW
+    INSERT_HW = INSERT_HW_NHL27 if prof.get("insert_color") == "source" else INSERT_HW_MIN
     LETTERING = prof.get("lettering", "standard")
     global NAME_ARCH
     NAME_ARCH = bool(prof.get("name_arch", False))
@@ -1335,7 +1336,8 @@ def use_club(code):
     COLLAR_PANEL = bool(prof.get("collar_panel", False))
     global COLLAR_LINING
     COLLAR_LINING = prof.get("collar_lining", "source")
-    global COLLAR_LAPEL
+    global COLLAR_LAPEL, YOKE_MESH
+    YOKE_MESH = bool(prof.get("yoke_mesh", True))
     COLLAR_LAPEL = prof.get("collar_lapel")             # "source": лацканы цвета источника (MTL, DAL — белые, 22.10)
     if COLLAR_LAPEL not in (None, "source"):
         sys.exit(f"[{code}] collar_lapel = {COLLAR_LAPEL!r} — только \"source\"")
@@ -1531,12 +1533,11 @@ def yoke_heights(code, kit):
     print("  кокетка: край спереди / сзади у середины, м:", round(float(np.interp(0.08, *res["front"])), 3), "/",
           round(float(np.interp(0.08, *res["back"])), 3), "(сзади — " + ("источник" if YOKE_BACK == "source" else
                                                                          f"EA {back_from}") + ")")
-    if COLLAR_LAPEL:                                     # лацканы (MTL, DAL выезд): у их концов край кокетки — не ниже угла
-        xs_, hs_ = res["front"]                          # вставки, где кончается лацкан (ниже — планка цвета ткани): иначе
-        y_c, x_c = INSERT_HW[2]                          # под концом лацкана — полоска кокетки 2–6 мм (сборка 2 MTL)
-        w_ = np.clip((x_c + LAPEL_TIP_X + 0.01 - xs_) / 0.01, 0, 1)
-        y_k = y_c + LAPEL_YOKE_GAP                       # чуть выше среза лацкана: их сглаженные края на одной высоте
-        res["front"] = (xs_, hs_ + np.maximum(y_k - hs_, 0.0) * w_)   # давали тонкую красную черту (сборка 3 MTL)
+    if COLLAR_LAPEL:                                     # лацканы (MTL, DAL): край кокетки спереди — ровный, на высоте угла
+        xs_, hs_ = res["front"]                          # вставки, где кончается лацкан, как у NHL 27 (шов кокетки — прямая
+        y_c, x_c = INSERT_CORNER                         # к углу). Был подъём на 3 мм у конца лацкана на 1 см (сборка 3
+        y_k = y_c + LAPEL_YOKE_GAP                       # MTL: красная черта) — крючки шва и белый зубец у конца лацкана
+        res["front"] = (xs_, np.full_like(hs_, y_k))     # (пользователь, 22.10, DAL и MTL)
     if COLLAR_PANEL and COLLAR != "lace":                # мыс со щитом — V шаблона ворота (BUF выезд, 22.10)
         notch_on_v(res)
     if YOKE_STRIPE == "source":                          # полоса под кокеткой (BUF выезд): цвет и ширина источника
@@ -1717,6 +1718,14 @@ class YokePaint:
 # (пользователь: «по краям должна быть ровная, а у тебя полукругами»): нижняя часть — узкий V между шнурками, выше —
 # прямые расходящиеся края до самого широкого места (у линии кокетки), дальше — прямые сходящиеся к вороту.
 INSERT_HW = ((1.583, 0.0), (1.610, 0.008), (1.629, 0.0426), (1.680, 0.0094))
+INSERT_HW_MIN = INSERT_HW
+INSERT_CORNER = (1.629, 0.0426)    # y, |x| самого широкого угла вставки — у MIN и у NHL 27 (замер DAL: 1,628, 3,8 см)
+# вставка NHL 27 (insert_color = "source": TOR, MTL, DAL) — язычок под шнурками короче, чем у MIN: острие на 1,604
+# (у MIN — 1,583, у DAL выезда зелёный клин до низа шнуровки — пользователь, 22.10); замер — контур чёрной вставки DAL
+# дома и зелёной DAL выезда в виде спереди (сетка NHL 24): 1,608 — 0,35 см, 1,612 — 0,5, 1,616 — 1,25, 1,620 — 2,25,
+# 1,624 — 3,15; угол и верх — как у MIN (с ними сходятся швы планки и лацканы)
+INSERT_HW_NHL27 = ((1.604, 0.0), (1.608, 0.0035), (1.612, 0.005), (1.616, 0.0125), (1.620, 0.0225), (1.624, 0.0315),
+                   INSERT_CORNER, (1.680, 0.0094))
 # (угол — на высоте линии кокетки спереди у вставки, 1,629 м: на 1,625 между линией и углом торчал белый «зубец» —
 # лесенка у стыка вставки и кокетки, пользователь, 19.10; верхний край — по-прежнему прямая от угла к вороту)
 # (верх — продолжение той же прямой края к вороту, до кромки: раньше над 1,645 край шёл отвесно, и у угла с кромкой
@@ -1967,6 +1976,38 @@ def edge_collar_geo(mesh, S=1024):
     return PE, DE, THE, frontE
 
 
+# Лацканы ворота со шнуровкой (collar_lapel, MTL и DAL дома и в гостях) — как у NHL 27 (22.10, пользователь: «ворота у
+# Далласа и Монреаля кривые, выравнивай»). Было: край лацкана — обод MIN (у шнуровки он спускается к верху планки S, и у
+# угла вставки лацкан резался по горизонтали — ступенька, к плечу обод круто уходил с 4,8 до 3,0 см — излом). Стало:
+# от угла вставки (INSERT_HW, 1,629 м) — коротко прямой до θ LAPEL_JOIN_TH, дальше — ровная полоса ширины лацкана NHL 27
+# по углу (замер DAL и MTL дома — крой один: 50° 3,5 см, 60° 3,3, 90° 3,1), сзади — обод; шов рельефа — по тому же краю.
+# Проба вариантов без сборки — game/work/nhl24/qa/lapel_try.py: прямая до 50° давала горб у плеча (D 32,6 → 36 мм)
+LAPEL_KNOTS = ((50.0, 0.0355), (60.0, 0.033), (75.0, 0.032))
+LAPEL_JOIN_TH = 30.0
+
+
+def lapel_edge(P, D, TH, front):
+    """Край лацкана спереди на растре: прямая (вид спереди) от угла вставки до точки LAPEL_JOIN_TH на ширине
+    LAPEL_KNOTS → D по |θ| (медиана по 1°). -> (θ, D)."""
+    x, y, ax = P[..., 0], P[..., 1], np.abs(P[..., 0])
+    yc, xc = INSERT_CORNER
+    th = np.abs(TH)
+    d1 = float(np.interp(LAPEL_JOIN_TH, *zip(*LAPEL_KNOTS)))
+    k = front & (np.abs(th - LAPEL_JOIN_TH) < 0.75) & (np.abs(D - d1) < 0.001)
+    x1, y1 = float(np.median(ax[k])), float(np.median(y[k]))
+    seg = (ax - xc) / max(x1 - xc, 1e-6)
+    yl = yc + (y1 - yc) * seg
+    on = front & (seg >= 0) & (seg <= 1) & (np.abs(y - yl) < 0.0012)
+    t_, d_ = th[on], D[on]
+    ths, ds = [], []
+    for b in np.arange(np.floor(t_.min()), LAPEL_JOIN_TH, 1.0):
+        sel = (t_ >= b) & (t_ < b + 1.0)
+        if sel.sum() >= 3:
+            ths.append(b + 0.5)
+            ds.append(float(np.median(d_[sel])))
+    return np.array(ths), np.array(ds)
+
+
 def panel_v(P, D, TH, front):
     """V ворота на растре (P, D — от края ворота, TH — угол): тексели у линии y = PANEL_TIP_Y + PANEL_SLOPE·|x| (вид
     спереди) → D по |θ| (медиана по 1°); с PANEL_BLEND[0] до PANEL_BLEND[1] — плавно (smoothstep) к ободу: у NHL 27
@@ -2099,6 +2140,8 @@ def flake_mask(bn):
 # PERF_CELL текселей карты 1024 (у Edge тексель ≈ 1,5–2 мм: шаг ≈ 6–8 мм; мельче 1024 не передаст), по решётке развёртки
 # (на острове — island_weave: без шва через край острова).
 PERF = True
+YOKE_MESH = True                   # профиль yoke_mesh = false: без сетки (у NHL 27 MTL, DAL, BUF её нет — 22.10, «волнистая
+#                                    хуетень вокруг белой обводки»: край сетки у лацкана шёл ступеньками по решётке ямок)
 PERF_CELL = (4, 4)                 # ячейка ямки (строки, столбцы), текселей
 PERF_SIGMA = 0.85                  # радиус ямки (гаусс), текселей
 PERF_RMS = 40.0                    # СКО наклона (xy карты, из 127,5)
@@ -2396,6 +2439,13 @@ def ring_field(G):
         if COLLAR != "lace":                             # без планки: обод — с RING_PLAIN_TH по таблице, без спуска
             thS, DS = RING_PLAIN_TH, float(np.interp(RING_PLAIN_TH, *zip(*RING_KNOTS)))
         kn = [(thS, DS)] + [(a, d_) for a, d_ in RING_KNOTS if a > thS + 1.0]
+        if COLLAR == "lace" and COLLAR_LAPEL:            # лацканы: край — прямая от угла вставки, дальше — как у NHL 27
+            if "lapel" not in G:
+                G["lapel"] = lapel_edge(P, D, TH, pz)
+            lth, ld = G["lapel"]
+            thS, DS = float(lth[0]), float(ld[0])
+            kn = (list(zip(lth, ld)) + [(a, d_) for a, d_ in LAPEL_KNOTS if a > lth[-1] + 1.0]
+                  + [(a, d_) for a, d_ in RING_KNOTS if a > LAPEL_KNOTS[-1][0] + 1.0])
         if COLLAR != "lace" and COLLAR_PANEL:            # ворот V: обод спереди — по V (острие посередине)
             if "panel" not in G:
                 G["panel"] = panel_v(P, D, TH, pz)
@@ -2728,7 +2778,7 @@ def rebuild_relief(nm_path, code, kit, mesh, cmap, n_jt, painters=None):
     yk = painters.get("cur") or painters.get("yoke_shape")
     perf = np.zeros(len(ys), bool)
     pdepth = np.zeros(len(ys))
-    if PERF and yk is not None:
+    if PERF and YOKE_MESH and yk is not None:
         ptile, pdep = perf_tile()
         pm = perf_mask(relief_geometry(mesh, S), yk)
         if os.path.exists(cm_path):                     # нашивки и надписи (не цвет ткани кокетки) — без ямок
@@ -2926,7 +2976,7 @@ class LapelPaint:
         cov = np.clip(0.5 + (np.where(ok, R, LAPEL_CENTER_D) - D) / texel, 0, 1)
         # конец лацкана — у самого широкого угла вставки (INSERT_HW, 1,629 м): ниже шов обода идёт к верху планки S — это
         # уже планка (у NHL 27 MTL цвета ткани; сборка 2 MTL дом: белая ступенька у углов вставки)
-        y_c, x_c = INSERT_HW[2]
+        y_c, x_c = INSERT_CORNER
         gy = px_size(P[..., 1], m)
         tip = (P[..., 2] > 0.03) & (np.abs(P[..., 0]) < x_c + LAPEL_TIP_X)
         cov = np.where(tip, cov * np.clip(0.5 + (P[..., 1] - y_c) / gy, 0, 1), cov)
@@ -4389,6 +4439,9 @@ NAME_ROW_H, NAME_CELL_W = 47, 32   # px атласа: высота строки 
 # Профиль lettering = "own" — как раньше (зоны и размеры образца)
 LETTERING = "standard"
 LETTERING_NAME_H = 0.072           # м: высота букв фамилии (новые клубы 22.10 — 7,05–7,2 см, MIN 7,1)
+LETTERING_NAME_W_MAX = 0.040       # м: буква фамилии не шире — у широкого шрифта фамилия ниже (22.10, DET: «шрифт огромный»
+#                                    при 7,5 × 4,4 см; так — 6,8 × 4,0, как одобренный до стандарта)
+LETTERING_NUM_GAP = 0.08           # промежуток между цифрами номера — не больше стольких высот цифры (≈ 2,4 см при 30 см)
 LETTERING_NUM_H = 0.30             # м: высота номера (MIN 25,7–27,5, DET 29,8, SEA 30,5 — «номера относительно большие»)
 LETTERING_NAME_TOP = 1.580         # м: верх зоны фамилии (у MIN, TBL, SEA, VGK — 1,577)
 LETTERING_YOKE_GAP = 0.027         # м: от края кокетки сзади до верха фамилии (BUF выезд)
@@ -4432,14 +4485,16 @@ def standard_lettering(slot_dir):
     k, b = back_m_per_v()
     row = lambda yy: (yy - b) / k * H                   # строка карты (вниз по картинке — вверх по свитеру)
     f = np.asarray(Image.open(os.path.join(slot_dir, "font_cm.png")).convert("RGBA"))[..., 3] > 40
-    hs = []
+    hs, ws = [], []
     for r_, (y0, y1) in enumerate(((1, 48), (49, 98))):
         cx = J.FONT_SLOTS[r_]
         bnd = [0] + [(cx[i] + cx[i + 1]) // 2 for i in range(len(cx) - 1)] + [CAPTAIN_BOX[0]]
         for i in range(len(cx)):
-            rr = np.nonzero(f[y0:y1, bnd[i]:bnd[i + 1]].any(1))[0]
+            sub = f[y0:y1, bnd[i]:bnd[i + 1]]
+            rr, cc = np.nonzero(sub.any(1))[0], np.nonzero(sub.any(0))[0]
             if len(rr):
                 hs.append(rr[-1] - rr[0] + 1)
+                ws.append(cc[-1] - cc[0] + 1)
     dh = []
     for y0, y1 in ((115, 238), (242, 367)):
         rr = np.nonzero(f[y0:y1, :420].any(1))[0]
@@ -4449,7 +4504,9 @@ def standard_lettering(slot_dir):
     digit_fill = float(np.median(dh)) / 123.0
     yb = back_yoke_bottom(os.path.join(slot_dir, "jersey_cm.png"))
     top = LETTERING_NAME_TOP if yb is None else min(LETTERING_NAME_TOP, yb - LETTERING_YOKE_GAP)
-    h0 = LETTERING_NAME_H / letter_fill                 # м: высота зоны фамилии
+    aspect = float(np.median(ws)) / float(np.median(hs))   # ширина буквы к высоте (DET — 0,59, прочие 0,45–0,56)
+    name_h = min(LETTERING_NAME_H, LETTERING_NAME_W_MAX / aspect)
+    h0 = name_h / letter_fill                           # м: высота зоны фамилии
     h1 = LETTERING_NUM_H / digit_fill
     # фамилия: столбцы прежней зоны, верх каждого — со сдвигом от среднего (дуга DET), высота — h0
     m0 = (a[..., 0] > 128) & (a[..., 1] > 128) & (a[..., 2] == 0)
@@ -4481,7 +4538,7 @@ def standard_lettering(slot_dir):
         sys.exit(f"{png}: зона номера по стандарту наезжает на другую зону")
     a[box] = col1
     Image.fromarray(a, "RGBA").save(png)
-    return (f"фамилия {LETTERING_NAME_H * 100:.1f} см (зона {h0 * 100:.1f}), верх {top:.3f} м"
+    return (f"фамилия {name_h * 100:.1f} см (зона {h0 * 100:.1f}, ширина буквы {name_h * aspect * 100:.1f}), верх {top:.3f} м"
             + (f" (кокетка сзади до {yb:.3f} м)" if yb is not None else "")
             + f", номер {LETTERING_NUM_H * 100:.0f} см (зона {h1 * 100:.1f}), верх {n_top:.3f} м, низ {n_top - h1:.3f} м")
 
@@ -5064,6 +5121,9 @@ def cmd_slot(a):
             if not std:                                 # в стандарте высоту зоны задаёт standard_lettering
                 print(f"  фамилия {kit}: зона ×{k_} по высоте (было, стало):",
                       scale_name_zone(os.path.join(d, "name_cm.png"), k_))
+        if std:                                         # цифры номера ближе (22.10: «цифры далеко друг от друга»)
+            from .fonts import fit_digits
+            print(f"  шрифт {kit}:", "; ".join(fit_digits(d, LETTERING_NUM_GAP)))
         if std:                                         # стандарт спины (22.10): размеры и место фамилии и номера
             print(f"  спина {kit}: стандарт —", standard_lettering(d))
         if NAME_ZONE_SCALE != 1.0 and not std:          # зона фамилии ниже (профиль name_zone_scale; LAK, DET 22.10)

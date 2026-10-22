@@ -67,6 +67,7 @@
 #                     синяя полоса по кругу, белое сзади до обода). Генератор ставит "full" вместо trim_width_from
 # crest_size_cm     — герб не меньше стольких см (√(ширина × высота) рамки; edge_kit.crest_to_size), потом [crest_fit]
 # name_arch         — true: у фамилии ширина и форма своей зоны (дуга, DET); иначе ширина стандартная (LETTERING_NAME_X)
+# yoke_mesh         — false: без сетки ямок в кокетке (по умолчанию true — как у MIN NHL 24; у NHL 27 MTL, DAL, BUF её нет)
 # lettering         — standard (по умолчанию) | own: стандарт спины (edge_kit.standard_lettering, 22.10 — фамилия 7,2 см,
 #                     номер 30 см, верх фамилии 1,580 м или на 2,7 см ниже кокетки сзади, шрифт фамилии расчётом)
 # name_zones_from   — форма Legacy, с карты номеров которой зоны фамилии, номера и буквы (0, 1, 5, 7; VGK — MIN 1_14_4;
@@ -435,6 +436,7 @@ legacy = "1_6_0"
 sock = "auto"
 pant = "source"
 helmet_logo = "source"
+default = true                      # поставлено в игру (пользователь, 22.10: «останови всё на том, что есть, и добавь в игру»)
 
 [CHI.slot.away]
 kit = "edge_away"
@@ -446,6 +448,7 @@ helmet_logo = "source"
 # BUF — из NHL 27, профиль собран генератором (python -m kitport profile --club BUF, 22.10.2026).
 # Нынешние формы — ten / eleven (база NHL 27). Решения «проверить» — в выводе генератора и
 # docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.
+default = true
 [BUF]
 source = "nhl27"
 source_kits = { home = "ten", away = "eleven" }
@@ -472,12 +475,14 @@ letter_zones_from = {}
 font_name_fit = "auto"   # фамилия: высота как у MIN, промежуток ≤ 0,23 высоты буквы (edge_kit.name_font_fit)
 sock_parts = [[0.0, [0, 0, 0]]]   # не используется (sock = auto)
 
+yoke_mesh = false   # у NHL 27 на плечах сетки нет (22.10: «волнистая хуетень вокруг белой обводки» — край сетки ямок)
 [BUF.slot.home]
 kit = "edge_home"
 legacy = "1_3_2"
 sock = "auto"
 pant = "source"
 helmet_logo = "source"
+default = true                      # поставлено в игру (пользователь, 22.10: «останови всё на том, что есть, и добавь в игру»)
 
 [BUF.slot.away]
 kit = "edge_away"
@@ -493,6 +498,7 @@ helmet_logo = "source"
 # лацканы, вставка V со щитом, планка с люверсами): кромка чёрная (спереди 1 см, сзади до 1,8), лацканы до шва обода —
 # белые, вставка — дома чёрная, в гостях зелёная (мыс кокетки), шнурки белые. Кокетка выезда — зелёная «на плечо».
 # «Белый лацкан со шнуровкой» дома (§12.2, особые) — тем же кроем MIN с лацканами (collar_lapel), не отдельный случай
+default = true
 [DAL]
 source = "nhl27"
 source_kits = { home = "ten", away = "eleven" }
@@ -515,12 +521,14 @@ letter_zones_from = {}
 font_name_fit = "auto"   # фамилия: высота как у MIN, промежуток ≤ 0,23 высоты буквы (edge_kit.name_font_fit)
 sock_parts = [[0.0, [0, 0, 0]]]   # не используется (sock = auto)
 
+yoke_mesh = false   # у NHL 27 на плечах сетки нет (22.10: «волнистая хуетень вокруг белой обводки» — край сетки ямок)
 [DAL.slot.home]
 kit = "edge_home"
 legacy = "1_9_3"
 sock = "auto"
 pant = "source"
 helmet_logo = "source"
+default = true                      # поставлено в игру (пользователь, 22.10: «останови всё на том, что есть, и добавь в игру»)
 
 [DAL.slot.away]
 kit = "edge_away"
@@ -536,6 +544,7 @@ helmet_logo = "source"
 # лацканы, вставка V со щитом, планка с люверсами): кромка тёмно-синяя ~1 см, лацканы до шва обода — белые, вставка —
 # цвета ткани (дома красная, в гостях белая), шнурки белые. Кокетка только у выезда — красная «на плечо»; у дома
 # генератор видел кокетку из-за синей полосы на спине (замер «ткани» попал на неё), рукав «другого цвета» — тоже
+default = true
 [MTL]
 source = "nhl27"
 source_kits = { home = "ten", away = "eleven" }
@@ -561,12 +570,14 @@ letter_zones_from = {}
 font_name_fit = "auto"   # фамилия: высота как у MIN, промежуток ≤ 0,23 высоты буквы (edge_kit.name_font_fit)
 sock_parts = [[0.0, [0, 0, 0]]]   # не используется (sock = auto)
 
+yoke_mesh = false   # у NHL 27 на плечах сетки нет (22.10: «волнистая хуетень вокруг белой обводки» — край сетки ямок)
 [MTL.slot.home]
 kit = "edge_home"
 legacy = "1_15_0"
 sock = "auto"
 pant = "source"
 helmet_logo = "source"
+default = true                      # поставлено в игру (пользователь, 22.10: «останови всё на том, что есть, и добавь в игру»)
 
 [MTL.slot.away]
 kit = "edge_away"
@@ -582,6 +593,7 @@ helmet_logo = "source"
 # люверсы, шнурки (дома белые на синем, в гостях белые на белом), V-вставка под воротом цвета ткани, кромка кончается
 # у вставки — крой MIN NHL 24. Генератор дал plain: под щитом цвет ткани (шнурки и вставка — того же цвета). По правилу
 # пользователя (22.10: «со шнуровкой — как MIN») — шаблон MIN: швы вставки, планки и обода, вставка — цветом источника
+default = true
 [TOR]
 source = "nhl27"
 source_kits = { home = "ten", away = "eleven" }
@@ -609,6 +621,7 @@ legacy = "1_27_4"
 sock = "auto"
 pant = "source"
 helmet_logo = "source"
+default = true                      # поставлено в игру (пользователь, 22.10: «останови всё на том, что есть, и добавь в игру»)
 
 [TOR.slot.away]
 kit = "edge_away"
@@ -620,6 +633,7 @@ helmet_logo = "source"
 # UTA — из NHL 27, профиль собран генератором (python -m kitport profile --club UTA, 22.10.2026).
 # Нынешние формы — twelve / thirteen (база NHL 27). Решения «проверить» — в выводе генератора и
 # docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.
+default = true
 [UTA]
 source = "nhl27"
 source_kits = { home = "twelve", away = "thirteen" }
@@ -650,6 +664,7 @@ legacy = "1_104_0"
 sock = "auto"
 pant = "source"
 helmet_logo = "source"
+default = true                      # поставлено в игру (пользователь, 22.10: «останови всё на том, что есть, и добавь в игру»)
 
 [UTA.slot.away]
 kit = "edge_away"
@@ -657,3 +672,4 @@ legacy = "1_104_1"
 sock = "auto"
 pant = "source"
 helmet_logo = "source"
+default = true

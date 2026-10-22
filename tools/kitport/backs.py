@@ -17,7 +17,7 @@ from . import core
 
 NAME_ROWS = ((1, 48), (49, 98))
 DIGIT_ROWS = ((115, 238), (242, 367))
-DIGIT_PITCH = 84
+DIGIT_PITCH = 80
 FRAME = (-0.30, 0.30, 1.05, 1.72)             # x0, x1, y0, y1, м — спина
 CELL_W = {"I": 16, "M": 48, "W": 48}           # ширина клетки буквы, px атласа (по раскладке EA; как у игры — не
 #                                                разбиралось, docs/kitport.md §2.5)
@@ -83,14 +83,12 @@ def _digit_centres(font, y0, y1):
 
 
 def cell_number(font, number):
-    """Номер из клеток цифр (шаг DIGIT_PITCH вокруг середины цифры), соседние знаки убраны."""
+    """Номер из клеток цифр (DIGIT_PITCH, от 0), соседние знаки убраны."""
     parts = []
     for ch in number:
         d = int(ch)
         y0, y1 = DIGIT_ROWS[0 if d < 5 else 1]
-        cs = _digit_centres(font, y0, y1)
-        c = cs[d % 5] if len(cs) == 5 else (d % 5 + 0.5) * DIGIT_PITCH
-        x0 = int(round(c - DIGIT_PITCH / 2))
+        x0 = (d % 5) * DIGIT_PITCH                    # клетки цифр — по 80 px (fb.fonts.DIGIT_CELL), как у игры
         cell = np.zeros((y1 - y0, DIGIT_PITCH, 4), np.uint8)
         a0, a1 = max(0, x0), min(font.shape[1], x0 + DIGIT_PITCH)
         cell[:, a0 - x0:a1 - x0] = font[y0:y1, a0:a1]
