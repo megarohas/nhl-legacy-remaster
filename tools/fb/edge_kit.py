@@ -1666,6 +1666,16 @@ WEAVE_CELL = (8, 6)                # период плетения в тексе
 WEAVE_SRC = (0.12, 0.30, 0.40, 0.60)   # v0, v1, u0, u1: участок спины без швов — по нему ячейка плетения
 FOLD_MED, FOLD_SIGMA = 9, 3.0      # складки: медиана (убирает линии швов) и гаусс
 SEAM_GAIN = 1.0                    # сила швов NHL 24
+BN_FLAKE_SP = 8.0                  # «блёстки» рельефа источника: |xy − медиана 3×3|, сглажено σ 8 px (2048), выше — шум
+BN_FLAKE_FRAC = 0.2                # доля развёртки в шуме, выше которой рельеф чинится (VGK ten 0,50; у остальных 0,01 —
+#                                    вязка обода ворота, LAK ten 0,075 — фактура белых полос: не трогаются)
+
+
+def flake_mask(bn):
+    """Где рельеф (normal map 2048, RGB 0–255) — мелкий шум «блёстками», а не швы и складки. -> bool H×W."""
+    from scipy import ndimage as ndi
+    xy = bn[..., :2]
+    return ndi.gaussian_filter(np.abs(xy - ndi.median_filter(xy, size=(3, 3, 1))).mean(-1), 8.0) > BN_FLAKE_SP
 
 
 # Кокетка у NHL 24 (обе формы MIN) — сетчатая ткань: решётка ямок (шаг ~7 текселей 2048, ≈ 5–6 мм), только в рельефе,
@@ -2143,13 +2153,31 @@ def rebuild_relief(nm_path, code, kit, mesh, cmap, n_jt, painters=None):
                                   2.0)[..., None]
         low = low * (1 - cm_) + np.roll(low, -int(round(dv * S)), axis=0) * cm_
     # швы NHL 24: base_normal без спонсорских нашивок (как у цвета — clean_color)
-    bn = normal_map(J.n24_tex(Hy.CLUB_NAME[code], kit, "base_normal"), 2048).astype(np.float64)
-    defaults, rules = kit_hybrid.load_rules(kit_hybrid.RULES, code, kit, [])
-    sp = tuple(k for k, r in rules.items() if r.get("sponsor"))
-    bn, _, _ = kit_hybrid.standard_patches(bn, rules, defaults, names=sp)
-    for u0, v0, u1, v1 in N24_RELIEF_FLAT:
-        S2 = bn.shape[0]
-        bn[int(v0 * S2):int(v1 * S2), int(u0 * S2):int(u1 * S2), :3] = (128, 128, 255)
+    def src_bn(k):
+        b_ = normal_map(J.n24_tex(Hy.CLUB_NAME[code], k, "base_normal"), 2048).astype(np.float64)
+        defaults, rules = kit_hybrid.load_rules(kit_hybrid.RULES, code, k, [])
+        sp = tuple(n for n, r in rules.items() if r.get("sponsor"))
+        b_, _, _ = kit_hybrid.standard_patches(b_, rules, defaults, names=sp)
+        for u0, v0, u1, v1 in N24_RELIEF_FLAT:
+            S2 = b_.shape[0]
+            b_[int(v0 * S2):int(v1 * S2), int(u0 * S2):int(u1 * S2), :3] = (128, 128, 255)
+        return b_
+    bn = src_bn(kit)
+    # фактура ткани «блёстками» в рельефе источника (VGK ten, 22.10: золотая ткань NHL 27 — шум по всему торсу и верху
+    # рукавов, в швы NHL 24 он проходил целиком — свитер «в крошку»; медиана и гаусс оставляют пятна). Если шумно больше
+    # BN_FLAKE_FRAC развёртки — там рельеф другой формы клуба (тот же крой: швы те же), где у неё чисто; иначе ровно
+    fl = flake_mask(bn)
+    if fl.mean() > BN_FLAKE_FRAC:
+        other = {"home": "away", "away": "home"}.get(kit)
+        ob = src_bn(other) if other and os.path.exists(J.n24_tex(Hy.CLUB_NAME[code], other, "base_normal")) else None
+        ok = ~flake_mask(ob) if ob is not None else np.zeros_like(fl)
+        w_o = ndi.gaussian_filter((fl & ok).astype(np.float64), 2.0)[..., None]
+        w_f = ndi.gaussian_filter((fl & ~ok).astype(np.float64), 2.0)[..., None]
+        if ob is not None:
+            bn[..., :3] = bn[..., :3] * (1 - w_o) + ob[..., :3] * w_o
+        bn[..., :3] = bn[..., :3] * (1 - w_f) + np.array([128.0, 128.0, 255.0]) * w_f
+        print(f"  рельеф источника: «блёстки» на {fl.mean():.0%} развёртки — рельеф {other} на {(fl & ok).mean():.0%}, "
+              f"ровно на {(fl & ~ok).mean():.0%}")
     if BASE_NM_DECALS == "flat":                         # профиль base_normal_decals: нашивки, «запечённые» в рельеф
         w = decal_mask(code, kit, bn.shape[0])[..., None]
         bn[..., :3] = bn[..., :3] * (1 - w) + np.array([128.0, 128.0, 255.0]) * w
