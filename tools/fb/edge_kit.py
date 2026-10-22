@@ -787,6 +787,7 @@ HEM_SHIFT = 0.0                    # м: профиль hem_shift_cm — пол�
 FONT_NAME_SCALE = 1.0              # профиль font_name_scale: буквы фамилии в атласе крупнее в клетках (fb.fonts.scale_glyphs)
 FONT_CAPTAIN_X = 1.0               # профиль font_captain_x: буквы капитана C и A шире
 NAME_ZONE_SCALE = 1.0              # профиль name_zone_scale: зона фамилии в карте номеров ниже в столько раз (верх на месте)
+NAME_ZONE_LIFT = 0.0               # см: профиль name_zone_lift_cm — зона фамилии выше на спине на столько (SEA 22.10)
 FONT_NAME_ANCHOR = "center"        # профиль font_name_anchor: center | top — верх букв на месте (мельче — место до номера, LAK)
 SLV_FILL_EXT = 0.035               # u Edge за концом рукава (у проймы): при заполнении тканью (SLV_FILL_S24) — тоже ткань:
 SLV_FILL_BLEND = 0.01              # там ближайшая точка NHL 24 брала его верхнюю полосу — золотая дуга (BOS, 21.10)
@@ -1207,9 +1208,10 @@ def use_club(code):
     from . import kit_fix                                # герб не на букву: свои поля [crest_fit] (gap_min …) клуба
     kit_fix.CREST_FIT_OVERRIDE = dict(prof.get("crest_fit", {}))
     FONT_CAPTAIN_X = float(prof.get("font_captain_x", 1.0))
-    global FONT_NAME_ANCHOR, NAME_ZONE_SCALE
+    global FONT_NAME_ANCHOR, NAME_ZONE_SCALE, NAME_ZONE_LIFT
     FONT_NAME_ANCHOR = prof.get("font_name_anchor", "center")
     NAME_ZONE_SCALE = float(prof.get("name_zone_scale", 1.0))
+    NAME_ZONE_LIFT = float(prof.get("name_zone_lift_cm", 0.0))
     # высота зоны низа «от края» (fb.hem.HEM_H): у NHL 27 BOS / TBL полосы низа — до 13–14 см, а зона — 9 см (переход
     # 6–9 см): белая полоса BOS попадала в переход и раздувалась посередине (пользователь, 21.10). Профиль hem_h — выше
     # полос, генератор (kitport profile) ставит по замеру; нет поля — как раньше
@@ -3567,6 +3569,42 @@ def scale_name_zone(png, k, zone=0):
     return round(h0, 3), round(h1, 3)
 
 
+def back_m_per_v():
+    """Метров высоты свитера на единицу v развёртки — посередине спины сетки слота (полевой, размер 0, lod 2): на спине
+    v растёт снизу вверх (номер — меньше v, фамилия над ним — больше). ~1,57 м: строка карты номеров 256² — ~0,6 см."""
+    M = mesh_for(0, 1, 2)
+    pos, uv = M["pos"], M["uv"]
+    back = (pos[:, 2] < 0) & (np.abs(pos[:, 0]) < 0.04) & (pos[:, 1] > 1.2)
+    k = np.polyfit(uv[back, 1], pos[back, 1], 1)
+    return float(k[0]), float(k[1])
+
+
+def lift_name_zone(png, cm, zone=0):
+    """Зона фамилии карты номеров выше на спине на cm (сдвиг строк к большему v; пользователь, 22.10, SEA: фамилия
+    вплотную к номеру и ниже, чем у других клубов, — «немного поднять»). Наезд на другую зону — отказ.
+    -> (строк, верх зоны было, стало — м над полом)."""
+    from PIL import Image
+    a = np.asarray(Image.open(png).convert("RGBA")).copy()
+    m = (a[..., 0] > 128) & (a[..., 1] > 128) & (a[..., 2] == zone)
+    if not m.any():
+        return None
+    H = a.shape[0]
+    k, b = back_m_per_v()
+    n = int(round(cm / 100 / k * H))
+    ys, xs = np.nonzero(m)
+    if ys.max() + n >= H or ys.min() + n < 0:
+        sys.exit(f"{png}: зона {zone} на {n} строк выходит за карту")
+    other = (a[..., 0] > 128) & (a[..., 1] > 128) & (a[..., 2] < 16) & ~m      # фон — белый (B 255)
+    if other[ys + n, xs].any():
+        sys.exit(f"{png}: зона {zone} на {n} строк наезжает на другую зону")
+    color = a[m][0].copy()
+    a[m] = (255, 255, 255, 255)
+    a[ys + n, xs] = color
+    Image.fromarray(a, "RGBA").save(png)
+    top = lambda r: round(k * (r + 1) / H + b, 3)
+    return n, top(ys.max()), top(ys.max() + n)
+
+
 def copy_zones(dst_png, ref_png, zones):
     """Зоны карты номеров (R, G > 128, B = номер зоны) — с карты ref: у dst зона стирается (фон — белый), из ref
     переносится как есть. -> {зона: (v0 было, v0 стало)}."""
@@ -4014,6 +4052,9 @@ def cmd_slot(a):
         if NAME_ZONE_SCALE != 1.0:                      # зона фамилии ниже (профиль name_zone_scale; LAK, DET 22.10)
             print(f"  фамилия {kit}: зона ×{NAME_ZONE_SCALE} по высоте (было, стало):",
                   scale_name_zone(os.path.join(d, "name_cm.png"), NAME_ZONE_SCALE))
+        if NAME_ZONE_LIFT:                              # зона фамилии выше (профиль name_zone_lift_cm; SEA 22.10)
+            print(f"  фамилия {kit}: зона выше на {NAME_ZONE_LIFT} см (строк карты, верх зоны — м):",
+                  lift_name_zone(os.path.join(d, "name_cm.png"), NAME_ZONE_LIFT))
         if SLEEVE_ZONES_FROM not in ("own", spec["legacy"]):
             ref = os.path.join(cur, SLEEVE_ZONES_FROM)
             if not os.path.exists(os.path.join(ref, "kit.json")):
