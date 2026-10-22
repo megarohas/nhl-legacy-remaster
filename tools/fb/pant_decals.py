@@ -70,6 +70,11 @@ def _basis(n):
 def decals(color, base, diff=DIFF, min_px=MIN_PX):
     """Связные части «color − base_color» → [маска (bool, как текстура)] (нашивки по одной)."""
     from scipy import ndimage as ndi
+    if base.shape[:2] != color.shape[:2]:                # NHL 24 MIN: color 1024², base_color 2048² (22.10 — MIN с
+        from PIL import Image                            # наклейками шорт не собирался: «shapes (1024,1024,3) (2048,…»)
+        base = np.stack([np.asarray(Image.fromarray(base[..., k].astype(np.float32)).resize(color.shape[1::-1],
+                                                                                          Image.BILINEAR))
+                         for k in range(3)], -1)
     d = np.abs(color[..., :3] - base[..., :3]).max(-1) > diff
     lab, n = ndi.label(ndi.binary_dilation(d, iterations=3))
     out = []
