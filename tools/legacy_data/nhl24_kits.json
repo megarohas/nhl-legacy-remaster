@@ -1065,7 +1065,7 @@
    "art": 100,
    "variant": 5,
    "fevariant": 5,
-   "jerseyindex": 7,
+   "jerseyindex": 9,
    "locstring": 6
   },
   {
@@ -1913,6 +1913,28 @@
    "variant": 10,
    "fevariant": 10,
    "jerseyindex": 15,
+   "locstring": 6
+  },
+  {
+   "club": "SEA",
+   "kit": "edge_home",
+   "teamid": 30,
+   "style": 0,
+   "art": 100,
+   "variant": 2,
+   "fevariant": 2,
+   "jerseyindex": 7,
+   "locstring": 6
+  },
+  {
+   "club": "SEA",
+   "kit": "edge_away",
+   "teamid": 30,
+   "style": 0,
+   "art": 100,
+   "variant": 3,
+   "fevariant": 3,
+   "jerseyindex": 8,
    "locstring": 6
   }
  ]
