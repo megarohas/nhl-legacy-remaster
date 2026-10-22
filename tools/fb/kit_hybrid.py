@@ -263,6 +263,10 @@ def uv_point(mesh, u, v):
 
 
 MERGE_PARTS = ()   # имена правил, чьи связные части — одна нашивка (fb.edge_kit.use_club: профиль merge_parts); () — как было
+# профиль merge_near (22.10, UTA выезд «UTAH» лесенкой — четыре буквы): участки вне правил ближе стольких долей развёртки
+# к группе merge_parts (по цепочке) — в неё же. U и H дальше match_radius от uv герба, без этого шли отдельными
+# нашивками без [crest_fit] (зазоры между буквами — 0,005–0,010, до прочих нашивок — от 0,05). 0 — как было
+MERGE_NEAR = 0.0
 
 
 def _match(lab, lid, sl, rules, defaults):
@@ -284,6 +288,9 @@ def merge_parts(lab, patches, rules, defaults, names):
     out = list(patches)
     for name in names:
         grp = [p for p in out if _match(lab, p[0], p[1], rules, defaults) == name]
+        if MERGE_NEAR > 0 and grp:                       # буквы надписи-герба (UTA выезд) — по цепочке соседей
+            free = [p for p in out if p not in grp and _match(lab, p[0], p[1], rules, defaults) is None]
+            grp = near_parts(lab, grp, free, MERGE_NEAR)
         if len(grp) < 2:
             continue
         lid0 = grp[0][0]
@@ -294,6 +301,27 @@ def merge_parts(lab, patches, rules, defaults, names):
         out = [(lid0, sl, sum(p[2] for p in grp))] + [p for p in out if p not in grp]
         print(f"  нашивка {name}: частей {len(grp)} — одной (merge_parts)")
     return out
+
+
+def near_parts(lab, grp, free, near):
+    """Группа участков grp и участки free, что ближе near (доля развёртки) к ней, — по цепочке (буква к букве). ->
+    список участков группы."""
+    H = lab.shape[0]
+    r = max(1, int(round(near * H)))
+    grp, free = list(grp), list(free)
+    while free:
+        y0 = max(0, min(p[1][0].start for p in grp) - r)
+        y1 = min(H, max(p[1][0].stop for p in grp) + r)
+        x0 = max(0, min(p[1][1].start for p in grp) - r)
+        x1 = min(lab.shape[1], max(p[1][1].stop for p in grp) + r)
+        win = lab[y0:y1, x0:x1]
+        dist = ndi.distance_transform_edt(~np.isin(win, [p[0] for p in grp]))
+        hit = [p for p in free if (win == p[0]).any() and dist[win == p[0]].min() <= r]
+        if not hit:
+            break
+        grp += hit
+        free = [p for p in free if p not in hit]
+    return grp
 
 
 def plan_decals(comp, lab, patches, rules, defaults, src, dst, tid24):

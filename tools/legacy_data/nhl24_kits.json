@@ -2068,6 +2068,28 @@
    "fevariant": 9,
    "jerseyindex": 15,
    "locstring": 6
+  },
+  {
+   "club": "UTA",
+   "kit": "edge_home",
+   "teamid": 22,
+   "style": 0,
+   "art": 104,
+   "variant": 2,
+   "fevariant": 2,
+   "jerseyindex": 2,
+   "locstring": 6
+  },
+  {
+   "club": "UTA",
+   "kit": "edge_away",
+   "teamid": 22,
+   "style": 0,
+   "art": 104,
+   "variant": 5,
+   "fevariant": 5,
+   "jerseyindex": 3,
+   "locstring": 6
   }
  ]
 }
