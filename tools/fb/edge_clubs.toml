@@ -40,6 +40,7 @@
 #                     как у MIN, промежуток ≤ NAME_FIT_GAP высоты буквы; вместо font_name_scale и name_zone_scale
 # letter_zone_shift_cm — [наружу, вверх] см: места буквы капитана (5, 7) сдвинуты по груди (edge_kit.shift_zones; VGK)
 # collar_trim       — auto | step | smooth | half: half — полоса спереди, скос на 79° (edge_kit.HALF_STEP_AT), сзади — обод
+# collar_lining     — source | trim: подворот ворота — цвет NHL 27 или цвет кромки (VGK — trim, как LAK)
 # collar_panel      — true: ворот V спереди (острие посередине, edge_kit.panel_v) — шов, у кромки во весь V и её край
 # crest_size_cm     — герб не меньше стольких см (√(ширина × высота) рамки; edge_kit.crest_to_size), потом [crest_fit]
 # name_zones_from   — форма Legacy, с карты номеров которой зоны фамилии, номера и буквы (0, 1, 5, 7; VGK — MIN 1_14_4)
@@ -338,7 +339,7 @@ default = true
 
 # VGK — из NHL 27, профиль собран генератором (python -m kitport profile --club VGK, 22.10.2026).
 # Нынешние формы — ten / eleven (база NHL 27). Решения «проверить» — в выводе генератора и
-# docs/kitport.md §12.6; одобрения нет (default) — его ставит пользователь.
+# docs/kitport.md §12.6; одобрено пользователем 22.10 (ворот как у LAK, шаблон ворота, герб 27 см).
 [VGK]
 source = "nhl27"
 source_kits = { home = "ten", away = "eleven" }
@@ -359,6 +360,7 @@ letter_zone_shift_cm = [2.0, 2.0]   # буква выше и к плечу на 
 crest_size_cm = 27   # герб крупнее (пользователь, 22.10: «лого Вегаса побольше»): не меньше 27 см, как EA-гербы NHL 13
 collar_panel = true   # шов ворота V спереди (вокруг щита NHL), как у NHL 27 (пользователь, 22.10)
 collar_trim = "half"   # половинчатый ворот: узкая полоса спереди, скос на 79°, сзади до обода — как TBL и LAK (пользователь, 22.10)
+collar_lining = "trim"   # подворот ворота цветом кромки — ворот как у выездной LAK (пользователь, 22.10)
 insert = []
 letter_zones_from = {}
 sock_parts = [[0.0, [0, 0, 0]]]   # не используется (sock = auto)
@@ -369,6 +371,7 @@ legacy = "1_101_0"
 sock = "auto"
 pant = "source"
 helmet_logo = "source"
+default = true                      # одобрено (пользователь, 22.10: «сделаем ... как у LAK, и всё»)
 
 [VGK.slot.away]
 kit = "edge_away"
@@ -376,3 +379,4 @@ legacy = "1_101_1"
 sock = "auto"
 pant = "source"
 helmet_logo = "source"
+default = true

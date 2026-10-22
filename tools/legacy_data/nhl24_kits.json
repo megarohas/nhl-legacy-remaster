@@ -1936,6 +1936,28 @@
    "fevariant": 3,
    "jerseyindex": 8,
    "locstring": 6
+  },
+  {
+   "club": "VGK",
+   "kit": "edge_home",
+   "teamid": 31,
+   "style": 0,
+   "art": 101,
+   "variant": 2,
+   "fevariant": 2,
+   "jerseyindex": 8,
+   "locstring": 6
+  },
+  {
+   "club": "VGK",
+   "kit": "edge_away",
+   "teamid": 31,
+   "style": 0,
+   "art": 101,
+   "variant": 3,
+   "fevariant": 3,
+   "jerseyindex": 9,
+   "locstring": 6
   }
  ]
 }

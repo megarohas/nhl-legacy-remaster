@@ -1292,6 +1292,8 @@ def use_club(code):
     NAME_ZONES_FROM = prof.get("name_zones_from")
     global LETTER_SHIFT_CM, COLLAR_PANEL
     COLLAR_PANEL = bool(prof.get("collar_panel", False))
+    global COLLAR_LINING
+    COLLAR_LINING = prof.get("collar_lining", "source")
     if COLLAR_PANEL and COLLAR != "lace":                # шаблон ворота: щит как у NHL 27 — размер и место по V
         SHIELD_SCALE, SHIELD_GAP_MM = SHIELD_PANEL_SCALE, "panel"
     LETTER_SHIFT_CM = tuple(map(float, prof["letter_zone_shift_cm"])) if "letter_zone_shift_cm" in prof else None
@@ -1691,6 +1693,7 @@ HALF_STEP_AT = 79.0
 # острия V (NHL 27: острие 1,607, верх щита 1,645 на сетке NHL 24). Профильные shield_scale / shield_offset_cm у шаблона
 # не действуют
 SHIELD_PANEL_SCALE = 1.0
+COLLAR_LINING = "source"           # профиль collar_lining: source | trim — подворот ворота цветом кромки
 SHIELD_PANEL_TOP = 0.038           # м: верх щита над острием V
 
 
@@ -2732,15 +2735,19 @@ def trim_rule(code, kit, mesh, with_yoke=False):
     yl, xl = np.nonzero(tl >= 0)
     lin_t = comp[w.g[n24["tri"][tl[yl, xl], 0]]] != main
     lining = np.median(src[yl[lin_t], xl[lin_t]], axis=0)
+    if COLLAR_LINING == "trim":                          # подворот — цветом кромки (VGK, 22.10: «воротник, как у выездной
+        lining = col                                     # LAK» — у VGK подворот NHL 27 серый, у полосы выходила вторая
+        print("  подворот ворота — цветом кромки (collar_lining)")   # полоска и двухцветный срез у вставки)
     # ткань у ворота (под кромкой, сзади и с боков): у формы без кокетки — одним цветом
     body_c = np.median(c[(d > 0.02) & (d < 0.035) & (np.abs(np.abs(th) - 120) < 40)], axis=0)
     wide = mode == "step" or (TRIM_MEASURE == "contiguous" and float(np.max(wf)) > 0.02)
     if wide:                                             # у широкой кромки (TBL сзади 2,9 см, DET выезд 3,0) на 2–3,5 см —
         pr = prof if mode == "step" else prof_b          # сама кромка: «ткань» была её цветом, и зачистка за кромкой
         wloc = np.interp(np.abs(th), pr["angles"], pr["width"])   # (TRIM_CLEAR) красила ещё 8 мм — у TBL белым
-        body_c = np.median(c[(d > wloc + 0.005) & (d < wloc + 0.02) & (np.abs(np.abs(th) - 160) < 20)], axis=0)
+        body_c = np.median(c[(d > 0.06) & (d < 0.10) & (np.abs(th) > 140)], axis=0)
         #                                                  (21.10: «сзади широкий»), у DET выезда — красным за швом;
-        #                                                  мера — у середины спины: сбоку у VGK — серый рукав (22.10)
+        #                                                  мера — спина в 6–10 см от ворота: сбоку у VGK серый рукав,
+        #                                                  за кромкой — серая полоса NHL 27 (22.10: «внешняя полоска»)
         #                                                  обода (пользователь, 22.10: «красная обводка за швами»)
     clear_to = (pr["angles"], pr["width"] + TRIM_CLEAR) if wide else None
     panel_c = None
