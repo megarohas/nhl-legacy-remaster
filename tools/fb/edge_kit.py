@@ -1290,6 +1290,8 @@ def use_club(code):
     SLEEVE_ZONES_FROM = prof.get("sleeve_zones_from", SLEEVE_ZONES_REF)
     global NAME_ZONES_FROM, ARMHOLE_SPLIT_ZONES
     NAME_ZONES_FROM = prof.get("name_zones_from")
+    global LETTER_SHIFT_CM
+    LETTER_SHIFT_CM = tuple(map(float, prof["letter_zone_shift_cm"])) if "letter_zone_shift_cm" in prof else None
     split = prof.get("armhole_split", "zones")
     if split not in ("zones", "full"):
         sys.exit(f"[{code}] armhole_split = {split!r} — zones или full")
@@ -3276,6 +3278,26 @@ def cmd_kit(a):
     kit_hybrid.legacy_with_shirt = lambda: (dst, n_jt)
     kit_hybrid.load_rules = load_rules
     kit_fix.collar_lace_rule = lambda *args, **kw: None
+    orig_crest_fit = kit_fix.crest_fit
+
+    def crest_fit(name_png, path=kit_fix.RULES):
+        """Герб не на букву — по тем местам буквы, что будут в слоте: зоны формы NAME_ZONES_FROM и сдвиг LETTER_SHIFT_CM
+        (стадия slot делает с картой то же)."""
+        import shutil
+        if not (NAME_ZONES_FROM or LETTER_SHIFT_CM):
+            return orig_crest_fit(name_png, path)
+        tmp = os.path.join(WORK, "cur_kits", f"_crest_fit_{a.club}.png")
+        os.makedirs(os.path.dirname(tmp), exist_ok=True)
+        shutil.copyfile(name_png, tmp)
+        if NAME_ZONES_FROM:
+            ref = os.path.join(WORK, "cur_kits", NAME_ZONES_FROM)
+            if not os.path.exists(os.path.join(ref, "kit.json")):
+                J.unpack_kit(NAME_ZONES_FROM, ref)
+            copy_zones(tmp, os.path.join(ref, "name_cm.png"), LETTER_ZONES)
+        if LETTER_SHIFT_CM:
+            shift_zones(tmp, *LETTER_SHIFT_CM)
+        return orig_crest_fit(tmp, path)
+    kit_fix.crest_fit = crest_fit
     pilot.set_roots(KITS_OUT, os.path.join(WORK, "pack"))
     try:
         for kit in a.kits.split(","):
@@ -3354,6 +3376,7 @@ def cmd_kit(a):
         kit3d.transfer = orig_transfer
         kit_hybrid.load_rules = orig_rules
         kit_fix._rules = orig_fix_rules
+        kit_fix.crest_fit = orig_crest_fit
         kit_fix.BrandSwap.relief = orig_brand_relief
         kit_fix.BrandSwap.__init__ = orig_brand_init
 
@@ -3768,6 +3791,57 @@ def lift_name_zone(png, cm, zone=0):
     Image.fromarray(a, "RGBA").save(png)
     top = lambda r: round(k * (r + 1) / H + b, 3)
     return n, top(ys.max()), top(ys.max() + n)
+
+
+LETTER_SHIFT_CM = None             # профиль letter_zone_shift_cm: [наружу, вверх] — места буквы капитана (5, 7) по груди
+#                                    (VGK 22.10: герб упирался в букву — 22 см вместо 27; на свитерах NHL буква выше и
+#                                    ближе к плечу); [crest_fit] на стадии kit — по сдвинутым местам
+
+
+def zone_shift_px(png, zone, out_cm, up_cm):
+    """Сдвиг зоны карты номеров в текселях (столбцы, строки) на out_cm наружу (от середины) и up_cm вверх по свитеру:
+    якобиан (u, v) по (x, y) — МНК по текселям зоны на сетке слота."""
+    from PIL import Image
+    a = np.asarray(Image.open(png).convert("RGBA"))
+    S = a.shape[0]
+    m = (a[..., 0] > 128) & (a[..., 1] > 128) & (a[..., 2] == zone)
+    if not m.any():
+        return None
+    M = mesh_for(0, 1, 2)
+    tid, bar = kit3d.raster_uv(M, S)
+    ys, xs = np.nonzero(m & (tid >= 0))
+    P = (bar[ys, xs][:, :, None] * M["pos"][M["tri"][tid[ys, xs]]]).sum(1)
+    X = np.c_[P[:, 0], P[:, 1], np.ones(len(ys))]
+    A = np.linalg.lstsq(X, np.c_[xs, ys].astype(np.float64), rcond=None)[0]     # [x, y, 1] → (столбец, строка)
+    dx = np.sign(P[:, 0].mean()) * out_cm / 100
+    d = np.array([dx, up_cm / 100]) @ A[:2]
+    return int(round(d[0])), int(round(d[1]))
+
+
+def shift_zones(png, out_cm, up_cm, zones=None):
+    """Зоны (по умолчанию LETTER_ZONES) карты номеров — сдвиг zone_shift_px; наезд на другую зону — отказ.
+    -> {зона: (столбцов, строк)}."""
+    from PIL import Image
+    zones = LETTER_ZONES if zones is None else zones
+    res = {z: zone_shift_px(png, z, out_cm, up_cm) for z in zones}
+    a = np.asarray(Image.open(png).convert("RGBA")).copy()
+    S = a.shape[0]
+    for z, d in res.items():
+        if d is None:
+            continue
+        m = (a[..., 0] > 128) & (a[..., 1] > 128) & (a[..., 2] == z)
+        ys, xs = np.nonzero(m)
+        ny, nx = ys + d[1], xs + d[0]
+        if ny.min() < 0 or nx.min() < 0 or ny.max() >= S or nx.max() >= S:
+            sys.exit(f"{png}: зона {z} со сдвигом {d} выходит за карту")
+        color = a[m][0].copy()
+        a[m] = (255, 255, 255, 255)
+        other = (a[..., 0] > 128) & (a[..., 1] > 128) & (a[..., 2] < 16)
+        if other[ny, nx].any():
+            sys.exit(f"{png}: зона {z} со сдвигом {d} наезжает на другую зону")
+        a[ny, nx] = color
+    Image.fromarray(a, "RGBA").save(png)
+    return res
 
 
 def copy_zones(dst_png, ref_png, zones):
@@ -4220,6 +4294,9 @@ def cmd_slot(a):
                 J.unpack_kit(SLOT_KITS[LETTER_ZONES_FROM[kit]]["legacy"], ref)
             print(f"  буква капитана {kit}: зоны {LETTER_ZONES} — как у {LETTER_ZONES_FROM[kit]}:",
                   copy_zones(os.path.join(d, "name_cm.png"), os.path.join(ref, "name_cm.png"), LETTER_ZONES))
+        if LETTER_SHIFT_CM:                             # места буквы — выше и к плечу (профиль letter_zone_shift_cm; VGK)
+            print(f"  буква капитана {kit}: зоны {LETTER_ZONES} сдвинуты на {LETTER_SHIFT_CM} см (наружу, вверх):",
+                  shift_zones(os.path.join(d, "name_cm.png"), *LETTER_SHIFT_CM))
         if FONT_NAME_FIT == "auto":                     # шрифт и зона фамилии расчётом (профиль font_name_fit; VGK 22.10)
             from .fonts import scale_glyphs
             sx, sy, k_, (w_, h_, zh_) = name_font_fit(d)
