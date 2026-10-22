@@ -782,6 +782,8 @@ SLV_U24 = (0.03, 0.30)             # u NHL 24: рукав (левый; прав�
 SLV_U24_MIN = 0.042                # u NHL 24 — не ближе к манжете (у Edge рукав там уходит в краги)
 SLV_BLEND = 0.007                  # u Edge: у проймы — плавно к прежнему переносу (полосы кончаются у 0,222)
 HEM_H_DEFAULT = 0.09               # м: зона низа «от края» (fb.hem.HEM_H) без поля hem_h в профиле
+FONT_NAME_SCALE = 1.0              # профиль font_name_scale: буквы фамилии в атласе крупнее в клетках (fb.fonts.scale_glyphs)
+FONT_CAPTAIN_X = 1.0               # профиль font_captain_x: буквы капитана C и A шире
 SLV_FILL_EXT = 0.035               # u Edge за концом рукава (у проймы): при заполнении тканью (SLV_FILL_S24) — тоже ткань:
 SLV_FILL_BLEND = 0.01              # там ближайшая точка NHL 24 брала его верхнюю полосу — золотая дуга (BOS, 21.10)
 SLV_X = 0.15                       # м: |x| больше — рукав
@@ -1181,7 +1183,7 @@ def use_club(code):
     from . import kitsrc
     global YOKE, YOKE_KIND, INSERT_KITS, SLOT_KITS, LETTER_ZONES_FROM, SOCK_PARTS, BODY_KIND, COLLAR, YOKE_EA_KIND
     global YOKE_SIDE_BLEND, SHIELD_OFFSET_CM, SHIELD_SCALE, SLEEVE_ZONES_FROM, BASE_NM_DECALS, COLLAR_TRIM
-    global SHIELD_GAP_MM, TRIM_WIDTH_FROM
+    global SHIELD_GAP_MM, TRIM_WIDTH_FROM, FONT_NAME_SCALE, FONT_CAPTAIN_X
     from . import hem
     from . import kit_hybrid
     prof = club_profiles().get(code)
@@ -1195,6 +1197,8 @@ def use_club(code):
     BODY_KIND = prof.get("body_color", "light")
     COLLAR = prof.get("collar", "lace")
     COLLAR_TRIM = prof.get("collar_trim", "auto")
+    FONT_NAME_SCALE = float(prof.get("font_name_scale", 1.0))
+    FONT_CAPTAIN_X = float(prof.get("font_captain_x", 1.0))
     # высота зоны низа «от края» (fb.hem.HEM_H): у NHL 27 BOS / TBL полосы низа — до 13–14 см, а зона — 9 см (переход
     # 6–9 см): белая полоса BOS попадала в переход и раздувалась посередине (пользователь, 21.10). Профиль hem_h — выше
     # полос, генератор (kitport profile) ставит по замеру; нет поля — как раньше
@@ -3911,6 +3915,9 @@ def cmd_slot(a):
         os.makedirs(d, exist_ok=True)
         for f in ("jersey_cm", "jersey_nm", "jersey_sm", "font_cm", "font_nm", "font_sm"):
             shutil.copy2(os.path.join(src, f + ".png"), os.path.join(d, f + ".png"))
+        if FONT_NAME_SCALE != 1.0 or FONT_CAPTAIN_X != 1.0:   # знаки атласа крупнее в клетках (профиль; BOS 22.10)
+            from .fonts import scale_glyphs
+            print(f"  шрифт {kit}:", "; ".join(scale_glyphs(d, FONT_NAME_SCALE, FONT_CAPTAIN_X)))
         for f in ("name_cm", "pant_cm", "pant_nm", "pant_sm"):
             shutil.copy2(os.path.join(leg, f + ".png"), os.path.join(d, f + ".png"))
         if spec.get("pant", "legacy") == "source":       # шорты источника (fb.pilot: 3D-перенос), рельеф — образца

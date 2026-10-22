@@ -41,6 +41,99 @@ def resize_premult(rgba, size):
     return np.clip(np.concatenate([rgb, al], -1), 0, 255).astype(np.uint8)
 
 
+# Области атласа 512² (docs/kitport.md §2.5): строки букв фамилии (y0, y1) с шагом клеток 32 px и буквы капитана
+NAME_ROWS = ((1, 48), (49, 98))
+NAME_CELL = 32
+CAPTAIN_BOX = (410, 512)          # x: столбец C и A
+CAPTAIN_ROWS = ((83, 190), (195, 302))
+
+
+def _glyph_boxes(alpha, x0, x1, y0, y1, min_h=4):
+    """Связные знаки в области атласа (alpha > 40): [(x0, y0, x1, y1)] в координатах атласа."""
+    from scipy import ndimage as ndi
+    lab, _ = ndi.label(alpha[y0:y1, x0:x1] > 40)
+    out = []
+    for sl in ndi.find_objects(lab):
+        if sl is not None and sl[0].stop - sl[0].start >= min_h:
+            out.append((sl[1].start + x0, sl[0].start + y0, sl[1].stop + x0, sl[0].stop + y0))
+    return out
+
+
+def _scale_box(layers, box, sx, sy, bounds, fills):
+    """Знак в рамке box — в sx × sy вокруг его середины, в пределах bounds (x0, y0, x1, y1); layers — массивы одного
+    размера (font_cm RGBA — с премультипликацией, font_nm), fills — фон каждого вне знака."""
+    bx0, by0, bx1, by1 = box
+    w, h = bx1 - bx0, by1 - by0
+    cx, cy = (bx0 + bx1) / 2, (by0 + by1) / 2
+    nw, nh = max(1, round(w * sx)), max(1, round(h * sy))
+    nx0 = int(round(min(max(cx - nw / 2, bounds[0]), bounds[2] - nw)))
+    ny0 = int(round(min(max(cy - nh / 2, bounds[1]), bounds[3] - nh)))
+    cm = layers[0]
+    a = cm[by0:by1, bx0:bx1, 3:4].astype(np.float32) / 255.0
+    crops = [np.concatenate([cm[by0:by1, bx0:bx1, :3] * a, cm[by0:by1, bx0:bx1, 3:4]], -1).astype(np.float32)]
+    crops += [L[by0:by1, bx0:bx1].astype(np.float32) for L in layers[1:]]
+    res = [np.stack([np.asarray(Image.fromarray(c[..., k]).resize((nw, nh), Image.LANCZOS)) for k in range(c.shape[2])],
+                    -1) for c in crops]
+    for L, fill in zip(layers, fills):                   # прежний знак — фоном
+        L[by0:by1, bx0:bx1] = fill
+    al = np.clip(res[0][..., 3:4], 0, 255)
+    rgb = np.where(al > 0.5, res[0][..., :3] / np.maximum(al / 255.0, 1e-3), 0)
+    cm[ny0:ny0 + nh, nx0:nx0 + nw] = np.clip(np.concatenate([rgb, al], -1), 0, 255).astype(np.uint8)
+    for L, r, fill in zip(layers[1:], res[1:], fills[1:]):   # рельеф: знак — по альфе нового, вне — фон
+        m = (al / 255.0)
+        L[ny0:ny0 + nh, nx0:nx0 + nw] = np.clip(r * m + np.array(fill, np.float32) * (1 - m), 0, 255).astype(np.uint8)
+
+
+def scale_glyphs(slot_dir, name=1.0, captain_x=1.0, log=None):
+    """Знаки атласа шрифта слота (font_cm / font_nm / font_sm) крупнее в своих клетках: буквы фамилии — в name раз (в
+    пределах клетки: игра берёт знак из клетки атласа — крупнее знак, крупнее и плотнее фамилия), буквы капитана C и
+    A — шире в captain_x раз (высота у них и так во всю клетку). Пользователь, 22.10, BOS: у атласа NHL 27 буквы
+    фамилии — 32 px высоты из 47 (у EA — 46), промежутки 17 px (у EA — 9), C и A узкие (46–56 px против 67–71).
+    font_sm — заново по альфе (как fb.pilot.build_font). -> [описание]."""
+    p = lambda f: os.path.join(slot_dir, f + ".png")
+    cm = np.asarray(Image.open(p("font_cm")).convert("RGBA")).copy()
+    nm = np.asarray(Image.open(p("font_nm")).convert("RGBA")).copy()
+    if cm.shape[:2] != (512, 512):
+        raise SystemExit(f"{slot_dir}: атлас {cm.shape[1]}×{cm.shape[0]}, ждал 512²")
+    fills = ((0, 0, 0, 0), (128, 128, 255, 255))
+    rep = []
+    if name != 1.0:
+        n = 0
+        from .jersey_mesh import FONT_SLOTS             # центры клеток букв EA (шаг не везде 32 px: L 368, M 416)
+        for row, (y0, y1) in enumerate(NAME_ROWS):
+            sc = np.array(FONT_SLOTS[row], float)
+            mids = np.concatenate([[max(sc[0] - 16, 0)], (sc[1:] + sc[:-1]) / 2, [min(sc[-1] + 16, 512)]])
+            # столбец C и A (x ≥ CAPTAIN_BOX[0]) — не буквы фамилии: верх C (y 83) заходит в строку P–Z
+            for box in _glyph_boxes(cm[..., 3], 0, CAPTAIN_BOX[0] - 2 if row else 512, y0, y1):
+                cx = (box[0] + box[2]) / 2
+                i = int(np.argmin(np.abs(sc - cx)))
+                if abs(sc[i] - cx) < 8:                  # буква — в своей клетке (до середин к соседям)
+                    bx = (mids[i], mids[i + 1])
+                else:                                    # ' . - между клетками — в пределах своего места
+                    bx = (cx - 8, cx + 8)
+                w, h = box[2] - box[0], box[3] - box[1]
+                s = min(name, (bx[1] - bx[0] - 2) / max(w, 1), (y1 - y0 - 1) / max(h, 1))
+                _scale_box([cm, nm], box, s, s, (bx[0], y0, bx[1], y1), fills)
+                n += 1
+        rep.append(f"буквы фамилии ×{name} (в пределах клетки): {n} знаков")
+    if captain_x != 1.0:
+        for y0, y1 in CAPTAIN_ROWS:
+            for box in _glyph_boxes(cm[..., 3], *CAPTAIN_BOX, y0, y1, min_h=40):
+                w = box[2] - box[0]
+                s = min(captain_x, (CAPTAIN_BOX[1] - CAPTAIN_BOX[0] - 2) / max(w, 1))
+                _scale_box([cm, nm], box, s, 1.0, (CAPTAIN_BOX[0], y0, CAPTAIN_BOX[1], y1), fills)
+        rep.append(f"буквы капитана шире ×{captain_x}")
+    sm = np.zeros((512, 512, 4), np.uint8)
+    sm[..., :3] = 21
+    sm[..., 3] = np.where(cm[..., 3] > 128, 255, 0)
+    Image.fromarray(cm).save(p("font_cm"))
+    Image.fromarray(nm).save(p("font_nm"))
+    Image.fromarray(sm).save(p("font_sm"))
+    if log is not None:
+        log.extend(rep)
+    return rep
+
+
 def normal_map(path, size):
     n = np.asarray(Image.open(path).convert("RGB")).astype(np.float32) / 255.0 * 2 - 1
     x, y = n[..., 0], n[..., 1]
