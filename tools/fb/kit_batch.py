@@ -52,6 +52,19 @@ CLUBS = [("anaheim", 0, "ANA"), ("winnipeg", 1, "WPG"), ("boston", 2, "BOS"), ("
          ("ottawa", 20, "OTT"), ("philadelphia", 21, "PHI"), ("arizona", 22, "ARI"), ("pittsburgh", 23, "PIT"),
          ("stlouis", 24, "STL"), ("sanjose", 25, "SJS"), ("tampabay", 26, "TBL"), ("toronto", 27, "TOR"),
          ("vancouver", 28, "VAN"), ("washington", 29, "WSH"), ("vegas", 101, "VGK"), ("seattle", 100, "SEA")]
+# клубы только новых источников (NHL 25+, fb.kitsrc; в NHL 24 их нет): (папка в дампе, номер арта Legacy, код). В CLUBS
+# их нет — обходы «все клубы» пакета NHL 24 (pilot all, шрифты, шлемы, лёд, verify) прежние; по коду их находит club()
+# (fb.pilot.club_info, fb.jersey_hybrid.CLUB_NAME, kitport profile). 22.10.2026: UTA — Utah Mammoth, строка 22 базы
+# Legacy (бывшая ARI: в NHL 24 — папка arizona, арт 22 EA), в игре — арт 104 (наши формы 1_104_0/1, docs/utah.md); в
+# NHL 27 — папка utah. ARI (NHL 24) не тронут: в пакет NHL 24 не идёт (fb.pilot.EXCLUDE)
+NEW_CLUBS = [("utah", 104, "UTA")]
+
+
+def club(code):
+    """(папка клуба в дампе источника, номер арта Legacy) по коду — CLUBS, потом NEW_CLUBS; нет — None."""
+    return next(((f, a) for f, a, c in CLUBS + NEW_CLUBS if c == code), None)
+
+
 KITS = {"home": 0, "away": 1, "three": 2}
 ADIDAS = [("home", "home", 0), ("away", "away", 1), ("three", "three", 2), ("twentytwo", "rr22", None),
           ("twentythree", "rr23", None)]

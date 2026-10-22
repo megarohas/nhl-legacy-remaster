@@ -65,10 +65,11 @@ def proposals():
 
 
 def club_info(code):
-    for club, art, c in CLUBS:
-        if c == code:
-            return club, art
-    raise SystemExit(f"нет клуба {code}")
+    from .kit_batch import club                      # CLUBS и NEW_CLUBS (UTA — только в новых источниках)
+    found = club(code)
+    if found is None:
+        raise SystemExit(f"нет клуба {code}")
+    return found
 
 
 # Правило пользователя (10.10): из NHL 24 ставим только основные комплекты — дом, выезд и третью (если есть).
@@ -115,9 +116,10 @@ def third_source():
 
 
 def home_template(art):
-    """Шаблон kitpaint для новой формы: домашняя форма клуба в Legacy; у наших SEA/VGK (100/101) — контейнер
-    3-значного арта 1_131_0 (карта номеров — наша, из legacy-data out)."""
-    if art in (100, 101):
+    """Шаблон kitpaint для новой формы: домашняя форма клуба в Legacy; у наших клубов с 3-значным артом — SEA 100,
+    VGK 101, UTA 104 (22.10.2026: формы не EA, в legacy_kits.json их нет) — контейнер 3-значного арта 1_131_0 (карта
+    номеров — наша, из legacy-data out)."""
+    if art >= 100:
         return "1_131_0"
     return f"1_{art}_{legacy_target(art, 0)['variant']}"
 

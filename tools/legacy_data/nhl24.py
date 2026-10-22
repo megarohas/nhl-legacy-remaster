@@ -66,6 +66,9 @@ CODES = ['ANA', 'WPG', 'BOS', 'BUF', 'CGY', 'CAR', 'CHI', 'COL', 'CBJ', 'DAL', '
          'MTL', 'NSH', 'NJD', 'NYI', 'NYR', 'OTT', 'PHI', 'ARI', 'PIT', 'STL', 'SJS', 'TBL', 'TOR', 'VAN', 'WSH']
 CLUBS = {c: (i, i) for i, c in enumerate(CODES)}
 CLUBS.update(SEA=(30, 100), VGK=(31, 101))
+# Utah Mammoth (22.10.2026): строка 22 — та же, что у ARI, но арт у неё в базе out 104 (наши формы 1_104_0/1,
+# docs/utah.md); формы NHL 27 Юты — под кодом UTA (fb.kit_batch.NEW_CLUBS). ARI (22, 22) — прежний код формы NHL 24
+CLUBS.update(UTA=(22, 104))
 
 # файлы комплекта стиля s (у формы NHL 24 «А» — 1; свитера adidas на сетке NHL 24 — 0, слот ретро-сеток,
 # docs/nhl24-uniforms.md §14): обязательные у новой формы и наклейка на шлем (по ней helmetlogo = 1)

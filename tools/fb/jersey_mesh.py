@@ -1216,7 +1216,8 @@ STARS = {"ANA": ("ZEGRAS", "11"), "WPG": ("SCHEIFELE", "55"), "BOS": ("PASTRNAK"
          "NSH": ("FORSBERG", "9"), "NJ": ("HUGHES", "86"), "NYI": ("BARZAL", "13"), "NYR": ("PANARIN", "10"),
          "OTT": ("TKACHUK", "7"), "PHI": ("COUTURIER", "14"), "PIT": ("CROSBY", "87"), "STL": ("KYROU", "25"),
          "SJ": ("CELEBRINI", "71"), "TB": ("KUCHEROV", "86"), "TOR": ("MATTHEWS", "34"), "VAN": ("PETTERSSON", "40"),
-         "WSH": ("OVECHKIN", "8"), "SEA": ("BENIERS", "10"), "VGK": ("EICHEL", "9")}
+         "WSH": ("OVECHKIN", "8"), "SEA": ("BENIERS", "10"), "VGK": ("EICHEL", "9"),
+         "UTA": ("KELLER", "9")}   # UTA — Юта (fb.kit_batch.NEW_CLUBS, 22.10): лист kitport present
 # настройки клубов после тестов пользователя (как у kit): зоны фамилии и буквы
 CLUB_KIT = {"PIT": {"name_scale": (0.85, 0.82), "name_up": 1.27},
             "WSH": {"name_scale": (0.85, 0.82), "name_up": -0.5, "letter_down": 3.0}}

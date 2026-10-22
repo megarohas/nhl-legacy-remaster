@@ -1111,9 +1111,10 @@ CLUB_NAME = {"MIN": "minnesota"}
 
 
 def _club_names():
-    """Код клуба → папка комплектов в дампе (fb.kit_batch.CLUBS: MIN → minnesota, NJD → newjersey)."""
-    from .kit_batch import CLUBS
-    return {code: club for club, _, code in CLUBS}
+    """Код клуба → папка комплектов в дампе (fb.kit_batch.CLUBS: MIN → minnesota, NJD → newjersey; NEW_CLUBS — клубы
+    только новых источников: UTA → utah)."""
+    from .kit_batch import CLUBS, NEW_CLUBS
+    return {code: club for club, _, code in CLUBS + NEW_CLUBS}
 
 
 CLUB_NAME.update(_club_names())
