@@ -441,7 +441,17 @@ def decal_post(comp, placed, soft, n_jersey_tri, collar=None, pre=(), crest_fit=
             if not sel.any():
                 pl["texels"] = 0
                 continue
-            duv = (d[sel] @ pinv.T) / sc
+            dd = d[sel]
+            if pl.get("level"):                          # проекция по высоте (edge_kit crest_level, MTL 23.10): вдоль
+                eu = np.cross([0.0, 1.0, 0.0], nL)       # наклонной нормали точки по бокам (торс уходит назад) брали
+                eu = eu / max(np.linalg.norm(eu), 1e-9)  # рисунок выше-ниже на глубину × tg наклона — не как полоса
+                ev = np.cross(nL, eu)
+                dd = (dd @ eu)[:, None] * eu + (dd[:, 1] / max(ev[1], 1e-6))[:, None] * ev
+            if pl.get("rot_deg"):                        # доворот нашивки вокруг нормали (edge_kit crest_rotate_deg):
+                t = -np.radians(pl["rot_deg"])           # точка берёт рисунок с повёрнутого назад места —
+                kx = np.cross(nL, dd)                    # рисунок против часовой на виде спереди
+                dd = dd * np.cos(t) + kx * np.sin(t) + np.outer(dd @ nL, nL) * (1 - np.cos(t))
+            duv = (dd @ pinv.T) / sc
             duv = duv @ R.T
             uu = u_c + duv[:, 0]
             vv = v_c + duv[:, 1]

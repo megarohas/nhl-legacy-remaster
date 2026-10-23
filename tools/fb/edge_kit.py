@@ -1379,6 +1379,7 @@ CHEST_SPECK_RING = 0.9             # доля кольца вокруг точк
 CHEST_SPECK_TOL = 25               # «тот же цвет» фона — ближе (max по каналам)
 CHEST_SPECK_DY = 0.02              # м ниже окна — тоже (под концами лацканов)
 CHEST_SPECK_D = 0.012              # м от края ворота: ближе — кромка, не трогается
+CHEST_END_DX = 0.008               # м от начала окна (x0) к середине: хвосты полос у их конца — фоном (WSH, 23.10)
 CHEST_END_MIN = 0.006              # м: крайний отрезок столбца источника короче — не фон (кромка ворота у верха окна)
 
 
@@ -1548,10 +1549,24 @@ def chest_bands_fit(png, mesh, box, code, kit):
         sp = good[labc] & (labc > 0)
         out[sp] = col_
         n_sp += int(sp.sum())
+    # хвост полос у их конца со стороны ворота (|x| от x0 − CHEST_END_DX до x0 — вне окна, прежний перенос): тексели ниже
+    # нижнего края полос и выше верхнего (на полтекселя за краем) — цветом фона там (WSH, 23.10, пользователь: «артефакт, где
+    # полоска по ключице втыкается в площадку для шильдика» — хвост синего в 6 текселей на 2–3 мм под концом правого канта,
+    # |x| 4,1–4,4 см при окне от 4,5); сами полосы до края шаблона — как были
+    tail = m & (P[..., 2] > 0) & (N[..., 2] > CHEST_NZ) & (ax < x0) & (ax >= x0 - CHEST_END_DX) & \
+        (P[..., 1] >= y0) & (P[..., 1] <= y1) & (wD > 0)
+    yt, xt = np.nonzero(tail)
+    bt = np.stack([np.interp(np.degrees(np.arctan2(ax[yt, xt], P[yt, xt, 2])), tq, hq[:, k]) for k in range(hq.shape[1])], 1)
+    yv, ht = P[yt, xt, 1], np.maximum(ts[yt, xt], 1e-4)
+    n_end = 0
+    for sel, col_ in ((yv < bt.min(1) - 0.5 * ht, cols[0]), (yv > bt.max(1) + 0.5 * ht, cols[-1])):
+        diff = np.abs(out[yt[sel], xt[sel]] - col_).max(-1) > CHEST_SPECK_TOL
+        out[yt[sel][diff], xt[sel][diff]] = col_
+        n_end += int(diff.sum())
     Image.fromarray(np.clip(np.round(out), 0, 255).astype(np.uint8)).save(png)
     edges = ", ".join(f"{np.interp(60.0, tq, hq[:, k]):.3f}" for k in range(hq.shape[1]))
     return [f"полосы источника (снизу вверх) {s_['colors']}, θ {tq.min():.0f}…{tq.max():.0f}°, края на 60°: {edges} (столбцов {s_['n']}); "
-            f"свои цвета {np.round(cols).astype(int).tolist()}; перекрашено {int(ch.sum())}, точек {n_sp} текселей"]
+            f"свои цвета {np.round(cols).astype(int).tolist()}; перекрашено {int(ch.sum())}, точек {n_sp}, у конца {n_end} текселей"]
 
 
 def armhole_dist(G):
@@ -1963,6 +1978,12 @@ def use_club(code):
     global BN_KEEP_LACE
     BN_KEEP_LACE = bool(prof.get("base_normal_keep_lace", False))   # шнуровка — рельеф источника (NYI, 23.10)
     global PLACKET_LIFT, LACE_ZONE, RELIEF_FLAT_UNDER
+    global CREST_LEVEL
+    CREST_LEVEL = list(prof.get("crest_level", []))                    # формы: герб — проекцией по высоте (MTL дом)
+    global CREST_ROT
+    CREST_ROT = {k: float(v) for k, v in prof.get("crest_rotate_deg", {}).items()}   # формы: доворот герба (MTL дом)
+    global CREST_DROP
+    CREST_DROP = {k: float(v) for k, v in prof.get("crest_drop_cm", {}).items()}   # формы: герб ниже полосы (MTL дом)
     RELIEF_FLAT_UNDER = list(prof.get("relief_flat_under", []))         # швы гладко под гербом и номерами (MTL, 23.10)
     if set(RELIEF_FLAT_UNDER) - {"crest", "numbers"}:
         sys.exit(f"[{code}] relief_flat_under = {RELIEF_FLAT_UNDER!r} — из \"crest\", \"numbers\"")
@@ -2255,6 +2276,21 @@ def torso_shift_dy(y, ts=None):
     return w * (cm / 100.0 + (y - yc) * (1.0 / k - 1.0))
 
 
+def crest_level(placed, kit):
+    """Герб — проекцией по высоте (профиль crest_level, формы): kit_hybrid.decal_post берёт смещение точки от центра
+    герба по горизонтали и по высоте, без глубины вдоль наклонной нормали (MTL дом, 23.10: нормаль груди 9,5° вверх,
+    торс у концов «C» на 2,7 см глубже — рисунок герба ниже полосы на ~4,5 мм, «отросток синего не стыкуется»)."""
+    for pl in placed:
+        if pl["name"] != "crest":
+            continue
+        if kit in CREST_LEVEL:
+            pl["level"] = True
+            print("  герб: проекция по высоте (crest_level)")
+        if CREST_ROT.get(kit):
+            pl["rot_deg"] = CREST_ROT[kit]
+            print(f"  герб: повёрнут на {CREST_ROT[kit]}° (crest_rotate_deg)")
+
+
 def torso_shift_crest(placed):
     """Герб (нашивка crest) ниже на сдвиг torso_shift: нашивки ставятся по 3D-точке центра (кадр _frame), не по
     развёртке — без этого полоса уходила бы из-под герба."""
@@ -2263,9 +2299,11 @@ def torso_shift_crest(placed):
             continue
         cL, nL, pinv, R, sc, rad, u_c, v_c = pl["_frame"]
         cL = np.asarray(cL, np.float64).copy()
-        cL[1] -= TORSO_SHIFT[0] / 100.0
+        drop = CREST_DROP.get(CUR_KIT, 0.0)               # crest_drop_cm: герб ниже полосы ещё на столько (MTL дом)
+        cL[1] -= (TORSO_SHIFT[0] + drop) / 100.0
         pl["_frame"] = (cL, nL, pinv, R, sc, rad, u_c, v_c)
-        print(f"  герб: ниже на {TORSO_SHIFT[0]} см вместе с полосой (torso_shift), центр {cL[1]:.3f} м")
+        print(f"  герб: ниже на {TORSO_SHIFT[0]} см вместе с полосой (torso_shift)"
+              + (f" и ещё на {drop} см (crest_drop_cm)" if drop else "") + f", центр {cL[1]:.3f} м")
 
 
 def use_kit(kit):
@@ -3468,6 +3506,14 @@ RELIEF_FLAT_UNDER = []             # профиль relief_flat_under = ["crest"
 #                                    гаснут под гербом (маска нашивки этой сборки — crest_alpha.png) и в зонах номеров 1–3
 #                                    карты номеров (спина, рукава): пользователь — «швы полосы видны на логотипе, нарисованном
 #                                    поверх», «на номерах виднеется рельеф полосы». Складки и плетение ткани — как были
+CREST_DROP = {}                    # профиль crest_drop_cm = { форма = см } (23.10, MTL дом): герб ниже на столько сверх
+#                                    torso_shift (тот двигает герб вместе с полосой) — куски полос в нашивке герба на ~2 мм
+#                                    выше нашей полосы; сдвиг полосы их не сводит (герб едет с ней)
+CUR_KIT = None                     # форма текущей сборки (для crest_drop_cm)
+CREST_ROT = {}                     # профиль crest_rotate_deg = { форма = ° } (23.10, MTL дом): герб повёрнут на столько (против
+#                                    часовой на виде спереди) — куски полос в нашивке слева выше полосы, справа ниже (~1,5 мм
+#                                    на 27 см: рамка нашивки повёрнута против полосы на ~0,3°)
+CREST_LEVEL = []                   # профиль crest_level = ["home"] (23.10, MTL): герб проекцией по высоте (crest_level)
 RELIEF_FLAT_ZONES = (1, 2, 3)      # зоны карты номеров: номер на спине, номера на рукавах
 RELIEF_FLAT_GROW = 2               # текселей рельефа: запас за краем герба / зоны
 RELIEF_FLAT_FEATHER = 2.0          # текселей: мягкий край
@@ -4283,6 +4329,36 @@ def ea_yoke_heights(ea_png):
     return out
 
 
+PANT_TINT_TOL = (20.0, 45.0)       # pant_tint: отступ цвета от луча основного цвета Legacy (max по каналам): до 20 — его оттенок,
+#                                    от 45 — чужой цвет (полосы, нашивки), между — плавно
+
+
+def _dominant(rgb):
+    q = np.round(rgb.reshape(-1, 3) / 12).astype(int)
+    key = (q[:, 0] * 64 + q[:, 1]) * 64 + q[:, 2]
+    ks, cnt = np.unique(key, return_counts=True)
+    return np.median(rgb.reshape(-1, 3)[key == ks[np.argmax(cnt)]], axis=0)
+
+
+def tint_pant(png, src_png):
+    """Шорты Legacy (слот pant = "legacy") — оттенком шорт источника (поле слота pant_tint = "source"; NYR, 23.10,
+    пользователь: «шорты как раньше — хорошо, только оттенок розово-красный, как в NHL 27»): основной цвет шорт Legacy и
+    его оттенки (тот же цвет темнее и светлее: луч основного цвета) → основной цвет шорт источника (перенос kit, pant_cm)
+    с той же долей яркости; полосы, нашивки и прочие цвета — как были. -> отчёт."""
+    from PIL import Image
+    a = np.asarray(Image.open(png).convert("RGBA")).astype(np.float64)
+    rgb = a[..., :3]
+    main_l = _dominant(rgb)
+    main_s = _dominant(np.asarray(Image.open(src_png).convert("RGB")).astype(np.float64))
+    t = (rgb @ main_l) / max(float(main_l @ main_l), 1e-6)
+    resid = np.abs(rgb - t[..., None] * main_l).max(-1)
+    lo, hi = PANT_TINT_TOL
+    w = np.clip((hi - resid) / (hi - lo), 0, 1) * (t > 0.3)
+    a[..., :3] = rgb * (1 - w[..., None]) + np.clip(t[..., None] * main_s, 0, 255) * w[..., None]
+    Image.fromarray(np.clip(np.round(a), 0, 255).astype(np.uint8), "RGBA").save(png)
+    return f"{np.round(main_l).astype(int).tolist()} → {np.round(main_s).astype(int).tolist()}, {int((w > 0.5).sum())} текселей"
+
+
 def save_crest_alpha(placed, od):
     """Где лёг герб в этой сборке (kit_hybrid.decal_post: pl["_alpha"]) → od/crest_alpha.png (для relief_flat_under)."""
     from PIL import Image
@@ -4308,7 +4384,10 @@ def relief_flat_weight(code, kit, od, S):
     w = np.zeros((S, S))
     cp = os.path.join(od, "crest_alpha.png")
     if "crest" in RELIEF_FLAT_UNDER and os.path.exists(cp):
-        w = np.maximum(w, np.asarray(Image.open(cp).convert("L").resize((S, S), Image.BILINEAR)) / 255.0)
+        c = np.asarray(Image.open(cp).convert("L").resize((S, S), Image.BILINEAR)) / 255.0
+        # весь герб целиком (как рамка нашивки): замкнуть и залить — швы гаснут и в дырах маски
+        c = np.maximum(c, ndi.binary_fill_holes(ndi.binary_closing(c > 0.5, iterations=4)))
+        w = np.maximum(w, c)
     if "numbers" in RELIEF_FLAT_UNDER:
         p = os.path.join(WORK, "slot", "kits", f"{code}_{kit}", "name_cm.png")
         if not os.path.exists(p) and kit in SLOT_KITS:
@@ -5710,7 +5789,11 @@ def cmd_kit(a):
         if CREST_SIZE_CM:
             crest_to_size(placed)
         if TORSO_SHIFT:                                  # герб — вместе с полосой (torso_shift)
+            global CUR_KIT
+            CUR_KIT = cur_kit.get("kit")
             torso_shift_crest(placed)
+        if CREST_LEVEL or CREST_ROT:
+            crest_level(placed, cur_kit.get("kit"))
         if SHIELD_GAP_MM is not None and yoke_rule.get("trim") is not None:
             fit_shield_gap(placed, soft, comp, src, dst_, tid24, yoke_rule["trim"], a.club, cur_kit["kit"])
         return placed, soft
@@ -7209,6 +7292,9 @@ def cmd_slot(a):
             shutil.copy2(os.path.join(leg, f + ".png"), os.path.join(d, f + ".png"))
         if spec.get("pant", "legacy") == "source":       # шорты источника (fb.pilot: 3D-перенос), рельеф — образца
             shutil.copy2(os.path.join(src, "pant_cm.png"), os.path.join(d, "pant_cm.png"))
+        elif spec.get("pant_tint") == "source":          # шорты Legacy — основным цветом шорт источника (NYR, 23.10)
+            print(f"  шорты {kit}: оттенок источника (pant_tint) —",
+                  tint_pant(os.path.join(d, "pant_cm.png"), os.path.join(src, "pant_cm.png")))
         if NAME_ZONES_FROM:                             # фамилия, номер, буква — как у формы Legacy (профиль; VGK)
             ref = os.path.join(cur, NAME_ZONES_FROM)
             if not os.path.exists(os.path.join(ref, "kit.json")):
