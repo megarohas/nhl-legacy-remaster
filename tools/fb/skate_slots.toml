@@ -1,0 +1,65 @@
+# Коньки NHL Legacy: что лежит в слотах каталога (cacherender/rendering/skate/texlib_<N>.rx2, skate_<N>_cm) — перенос
+# из NHL 27 и имена. Сборка и пакет — python -m fb.skates (docs/skates.md); edge_kit pack кладёт их в pack-edge.
+#
+# Слоты — 11 коньков каталога редактора (записи по 0x1C байт в default.bin с 0x19b9f3c, разбор 23.10.2026); буква —
+# порядок в редакторе. N — номер текстуры и значение exhibitionskaterequipment.skatebrand у игрока: у игроков меняются
+# только картинка и имя. Игроки базы носят только 39, 41, 43–48; прочие texlib_ в архиве — вратарские и старые.
+#
+# from: "nhl27:<модель>" — текстура player_skate_<модель>_color NHL 27 (модель конька — своя, если есть, иначе общая
+#       модель бренда: fb.skates.mesh_of) переносом по 3D на модель конька Legacy.
+# key, name: строка локализации и новый текст. Ключи bauersupreme1s, bauervapor1x, bauerpreorder, ccmpreorder,
+# eastonpreorder общие с клюшками (fb/stick_slots.toml) — имя у них задаёт план клюшек (здесь name = null).
+#
+# Решение пользователя 23.10.2026: «адаптировать все коньки — модель, текстуру, название из NHL 27» (заранее «да» на
+# замены). Слоты — по предложению game/work/equipment27/proposal.md; A (BAUER Nexus 8000, ключ свой) — CCM Jetspeed FT6,
+# а Bauer Supreme Shadow — в слот I (BAUER Preorder): имя у I общее с клюшкой X («BAUER Twitch») — пусть хоть бренд тот же.
+
+[slot.41]    # A — было BAUER Nexus 8000 (49 игроков)
+from = "nhl27:ccm_jetspeed_ft6"
+key = "bauernexus8000"
+name = "CCM Jetspeed FT6"
+
+[slot.48]    # B — BAUER Supreme 1S (580); имя — у клюшки B («BAUER Supreme Fuse»)
+from = "nhl27:bauer_supreme_fuse_base"
+key = "bauersupreme1s"
+
+[slot.47]    # C — BAUER Vapor 1X (3430); имя — у клюшки C («BAUER Vapor FlyLite»)
+from = "nhl27:bauer_vapor_flylite_base"
+key = "bauervapor1x"
+
+[slot.43]    # D — CCM Jetspeed (405)
+from = "nhl27:ccm_jetspeed_ft8_base"
+key = "ccmjetspeed"
+name = "CCM Jetspeed FT8"
+
+[slot.44]    # E — CCM Ribcor 50K (17)
+from = "nhl27:ccm_ribcor_100k"
+key = "ccmribcor50k"
+name = "CCM Ribcor 100K"
+
+[slot.39]    # F — CCM Tacks (395)
+from = "nhl27:ccm_tacks_xf_base"
+key = "ccmtacks"
+name = "CCM Tacks XF"
+
+[slot.45]    # G — EASTON Mako 2 (79)
+from = "nhl27:true_catalyst_9x4_base"
+key = "eastonmako2"
+name = "TRUE Catalyst 9X4"
+
+[slot.46]    # H — GRAF G9035 (111)
+from = "nhl27:true_hzrdus_original"
+key = "grafg9035"
+name = "TRUE HZRDUS"
+
+[slot.70]    # I — BAUER Preorder (0); имя — у клюшки X
+from = "nhl27:bauer_supreme_shadow_base"
+key = "bauerpreorder"
+
+[slot.72]    # J — CCM Preorder (0), закрыт; имя — у клюшки Y
+from = "nhl27:ccm_supertacks_as3pro"
+key = "ccmpreorder"
+
+[slot.74]    # K — EASTON Preorder (0), закрыт; имя — у клюшки Z
+from = "nhl27:true_tfpro_original"
+key = "eastonpreorder"

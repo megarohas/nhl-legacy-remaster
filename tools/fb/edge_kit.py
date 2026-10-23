@@ -7537,6 +7537,10 @@ def cmd_pack(a):
     n_stick = sticks.pack(man, cache)
     if n_stick:
         print(f"клюшки (fb.sticks, stick_slots.toml): {n_stick}, имён {len(man.get('loc', {}))}")
+    from . import skates                                 # коньки NHL 27 (23.10, skate_slots.toml)
+    n_skate = skates.pack(man, cache)
+    if n_skate:
+        print(f"коньки (fb.skates, skate_slots.toml): {n_skate}, имён всего {len(man.get('loc', {}))}")
     # в пакет (в игру) — только одобренные клубы: все формы слота с default = true (правило 21.10); черновики — нет
     prof = club_profiles()
     built = [c for c in prof if all(os.path.isdir(os.path.join(WORK, "slot", "kits", f"{c}_{k}"))

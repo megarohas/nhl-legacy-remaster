@@ -568,7 +568,7 @@ def _view_raster(mesh, view, width, height, frame):
 def transfer_normals(src_nmap, src_mesh, dst_mesh, size=1024, ss=2, flip_green=True):
     """Карта нормалей src (касательное пространство src) → касательное пространство dst через то же соответствие:
     n_мир = T·x + B·y + N·z на src, затем проекция на T, B, N dst. -> RGB (R = X, G = Y, B = Z), size²."""
-    S = size * ss
+    Wd, Hd = _wh(size)                                   # и прямоугольная развёртка (коньки 1024×512, 23.10)
     transfer(np.zeros((4, 4, 3)), src_mesh, dst_mesh, size, ss)  # заполнить кеш соответствия
     mask, t, b, UV, dist_v, bad_tri = _MAPCACHE[(id(src_mesh), id(dst_mesh), _wh(size), ss, 0.04)]
     T = dst_mesh["tri"]
@@ -614,12 +614,12 @@ def transfer_normals(src_nmap, src_mesh, dst_mesh, size=1024, ss=2, flip_green=T
     z = (nw * Nd).sum(-1)
     if flip_green:
         y = -y
-    out = np.zeros((S, S, 3))
+    out = np.zeros((Hd * ss, Wd * ss, 3))
     out[...] = (127.5, 127.5, 255.0)
     out[mask] = np.stack([x, y, z], -1) * 127.5 + 127.5
     out[mask][~ok] = (127.5, 127.5, 255.0)
     if ss > 1:
-        out = out.reshape(size, ss, size, ss, 3).mean((1, 3))
+        out = out.reshape(Hd, ss, Wd, ss, 3).mean((1, 3))
     return np.clip(out, 0, 255)
 
 

@@ -103,18 +103,21 @@ def _fe_parts():
     return _M["fe"]
 
 
-def _fe_rot(yaw, pitch, roll):
+FE_BASE = np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]])   # толщина клюшки (y) — к камере; коньки — своя (np.eye: высота вверх)
+
+
+def _fe_rot(yaw, pitch, roll, base=None):
     cy, sy, cp, sp, cr, sr = np.cos(yaw), np.sin(yaw), np.cos(pitch), np.sin(pitch), np.cos(roll), np.sin(roll)
     Ry = np.array([[cy, 0, sy], [0, 1, 0], [-sy, 0, cy]])
     Rx = np.array([[1, 0, 0], [0, cp, -sp], [0, sp, cp]])
     Rz = np.array([[cr, -sr, 0], [sr, cr, 0], [0, 0, 1]])
-    return Rz @ Rx @ Ry @ np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]])     # толщина клюшки (y) — к камере
+    return Rz @ Rx @ Ry @ (FE_BASE if base is None else base)
 
 
-def _fe_raster(parts, pose, c, ss=1, size=FE_SIZE):
+def _fe_raster(parts, pose, c, ss=1, size=FE_SIZE, base=None):
     """Кадр превью: (покрытие, альбедо, нормаль в осях камеры, номер части) в разрешении size × ss."""
     W, H = size[0] * ss, size[1] * ss
-    R = _fe_rot(*pose[:3])
+    R = _fe_rot(*pose[:3], base=base)
     ox, oy, sc, ps = pose[3:]
     zb = np.full((H, W), -np.inf)
     alb, nrm, part = np.zeros((H, W, 3)), np.zeros((H, W, 3)), np.full((H, W), -1)

@@ -90,6 +90,7 @@ TYPES = {
     'ice': r'rendering/icesurface/[a-z0-9_]+\.rx2',               # логотипы и реклама на льду
     'puck': r'rendering/puck/[a-z0-9_]+\.rx2',                    # шайба
     'stick': r'rendering/playerstick/[a-z0-9_]+\.rx2|fe/ion/artassets/createplayer/sticks/stick\d+\.big',   # клюшки и превью
+    'skate': r'rendering/skate/texlib_\d+\.rx2|fe/ion/artassets/createplayer/skates/skate\d+\.big',   # коньки и превью (23.10)
     'other': r'(rendering|fe)/[a-z0-9_/]+\.(rx2|big)',            # прочее (с полем note)
 }
 
