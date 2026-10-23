@@ -1,0 +1,312 @@
+# Цвета кресел арен NHL Legacy на сезон 2026/27 — рецепты для `python stadium.py recipe` (docs/arenas.md).
+#
+# Ключ [arena.N] — номер модели арены (`exhibitionarena.arenaartid`, файл rendering/crowddata/crowd_N.cwd).
+# rules — правила stadium.py: "[фильтр,…:]#RRGGBB" (без фильтра — все кресла; color=, y=, tier=, x=, z=).
+# Цвет правила — оттенок кресла Legacy (множитель серой текстуры chair_cm), не цвет на экране.
+# status:
+#   proposed — предложение агента (23.10.2026), пользователь ещё не смотрел; `recipe --approved` его пропускает;
+#   approved — одобрено пользователем (дата и слова — в note);
+#   keep     — у EA уже близко к нынешней арене, не трогать.
+# confidence: high — реальная замена кресел подтверждена новостью и совпадает с NHL 27; medium — NHL 27 во всех
+# (или 3 из 4) вариантах кресел даёт один цвет, а у Legacy другой; low — данных мало.
+# nhl27 — основной цвет текстур кресел NHL 27 crowd_chair_<город>_0…3 (`stadium.py nhl27`), в скобках — оттенок
+# Legacy ×1.43 (калибровка по TB и BUF, NHL27_GAIN в stadium.py). Какой вариант NHL 27 стоит в каком секторе —
+# неизвестно (раскладка кресел NHL 27 не разбиралась), поэтому где у NHL 27 несколько цветов — берётся основной.
+
+[arena.0]
+club = "ANA"
+building = "Honda Center"
+legacy = "#923f48 (бордовый, вся чаша)"
+nhl27 = "#68311e ×2 (#95462b, рыжий), #212529 ×2 (#2f353b)"
+status = "proposed"
+confidence = "low"
+rules = []
+note = "Новостей о замене кресел нет. NHL 27 — рыже-коричневые и тёмные. Вариант: [\"y=0-12:#95462b\", \"y=12-40:#2f353b\"]"
+
+[arena.1]
+club = "WPG"
+building = "Canada Life Centre"
+legacy = "#6d788c (серо-синий, общий цвет EA) 9009 + #1f2e4e 4881"
+nhl27 = "#292a29 ×4 (#3b3c3b)"
+status = "proposed"
+confidence = "medium"
+rules = ["#3b3c3b"]
+note = "Модель общая с Manitoba Moose (АХЛ, строка 44)."
+
+[arena.2]
+club = "BOS"
+building = "TD Garden"
+legacy = "#d0b640 (жёлтые, вся чаша)"
+nhl27 = "#333433 ×4 (#494a49)"
+status = "proposed"
+confidence = "high"
+rules = ["#494a49"]
+note = "Лето 2019: жёлтые кресла 1995 года заменены чёрными (985thesportshub.com, boston.com, 2019)."
+
+[arena.3]
+club = "BUF"
+building = "KeyBank Center"
+legacy = "#34568c (синие) + #22375b/#223750"
+nhl27 = "#33385a, #1e2e52, #182233, #263d62 (#36578c …)"
+status = "keep"
+confidence = "high"
+rules = []
+note = "Синие — как у NHL 27 (по ней и калибровка ×1.43)."
+
+[arena.4]
+club = "CGY"
+building = "Scotiabank Saddledome"
+legacy = "#2a5447 (зелёные)"
+nhl27 = "#23313e, #15243c, #262626, #12223f (тёмно-синие, тёмные)"
+status = "keep"
+confidence = "low"
+rules = []
+note = "У Saddledome исходно зелёные и синие кресла (форум skyrisecities); NHL 27 — тёмно-синие. Оставить, решит пользователь."
+
+[arena.5]
+club = "CAR"
+building = "Lenovo Center (PNC Arena)"
+legacy = "#753e3c (кирпичный)"
+nhl27 = "#232223, #292829, #232223, #202020 (#323132)"
+status = "proposed"
+confidence = "medium"
+rules = ["#323132"]
+
+[arena.6]
+club = "CHI"
+building = "United Center"
+legacy = "#823933 (красные)"
+nhl27 = "#292a29 ×3, #1b1a1b (#3b3c3b)"
+status = "proposed"
+confidence = "medium"
+rules = ["#3b3c3b"]
+
+[arena.7]
+club = "COL"
+building = "Ball Arena (Pepsi Center)"
+legacy = "#7d633c (горчичный)"
+nhl27 = "#1c1c1c ×3, #993d33 (#282828)"
+status = "proposed"
+confidence = "medium"
+rules = ["#282828"]
+
+[arena.8]
+club = "CBJ"
+building = "Nationwide Arena"
+legacy = "#3a4e75 (синие)"
+nhl27 = "#20283f ×3 (#2e395a), #12151b"
+status = "keep"
+confidence = "medium"
+rules = []
+
+[arena.9]
+club = "DAL"
+building = "American Airlines Center"
+legacy = "#c1b48f (бежевые)"
+nhl27 = "#2b2a29 ×3 (#3d3c3b), #756f62 (#a79f8c, бежевый)"
+status = "proposed"
+confidence = "low"
+rules = ["#3d3c3b"]
+note = "У NHL 27 бежевый остался в одном варианте из четырёх — где он, неизвестно."
+
+[arena.10]
+club = "DET"
+building = "Little Caesars Arena (модель — Joe Louis Arena)"
+legacy = "#c53f3f (красные, Joe Louis)"
+nhl27 = "#1b1b1b ×4 (#272727)"
+status = "proposed"
+confidence = "high"
+rules = ["#272727"]
+note = "С 2017 «Детройт» играет в Little Caesars Arena; её красные кресла заменены чёрными зимой 2018/19 (cbssports.com, 2018). Модель Legacy — Joe Louis Arena, меняется только цвет."
+
+[arena.11]
+club = "EDM"
+building = "Rogers Place (модель — Rexall Place)"
+legacy = "#3876ad (синие) 7257 + #ffffff 1372"
+nhl27 = "#212529 ×3 (#2f353b), #7e7e7e"
+status = "proposed"
+confidence = "medium"
+rules = ["#2f353b"]
+note = "С 2016 — Rogers Place, модель Legacy — Rexall Place. Та же модель у 363 (CHL)."
+
+[arena.12]
+club = "FLA"
+building = "Amerant Bank Arena"
+legacy = "#400612 (тёмно-бордовый)"
+nhl27 = "#201e23 ×2, #9c3d33, #6b7d8e"
+status = "keep"
+confidence = "low"
+rules = []
+
+[arena.13]
+club = "LA"
+building = "Crypto.com Arena"
+legacy = "#6d788c 13166 + #563b5a (фиолетовый) 1324"
+nhl27 = "#1a1b1a ×3 (#252725), #637689"
+status = "proposed"
+confidence = "low"
+rules = ["#252725"]
+
+[arena.14]
+club = "MIN"
+building = "Grand Casino Arena (Xcel Energy Center)"
+legacy = "#374335 (тёмно-зелёный)"
+nhl27 = "#1a1a1d ×2, #9f3f36, #637689"
+status = "keep"
+confidence = "low"
+rules = []
+note = "NHL 27 — в основном тёмные; у Legacy и так тёмный зелёный."
+
+[arena.15]
+club = "MTL"
+building = "Bell Centre"
+legacy = "#b23d35 (красные) 9991 + #a39896 (серые, верх) 3999"
+nhl27 = "#a21826, #354367, #5a1500, #b7b096 (несколько цветов по ярусам)"
+status = "keep"
+confidence = "medium"
+rules = []
+
+[arena.16]
+club = "NSH"
+building = "Bridgestone Arena"
+legacy = "#213044 / #212b44 (тёмно-синие)"
+nhl27 = "#232629, #292a2e, #1b1d29, #687b8e"
+status = "keep"
+confidence = "medium"
+rules = []
+note = "Модель общая с Матчем всех звёзд (EAS/WES)."
+
+[arena.17]
+club = "NJ"
+building = "Prudential Center"
+legacy = "#c53f3f (красные)"
+nhl27 = "#242424 ×2, #627689, #622821"
+status = "keep"
+confidence = "low"
+rules = []
+note = "NHL 27 — в основном тёмные, один вариант тёмно-красный. Оставить, решит пользователь."
+
+[arena.18]
+club = "NYI"
+building = "UBS Arena (модель — Barclays/Nassau)"
+legacy = "#478063 (зелёные), #575a9d (синие), #994047"
+nhl27 = "#292a29 ×4 (#3b3c3b)"
+status = "proposed"
+confidence = "medium"
+rules = ["#3b3c3b"]
+note = "С 2021 — UBS Arena; модель Legacy — старая арена."
+
+[arena.19]
+club = "NYR"
+building = "Madison Square Garden"
+legacy = "#4e99aa (бирюзовые, верх и середина) 6573 + #7e4959 (сливовые, низ) 2744"
+nhl27 = "#1c2029 ×4 (#282e3b)"
+status = "proposed"
+confidence = "low"
+rules = ["#282e3b"]
+note = "После реконструкции 2011–2013 вернули ~1000 бирюзовых «blue seats» наверху (ESPN, 2013), остальное тёмное. Вариант: [\"#282e3b\", \"y=21.5-30:#4e99aa\"]."
+
+[arena.20]
+club = "OTT"
+building = "Canadian Tire Centre"
+legacy = "#923d44 (красные)"
+nhl27 = "#242424 ×2, #9c3d33 (красный), #6b7d90"
+status = "keep"
+confidence = "low"
+rules = []
+
+[arena.21]
+club = "PHI"
+building = "Xfinity Mobile Arena (Wells Fargo Center)"
+legacy = "#893c3e (красные)"
+nhl27 = "#313131 ×2 (#464646), #42201b ×2"
+status = "proposed"
+confidence = "high"
+rules = ["#464646"]
+note = "2018–2019: красные кресла заменены тёмно-серыми (inquirer.com, 2019)."
+
+[arena.23]
+club = "PIT"
+building = "PPG Paints Arena (CONSOL Energy Center)"
+legacy = "#6d788c (серо-синий, общий цвет EA)"
+nhl27 = "#232023 ×3 (#322e2f), #36353c"
+status = "proposed"
+confidence = "medium"
+rules = ["#322e2f"]
+
+[arena.24]
+club = "STL"
+building = "Enterprise Center"
+legacy = "#313f64 (тёмно-синие)"
+nhl27 = "#242524 ×3 (#333533), #525152"
+status = "proposed"
+confidence = "low"
+rules = ["#333533"]
+
+[arena.25]
+club = "SJ"
+building = "SAP Center"
+legacy = "#6d788c 4509, #8fb2b2 (бирюзовые) 3829, #33282e 1970"
+nhl27 = "#525152, #252625 (#353635), #6d6e6d, #444b91"
+status = "proposed"
+confidence = "low"
+rules = ["#353635"]
+note = "Модель общая с San Jose Barracuda (АХЛ, Tech CU Arena)."
+
+[arena.26]
+club = "TB"
+building = "Amalie Arena"
+legacy = "#313f64 (синие)"
+nhl27 = "#212a4c ×4 (#2f3c6d)"
+status = "keep"
+confidence = "high"
+rules = []
+note = "Совпадает (по ней калибровка ×1.43)."
+
+[arena.27]
+club = "TOR"
+building = "Scotiabank Arena (Air Canada Centre)"
+legacy = "#34414a 5884, #9c2c30 3004 (красный пояс 7–11 м), #f0a05a 2193 (оранжевый пояс 3–7 м)"
+nhl27 = "#353535 / #363431 ×4 (#4c4c4c)"
+status = "proposed"
+confidence = "medium"
+rules = ["#4c4c4c"]
+
+[arena.28]
+club = "VAN"
+building = "Rogers Arena"
+legacy = "#803f3f (бордовые, «maroon seats» 1995 года)"
+nhl27 = "#292829 ×4 (#3b393b)"
+status = "proposed"
+confidence = "high"
+rules = ["#3b393b"]
+note = "2024–2025: все кресла чаши заменены чёрными (norfolkandtillsonburgnews.com, nsnews.com)."
+
+[arena.29]
+club = "WSH"
+building = "Capital One Arena"
+legacy = "#616265 (серые)"
+nhl27 = "#333433 ×4 (#494a49)"
+status = "proposed"
+confidence = "medium"
+rules = ["#494a49"]
+
+[arena.255]
+club = "UTA/SEA/VGK"
+building = "EA SPORTS Arena (Delta Center, Climate Pledge, T-Mobile)"
+legacy = "#923f48 (бордовые — копия Анахайма)"
+nhl27 = "у SEA/UTA/VGK общий набор: #292a29, #313131, #1b1b1b, #42201b (#3b3c3b)"
+status = "proposed"
+confidence = "medium"
+rules = ["#3b3c3b"]
+note = "Модель 255 общая: Юта, Сиэтл, Вегас, «EA SPORTS Arena» (созданные команды, тренировки) и ещё несколько строк."
+
+[arena.363]
+club = "EDM (CHL)"
+building = "Rogers Place (копия модели 11)"
+legacy = "#3876ad + #ffffff (как у 11)"
+nhl27 = "как у EDM"
+status = "proposed"
+confidence = "medium"
+rules = ["#2f353b"]
+note = "Та же арена, что у 11 — менять вместе."
