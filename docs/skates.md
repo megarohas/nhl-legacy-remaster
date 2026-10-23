@@ -1,0 +1,87 @@
+# Коньки из NHL 27 в NHL Legacy (`tools/fb/skates.py`, 23.10.2026)
+
+Рисунки коньков NHL 27 переносятся в 11 слотов каталога Legacy. Вместе с цветом переходят рельеф и блик, а также
+новые имена и превью в редакторе. Что в каком слоте, задаёт `tools/fb/skate_slots.toml`. В игру коньки идут вместе с
+формами и клюшками (`kitport build --stages pack,overlay`, `kitport install`). Решение пользователя: «адаптировать все
+коньки — модель, текстуру, название из NHL 27».
+
+## Как устроены коньки
+
+**Legacy.** Модель у всех одна: `renderboot/rendering/skate/playerskate_2.rx2`, в ней оба конька, 1938 вершин
+(`_0` — дальняя). Бренд задаёт только текстура `cacherender/rendering/skate/texlib_<N>.rx2`:
+- `skate_<N>_cm` — 1024×512, верхняя половина — левый и правый конёк зеркально;
+- `skate_<N>_nm` и `skate_<N>_sm` — по 512×256;
+- `skate_<N>_rm` — 256×128.
+
+N хранится у игрока в поле `exhibitionskaterequipment.skatebrand`. В базе игроки носят только 39, 41 и 43–48.
+
+**Каталог редактора** зашит в `default.bin` с 0x19b9f3c: 11 записей по 0x1C байт, `[?, разблокировка, 0, N, N,
+ключ имени, бренд]`. Слоты: 41, 48, 47, 43, 44, 39, 45, 46 и три предзаказа 70, 72, 74. Ключи `bauersupreme1s`,
+`bauervapor1x`, `bauerpreorder`, `ccmpreorder` и `eastonpreorder` общие с клюшками, поэтому имя этих слотов задаёт план
+клюшек.
+
+**NHL 27.** Своя модель есть у пяти коньков (`OWN_MESH`: Supreme Fuse, Supreme Shadow, Vapor FlyLite, Tacks XF652,
+Catalyst 9X4), у остальных — общая модель бренда (`bauer|ccm|true/common`). Используется вариант `notuck` (без
+заправленной гетры). Карты модели: `player_skate_<модель>_color`, `_normal` и `_coeff`, все 2048² (верх — один конёк,
+низ — другой). Модели NHL 27 и Legacy — в одной системе координат: подошва на 0, носок к +z. Но конёк NHL 27 шире
+(|x| до 0,237 против 0,177) и выше (0,267 против 0,242).
+
+## Перенос
+
+Каждый конёк NHL 27 (знак x) вписывается в рамку своего конька Legacy по осям (`fitted27`). Затем каждый тексель
+Legacy берёт цвет с ближайшей точки NHL 27 (`kit3d.transfer`).
+
+Что взято не из NHL 27:
+- **шнуровка** — нарисованная Legacy: светлые тексели острова переда (строки 235–342) в рамке, со слота `LACE_REF` 48
+  (белые шнурки на чёрном языке). У NHL 27 шнурки — отдельная сетка прядей, и переносом на нарисованную шнуровку Legacy
+  выходила каша. Рамку со слота 70 (белый ботинок APX) брать нельзя: она захватывала ботинок;
+- **рельеф (`_nm`)** — перенос `normal` NHL 27 (`kit3d.transfer_normals`, теперь и на прямоугольной развёртке). На
+  стакане он гладкий: прорези стаканов разной формы давали цветную кашу (`HOLDER_V` — острова ниже v 0,72). На шнуровке
+  — рельеф Legacy;
+- **блик (`_sm`)** — канал G `coeff` NHL 27 (гладкость деталей), подогнанный на каждом острове развёртки к среднему и
+  разбросу блика Legacy. Уровни материалов игры остаются прежними, рисунок — новый. Карты Legacy нарисованы под прежний
+  дизайн (окна стакана Tuuk, «X» Supreme 1S), под новым рисунком они бы проступали;
+- **`_rm`** — как было.
+
+## Превью в редакторе
+
+`fe/ion/artassets/createplayer/skates/skate<N>.big` — 140×108, два вида одного конька: сбоку (носок влево) и сзади.
+Ракурсы фиксированные (`FE_VIEWS`). Масштаб и место подобраны по рамкам двух фигур силуэта превью EA `skate48`
+(`fe-fit`, `fe_fit_box`), свет взят оттуда же.
+
+Подбор по силуэту целиком не работал по двум причинам: у EA для превью конёк с ботинком выше, а IoU тянул вид сзади в
+три четверти и в масштаб ×1,4. Рендер — `fb.sticks._fe_raster` с основой «высота вверх».
+
+## Запуск
+
+```bash
+cd tools
+FB_GAME=nhl27 python -m fb.extract "/player_skate_(…)_(color|normal|coeff)$" --out gear27   # карты NHL 27
+FB_GAME=nhl27 python -m fb.skates build      # все слоты плана → game/work/equipment27/skates/out/texlib_<N>.png
+FB_GAME=nhl27 python -m fb.skates sheet      # лист: было (Legacy) | NHL 27 | в игре — 4 вида
+python -m fb.skates fe-sheet                 # превью: EA → новое
+python -m kitport build --stages pack,overlay && python -m kitport install --tag skates --yes
+```
+
+Первый запуск — с `FB_GAME=nhl27`: сетки NHL 27 кэшируются в `game/work/equipment27/skates/mesh27_*.pkl`, потом
+`edge_kit pack` работает без этой переменной. В пакет коньки кладёт `fb.skates.pack` из `edge_kit pack`: `texlib_<N>`
+по шаблону архива Legacy (заменяются cm, nm, sm), превью — по шаблону превью EA слота. Запись в манифесте — `type:
+skate`. Имена пишутся в `loc` манифеста, как у клюшек. База игроков не меняется.
+
+## План (`skate_slots.toml`)
+
+| Слот | Было | Стало |
+|---|---|---|
+| A 41 | BAUER Nexus 8000 | CCM Jetspeed FT6 |
+| B 48 | BAUER Supreme 1S | Supreme Fuse |
+| C 47 | Vapor 1X | Vapor FlyLite |
+| D 43 | CCM Jetspeed | Jetspeed FT8 |
+| E 44 | Ribcor 50K | Ribcor 100K |
+| F 39 | Tacks | Tacks XF |
+| G 45 | EASTON Mako 2 | TRUE Catalyst 9X4 |
+| H 46 | GRAF G9035 | TRUE HZRDUS |
+| I 70 | BAUER Preorder | Supreme Shadow (имя — у клюшки X) |
+| J 72 | CCM Preorder | Super Tacks AS3 Pro |
+| K 74 | EASTON Preorder | TRUE TF Pro |
+
+Остальные 19 коньков NHL 27 класть некуда: других слотов в каталоге нет.
