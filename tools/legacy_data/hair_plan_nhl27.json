@@ -779,6 +779,12 @@
   "color": 6,
   "name": "Mason Lohrei"
  },
+ "mathew_barzal": {
+  "style": 70,
+  "color": 0,
+  "name": "Mathew Barzal",
+  "force": true
+ },
  "mathieu_joseph": {
   "style": 4,
   "color": 0,

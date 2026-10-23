@@ -87,6 +87,11 @@ GAZE_BONES = {'eyel': 23, 'eyer': 24}                  # голова NHL 24 в 
 ROW_TEMPLATE = 11145                          # строка stockplayerheads образец (haircards_a/b = 0)
 # пилот 12.10.2026: в out-ahl32 Макар поставлен makar_db.py до этапа (headid 60112 → 20185) — прежняя голова для сейва
 PILOT_OLD = {('cale', 'makar', (1998, 10, 30)): 60112}
+# голова EA из архива Legacy — заменить сканом источника (решение пользователя 23.10.2026: «у Драйзайтля нет
+# лицензированного лица» — у него, как и у 46 других, скан EA 2015 года, 19-летний; правило 21.10 «персональные головы не
+# трогать» — кроме этих). Имя, фамилия (norm) → источник; headid тот же (файл player_<id> из out главнее архива).
+REPLACE_EA = {('sergei', 'bobrovsky'): 'nhl27', ('leon', 'draisaitl'): 'nhl27', ('sean', 'couturier'): 'nhl27',
+              ('mathew', 'barzal'): 'nhl27'}
 NICK = [('alex', 'alexander'), ('alex', 'aleksander'), ('alex', 'alexandre'), ('mitch', 'mitchell'), ('nick', 'nicholas'),
         ('nick', 'nicolas'), ('matt', 'matthew'), ('mike', 'michael'), ('josh', 'joshua'), ('zach', 'zachary'),
         ('zack', 'zachary'), ('jake', 'jacob'), ('chris', 'christopher'), ('tony', 'anthony'), ('dan', 'daniel'),
@@ -237,7 +242,8 @@ def cmd_match(variants):
         ea_scan = ours = 0
         for p in pl:
             h = p['headid']
-            if h < TYPICAL and h in ea:
+            replace = REPLACE_EA.get((norm(p['first']), norm(p['last']))) == P24.SOURCE
+            if h < TYPICAL and h in ea and not replace:
                 ea_scan += 1
                 continue
             if h < TYPICAL and foreign.get(p['game_id']) == h:
@@ -277,12 +283,14 @@ def cmd_match(variants):
                         nofolder.append(rec)                   # скан в базе NHL 24 есть, а папки с сеткой не нашлось
                     continue
                 rec['folder'] = folder_of[i]
+                if replace:
+                    rec['replace_ea'] = True
                 new = q['artid']
                 rec['new'] = new
                 why = []
                 if new >= TYPICAL:
                     why.append(f'ID EA {new} ≥ 60000')
-                if new in ea:
+                if new in ea and not (replace and new == h):    # REPLACE_EA: свой же файл EA — заменяется
                     why.append(f'файл player_{new} уже есть в архиве (другая голова)')
                 if new in foreign_files:
                     why.append(f'файл player_{new} уже собран из другого источника')
@@ -582,6 +590,8 @@ def build_one(job):
     rep['pose'] = sm['pose']
     nh = P['head']['nv']
     hair = heads.hair(folder) if tx['hair'] is not None else []
+    if (job.get('style') or {}).get('force'):            # hair-plan "force": стиль главнее своих прядей (Барзал 23.10: пышные
+        hair = []                                        # волосы NHL 27 переносом — тёмная «шапка»)
     lpos = np.concatenate([P['head']['pos'], P['mouthbag']['pos']])
     w = smoothstep(NECK[0], NECK[1], lpos[:, 1])[:, None]
     newp = lpos + w * (npos[j] - lpos)
@@ -638,7 +648,7 @@ def build_one(job):
         # есть; иначе голова вышла бы лысой — волосы с нынешней типовой головы игрока (её подбирали по фото, heads24)
         painted, rep['scalp_ratio'] = scalp_painted(N['mat_head'], tx['head'])
         st = job.get('style')
-        if not painted and st is not None:
+        if st is not None and (not painted or st.get('force')):   # force — и поверх нарисованных на скальпе
             # причёска NHL 27 из общих (подбор по фото — hair-plan.json): сетки, обтянутые по голове игрока, и рисунок на
             # скальпе (маска стиля на развёртке головы — она у NHL 27 и Legacy одна)
             hair, hair_tex, tx['head'] = shared_style(st['style'], st['color'], N['mat_head'], tx['head'], rigid)
@@ -763,8 +773,8 @@ def build_one(job):
     from PIL import Image
     R.use_game('legacy')
     rw = teamart.Rw4.load(os.path.join(EA_PLAYER, f'texlib_{tpl}.rx2'))
-    ren = rw.rename(tpl, new)
-    if len(ren) != 2:
+    ren = rw.rename(tpl, new) if tpl != new else None   # шаблон — своя же голова EA (REPLACE_EA, Барзал 23.10): имена те же
+    if ren is not None and len(ren) != 2:
         raise RuntimeError(f'{new}: переименовано растров {len(ren)}')
     face = np.array(Image.fromarray(tx['head'][..., :3]).resize((512, 512), Image.LANCZOS))
     face = np.dstack([face, np.full(face.shape[:2], 255, np.uint8)])
@@ -1081,7 +1091,7 @@ def cmd_build(jobs, disputed, only=None, legacy_hair=LEGACY_HAIR):
             print(f'  {new} {folder}: нет шаблона с {len(str(new))} цифрами — пропуск')
             continue
         joblist.append({'new': new, 'folder': folder, 'tpl': best[0], 'tpl_dist_mm': round(best[1] * 1000, 2), 'kind': kind,
-                        'old_head': old, 'style': {k: plan[folder][k] for k in ('style', 'color')}
+                        'old_head': old, 'style': {k: plan[folder][k] for k in ('style', 'color', 'force') if k in plan[folder]}
                         if plan.get(folder, {}).get('style') is not None else None,
                         'hair_color': (plan.get(folder) or {}).get('color', source_hair_colors().get(new))})
     res, bad = {}, []
