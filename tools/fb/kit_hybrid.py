@@ -453,6 +453,7 @@ def decal_post(comp, placed, soft, n_jersey_tri, collar=None, pre=(), crest_fit=
             a = np.where(inside, np.clip(a, 0, 1), 0)
             flat[sel] = flat[sel] * (1 - a[:, None]) + col * a[:, None]
             pl["texels"] = int((a > 0.5).sum())
+            pl["_alpha"] = (msk, sel, a)                 # где легла нашивка (edge_kit: рельеф под гербом, 23.10)
         out[msk] = flat
         return out
     return post

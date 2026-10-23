@@ -1962,6 +1962,12 @@ def use_club(code):
     BASE_NM_DECALS = prof.get("base_normal_decals")
     global BN_KEEP_LACE
     BN_KEEP_LACE = bool(prof.get("base_normal_keep_lace", False))   # шнуровка — рельеф источника (NYI, 23.10)
+    global PLACKET_LIFT, LACE_ZONE, RELIEF_FLAT_UNDER
+    RELIEF_FLAT_UNDER = list(prof.get("relief_flat_under", []))         # швы гладко под гербом и номерами (MTL, 23.10)
+    if set(RELIEF_FLAT_UNDER) - {"crest", "numbers"}:
+        sys.exit(f"[{code}] relief_flat_under = {RELIEF_FLAT_UNDER!r} — из \"crest\", \"numbers\"")
+    PLACKET_LIFT = float(prof.get("placket_lift_cm", 0.0)) / 100     # планка под одну шнуровку (MTL, 23.10)
+    LACE_ZONE = tuple(prof.get("lace_zone", LACE_ZONE_DEFAULT))       # зона рельефа шнуровки источника (MTL, 23.10)
     YOKE = {(code, k): {"from": v} for k, v in prof.get("yoke", {}).items()}
     YOKE_KIND = prof.get("yoke_color", "green")
     BODY_KIND = prof.get("body_color", "light")
@@ -3443,6 +3449,10 @@ Y_SUPPRESS_FADE = 0.08             # м: переход «рельеф исто�
 #                                    поперечная черта (пользователь, 21.10, NJD; у MIN — та же)
 LACE_ZONE = (0.029, 1.580, 1.617)  # |x|, y от, y до: шнуровка — рельеф NHL 24 (шнурки, люверсы; 0,034 — в зону
 #                                    попадал контур планки NHL 24: шов без смены цвета)
+LACE_ZONE_DEFAULT = LACE_ZONE      # профиль lace_zone = [|x|, y от, y до] (23.10, MTL): у NHL 27 MTL один шнурок (1,594 м)
+#                                    и своя короткая панель (бока ±3,2 см, низ 1,57): в зону по умолчанию она входила и
+#                                    ложилась рядом с нашей планкой — «швы двоятся» (пользователь). [0.027, 1.586, 1.617] —
+#                                    только шнурок, люверсы и язычок (проба: без зоны контур панели NHL 27 пропадает)
 LACE_FADE = 0.003                  # м: край зоны — мягкий
 # Планка под шнуровкой и обод вокруг шеи — как у NHL 24 (пользователь, 19.10, картинка 3.png: «шов вокруг шнуровки
 # пусть будет вот такой; и такой же обод швов вокруг шеи, как в NHL 24»). У NHL 24 это одна линия: от плеч вниз по
@@ -3454,6 +3464,17 @@ PLACKET_HALF = ((0.0, 1.5634), (0.0235, 1.5705), (0.0262, 1.5726), (0.0280, 1.57
                 (0.0306, 1.5837), (0.0320, 1.5885), (0.0333, 1.5932), (0.0344, 1.5981), (0.0359, 1.6028),
                 (0.0376, 1.6075), (0.0397, 1.6119))
 PLACKET_CENTER = ((0.0, 1.5634), (0.0, 1.581))   # шов посередине — от низа до нижнего шнурка
+RELIEF_FLAT_UNDER = []             # профиль relief_flat_under = ["crest", "numbers"] (23.10, MTL дом): швы (источника и свои)
+#                                    гаснут под гербом (маска нашивки этой сборки — crest_alpha.png) и в зонах номеров 1–3
+#                                    карты номеров (спина, рукава): пользователь — «швы полосы видны на логотипе, нарисованном
+#                                    поверх», «на номерах виднеется рельеф полосы». Складки и плетение ткани — как были
+RELIEF_FLAT_ZONES = (1, 2, 3)      # зоны карты номеров: номер на спине, номера на рукавах
+RELIEF_FLAT_GROW = 2               # текселей рельефа: запас за краем герба / зоны
+RELIEF_FLAT_FEATHER = 2.0          # текселей: мягкий край
+PLACKET_LIFT = 0.0                 # профиль placket_lift_cm (23.10, MTL): шнурков меньше, чем у MIN (у MIN нижний — 1,580,
+#                                    низ планки на 1,66 см ниже) — низ на столько выше: у MTL один шнурок на 1,594 → 1,4 см
+#                                    (пользователь: «был стежок, и снизу всё заканчивалось так же, как после последнего
+#                                    стежка у Миннесоты»)
 # Обод: расстояние от края ворота (сглаженный сгиб) по |θ| — от S (свой угол и расстояние — по сетке) вверх по V:
 # до ~36° — по линии NHL 24 в виде спереди (расстояния — её точки на нашей сетке), дальше — полоса за кромкой как у
 # NHL 24 (кромка + 1,8–2,2 см: у Edge плечи не как у NHL 24, вид спереди там прижал бы обод к кромке), сзади — 3 см
@@ -3600,12 +3621,17 @@ RING_KNOTS = ((23.7, 0.0502), (26.5, 0.0455), (32.0, 0.0355), (35.3, 0.0318), (4
               (180.0, 0.0305))
 
 def placket_segments():
-    """Отрезки планки в виде спереди (x, y): обе половины и шов посередине."""
+    """Отрезки планки в виде спереди (x, y): обе половины и шов посередине. PLACKET_LIFT — низ планки и шов посередине
+    выше на столько (верх S — на месте, там начинается обод; бока сжаты по высоте)."""
+    y0, yS = PLACKET_HALF[0][1], PLACKET_HALF[-1][1]
+    k = (yS - y0 - PLACKET_LIFT) / (yS - y0)
+    half = [(x, yS - (yS - y) * k) for x, y in PLACKET_HALF]
     segs = []
     for sx in (-1.0, 1.0):
-        pts = [(sx * x, y) for x, y in PLACKET_HALF]
+        pts = [(sx * x, y) for x, y in half]
         segs += list(zip(pts[:-1], pts[1:]))
-    segs.append(PLACKET_CENTER)
+    (cx, cy0), (_, cy1) = PLACKET_CENTER
+    segs.append(((cx, cy0 + PLACKET_LIFT), (cx, cy1 + PLACKET_LIFT)))
     return segs
 INSERT_SEAM_Y0 = 1.612             # м: ниже — край вставки у шнуровки (рельеф NHL 24)
 SEAM_PROFILE = (0.30, 0.95, 0.12, 2.0, 0.8)   # глубина, ширина канавки, валик, его место, ширина — в текселях 1024
@@ -4257,6 +4283,48 @@ def ea_yoke_heights(ea_png):
     return out
 
 
+def save_crest_alpha(placed, od):
+    """Где лёг герб в этой сборке (kit_hybrid.decal_post: pl["_alpha"]) → od/crest_alpha.png (для relief_flat_under)."""
+    from PIL import Image
+    for pl in placed or ():
+        if pl["name"] != "crest" or "_alpha" not in pl:
+            continue
+        msk, sel, a = pl["_alpha"]
+        f = np.zeros(int(msk.sum()))
+        f[sel] = a
+        M = np.zeros(msk.shape)
+        M[msk] = f
+        Image.fromarray(np.clip(np.round(M * 255), 0, 255).astype(np.uint8), "L").save(os.path.join(od, "crest_alpha.png"))
+        return int((M > 0.5).sum())
+    return 0
+
+
+def relief_flat_weight(code, kit, od, S):
+    """Вес 0…1 на развёртке S²: где швы рельефа гаснут (профиль relief_flat_under). crest — маска герба этой сборки
+    (crest_alpha.png), numbers — зоны RELIEF_FLAT_ZONES карты номеров собранного слота (номера там уже на своих местах;
+    слота ещё нет — карта образца Legacy)."""
+    from PIL import Image
+    from scipy import ndimage as ndi
+    w = np.zeros((S, S))
+    cp = os.path.join(od, "crest_alpha.png")
+    if "crest" in RELIEF_FLAT_UNDER and os.path.exists(cp):
+        w = np.maximum(w, np.asarray(Image.open(cp).convert("L").resize((S, S), Image.BILINEAR)) / 255.0)
+    if "numbers" in RELIEF_FLAT_UNDER:
+        p = os.path.join(WORK, "slot", "kits", f"{code}_{kit}", "name_cm.png")
+        if not os.path.exists(p) and kit in SLOT_KITS:
+            p = os.path.join(WORK, "cur_kits", SLOT_KITS[kit]["legacy"], "name_cm.png")
+        if os.path.exists(p):
+            n = np.asarray(Image.open(p).convert("RGBA"))
+            z = (n[..., 0] > 128) & (n[..., 1] > 128) & np.isin(n[..., 2], RELIEF_FLAT_ZONES)
+            w = np.maximum(w, np.asarray(Image.fromarray(z.astype(np.uint8) * 255).resize((S, S), Image.NEAREST)) / 255.0)
+        else:
+            print(f"  relief_flat_under numbers: нет карты номеров {p} — номера без правки")
+    if w.max() > 0:
+        w = np.maximum(w, ndi.binary_dilation(w > 0.5, iterations=RELIEF_FLAT_GROW))
+        w = ndi.gaussian_filter(w.astype(np.float64), RELIEF_FLAT_FEATHER)
+    return np.clip(w, 0, 1)
+
+
 def rebuild_relief(nm_path, code, kit, mesh, cmap, n_jt, painters=None):
     """jersey_nm комплекта (рельеф Legacy T=4 после fb.pilot) → рельеф без лишних швов (пользователь, 19.10):
     - основа — складки Edge без швов (швы чистого рельефа T=4 — V-вырез, реглан, шов по верху плеча, линии кокетки —
@@ -4441,7 +4509,10 @@ def rebuild_relief(nm_path, code, kit, mesh, cmap, n_jt, painters=None):
     fr_ = (G1["N"][ys, xs, 2] > 0.2) & (G1["P"][ys, xs, 2] > 0.03) & (yi_ > INSERT_SEAM_Y0) & (COLLAR == "lace")
     plain = np.maximum(plain, fr_ * Hy.smooth((hw + 0.001 - xi_) / 0.002))
     wv = wv * (1.0 - plain)[:, None]
-    body_xy = low_px + wv + seam24 * keep24[:, None] + gen[ys, xs]
+    flat_w = relief_flat_weight(code, kit, os.path.dirname(nm_path), S)[ys, xs] if RELIEF_FLAT_UNDER else 0.0
+    if RELIEF_FLAT_UNDER:
+        print(f"  швы гладко под {'/'.join(RELIEF_FLAT_UNDER)}: {int((flat_w > 0.5).sum())} текселей")
+    body_xy = low_px + wv + (seam24 * keep24[:, None] + gen[ys, xs]) * (1.0 - np.asarray(flat_w))[..., None]         if RELIEF_FLAT_UNDER else low_px + wv + seam24 * keep24[:, None] + gen[ys, xs]
     new_xy[ys, xs] = np.where(band[:, None], xy[ys, xs], body_xy)
     # текселям вне треугольников (в т. ч. прежнее место острова — там старый рельеф V-выреза Edge) — значение
     # ближайшего своего: иначе фильтрация на краю соседних текселей подмешивала старое (тонкие «трещины»)
@@ -5635,6 +5706,7 @@ def cmd_kit(a):
         """Щит по зазору под кромкой (SHIELD_GAP_MM, профиль shield_gap_mm): высота — расчётом по кромке этой формы
         (yoke_rule["trim"]). Без поля (задан shield_offset_cm) и в первых сборках (кромки ещё нет) — как было."""
         placed, soft = orig_plan_decals(comp, lab, patches, rules, defaults, src, dst_, tid24)
+        cur_kit["placed"] = placed                       # для маски герба (relief_flat_under)
         if CREST_SIZE_CM:
             crest_to_size(placed)
         if TORSO_SHIFT:                                  # герб — вместе с полосой (torso_shift)
@@ -5773,6 +5845,8 @@ def cmd_kit(a):
             yoke_rule.pop("trim", None)
             yoke_rule.pop("lapel", None)
             od = os.path.join(KITS_OUT, f"{a.club}_{kit}")
+            if "crest" in RELIEF_FLAT_UNDER:
+                print("  маска герба (crest_alpha.png):", save_crest_alpha(cur_kit.get("placed"), od), "текселей")
             n_isl = remap_island_maps(os.path.join(od, "jersey_nm.png"), os.path.join(od, "jersey_sm.png"), E2)
             print("  рельеф и блик острова — с прежнего места:", n_isl, "текселей")
             if RELIEF_REBUILD:
