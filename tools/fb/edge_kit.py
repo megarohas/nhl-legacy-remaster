@@ -997,6 +997,8 @@ def armhole_clean(png, mesh, du=ARMHOLE_CLEAN):
     return int(ok.sum())
 
 
+SLEEVE_STRIPES_KITS = None         # sleeve_stripes по формам: { away = "fit" } (STL выезд, 23.10: белые выемки полос у
+#                                    манжеты на шве снизу рукава — лента NHL 27 со скошенными концами не доходит до шва Edge)
 SLEEVE_STRIPES = None              # профиль sleeve_stripes = "fit" (22.10, агент review-b, OTT): края полос рукава — гладкими
 #                                    кривыми (sleeve_stripes_fit). У OTT блок полос NHL 27 почти до плеча и наискосок, сжатия к
 #                                    кисти нет (граница не находится, sleeve_top24 гнул полосы галочкой): у конца карты рукава
@@ -2048,10 +2050,13 @@ def use_club(code):
     SLEEVE_TOP24_KITS = dict(_t) if isinstance(_t, dict) else None
     SLEEVE_TOP24 = None if (_t is None or SLEEVE_TOP24_KITS is not None) else float(_t)
     global SLEEVE_FILL
-    global SLEEVE_STRIPES
-    SLEEVE_STRIPES = prof.get("sleeve_stripes")          # "fit": края полос рукава — гладкие кривые (OTT 22.10)
-    if SLEEVE_STRIPES not in (None, "fit"):
-        sys.exit(f"[{code}] sleeve_stripes = {SLEEVE_STRIPES!r} — только \"fit\"")
+    global SLEEVE_STRIPES, SLEEVE_STRIPES_KITS
+    _ss = prof.get("sleeve_stripes")                     # "fit": края полос рукава — гладкие кривые (OTT 22.10)
+    SLEEVE_STRIPES_KITS = dict(_ss) if isinstance(_ss, dict) else None   # или по формам (STL выезд, 23.10)
+    SLEEVE_STRIPES = None if isinstance(_ss, dict) else _ss
+    for _v in [SLEEVE_STRIPES] + list((SLEEVE_STRIPES_KITS or {}).values()):
+        if _v not in (None, "fit"):
+            sys.exit(f"[{code}] sleeve_stripes = {_v!r} — только \"fit\" (или {{ форма = \"fit\" }})")
     global PIPING_FIT, PIPING_FIT_KITS, ARMHOLE_AA, YOKE_MIX_KEEP, BRAND_Y, PIPING_MIX
     _pf = prof.get("piping_fit")                         # кант вдоль руки у шва проймы — гладко (23.10, review-d: CBJ, WSH)
     PIPING_FIT_KITS = dict(_pf) if isinstance(_pf, dict) else None
@@ -2299,11 +2304,25 @@ def torso_shift_crest(placed):
             continue
         cL, nL, pinv, R, sc, rad, u_c, v_c = pl["_frame"]
         cL = np.asarray(cL, np.float64).copy()
-        drop = CREST_DROP.get(CUR_KIT, 0.0)               # crest_drop_cm: герб ниже полосы ещё на столько (MTL дом)
-        cL[1] -= (TORSO_SHIFT[0] + drop) / 100.0
+        cL[1] -= TORSO_SHIFT[0] / 100.0
         pl["_frame"] = (cL, nL, pinv, R, sc, rad, u_c, v_c)
-        print(f"  герб: ниже на {TORSO_SHIFT[0]} см вместе с полосой (torso_shift)"
-              + (f" и ещё на {drop} см (crest_drop_cm)" if drop else "") + f", центр {cL[1]:.3f} м")
+        print(f"  герб: ниже на {TORSO_SHIFT[0]} см вместе с полосой (torso_shift), центр {cL[1]:.3f} м")
+
+
+def crest_drop(placed, kit):
+    """Герб ниже на CREST_DROP[kit] см (профиль crest_drop_cm): MTL дом — сверх torso_shift, под куски полос в нашивке;
+    WSH — вместе с местами литеры (letter_zone_shift_cm), литера ниже канта у ключицы (23.10)."""
+    drop = CREST_DROP.get(kit, 0.0)
+    if not drop:
+        return
+    for pl in placed:
+        if pl["name"] != "crest":
+            continue
+        cL, nL, pinv, R, sc, rad, u_c, v_c = pl["_frame"]
+        cL = np.asarray(cL, np.float64).copy()
+        cL[1] -= drop / 100.0
+        pl["_frame"] = (cL, nL, pinv, R, sc, rad, u_c, v_c)
+        print(f"  герб: ниже ещё на {drop} см (crest_drop_cm), центр {cL[1]:.3f} м")
 
 
 def use_kit(kit):
@@ -2332,6 +2351,9 @@ def use_kit(kit):
     global SLEEVE_ZONE_SHIFT
     if SLEEVE_ZONE_SHIFT_KITS is not None:               # sleeve_zone_shift_cm по формам: вне таблицы — нет
         SLEEVE_ZONE_SHIFT = tuple(map(float, SLEEVE_ZONE_SHIFT_KITS[kit])) if kit in SLEEVE_ZONE_SHIFT_KITS else None
+    global SLEEVE_STRIPES
+    if SLEEVE_STRIPES_KITS is not None:                  # sleeve_stripes по формам: вне таблицы — нет
+        SLEEVE_STRIPES = SLEEVE_STRIPES_KITS.get(kit)
     global TORSO_SHIFT
     if TORSO_SHIFT_KITS is not None:                     # torso_shift по формам (MTL дом): вне таблицы — нет
         TORSO_SHIFT = [float(x) for x in TORSO_SHIFT_KITS[kit]] if kit in TORSO_SHIFT_KITS else None
@@ -3506,10 +3528,9 @@ RELIEF_FLAT_UNDER = []             # профиль relief_flat_under = ["crest"
 #                                    гаснут под гербом (маска нашивки этой сборки — crest_alpha.png) и в зонах номеров 1–3
 #                                    карты номеров (спина, рукава): пользователь — «швы полосы видны на логотипе, нарисованном
 #                                    поверх», «на номерах виднеется рельеф полосы». Складки и плетение ткани — как были
-CREST_DROP = {}                    # профиль crest_drop_cm = { форма = см } (23.10, MTL дом): герб ниже на столько сверх
-#                                    torso_shift (тот двигает герб вместе с полосой) — куски полос в нашивке герба на ~2 мм
-#                                    выше нашей полосы; сдвиг полосы их не сводит (герб едет с ней)
-CUR_KIT = None                     # форма текущей сборки (для crest_drop_cm)
+CREST_DROP = {}                    # профиль crest_drop_cm = { форма = см } (23.10): герб ниже на столько. MTL дом — сверх
+#                                    torso_shift (тот двигает герб вместе с полосой): куски полос в нашивке герба выше нашей
+#                                    полосы; WSH — вместе с местами литеры (letter_zone_shift_cm), литера ниже канта у ключицы
 CREST_ROT = {}                     # профиль crest_rotate_deg = { форма = ° } (23.10, MTL дом): герб повёрнут на столько (против
 #                                    часовой на виде спереди) — куски полос в нашивке слева выше полосы, справа ниже (~1,5 мм
 #                                    на 27 см: рамка нашивки повёрнута против полосы на ~0,3°)
@@ -5789,9 +5810,9 @@ def cmd_kit(a):
         if CREST_SIZE_CM:
             crest_to_size(placed)
         if TORSO_SHIFT:                                  # герб — вместе с полосой (torso_shift)
-            global CUR_KIT
-            CUR_KIT = cur_kit.get("kit")
             torso_shift_crest(placed)
+        if CREST_DROP:
+            crest_drop(placed, cur_kit.get("kit"))
         if CREST_LEVEL or CREST_ROT:
             crest_level(placed, cur_kit.get("kit"))
         if SHIELD_GAP_MM is not None and yoke_rule.get("trim") is not None:
