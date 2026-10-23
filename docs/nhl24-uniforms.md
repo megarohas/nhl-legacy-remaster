@@ -849,3 +849,7 @@ adidas, сейв ROSTER дописывается в конец). Шорты и �
   `kitport audit` — 0 замечаний из 64 форм. Регрессия MIN — байт в байт. Обновились 36 файлов (`db/nhlng.db` и формы),
   копия — `backup-cache/user-20261023-after-play`; сейв ROSTER 20261023050621 — `roster_merge.py` (экипировка: каска COL;
   копия — `backup-saves/roster_merge-20261023-100513`), `nhl24.py save` — «сейв уже совпадает с базой».
+- 23.10 10:50 — ответы пользователя: BUF — номера на груди нет (`chest_zone_scale = 0`); светлый валик шва под мысом V
+  снят у BUF, ANA, CGY, STL выезда и EDM (`notch_seam = "edge"`) и у NJD по краю кокетки (`notch_seam = "yoke"`); SEA
+  выезд — правый рукав зеркалом левого (`sleeve_mirror`, агент fix-c). `kitport audit` — 0 замечаний. Обновились 20
+  файлов, копия — `backup-cache/user-20261023-answers`; сейв ROSTER — без изменений.
