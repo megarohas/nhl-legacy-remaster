@@ -152,11 +152,20 @@ def nhl27_equipment(db, team, equipment):
 
 
 def eq_pick(rows, variant):
-    """Строка экипировки формы: (era 2, вариант формы) → (era 2, −1) → (era −1, −1); бренд −1. -> (зоны, откуда)."""
-    for era, v in ((2, variant), (2, -1), (-1, -1)):
+    """Строка экипировки формы: (era 2, вариант формы) → (era 2, −1) → первая строка era 2 в порядке таблицы (так
+    выбирает сама NHL 27: при равной эре и без «любого» варианта лучшей остаётся первая; 23.10, COL дом — вариант 10 без
+    своей строки и без (2, −1): брался (−1, −1) — чёрный шлем вместо синего (2, 0); пользователь: «должен быть голубой»)
+    → (era −1, −1); бренд −1. -> (зоны, откуда)."""
+    for era, v in ((2, variant), (2, -1)):
         r = next((x for x in rows if x[0] == era and x[1] == v and x[2] == -1), None)
         if r is not None:
             return [list(z) for z in r[3]], f"era {era}, variant {v}"
+    r = next((x for x in rows if x[0] == 2 and x[2] == -1), None)
+    if r is not None:
+        return [list(z) for z in r[3]], f"era 2, первая строка (variant {r[1]})"
+    r = next((x for x in rows if x[0] == -1 and x[1] == -1 and x[2] == -1), None)
+    if r is not None:
+        return [list(z) for z in r[3]], "era -1, variant -1"
     return None, "нет строки"
 
 
