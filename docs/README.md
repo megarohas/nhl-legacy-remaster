@@ -35,6 +35,7 @@
 - [nhl24-uniforms.md](nhl24-uniforms.md) — формы NHL 24 → Legacy: модели свитеров, воротники, текстуры, правила переноса; журнал установок (§15.1)
 - [nhl24-textures.md](nhl24-textures.md) — перенос текстур NHL 24 в Legacy: план по категориям
 - [player-models.md](player-models.md) — 3D-модели игроков: формат RW4, гетры и голень, обмотка до носка крюка, нижний край свитера как в NHL 10
+- [sticks.md](sticks.md) — клюшки из NHL 27 в слоты каталога Legacy (`tools/fb/sticks.py`, план `fb/stick_slots.toml`): перенос по модели, имена в редакторе, белая CCM в слоте D
 - [player-equipment.md](player-equipment.md) — экипировка по фото (обмотка, гетры, свитер, визор): поля базы и охват
 - [logos-2026.md](logos-2026.md) — логотипы клубов НХЛ и АХЛ 2026/27 в Legacy: наборы интерфейса, этап `logos`
 - [logos-arenas.md](logos-arenas.md) — логотипы, арены и лёд Seattle и Vegas: форматы и поля базы (разбор на NHL 13, арт потом перенесён в Legacy)

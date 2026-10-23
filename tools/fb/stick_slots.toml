@@ -1,0 +1,150 @@
+# Клюшки NHL Legacy: что лежит в слотах каталога (texlib_<N>.rx2, playerstick_<N>_cm) — перенос из NHL 27 и имена.
+# Сборка и пакет — python -m fb.sticks (docs/sticks.md); edge_kit pack кладёт их в pack-edge вместе с формами.
+#
+# Слоты — 27 клюшек каталога редактора (записи по 0x7C байт в default.bin, разбор 23.10.2026,
+# game/work/equipment27/proposal.md); буква — порядок в редакторе. N — номер текстуры и значение
+# exhibitionskaterequipment.stick у игрока: у игроков меняется только картинка и имя, база не трогается.
+#
+# from: "nhl27:<модель>" — текстура player_stick_<модель>_color NHL 27 через общую модель клюшки (fb.sticks.convert);
+#       "legacy:<N>" — текстура слота N из архива Legacy как есть (оригинал, не наша замена).
+# key, name: строка локализации с именем клюшки (nhl_eng_us.db) и новый текст. Ключи bauersupreme1s, bauervapor1x,
+# bauerpreorder, ccmpreorder, eastonpreorder общие с коньками каталога — имя меняется и у конька.
+#
+# Решение пользователя 23.10.2026: «портировать клюшки из NHL 27 сколько можно» по предложению proposal.md, в слот D
+# (BUSCH HPC 2.0, 0 игроков) — белую CCM из Legacy (слот 72, заблокирован предзаказом): «чтобы её можно было выбрать в
+# редакторе без разблокировки». Слоты X, Y, Z, AA (предзаказ) в редакторе закрыты — переносим тоже, для игроков из базы.
+
+[slot.108]   # A — было BAUER Nexus 1N (121 игрок)
+from = "nhl27:bauer_nexus_tracer_base"
+key = "bauernexus1n"
+name = "BAUER Nexus Tracer"
+
+[slot.111]   # B — BAUER Supreme 1S (350)
+from = "nhl27:bauer_supreme_fuse_base"
+key = "bauersupreme1s"
+name = "BAUER Supreme Fuse"
+
+[slot.105]   # C — BAUER Vapor 1X (2230)
+from = "nhl27:bauer_vapor_flylite_base"
+key = "bauervapor1x"
+name = "BAUER Vapor FlyLite"
+
+[slot.94]    # D — BUSCH HPC 2.0 (0): белая CCM RBZ из слота 72 (решение 23.10)
+from = "legacy:72"
+key = "buschhpc20"
+name = "CCM RBZ White"
+
+[slot.102]   # E — CCM RBZ Speedburner (314)
+from = "nhl27:ccm_jetspeed_ft8_base"
+key = "ccmrbzspeedburner"
+name = "CCM Jetspeed FT8"
+
+[slot.86]    # F — CCM RBZ Superfast (394)
+from = "nhl27:ccm_jetspeed_ft7"
+key = "ccmrbzsuperfast"
+name = "CCM Jetspeed FT7"
+
+[slot.112]   # G — CCM Ribcor 40K (735)
+from = "nhl27:ccm_ribcor_trigger10_base"
+key = "ccmribcor40k"
+name = "CCM Ribcor Trigger 10"
+
+[slot.103]   # H — CCM Ribcor Reckoner (55)
+from = "nhl27:ccm_ribcor_trigger9"
+key = "ccmribcorreckoner"
+name = "CCM Ribcor Trigger 9"
+
+[slot.87]    # I — CCM Tacks (100)
+from = "nhl27:ccm_tacks_xf"
+key = "ccmrtacks"
+name = "CCM Tacks XF"
+
+[slot.99]    # J — CCM Ultra Tacks (5)
+from = "nhl27:ccm_supertacks_as3pro"
+key = "ccmultratacks"
+name = "CCM Super Tacks AS3 Pro"
+
+[slot.104]   # K — EASTON Stealth CX (309)
+from = "nhl27:true_hzrdus_smoke_base"
+key = "eastonstealthcx"
+name = "TRUE HZRDUS Smoke"
+
+[slot.85]    # L — EASTON Synergy HTX (112)
+from = "nhl27:true_catalyst_px"
+key = "eastonsynergyhtx"
+name = "TRUE Catalyst PX"
+
+[slot.82]    # M — EASTON V9E (67)
+from = "nhl27:true_projectx_storm_base"
+key = "eastonv9e"
+name = "TRUE Project X Storm"
+
+[slot.106]   # N — GRAF G95 Revolt (6)
+from = "nhl27:ccm_vizion_se2025_base"
+key = "grafg95revolt"
+name = "CCM Vizion SE"
+
+[slot.109]   # O — SHER-WOOD Rekker EK60 (98)
+from = "nhl27:sherwood_rekker_morph_base"
+key = "sherwoodrekkerek60"
+name = "SHER-WOOD Rekker Morph"
+
+[slot.95]    # P — SHER-WOOD T120 (6)
+from = "nhl27:sherwood_code_encrypt_base"
+key = "sherwoodt120"
+name = "SHER-WOOD Code Encrypt"
+
+[slot.110]   # Q — STX Stallion 600 (4)
+from = "nhl27:stx_stallion_hpr2"
+key = "stxstallion600"
+name = "STX Stallion HPR2"
+
+[slot.107]   # R — STX Surgeon RX (5)
+from = "nhl27:stx_surgeon_rx3"
+key = "stxsurgeonrx"
+name = "STX Surgeon RX3"
+
+[slot.84]    # S — WARRIOR Covert QR1 (95)
+from = "nhl27:warrior_covert_qr6"
+key = "warriorcovertqr1"
+name = "WARRIOR Covert QR6"
+
+[slot.98]    # T — WARRIOR Dynasty HD1 (58)
+from = "nhl27:warrior_alpha_lx3_base"
+key = "warriordynastyhd1"
+name = "WARRIOR Alpha LX3"
+
+[slot.93]    # U — WINNWELL Q Series (1)
+from = "nhl27:warrior_novium_super"
+key = "winnwellqseries"
+name = "WARRIOR Novium Super"
+
+[slot.36]    # V — SHER-WOOD Retro (1)
+from = "nhl27:sherwood_wooden_original"
+key = "woodensherwoodstick"
+name = "SHER-WOOD Wooden"
+
+[slot.35]    # W — TITAN Retro (0)
+from = "nhl27:titan_original_original"
+key = "titanstick"
+name = "TITAN Original"
+
+[slot.70]    # X — BAUER Preorder (0), закрыт в редакторе
+from = "nhl27:bauer_twitch_original"
+key = "bauerpreorder"
+name = "BAUER Twitch"
+
+[slot.72]    # Y — CCM Preorder (0), закрыт; прежняя белая — в слоте D
+from = "nhl27:ccm_xfghost_original_base"
+key = "ccmpreorder"
+name = "CCM XF Ghost"
+
+[slot.74]    # Z — EASTON Preorder (0), закрыт
+from = "nhl27:easton_stealth_s17"
+key = "eastonpreorder"
+name = "EASTON Stealth S17"
+
+[slot.100]   # AA — WARRIOR Preorder (0), закрыт
+from = "nhl27:warrior_novium_2"
+key = "warriorpreorder"
+name = "WARRIOR Novium 2"

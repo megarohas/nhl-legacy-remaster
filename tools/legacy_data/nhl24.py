@@ -303,6 +303,10 @@ def check_manifest(pack, man, reg):
         elif os.path.getsize(p) != e.get('size') or md5(p) != e.get('md5'):
             bad.append(f'{rel}: md5/размер не как в манифесте')
         files[rel] = e
+    loc = man.get('loc', {})                         # строки локализации накладки {ключ: текст} (имена клюшек, 23.10)
+    if not isinstance(loc, dict) or any(not isinstance(k, str) or not isinstance(t, str) or not 0 < len(t) <= 40
+                                        for k, t in loc.items()):
+        bad.append(f'loc: {loc!r} — словарь {{ключ строки: текст до 40 символов}}')
     clubs = man.get('clubs')                         # для людей: клубы пакета (шнуровку определяют файлы свитеров)
     if clubs is not None and clubs != 'all' and (not isinstance(clubs, list) or any(c not in CLUBS for c in clubs)):
         bad.append(f'clubs: {clubs!r} — список кодов клубов или "all"')
@@ -404,7 +408,7 @@ def build_db(base, man, reg, files):
     out = bytes(db.d)
     rep = {'base': db_path, 'base_md5': md5(db_path), 'md5': hashlib.md5(out).hexdigest(),
            'hastie_zeroed': len(tie), 'rows_added': added, 'helmets': helmets, 'defaults': defaults}
-    loc, labels = build_loc(base, new, old_labels)
+    loc, labels = build_loc(base, new, {**(old_labels or {}), **man.get('loc', {})})   # loc манифеста — клюшки (fb.sticks)
     if loc is not None:
         rep.update(loc_base_md5=md5(os.path.join(base, *LOC.split('/'))), loc_md5=hashlib.md5(loc).hexdigest(),
                    labels=labels)

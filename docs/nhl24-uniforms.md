@@ -856,3 +856,8 @@ adidas, сейв ROSTER дописывается в конец). Шорты и �
 - 23.10 11:15 — центры льда NHL 27 у всех 32 клубов (`fb.ice --source nhl27`, `edge_kit.pack_ice_centers`;
   docs/logos-arenas.md, «Центр льда из NHL 27»): 32 файла `centerlogo_<арт>_cm.rx2` (5 заменены, 27 новых в cache:),
   копия — `backup-cache/user-20261023-ice27`; сейв ROSTER — без изменений.
+- 23.10 11:54 — клюшки: 26 рисунков NHL 27 в слоты каталога Legacy и белая CCM RBZ (слот 72, закрыт предзаказом)
+  в слот D вместо BUSCH HPC 2.0 — по решению пользователя (`fb.sticks`, план `fb/stick_slots.toml`, docs/sticks.md);
+  27 имён в `fe/loc/NHL_ENG_US.db` накладки (поле `loc` манифеста). Обновились 28 файлов: 27
+  `rendering/playerstick/texlib_<N>.rx2` (новые в cache:) и `NHL_ENG_US.db`; копия — `backup-cache/user-20261023-sticks27`;
+  база и сейв ROSTER — без изменений (у игроков прежний номер клюшки).

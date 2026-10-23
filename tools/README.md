@@ -128,6 +128,7 @@
 - `eaimport.py` — **импорт из новой EA NHL** (status, prepare, leagues, stats, portraits, heads, overlay, all), руководство — [docs/import-from-ea.md](../docs/import-from-ea.md)
 - `../kitport/` — **точка входа переноса форм**: `python -m kitport doctor | status | snapshot | build | diff | install | rollback | sheet | uvmap | params` (из `tools/`), руководство — [docs/kitport.md](../docs/kitport.md)
 - `fonts.py`, `helmet.py`, `ice.py`, `stick_map.toml` — шрифты номеров, наклейки на шлем, центр льда, клюшки
+- `sticks.py`, `stick_slots.toml` — клюшки NHL 27 в слоты каталога Legacy и их имена (build, sheet, пакет — из `edge_kit pack`), руководство — [docs/sticks.md](../docs/sticks.md)
 - `gallery.py` — галерея всех комплектов NHL 24
 - `pack.py`, `pilot.py` — упаковка в формат Legacy, пилот одного клуба
 - `build_ooz.cmd`, `ooz_export.cpp` — сборка декомпрессора Oodle (ooz, GPL-3.0) для `cas.py`; исходников ooz в git нет

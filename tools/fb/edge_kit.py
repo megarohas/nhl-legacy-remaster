@@ -7352,6 +7352,10 @@ def cmd_pack(a):
     n_ice = pack_ice_centers(man, cache)                 # центры льда NHL 27 у всех клубов (23.10)
     if n_ice:
         print(f"центры льда NHL 27 (fb.ice --source nhl27): {n_ice}")
+    from . import sticks                                 # клюшки NHL 27 и белая CCM в слоте D (23.10, stick_slots.toml)
+    n_stick = sticks.pack(man, cache)
+    if n_stick:
+        print(f"клюшки (fb.sticks, stick_slots.toml): {n_stick}, имён {len(man.get('loc', {}))}")
     # в пакет (в игру) — только одобренные клубы: все формы слота с default = true (правило 21.10); черновики — нет
     prof = club_profiles()
     built = [c for c in prof if all(os.path.isdir(os.path.join(WORK, "slot", "kits", f"{c}_{k}"))

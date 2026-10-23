@@ -9,6 +9,9 @@
 # [replace] — замена старой модели Legacy новой из NHL 24 (смена каталога: у игроков в базе — номер клюшки). Пусто, пока
 # пользователь не решит, какую на какую: python -m fb.pilot sticks — кладёт в пакет только [replace].
 
+# 23.10.2026: слоты каталога заняты клюшками NHL 27 — план fb/stick_slots.toml (fb.sticks, docs/sticks.md); в pack-edge
+# он главнее [replace] отсюда.
+
 [same]
 35 = "titan/original/textures/player_stick_titan_original_original"
 36 = "sherwood/wooden/textures/player_stick_sherwood_wooden_original"
