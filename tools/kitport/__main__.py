@@ -319,6 +319,9 @@ def main():
     s.add_argument("--source-only", action="store_true", help="только источник (слот ещё не собран)")
     s.add_argument("--tilt", type=float, default=35.0, help="наклон камеры сверху, град")
     s.add_argument("--out", default=None, help="файл листа (по умолчанию — compare/kitport/collar-…png)")
+    s.add_argument("--frame", default=None, help="кадр x0,x1,y0,y1 (м; по умолчанию — ворот): любое место крупно — стыки "
+                                                 "полосы с гербом, концы кантов (MTL, WSH 23.10)")
+    s.add_argument("--width", type=int, default=None, help="ширина вида, px (по умолчанию 420)")
     s = sub.add_parser("yoke", help="кокетка и плечи: наш и источник в одних видах с линиями высот, замер края кокетки")
     s.add_argument("--clubs", required=True, help="коды клубов через запятую (MTL,BUF)")
     s.add_argument("--kits", default="", help="формы через запятую (по умолчанию — с кокеткой в профиле)")

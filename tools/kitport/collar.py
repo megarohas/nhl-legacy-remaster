@@ -4,6 +4,7 @@
     python -m kitport collar --clubs TOR                     # формы слота клуба: наш и источник, прямо и сверху
     python -m kitport collar --clubs TOR --source-only       # только источник (до сборки профиля и формы)
     python -m kitport collar --clubs TOR,MIN --kits home --tilt 35 --out ../game/work/nhl24/compare/kitport/c.png
+    python -m kitport collar --clubs MTL --kits home --frame 0.06,0.20,1.22,1.32 --width 700   # любое место крупно
 
 Ряд на форму. Наш (если слот собран): цвет прямо, цвет сверху (камера наклонена на --tilt°), рельеф без цвета прямо.
 Источник: цвет (готовый свитер), основа (base_color) с рельефом base_normal прямо и сверху, рельеф без цвета прямо.
@@ -67,6 +68,13 @@ def views(S, mesh, tex, nmap, deg, what, font):
 
 
 def cmd_collar(a):
+    global FRAME, WIDTH
+    if getattr(a, "frame", None):                       # свой кадр (--frame): стыки полос с гербом, концы кантов
+        FRAME = tuple(float(v) for v in a.frame.split(","))
+        if len(FRAME) != 4:
+            sys.exit("--frame x0,x1,y0,y1 (м)")
+    if getattr(a, "width", None):
+        WIDTH = a.width
     os.environ.setdefault("PHOTOS_SOURCE", "nhl24")     # scans24 (рендер) читает его при импорте
     sys.path.insert(0, core.TOOLS)
     import scans24 as S
