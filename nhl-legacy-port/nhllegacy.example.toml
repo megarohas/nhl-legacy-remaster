@@ -47,3 +47,11 @@ resolution_scale = 1
 # FSR 1 / CAS при выводе кадра (D3D12 и Vulkan): "bilinear" (по умолчанию) | "cas" | "fsr".
 # present_effect = "fsr"
 # present_fsr_sharpness_reduction = 0.2
+
+# ─── Закрытое (docs/legacy-port.md, «Закрытое: предзаказ, маски, бусты, коды формы») ─────────
+# По умолчанию всё открыто; false — как у EA. Экипировка: клюшки, перчатки и коньки предзаказа BAUER / CCM /
+# EASTON / WARRIOR и 37 масок вратаря. Бусты Pro Shop: бусты, ячейки и Max-бусты («Стань профи», созданный
+# игрок). Формы под кодом (islockable; в базе Legacy таких нет — для модов).
+# nhl_unlock_equipment = true
+# nhl_unlock_boosts = true
+# nhl_unlock_jerseys = true

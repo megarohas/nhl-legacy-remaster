@@ -36,6 +36,7 @@ set(NHLLEGACY_SOURCES
     src/nhllegacy_printf.cpp
     src/nhllegacy_astrace.cpp
     src/nhllegacy_settings.cpp
+    src/nhllegacy_unlock.cpp
 )
 
 if(WIN32)

@@ -13,7 +13,7 @@
 
 ## Порт NHL Legacy
 
-- [legacy-port.md](legacy-port.md) — свой порт NHL Legacy (`nhl-legacy-port/`): что работает, устройство, сборка, запуск, папка для друзей, год, франшиза на 32 клуба и разбор её падений
+- [legacy-port.md](legacy-port.md) — свой порт NHL Legacy (`nhl-legacy-port/`): что работает, устройство, сборка, запуск, папка для друзей, год, франшиза на 32 клуба и разбор её падений, закрытое (предзаказ, маски, бусты — `nhl_unlock_*`)
 - [launcher.md](launcher.md) — лаунчер `nhllegacy_launcher.exe`: перед запуском настраиваются графика и переключатели `nhl_*`
 - [graphics-settings.md](graphics-settings.md) — графика порта: cvar'ы SDK, апскейл, ROV/RTV, задержка ввода, источники настроек и их приоритет
 - [sdk-build.md](sdk-build.md) — своя сборка ReXGlue SDK (Vulkan, FSR 1 / CAS): скрипты `nhl-legacy-port/scripts/sdk_*`, патчи, восстановление с нуля
