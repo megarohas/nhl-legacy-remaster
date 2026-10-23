@@ -26,6 +26,7 @@
 - [legacy-data.md](legacy-data.md) — набор модов NHL Legacy через `cache:`: состав, этапы `build-all.sh`, установка и снятие, проверка в игре, подробности каждого этапа
 - [modding.md](modding.md) — как устроены моды через `cache:`: файл оттуда главнее копии в архиве `.big` (проверено на NHL 13, в Legacy так же)
 - [utah.md](utah.md) — Utah Mammoth вместо Arizona Coyotes и Tucson Roadrunners вместо Springfield Falcons: данные и арт
+- [awards.md](awards.md) — история наград и Кубка Стэнли из NHL 27 (`tools/legacy_data/awards27.py`, этап `awards`): НХЛ 1994/95…2025/26, АХЛ и CHL, правки ошибок EA, как игра читает награды
 
 ## Формы, экипировка, логотипы
 

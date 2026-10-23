@@ -25,6 +25,7 @@
 | Доски драфта на 32: три колонки 15 + 15 + 2 (Be a GM, фэнтези-драфт и его порядок, Live the Life) | `tools/draft32_legacy.py` + `tools/aptc.py` (legacy-fe, 11.10) | ✔ Entry Draft и фэнтези-драфт (exe nhl-legacy-port a1cb8f74), у пользователя с 11.10 16:36; в out — эти 3 ролика, Live the Life — нет ([fe-menu-legacy.md](fe-menu-legacy.md) §11) |
 | Год 2015 → 2026 в надписях: стартовый экран, юридический текст, титры, подсказка FA | `tools/year2026_legacy.py` (legacy-fe, 12.10) | в игре не проверялось, не поставлено; в out и out-ahl32 ([fe-menu-legacy.md](fe-menu-legacy.md) §12) |
 | Сканы голов NHL 24 игрокам с типовой головой: 178 в out-ahl32 (сканы EA не трогаются), headid = ID EA, строки `stockplayerheads` на местах доноров | `tools/scans24.py` (этап `scans24`, [heads-nhl24.md](heads-nhl24.md)) | пилот Cale Makar ✔ (пользователь, 12.10); массово — ✔ стоит: 358 файлов голов в `cache:` совпадают с out (12.10 10:17–11:39), база — 178 номеров scans24, сейв ROSTER записан 12.10 (`backup-saves/scans24-20261012-101718`); сверка 20.10 |
+| История наград и Кубка Стэнли до 2025/26: НХЛ с 1994/95, АХЛ и CHL с 2008/09, 1 744 строки `stockawardstable` (index 11 бит) | `tools/legacy_data/awards27.py` (этап `awards`, [awards.md](awards.md)) | собрано в out и out-ahl32 23.10; в игре не проверено, сейвы не нужны |
 
 Набор — `game/work/legacy-data/out/` (дерево путей как в `cache:`); ставится при закрытой игре:
 
@@ -751,6 +752,11 @@ python tools/legacy_data/stats27.py [out|out-ahl32] [--dry-run]
 - **Сейвы.** Таблицы `stockcareer*` в сейвы не пишутся (нет групп сохранения), франшиза их не копирует
   (`leagueplayercareerseasonstats` в сейве франшизы пустая), поэтому размер сейва франшизы не меняется. База `nhlng.db`
   — 3,05 МБ вместо 2,78.
+
+## История наград из NHL 27 (этап `awards`, 23.10.2026)
+
+Отдельный документ — [awards.md](awards.md): `stockawardstable` (Previous Winners) из базы NHL 27 с правками
+`awards_fix.json`, клубы и игроки — к нашей базе; таблицы нет в сейвах, после записи — накладка `out-nhl24` заново.
 
 ## Перенос в сейв ROSTER: `roster_merge.py` (21.10.2026)
 

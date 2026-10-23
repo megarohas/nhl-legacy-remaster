@@ -5,7 +5,7 @@
 #   LEGACY_DATA_WORK=папка bash tools/legacy_data/build-all.sh …   # сухой прогон: всё (и out) — в эту папку;
 #        входы, которые этапом не пересобираются (например, составы без сети), — положить туда заранее
 #        этапы: base roster photos equip collect retire fixdb utah ahl europe chl stats27 nhlattrs useredits tape players
-#        contracts goaliegear photos24 heads scans24 fonts
+#        contracts awards goaliegear photos24 heads scans24 fonts
 #        music models art logos menu nhl24
 #        (без этапов — все по порядку;
 #        --ahl32 — ещё вариант «АХЛ на 32», накладка game/work/legacy-data/out-ahl32; nhl24 — накладка out-nhl24
@@ -28,7 +28,7 @@ L=game/other/legacy/big/cacheboot
 AHL32=0
 stages=()
 for a in "$@"; do [ "$a" = "--ahl32" ] && AHL32=1 || stages+=("$a"); done
-[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah ahl europe chl stats27 nhlattrs useredits tape players contracts goaliegear photos24
+[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah ahl europe chl stats27 nhlattrs useredits tape players contracts awards goaliegear photos24
                                   heads scans24 fonts music models art logos menu nhl24)
 want() { for s in "${stages[@]}"; do [ "$s" = "$1" ] && return 0; done; return 1; }
 say() { echo "== $(date +%H:%M:%S) $*"; }
@@ -249,6 +249,18 @@ if want contracts; then
     done
   else
     say "контракты: нет $S/*.json — этап пропущен"
+  fi
+fi
+if want awards; then
+  # история наград и Кубка Стэнли из NHL 27 (tools/legacy_data/awards27.py, docs/awards.md): stockawardstable в out и
+  # out-ahl32 — НХЛ 1994/95…2025/26, АХЛ и CHL с 2008/09, правки EA — awards_fix.json; index таблицы — 11 бит (и в
+  # nhlng-meta.xml). После составов и своих игроков (клубы, game_id победителей — players/contracts), до nhl24 (накладка из
+  # out/db). Сейвы не меняются: таблицы нет ни в ROSTER, ни в сейве франшизы. Повтор ничего не меняет
+  if [ -f "${NHL27_DB:-game/work/nhl27/db/nhl_game.db}" ]; then
+    say "история наград из NHL 27 (awards27.py)"
+    python $T/awards27.py --write
+  else
+    say "награды: нет базы NHL 27 — этап пропущен"
   fi
 fi
 if want goaliegear; then

@@ -53,6 +53,7 @@
 | 15 | `tape` | обмотка крюка по списку и подписи вариантов в меню | `tape_players.py` |
 | 16 | `players` | свои игроки по спекам JSON: новые и правка, клуб, номер, звенья, портрет | `add_players.py` |
 | 17 | `contracts` | настоящие контракты 2026/27 и продления, переводы игроков в клубы | `contracts.py` |
+| 17а | `awards` | история наград и Кубка Стэнли из NHL 27 (`stockawardstable`, docs/awards.md) | `awards27.py`, `awards_fix.json` |
 | 18 | `goaliegear` | командная экипировка вратарей | `goalie_gear.py` |
 | 19 | `photos24` | портреты из NHL 24 тем, у кого портрета нет | `photos24.py` |
 | 20 | `heads` | типовые головы по фото | `heads24.py` |

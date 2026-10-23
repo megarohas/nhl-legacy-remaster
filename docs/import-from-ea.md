@@ -15,6 +15,7 @@ python tools/eaimport.py prepare   --game nhl27     # проход по CAS, к�
 python tools/eaimport.py leagues europe             # составы SHL, DEL, Extraliga, NL
 python tools/eaimport.py leagues chl                # составы OHL, QMJHL, WHL
 python tools/eaimport.py stats                      # история статистики НХЛ/АХЛ
+python tools/eaimport.py awards                     # история наград и Кубка Стэнли (docs/awards.md)
 python tools/eaimport.py portraits                  # портреты тем, у кого их нет
 python tools/eaimport.py heads --only macklin_celebrini   # пилот головы; без --only — все сопоставленные
 python tools/eaimport.py overlay                    # накладка out-nhl24 из новых баз (формы pack-edge)
@@ -24,8 +25,8 @@ cd tools && python -m kitport install --tag <метка> --yes && cd ..         
 python tools/legacy_data/roster_merge.py "<ROSTER>" --old game/work/legacy-data/roster-merge/old-cache-nhlng.db        --new game/work/legacy-data/out-nhl24-ahl32/db/nhlng.db --write              # перенос в сейв ROSTER
 ```
 
-`all` делает leagues europe → chl → stats → portraits; головы и накладка — отдельно. Те же шаги есть этапами
-`tools/legacy_data/build-all.sh` (`europe`, `chl`, `stats27`, `photos24`, `scans24`, `nhl24`).
+`all` делает leagues europe → chl → stats → awards → portraits; головы и накладка — отдельно. Те же шаги есть этапами
+`tools/legacy_data/build-all.sh` (`europe`, `chl`, `stats27`, `awards`, `photos24`, `scans24`, `nhl24`).
 
 ## Что за чем стоит
 
@@ -35,6 +36,7 @@ python tools/legacy_data/roster_merge.py "<ROSTER>" --old game/work/legacy-data/
 | база игры | `fb.lfs get gamemodes/database/t3db/nhl_game.db`, `tools/tdb.py` (LE-базы), `roster/nhl27.py` | frostbite-sources.md §5 | `game/work/<игра>/db` |
 | составы лиг | `legacy_data/league27.py chl\|europe` | [legacy-data.md](legacy-data.md), «Лиги из NHL 27» | составы, био, атрибуты, звенья, названия клубов в `out` |
 | статистика | `legacy_data/stats27.py` | legacy-data.md, «Статистика из NHL 27» | `stockcareer*` в `out` |
+| награды | `legacy_data/awards27.py` (+ `awards_fix.json`) | [awards.md](awards.md) | `stockawardstable` в `out` (и схема) |
 | портреты | `photos24.py --source <игра>` | [player-photos-nhl24.md](player-photos-nhl24.md) | `out/fe/…/p<artid>.big`, `hasportrait` |
 | головы | `scans24.py --source <игра>`, `fb/heads.py` | [heads-nhl24.md](heads-nhl24.md) | `out/rendering/player`, `headid`, `stockplayerheads` |
 | формы | `python -m kitport` (`fb/edge_kit.py`) | [kitport.md](kitport.md) | текстуры форм, накладка `out-nhl24` |
