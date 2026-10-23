@@ -195,6 +195,9 @@ def cmd_build(a):
             old = core.next_pack_version()
             os.rename(pe, old)
             say(f"прежний пак → {os.path.basename(old)}")
+            sys.path.insert(0, core.TOOLS)
+            import recycle                    # хранить 3 прежних пака, остальное — в Корзину (23.10: копилось 20 ГБ)
+            recycle.prune(core.PACKS, r"(pack-edge)-v(\d+)", say=say)
         if run_stage("pack", [py, "-m", "fb.edge_kit", "pack", "--club", a.club], core.TOOLS):
             return 1
     if "overlay" in stages:

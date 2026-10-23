@@ -826,6 +826,8 @@ def to_stale(path, tag):
             old = f'{base}-{n}'
         os.replace(path, old)
         print(f'прежняя {tag} → {old}')
+        import recycle                                # хранить 3 последние, остальное — в Корзину (23.10: копилось 25 ГБ)
+        recycle.prune(STALE, r'(.+)-(\d{8}-\d{6}(?:-\d+)?)')
 
 
 def cmd_build(args):
