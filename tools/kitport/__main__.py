@@ -152,7 +152,8 @@ def cmd_diff(a):
 
 # ---------------------------------------------------------------- build
 
-STAGES = ("kit", "slot", "pack", "overlay")
+STAGES = ("kit", "pant", "slot", "pack", "overlay")
+DEFAULT_STAGES = ("kit", "slot", "pack", "overlay")   # pant — только шорты (fb.pant_decals rebuild): kit их уже собирает
 
 
 def run_stage(name, cmd, cwd, env=None):
@@ -186,6 +187,9 @@ def cmd_build(a):
         return 1
     if "kit" in stages and run_stage("kit", [py, "-m", "fb.edge_kit", "kit", "--club", a.club,
                                              "--kits", ",".join(kits)], core.TOOLS):
+        return 1
+    if "pant" in stages and run_stage("pant", [py, "-m", "fb.pant_decals", "rebuild", "--club", a.club,
+                                               "--kits", ",".join(kits)], core.TOOLS):
         return 1
     if "slot" in stages and run_stage("slot", [py, "-m", "fb.edge_kit", "slot", "--club", a.club], core.TOOLS):
         return 1
@@ -286,7 +290,8 @@ def main():
     s = sub.add_parser("build", help="стадии сборки формы")
     s.add_argument("--club", default="MIN")
     s.add_argument("--kits", default="away,home")
-    s.add_argument("--stages", default=",".join(STAGES), help=f"через запятую из {STAGES}")
+    s.add_argument("--stages", default=",".join(DEFAULT_STAGES), help=f"через запятую из {STAGES}; pant — только шорты "
+                   "собранных комплектов (~15 с на форму: нашивки, маски для рельефа), например --stages pant,slot")
     s.add_argument("--meshes", action="store_true", help="и сетки слота (fb.edge_kit meshes) — после правки сеток")
     s = sub.add_parser("install", help="установка в игру с копией заменённого")
     s.add_argument("--tag", required=True, help="метка копии: edge12, mgrhs …")
@@ -328,6 +333,11 @@ def main():
     s.add_argument("--x0", type=float, default=0.30, help="м: рука — вершины с x больше (и начало кадра)")
     s.add_argument("--x1", type=float, default=0.52, help="м: конец кадра по x")
     s.add_argument("--width", type=int, default=420, help="ширина вида, px")
+    s = sub.add_parser("pants", help="нашивки шорт крупно: цвет и рельеф без цвета у нашего герба и у места герба образца")
+    s.add_argument("--clubs", required=True, help="коды клубов через запятую (DET,BOS)")
+    s.add_argument("--kits", default="home,away", help="формы через запятую")
+    s.add_argument("--before", default=None, help="снимок «было» (kitport snapshot, с pant_nm с 23.10) — строки «было»")
+    s.add_argument("--width", type=int, default=240, help="ширина вида, px")
     s = sub.add_parser("yoke", help="кокетка и плечи: наш и источник в одних видах с линиями высот, замер края кокетки")
     s.add_argument("--clubs", required=True, help="коды клубов через запятую (MTL,BUF)")
     s.add_argument("--kits", default="", help="формы через запятую (по умолчанию — с кокеткой в профиле)")
@@ -382,6 +392,9 @@ def main():
     if a.cmd == "arm":
         from . import arm
         return arm.cmd_arm(a)
+    if a.cmd == "pants":
+        from . import pants
+        return pants.cmd_pants(a)
     if a.cmd == "yoke":
         from . import yoke
         return yoke.cmd_yoke(a)

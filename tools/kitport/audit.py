@@ -10,10 +10,14 @@
   фамилия — промежуток букв против edge_kit.NAME_FIT_GAP_MIN … NAME_FIT_GAP;
 - гетры: нижние строки своих гетр (flat_sock) против нижних строк перенесённых с источника — у NHL 27 низ бывает
   другого цвета («оранжевая полоска внизу гетр», ANA, COL, NSH);
+- шорты pant = "source": рельеф (pant_nm слота) — только под нашими гербами (fb.pant_decals.relief_check): рельеф герба
+  образца Legacy вне нашего герба не стёрт, наш герб без рельефа («лого на трусах выше и сбоку относительно рельефного
+  места», DET, 23.10);
 - --helmets: строка шлема NHL 27, из которой взята каска (kitport.profile.eq_pick) — общая (−1, −1) или первая era 2
   вместо своей строки формы (COL дом: чёрный вместо синего); нужна база NHL 27 (FB_GAME=nhl27 не обязателен).
 Принятое пользователем или проверенное глазами — поле профиля `audit_accept` (список проверок с причиной в комментарии:
-sleeve_mix, sleeve_out, letter_mix, letter_out, number, name_gap, sock, helmet) — не замечание (печатается «принято»).
+sleeve_mix, sleeve_out, letter_mix, letter_out, number, name_gap, sock, pant_relief, helmet) — не замечание
+(печатается «принято»).
 Итог — таблица замечаний; код выхода 1, если они есть. Порядок работы с новыми формами — docs/kitport.md §12.11.
 """
 import os
@@ -96,6 +100,13 @@ def check_kit(club, kit, d, src_d, tid, prof, E, lettering):
         if np.abs(ca - cb).max() > AUDIT_SOCK:
             flag("sock", f"низ гетр {np.round(ca).astype(int).tolist()}, у источника {np.round(cb).astype(int).tolist()}"
                          " — полоска внизу")
+    spec = prof.get("slot", {}).get(kit, {})
+    if spec.get("pant", "legacy") == "source":       # рельеф шорт — под нашими гербами (23.10, DET)
+        from fb import pant_decals
+        tpl = os.path.join(E.WORK, "cur_kits", spec["legacy"])
+        if os.path.exists(os.path.join(tpl, "pant_nm.png")):
+            for t in pant_decals.relief_check(tpl, d, os.path.join(src_d, pant_decals.MASKS))[0]:
+                flag("pant_relief", t)
     return flags
 
 

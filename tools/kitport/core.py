@@ -140,7 +140,8 @@ def slot_kits_dir():
     return os.path.join(EDGE_WORK, "slot", "kits")
 
 
-SNAP_FILES = ("jersey_cm", "jersey_nm", "jersey_sm", "name_cm", "sock_cm", "font_cm", "pant_cm")
+SNAP_FILES = ("jersey_cm", "jersey_nm", "jersey_sm", "name_cm", "sock_cm", "font_cm", "pant_cm", "pant_nm", "pant_sm")
+#            pant_nm, pant_sm — с 23.10: рельеф нашивок шорт (fb.pant_decals.relief, kitport pants --before)
 
 
 def snapshot(tag="before"):

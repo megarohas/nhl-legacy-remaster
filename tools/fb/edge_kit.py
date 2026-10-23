@@ -7311,8 +7311,11 @@ def cmd_slot(a):
             print(f"  шрифт {kit}:", "; ".join(scale_glyphs(d, FONT_NAME_SCALE, FONT_CAPTAIN_X, name_anchor=FONT_NAME_ANCHOR)))
         for f in ("name_cm", "pant_cm", "pant_nm", "pant_sm"):
             shutil.copy2(os.path.join(leg, f + ".png"), os.path.join(d, f + ".png"))
-        if spec.get("pant", "legacy") == "source":       # шорты источника (fb.pilot: 3D-перенос), рельеф — образца
+        if spec.get("pant", "legacy") == "source":       # шорты источника (fb.pilot: 3D-перенос)
             shutil.copy2(os.path.join(src, "pant_cm.png"), os.path.join(d, "pant_cm.png"))
+            from . import pant_decals                    # рельеф и блеск — под наши гербы, гербы образца стёрты
+            info = pant_decals.relief(leg, d, os.path.join(src, pant_decals.MASKS))   # (23.10, пользователь, DET)
+            print(f"  шорты {kit}: рельеф —", pant_decals.relief_note(info))
         elif spec.get("pant_tint") == "source":          # шорты Legacy — основным цветом шорт источника (NYR, 23.10)
             print(f"  шорты {kit}: оттенок источника (pant_tint) —",
                   tint_pant(os.path.join(d, "pant_cm.png"), os.path.join(src, "pant_cm.png")))

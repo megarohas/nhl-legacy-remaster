@@ -418,6 +418,61 @@ def finish_kit(rec, od, tpl_kit, art, variant, label, mode, patches, t0, pant=No
         json.dump(rec, f, ensure_ascii=False, indent=1)
 
 
+def build_pant(rec, folder, ok, p, family, club, kit, od, pN, pLa, pL):
+    """Шорты комплекта → od/pant_cm.png: ткань — 3D-перенос base_color, нашивки — наклейками (fb.pant_decals); маски
+    нашивок → od/pant_decals_a.png (по ним стадия slot кладёт рельеф и блеск шорт pant = "source", pant_decals.relief;
+    23.10, DET). Поля rec: pant, pant_decals, pant_hem."""
+    from . import pant_decals
+    pc = p + f"pant_{family}_{club}_{kit}_color"
+    pb = p + f"pant_{family}_{club}_{kit}_base_color"
+    if pc in ok and PANT_DECALS and pb in ok:
+        pcol, pbase = kit3d.load_tex(png(folder, pc)), kit3d.load_tex(png(folder, pb))
+        pimg = kit3d.transfer(pbase, pN, pLa, 512, 2)[0]
+        if pant_decals.HEM_H:                            # полосы низа — от края штанины (профиль pant_hem, NYR 23.10)
+            pimg = pant_decals.hem(pimg, pbase, pN, pLa, pL, 512)
+            rec["pant_hem"] = pant_decals.HEM_H
+        masks = {}
+        pimg, prep = pant_decals.apply(pimg, pcol, pbase, pN, pLa, pL, 512, masks=masks)
+        Image.fromarray(np.clip(pimg, 0, 255).astype(np.uint8)).convert("RGB").save(os.path.join(od, "pant_cm.png"))
+        pant_decals.save_masks(os.path.join(od, pant_decals.MASKS), masks)
+        rec["pant"] = f"ok (3D, нашивок наклейками: {len(prep)})"
+        rec["pant_decals"] = prep
+    elif pc in ok:
+        pimg, pm, pd, _ = kit3d.transfer(kit3d.load_tex(png(folder, pc)), pN, pLa, 512, 2)
+        Image.fromarray(np.clip(pimg, 0, 255).astype(np.uint8)).convert("RGB").save(os.path.join(od, "pant_cm.png"))
+        rec["pant"] = "ok (3D)"
+    else:
+        rec["pant"] = "нет текстуры шорт"
+
+
+def rebuild_pants(code, kits=None):
+    """Только шорты собранных комплектов клуба (build_pant) в OUTP/<КОД>_<форма>: pant_cm.png, маски нашивок, поля
+    info.json; свитер, шрифт, гетры не трогаются (~15 с на форму против минут стадии kit). Профиль клуба
+    (fb.edge_kit.use_club) и корни (set_roots) — до вызова (python -m fb.pant_decals rebuild). -> [(форма, итог)]."""
+    club, art = club_info(code)
+    folder, ok = extract_club(club)
+    pN, pL = kit3d.load_nhl24(PANT_N24), kit3d.load_legacy(PANT_L)
+    bN = kit3d.bbox(pN)
+    bN[3] = PANT_WAIST
+    pLa = kit3d.aligned(pL, bN, kit3d.bbox(pL))
+    out = []
+    for label, family, kit, variant, new in kits_for(code):
+        if kits and label not in kits:
+            continue
+        od = os.path.join(OUTP, f"{code}_{label}")
+        info = os.path.join(od, "info.json")
+        if not os.path.exists(info):
+            out.append((label, "комплект не собран (нет info.json) — сначала стадия kit"))
+            continue
+        with open(info, encoding="utf-8") as f:
+            rec = json.load(f)
+        build_pant(rec, folder, ok, prefix(club, family, kit), family, club, kit, od, pN, pLa, pL)
+        with open(info, "w", encoding="utf-8") as f:
+            json.dump(rec, f, ensure_ascii=False, indent=1)
+        out.append((label, rec.get("pant")))
+    return out
+
+
 def cmd_build(a):
     code = a.club
     club, art = club_info(code)
@@ -530,25 +585,8 @@ def cmd_build(a):
             brand_fix.relief(os.path.join(od, "jersey_nm.png"), os.path.join(od, "jersey_sm.png"))
         build_font(rec, folder, ok, p, family, club, kit, od, tpl_kit, own_name)
         # шорты и гетры: точно через 3D (сетки по .toc), выравнивание по рамкам
-        pc, sc = p + f"pant_{family}_{club}_{kit}_color", p + f"sock_{family}_{club}_{kit}_color"
-        pb = p + f"pant_{family}_{club}_{kit}_base_color"
-        if pc in ok and PANT_DECALS and pb in ok:
-            from . import pant_decals
-            pcol, pbase = kit3d.load_tex(png(folder, pc)), kit3d.load_tex(png(folder, pb))
-            pimg = kit3d.transfer(pbase, pN, pLa, 512, 2)[0]
-            if pant_decals.HEM_H:                        # полосы низа — от края штанины (профиль pant_hem, NYR 23.10)
-                pimg = pant_decals.hem(pimg, pbase, pN, pLa, pL, 512)
-                rec["pant_hem"] = pant_decals.HEM_H
-            pimg, prep = pant_decals.apply(pimg, pcol, pbase, pN, pLa, pL, 512)
-            Image.fromarray(np.clip(pimg, 0, 255).astype(np.uint8)).convert("RGB").save(os.path.join(od, "pant_cm.png"))
-            rec["pant"] = f"ok (3D, нашивок наклейками: {len(prep)})"
-            rec["pant_decals"] = prep
-        elif pc in ok:
-            pimg, pm, pd, _ = kit3d.transfer(kit3d.load_tex(png(folder, pc)), pN, pLa, 512, 2)
-            Image.fromarray(np.clip(pimg, 0, 255).astype(np.uint8)).convert("RGB").save(os.path.join(od, "pant_cm.png"))
-            rec["pant"] = "ok (3D)"
-        else:
-            rec["pant"] = "нет текстуры шорт"
+        build_pant(rec, folder, ok, p, family, club, kit, od, pN, pLa, pL)
+        sc = p + f"sock_{family}_{club}_{kit}_color"
         if sc in ok:
             simg, smk, sd, _ = kit3d.transfer(kit3d.load_tex(png(folder, sc)), sN, sLa, (1024, 512), 2)
             Image.fromarray(np.clip(simg, 0, 255).astype(np.uint8)).convert("RGB").save(os.path.join(od, "sock_cm.png"))
