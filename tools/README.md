@@ -7,7 +7,7 @@
 - Запуск — из корня репозитория: `python tools/<имя>.py …`, пакеты — `python tools/roster …` или `cd tools && python -m fb.<модуль> …`. Команды и параметры описаны в начале каждого файла.
 - Игра выбирается ключом `--game nhl13|legacy` или переменной `NHL_GAME`. По умолчанию — NHL 13, кроме инструментов `*_legacy.py`. Пути и константы обеих игр — в `gameprofile.py`.
 - На входе — своя копия игры в `game/` (вне git), на выходе — `game/work/…`. В `cache:` порта и в сейвы пишут только установщики и команды с явным `--write`, и только при закрытой игре.
-- Почти всё написано на стандартной библиотеке Python 3. numpy и Pillow (местами scipy и opencv) нужны `fb/`, `logos/`, `utah/`, `photos24.py`, `heads24.py`, `scans24.py`, `fepose.py`, `menu12_legacy.py`, `menuplayers.py` и `kitpicker/`. Для отрисовки SVG `teamart.py` запускает Chrome или Edge без окна, `music.py` нужен ffmpeg.
+- Почти всё написано на стандартной библиотеке Python 3. numpy и Pillow (местами scipy и opencv) нужны `fb/`, `logos/`, `utah/`, `photos24.py`, `heads24.py`, `scans24.py`, `fepose.py`, `menu12_legacy.py`, `menuplayers.py`, `stadium.py` и `kitpicker/`. Для отрисовки SVG `teamart.py` запускает Chrome или Edge без окна, `music.py` нужен ffmpeg.
 
 ## Форматы файлов Xbox 360 и EA
 
@@ -23,6 +23,7 @@
 - `gameprofile.py` — профиль игры для всех инструментов: пути, схема базы, номера строк лиг и арта
 - `legacy_settings.py` — блок настроек в сейвах Legacy: разбор, сравнение, перенос слайдеров
 - `rw4mesh.py` — сетки RenderWare 4 (`.rx2`) ⇄ OBJ: правка голени, проверки, превью
+- `stadium.py` — арены NHL Legacy: модель чаши `stadium_<N>` (слои, материалы, текстуры, картинки), кресла `crowd_<N>.cwd` и перекраска их цвета по рецептам `arena_seats.toml` (по умолчанию `--game legacy`)
 - `teamart.py` — арт клубов: логотипы интерфейса и 3D (центр льда, шайба, баннер) ⇄ PNG, сборка своих
 - `playerhead.py` — портреты `p<artid>.big` ⇄ PNG, сборка новых
 - `feapt.py` — ActionScript роликов интерфейса (Apt): дизассемблер, «декомпилятор», поиск, правка без изменения длины

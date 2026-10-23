@@ -224,7 +224,8 @@ python tools/newteams_art.py --out nhlng.new.db   # копия с правкам
 
 ## 6. Арены и лёд
 
-`exhibitionarena` (176 строк; во франшизе — копия `leaguearena`), номер арены — `exhibitionteams.arenaid`:
+`exhibitionarena` (176 строк; во франшизе — копия `leaguearena`), номер арены — `exhibitionteams.arenaid`. Сама чаша
+(`stadium_<N>`) и кресла с их цветом (`crowd_<N>.cwd`) у NHL Legacy — в [arenas.md](arenas.md):
 
 | Поле | Что |
 |---|---|
