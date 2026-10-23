@@ -894,6 +894,19 @@ SLEEVE_FILL_SIDE = False           # профиль sleeve_fill_side (23.10, а�
 #                                    audit: 31 % белого под зоной 3). true или { форма = true }; нет — как было
 SLEEVE_FILL_SIDE_KITS = None       # sleeve_fill_side таблицей по форме — значение формы ставит use_kit
 SLV_FILL_S24_R = None              # задаёт sleeve_compress при sleeve_fill_side: s NHL 24 ткани правого рукава; None — как левый
+SLEEVE_MIRROR = None               # профиль sleeve_mirror (23.10, агент fix-c, SEA выезд; пользователь: «поправь — правая рука
+#                                    как левая»): "left" — правый рукав от манжеты до верха полос — зеркалом левого. У NHL 27
+#                                    SEA выезда рукава несимметричны (справа низ полос на ~2,5 см ближе к плечу, бирюза уже —
+#                                    sleeve_fill_side выше); развёртка Edge симметрична (u → 1 − u — та же точка руки зеркально,
+#                                    медиана 1,5 мм): после переноса тексели правого рукава берутся с левого — цвет (стадия kit,
+#                                    после прочих правок рукава) и рельеф с бликом (после rebuild_relief; R нормали — с обратным
+#                                    знаком: тангенс — по u). Зона — до колена сжатия к кисти + SLV_MIRROR_PAD, выше — переход
+#                                    SLV_MIRROR_BLEND к своему (складки рук разные). "left" или { форма = "left" }; нет — как было
+SLEEVE_MIRROR_KITS = None          # sleeve_mirror таблицей по форме — значение формы ставит use_kit
+SLV_MIRROR_PAD = 0.006             # s Edge: зона зеркала — до верха полос (колено сжатия) + столько (~1 см ткани над ними)
+SLV_MIRROR_BLEND = 0.008           # s Edge: над зоной — переход к своему (рельеф; цвет там — ткань с обеих сторон)
+SLV_MIRROR_TOL = 0.02              # м: тексель правого рукава и зеркальный левого — одна точка руки (дальше — другой остров)
+SLV_MIRROR_PADPX = 8               # текселей: поля острова (заливка за краем сетки) у зоны — тоже зеркалом (мип-уровни игры)
 # Шов проймы Edge (рукав — реглан): правый край панели рукава EA-формы MIN 1_14_0 на развёртке Edge (левый рукав;
 # правый — 1 − u), (v, u), сглажено. В строках подмышки рукав и туловище делятся по нему (а не по шву NHL 24, у
 # которого рукав втачной: грудная полоса заходила на рукав), там же — шов рельефа.
@@ -2064,6 +2077,13 @@ def use_club(code):
     _fs = prof.get("sleeve_fill_side", False)
     SLEEVE_FILL_SIDE_KITS = {str(k_): bool(v_) for k_, v_ in _fs.items()} if isinstance(_fs, dict) else None
     SLEEVE_FILL_SIDE = False if SLEEVE_FILL_SIDE_KITS is not None else bool(_fs)
+    global SLEEVE_MIRROR, SLEEVE_MIRROR_KITS             # правый рукав — зеркалом левого (SEA выезд, 23.10)
+    _sm = prof.get("sleeve_mirror")
+    SLEEVE_MIRROR_KITS = {str(k_): v_ for k_, v_ in _sm.items()} if isinstance(_sm, dict) else None
+    SLEEVE_MIRROR = None if SLEEVE_MIRROR_KITS is not None else _sm
+    for v_ in ([SLEEVE_MIRROR] if SLEEVE_MIRROR_KITS is None else list(SLEEVE_MIRROR_KITS.values())):
+        if v_ not in (None, "left"):
+            sys.exit(f"[{code}] sleeve_mirror = {v_!r} — только \"left\" (или {{ форма = \"left\" }})")
     global YOKE_RGB_DIST                                # кокетка [R, G, B]: насколько близко к цвету (22.10, агент plain, CAR дом:
     YOKE_RGB_DIST = float(prof.get("yoke_rgb_dist", 60.0))   # тёмно-серая (38, 49, 51) на чёрном (27, 26, 27) — Δ 33 < 60)
     global YOKE_CLEAN_DEPTH                              # красное YokePaint — не ниже края кокетки на столько (CAR дом)
@@ -2097,8 +2117,8 @@ def use_club(code):
     _ns = prof.get("notch_seam")
     NOTCH_SEAM_KITS = dict(_ns) if isinstance(_ns, dict) else None
     NOTCH_SEAM = None if (_ns is None or NOTCH_SEAM_KITS is not None) else _ns
-    if any(v != "edge" for v in ([NOTCH_SEAM] if NOTCH_SEAM else []) + list((NOTCH_SEAM_KITS or {}).values())):
-        sys.exit(f"[{code}] notch_seam = {_ns!r} — \"edge\" или {{ форма = \"edge\" }}")
+    if any(v not in ("edge", "yoke") for v in ([NOTCH_SEAM] if NOTCH_SEAM else []) + list((NOTCH_SEAM_KITS or {}).values())):
+        sys.exit(f"[{code}] notch_seam = {_ns!r} — \"edge\" | \"yoke\" или {{ форма = \"edge\" }}")
     global YOKE_BAND_SEAM, YOKE_BAND_SKIP                # замер полосы рукава (yoke_sleeve = "band"; 23.10, review-d, WPG)
     YOKE_BAND_SEAM = float(prof.get("yoke_band_seam", YOKE_BAND_SEAM_DEFAULT))
     YOKE_BAND_SKIP = tuple(map(float, prof["yoke_band_skip"])) if "yoke_band_skip" in prof else None
@@ -2254,6 +2274,9 @@ def use_kit(kit):
     global SLEEVE_FILL_SIDE
     if SLEEVE_FILL_SIDE_KITS is not None:                # sleeve_fill_side по формам (SEA): вне таблицы — нет
         SLEEVE_FILL_SIDE = SLEEVE_FILL_SIDE_KITS.get(kit, False)
+    global SLEEVE_MIRROR
+    if SLEEVE_MIRROR_KITS is not None:                   # sleeve_mirror по формам (SEA): вне таблицы — нет
+        SLEEVE_MIRROR = SLEEVE_MIRROR_KITS.get(kit)
     if ARMHOLE_SPLIT_KITS is not None:                  # armhole_split по формам (CAR): вне таблицы — zones
         ARMHOLE_SPLIT_ZONES = ARMHOLE_SPLIT_FULL if ARMHOLE_SPLIT_KITS.get(kit, "zones") == "full" else ARMHOLE_ZONES
     global PIPING_FIT
@@ -2320,6 +2343,7 @@ NOTCH_SEAM_KITS = None
 NOTCH_EDGE_SOFT = 0.006            # м: notch_seam — полуширина пологого склона канавки со стороны ткани (обычный — ~1,3 мм)
 NOTCH_EDGE_W = 0.014               # м: notch_seam — полоса под краем мыса, где шов заменяется (склон там < 0,5 % глубины)
 NOTCH_EDGE_FADE = 0.004            # м: notch_seam — к углу мыса (где V доходит до низа полосы или кокетки) — на нет
+NOTCH_YOKE_X = 0.16                # м: notch_seam = "yoke" — по краю кокетки спереди до |x| (дальше — на нет за 2 см)
 YOKE_BACK_FROM_KITS = None         # профиль yoke_back_from = { форма = ["EA-форма", цвет] } (23.10, агент fix-b, NSH выезд):
 #                                    край кокетки сзади — по этой EA-форме (её цвет кокетки — green | dark | [R, G, B]), бока —
 #                                    по yoke. NSH выезд у NHL 27 — кокетка «до плеча» (бока MIN 1_14_3, как NJD), а спина
@@ -4055,7 +4079,7 @@ def yoke_stripe_field(G, yk):
     return F
 
 
-def notch_edge_seam(H, P, N, zone, hts, ts):
+def notch_edge_seam(H, P, N, zone, hts, ts, mode="edge"):
     """notch_seam = "edge" (23.10, агент fix-b, NSH выезд): у нижнего края мыса V со щитом (V шаблона, notch_on_v), где
     под ним ткань (выше низа полосы под кокеткой или кокетки), высота швов со стороны ткани — пологий склон от дна канавки
     на самом крае (seam_height(0) · exp(−(s / NOTCH_EDGE_SOFT)²), s — м по высоте от края) вместо обычного профиля:
@@ -4064,11 +4088,15 @@ def notch_edge_seam(H, P, N, zone, hts, ts):
     (NOTCH_EDGE_FADE). -> H."""
     y, ax = P[..., 1], np.abs(P[..., 0])
     k = np.maximum(np.sqrt(np.clip(1 - N[..., 1] ** 2, 0, 1)), 0.3)
-    vline = PANEL_TIP_Y + PANEL_SLOPE * ax
+    if mode == "yoke":                                   # "yoke" (NJD, 23.10): мыс — край самой кокетки (V кокетки, не
+        vline = np.interp(ax, *hts["front"])            # шаблона ворота): шов — по краю кокетки спереди до NOTCH_YOKE_X
+        w = np.clip((NOTCH_YOKE_X - ax) / 0.02, 0, 1)
+    else:
+        vline = PANEL_TIP_Y + PANEL_SLOPE * ax
+        hfl = np.interp(ax, *hts.get("front_flat", hts["front"]))
+        lo = hfl - (hts["stripe"]["width"] if hts.get("stripe") else 0.0)   # низ полосы под кокеткой (или кокетки)
+        w = np.clip((lo - vline) / NOTCH_EDGE_FADE, 0, 1)
     s = (y - vline) / k                                  # м: + в мысе, − в ткани под ним
-    hfl = np.interp(ax, *hts.get("front_flat", hts["front"]))
-    lo = hfl - (hts["stripe"]["width"] if hts.get("stripe") else 0.0)   # низ полосы под кокеткой (или кокетки)
-    w = np.clip((lo - vline) / NOTCH_EDGE_FADE, 0, 1)
     w = w * w * (3 - 2 * w)
     band = zone & (s < 0) & (s > -NOTCH_EDGE_W) & (w > 0)
     soft = float(seam_height(np.array(0.0))) * np.exp(-(s / NOTCH_EDGE_SOFT) ** 2)
@@ -4178,6 +4206,8 @@ def design_seams(mesh, painters, S=2048, out_S=1024):
     H = np.where(m, H, 0.0)
     if NOTCH_SEAM == "edge" and yk is not None and yk.h.get("notch"):   # мыс V над тканью — без светлой каймы (NSH выезд)
         H = notch_edge_seam(H, P, N, m & ~B & front, yk.h, ts)
+    elif NOTCH_SEAM == "yoke" and yk is not None:       # край кокетки V (NJD, 23.10: та же светлая кайма под мысом)
+        H = notch_edge_seam(H, P, N, m & ~B & front, yk.h, ts, mode="yoke")
     design_seams.height = H.reshape(out_S, S // out_S, out_S, S // out_S).mean((1, 3))   # высота швов (превью меню)
     # наклон: dH на тексель out_S (тексель S — в S/out_S раз мельче)
     k = S / out_S
@@ -5635,6 +5665,9 @@ def cmd_kit(a):
         if CHEST_BANDS:                                   # полосы через грудь у ворота — прямые, по источнику (NYR; 23.10)
             for r_ in chest_bands_fit(os.path.join(od, "jersey_cm.png"), E2, CHEST_BANDS, a.club, cur_kit["kit"]):
                 print("  полосы через грудь (chest_bands):", r_)
+        if SLEEVE_MIRROR:                                 # правый рукав — зеркалом левого (SEA выезд, 23.10): цвет
+            print("  правый рукав — зеркалом левого (sleeve_mirror), цвет, текселей:",
+                  sleeve_mirror(od, E2, ("jersey_cm.png",)))
         return dict(sleeve_plan)
     pilot.sleeve_rule = sleeve_rule
     keep = collar_keep_mask({k: E2[k] for k in ("pos", "uv", "nrm", "tri")}, 1024)
@@ -5752,6 +5785,9 @@ def cmd_kit(a):
                                                          src_a=brand_alpha()),
                                          os.path.join(od, "jersey_nm.png"), os.path.join(od, "jersey_sm.png"))
                 print("  рельеф:", info_r)
+            if SLEEVE_MIRROR:                            # рельеф и блик правого рукава — зеркалом левого (SEA выезд)
+                print("  правый рукав — зеркалом левого (sleeve_mirror), рельеф и блик, текселей:",
+                      sleeve_mirror(od, E2, ("jersey_nm.png", "jersey_sm.png")))
             pad_island(od, E2)
             print("  прежнее место острова (для lod 0, 3):", fill_old_place(od, E2), "текселей")
             J.fe_preview(od, {k: E2[k] for k in ("pos", "uv", "nrm", "tri")})   # превью меню — по своей сетке
@@ -5836,6 +5872,44 @@ def sleeve_compress(cmap, code, kit, od, plan_out):
             fs = SLV_FILL_S24_R if (not left and SLV_FILL_S24_R is not None) else SLV_FILL_S24   # sleeve_fill_side
             plan_out[str(z)].update(top_margin_cm=round(margin * 100, 2), fill_s24=round(fs, 4))
     return (k, d_top)
+
+
+def sleeve_mirror(od, mesh, files):
+    """Профиль sleeve_mirror = "left" (23.10, SEA выезд): правый рукав развёртки Edge от манжеты до верха полос (колено
+    SLV_COMPRESS + SLV_MIRROR_PAD, выше — переход SLV_MIRROR_BLEND) — зеркалом левого (тексель u → 1 − u) в файлах files
+    папки od; у jersey_nm — R с обратным знаком. Тексель берётся, только если зеркальный — та же точка руки (SLV_MIRROR_TOL);
+    поля острова вокруг зоны (SLV_MIRROR_PADPX) — тоже. -> число текселей зоны."""
+    from PIL import Image
+    from scipy import ndimage as ndi
+    S = 1024
+    tid, bar = kit3d.raster_uv(mesh, S)
+    m = tid >= 0
+    P = np.zeros((S, S, 3))
+    P[m] = (bar[m][:, :, None] * mesh["pos"][mesh["tri"][tid[m]]]).sum(1)
+    top = (SLV_COMPRESS[0] * SLV_COMPRESS[1] if SLV_COMPRESS is not None else SLV_U[1] - SLV_MIRROR_BLEND) + SLV_MIRROR_PAD
+    s = 1.0 - (np.arange(S) + 0.5) / S                   # s правого рукава по столбцу
+    near = (s < top + SLV_MIRROR_BLEND)[None, :]
+    xm = S - 1 - np.arange(S)
+    mm = m[:, xm]
+    same = np.linalg.norm(P - P[:, xm] * np.array([-1.0, 1.0, 1.0]), axis=-1) < SLV_MIRROR_TOL
+    zone = m & mm & near & (P[..., 0] > SLV_X) & same
+    zone |= ndi.binary_dilation(zone, iterations=SLV_MIRROR_PADPX) & ~m & ~mm & near
+    w = np.clip((top + SLV_MIRROR_BLEND - s) / SLV_MIRROR_BLEND, 0.0, 1.0)
+    ys, xs = np.nonzero(zone)
+    ww = w[xs][:, None]
+    for f in files:
+        p = os.path.join(od, f)
+        im = Image.open(p)
+        a = np.asarray(im).astype(np.float64).copy()
+        if a.shape[:2] != (S, S):
+            print(f"  ! sleeve_mirror: {f} {a.shape[1]}×{a.shape[0]} — не {S}², не тронут")
+            continue
+        src = a[ys, S - 1 - xs].copy()
+        if f.startswith("jersey_nm"):                    # нормаль в касательных: тангенс по u — у зеркала обратный
+            src[:, 0] = 255.0 - src[:, 0]
+        a[ys, xs] = src * ww + a[ys, xs] * (1.0 - ww)
+        Image.fromarray(np.clip(np.round(a), 0, 255).astype(np.uint8), im.mode).save(p)
+    return int(zone.sum())
 
 
 def sleeve_top_margin(cmap, d_top):
@@ -6555,7 +6629,8 @@ CHEST_ZONE = 6                     # зона карты номеров «ном
 #                                    2010–13 номер на груди слева; у NHL 27 его нет, игра ставит номер по карте образца)
 CHEST_ZONE_SCALE = 1.0             # профиль chest_zone_scale (23.10, агент fix-a, BUF): зона 6 в k раз, верх на месте —
 #                                    у герба 27 см низ зоны лежал на его верху (пользователь: «номер на груди поменьше
-#                                    или лого пониже»). 1 — как было
+#                                    или лого пониже»). 1 — как было; 0 — зоны нет, номера на груди нет (BUF 23.10:
+#                                    «убери», у NHL 27 номера на груди нет)
 
 
 def chest_zone_gap(slot_dir):
@@ -7123,7 +7198,14 @@ def cmd_slot(a):
         if SLEEVE_ZONE_Z:                                # номер на рукаве к груди / к спине (профиль sleeve_zone_z_cm)
             print(f"  номера на рукавах {kit}: зоны {SLEEVE_ZONES} к груди на {SLEEVE_ZONE_Z * 100:+.1f} см:",
                   zones_move_z(os.path.join(d, "name_cm.png"), SLEEVE_ZONES, SLEEVE_ZONE_Z))
-        if CHEST_ZONE_SCALE != 1.0:                      # номер на груди мельче, верх на месте (профиль chest_zone_scale;
+        if CHEST_ZONE_SCALE == 0.0:                      # номера на груди нет (BUF, пользователь 23.10: «убери» — у NHL 27
+            from PIL import Image                        # его нет): зона 6 карты номеров — снята
+            a_ = np.asarray(Image.open(os.path.join(d, "name_cm.png")).convert("RGBA")).copy()
+            m_ = (a_[..., 0] > 128) & (a_[..., 1] > 128) & (a_[..., 2] == CHEST_ZONE)
+            a_[m_] = (255, 255, 255, 255)
+            Image.fromarray(a_, "RGBA").save(os.path.join(d, "name_cm.png"))
+            print(f"  номер на груди {kit}: зона {CHEST_ZONE} снята ({int(m_.sum())} текселей)")
+        elif CHEST_ZONE_SCALE != 1.0:                    # номер на груди мельче, верх на месте (профиль chest_zone_scale;
             g0 = chest_zone_gap(d)                       # BUF 23.10: низ зоны лежал на гербе)
             cz = scale_zones(os.path.join(d, "name_cm.png"), CHEST_ZONE_SCALE, (CHEST_ZONE,), anchor="top")
             print(f"  номер на груди {kit}: зона {CHEST_ZONE} ×{CHEST_ZONE_SCALE}, верх на месте: {cz}; до герба строк "
