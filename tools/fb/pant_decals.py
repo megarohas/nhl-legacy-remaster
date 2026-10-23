@@ -28,6 +28,12 @@ MIN_PX = 200                       # меньше текселей (в 2048²) �
 RES = 0.0004                       # м на пиксель наклейки (0,4 мм: у источника 2048² на шорты ~0,3 мм)
 SLAB = 0.04                        # м: тексели Legacy дальше от касательной плоскости центра — не на той же поверхности
 FACING = 0.3                       # косинус: нормаль текселя к нормали центра — не меньше (не другая нога, не изнанка)
+MERGE_PX = 0                       # профиль pant_merge_px (23.10, агент review-d, WSH): части нашивки ближе стольких текселей
+#                                    (2048²) — одна наклейка. У WSH на ноге три звезды (по 48 px, промежуток ~30 px): порознь
+#                                    каждая шла в место герба EA (11,5 см по диагонали) — одна крупная звезда. 0 — как было
+Y_MAX = None                       # профиль pant_decal_ymax, м (23.10, агент review-d, WPG): нашивка с центром выше на сетке
+#                                    источника — не нашивка (пояс шорт под свитером: у WPG обрывки разницы у шнурка пояса
+#                                    шли в места гербов EA — тёмные пятна на обеих ногах). None — как было
 # места нашивок шорт EA (uv развёртки шорт Legacy pant_1_0_0_2; центры рамок): щит — одна рамка у всех 84 форм EA,
 # герб слева — среднее рамок 1_14_0, 1_16_2, 1_1_3, 1_23_0, 1_24_3, справа — 1_20_0, 1_131_0, 1_20_3, 1_23_6
 EA_SLOTS = {"back": {"uv": (0.1275, 0.3545), "h": 0.055},
@@ -76,7 +82,7 @@ def decals(color, base, diff=DIFF, min_px=MIN_PX):
                                                                                           Image.BILINEAR))
                          for k in range(3)], -1)
     d = np.abs(color[..., :3] - base[..., :3]).max(-1) > diff
-    lab, n = ndi.label(ndi.binary_dilation(d, iterations=3))
+    lab, n = ndi.label(ndi.binary_dilation(d, iterations=max(3, (MERGE_PX + 1) // 2)))   # MERGE_PX: части рядом — одна
     out = []
     for i in range(1, n + 1):
         m = (lab == i) & d
@@ -158,6 +164,9 @@ def apply(img, color, base, src_mesh, dst_aligned, dst_mesh, size=512, ss=2, rep
     rep = []
     for m in decals(color, base):
         rgba, c, n, (right, up), x0, y0 = sticker(color, m, ok_s, P_s, N_s)
+        if Y_MAX is not None and c[1] > Y_MAX:           # пояс под свитером — не нашивка (профиль pant_decal_ymax, WPG)
+            rep.append({"slot": "skip", "src_center": np.round(c, 3).tolist(), "why": f"y > {Y_MAX}"})
+            continue
         slot = slot_of(c, n) if ea else None
         k = scale
         if slot:                                         # место EA: тексель с центром рамки (ближайший на развёртке)
@@ -194,7 +203,7 @@ def apply(img, color, base, src_mesh, dst_aligned, dst_mesh, size=512, ss=2, rep
         rep.append({"slot": slot or "source", "src_center": np.round(c, 3).tolist(),
                     "dst_uv": [round(float(ix) / S, 3), round(float(iy) / S, 3)],
                     "size_cm": [round(rgba.shape[1] * RES * k * 100, 1), round(rgba.shape[0] * RES * k * 100, 1)]})
-    if not rep:
+    if not [r for r in rep if r["slot"] != "skip"]:
         return img, rep
     box = lambda x: x.reshape(size, ss, size, ss, *x.shape[2:]).mean((1, 3))
     a = box(a_hi)

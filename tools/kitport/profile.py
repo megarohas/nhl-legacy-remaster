@@ -335,6 +335,21 @@ def lapel_look(folder, kit):
             median_c(b[(d > 0.045) & (d < 0.06) & (ath > f0) & (ath < b1)]))
 
 
+def font_plate(kit, folder):
+    """Фамилия на подложке (22.10, PHI): строки букв атласа шрифта источника (верхние 19 % высоты, до столбца C и A —
+    80 %) в основном непрозрачны (у прочих клубов там прозрачно между буквами)."""
+    from . import survey
+    try:
+        im = survey.tex("nhl27", f"content/character/skater/league/nhl/{folder}/adidas/{kit}/font_adidas_{folder}_{kit}_color")
+    except (KeyError, ValueError, OSError):
+        return False
+    a = np.asarray(im)
+    if a.ndim < 3 or a.shape[2] < 4:
+        return False
+    H, W = a.shape[:2]
+    return bool(np.median(a[:int(0.19 * H), :int(0.8 * W), 3]) > 200)
+
+
 def ea_yoke_rgb(kit):
     """Цвет кокетки EA-формы Legacy у её семени (edge_kit.yoke_polygon: строка 0,53, столбец 0,37 развёртки 1024), если он
     не цвет середины спины (edge_kit.BODY_BOX); у формы нет кокетки — None."""
@@ -570,10 +585,16 @@ def propose(code):
         # боков EA нет — шапка на руке кончается краем, прямой наискосок от переда к спине (yoke_side_blend)
         yc = np.median([look[k]["yoke_c"] for k in SLOT_KITS if yoke[k]], axis=0)
         prof["yoke_color"] = [int(round(v)) for v in yc]
+        ycs = {k: [int(round(v)) for v in look[k]["yoke_c"]] for k in SLOT_KITS if yoke[k]}
+        if len(ycs) > 1 and differs(*ycs.values()):      # у форм кокетки разного цвета (22.10, EDM: дома оранжевая, в гостях
+            prof["yoke_color"] = ycs                     # синяя; среднее не узнавало ни ту, ни другую) — таблицей по форме
         ea = {k: ea_yoke_rgb(legacy[k]) for k in SLOT_KITS if yoke[k]}
         prof["yoke"] = {k: (legacy[k] if v is not None else "1_14_3") for k, v in ea.items()}
         got = [v for v in ea.values() if v is not None]
         prof["yoke_shape_color"] = got[0] if got else "green"
+        shp = {k: (v if v is not None else "green") for k, v in ea.items()}
+        if len(shp) > 1 and len({json.dumps(v) for v in shp.values()}) > 1 and                 not (all(isinstance(v, list) for v in shp.values()) and not differs(*shp.values())):
+            prof["yoke_shape_color"] = shp               # и у EA-форм (край спины) — своей формы
         prof["yoke_side_blend"] = YOKE_SIDE_BLEND
         # «проверить» всегда: у NHL 27 кокетка adidas одна и та же (NJD, BUF, MTL, DAL — шапка до одного места на руке), а у
         # NJD пользователь выбрал «до плеча» (бока MIN 1_14_3, 21.10) — решение по листу, не по текстуре
@@ -626,6 +647,12 @@ def propose(code):
         prof["name_zones_from"] = legacy["home"]   # арта — 1_131_0 (fb.pilot.home_template), места буквы у него ниже, без
         #                                            зоны 7 — герб [crest_fit] мерил бы не по тем местам, что в слоте
     prof["font_name_fit"] = "auto"
+    plate = {k: font_plate(src[k], folder) for k in SLOT_KITS}   # фамилия на подложке (PHI, 22.10): атлас — как у источника
+    if any(plate.values()):
+        prof["font_plate"] = True
+    D.append(Decision("font_plate", prof.get("font_plate", "—"), True,
+                      "строки букв фамилии в атласе источника непрозрачны (плашка): " + ", ".join(
+                          f"{k} {'да' if v else 'нет'}" for k, v in plate.items())))
     lz_s = f"буква {lz[0]} × {lz[1]}" if lz else "буква —"
     D.append(Decision("name_zones_from", prof.get("name_zones_from", "—"), True,
                       f"заготовка Custom: фамилия и номер на 15–17 % крупнее EA, {lz_s} против 15 × 15 — зоны MIN"
@@ -824,7 +851,7 @@ def toml_section(code, prof, D, data):
               "yoke_side_blend", "yoke_stripe", "shield_offset_cm", "shield_scale", "merge_parts", "merge_near",
               "base_normal_decals", "hem_h", "insert", "insert_color", "collar_lapel",
               "letter_zones_from", "yoke_mesh", "collar_panel", "trim_clear", "armhole_split", "name_zones_from", "font_name_fit",
-              "sock_parts"):
+              "font_plate", "sock_parts"):
         if k not in prof:
             continue
         line = f"{k} = {toml_value(prof[k])}"
@@ -842,6 +869,7 @@ def toml_section(code, prof, D, data):
                 "armhole_split": "рукав другого цвета: граница с тканью по шву проймы Edge целиком (VGK, DET)",
                 "name_zones_from": "заготовка Custom: зоны фамилии, номера и буквы — как у MIN",
                 "font_name_fit": "фамилия: высота как у MIN, промежуток ≤ 0,23 высоты буквы (edge_kit.name_font_fit)",
+                "font_plate": "фамилия на подложке: буквы атласа — как у источника, без растяжки (edge_kit.FONT_PLATE)",
                 "collar_band": "двухцветный ворот: у края полоса цвета ткани, за ней кромка во весь V (щит на ней) "
                                "(edge_kit.COLLAR_BAND)",
                 "trim_clear": "за кромкой сбоку и сзади — вторая полоса: зачистка цветом источника по углу "

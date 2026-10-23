@@ -396,6 +396,20 @@ def fill_old_place(od, M):
     return n
 
 
+ISLAND_PAD_CM = False              # профиль island_pad_cm = true | { форма = true } (23.10, агент review-e, NYR выезд): поле
+#                                    вокруг острова развёртки и в jersey_cm — цветом ближайшего текселя острова (pad_island). Без
+#                                    поля там прежний цвет до правок после переноса (chest_bands): фильтрация и мипы на шве
+#                                    острова тянули его на свитер — у NYR выезда синяя точка и черта под синей полосой у |x| 11 см,
+#                                    белая чёрточка в синей кокетке у ±14 см (и прежнее место острова — fill_old_place — бралось
+#                                    с ним же). Цвет поля — свитера в той же 3D-точке: развёртка ближайшего треугольника острова
+#                                    продолжена за край, цвет — ближайшего по 3D текселя основной развёртки (не дальше
+#                                    ISLAND_PAD_3D); ближайший тексель острова продолжал край полосы поперёк шва лесенкой — слабая
+#                                    синяя черта оставалась. Нет — как было
+ISLAND_PAD_CM_KITS = None          # island_pad_cm таблицей по форме (use_kit)
+ISLAND_PAD_PX = 8                  # текселей 1024² за краем острова
+ISLAND_PAD_3D = 0.006              # м: тексель основной развёртки дальше от 3D-точки поля — поле ближайшим текселем острова
+
+
 def pad_island(od, M, px=6):
     """Рельеф и блик за краем острова (px текселей) — значениями самого края: иначе при фильтрации и мипах по краю
     острова — тонкая линия (видна на рельефе у нижних углов вставки)."""
@@ -411,6 +425,41 @@ def pad_island(od, M, px=6):
         _, (iy, ix) = ndi.distance_transform_edt(~inside, return_indices=True)
         im = im[iy, ix]
         Image.fromarray(np.clip(np.round(im), 0, 255).astype(np.uint8), "RGBA").save(path)
+    if ISLAND_PAD_CM:                                    # и цвет: поле острова — ближайшим текселем острова (NYR, 23.10)
+        path = os.path.join(od, "jersey_cm.png")
+        im0 = Image.open(path)
+        mode = im0.mode
+        im = np.asarray(im0).copy()
+        tid, _ = kit3d.raster_uv({"uv": M["uv"], "tri": M["tri"]}, im.shape[0])
+        inside = tid >= 0
+        isl = inside & M["island"][M["tri"]].all(1)[np.maximum(tid, 0)]
+        d, (iy, ix) = ndi.distance_transform_edt(~inside, return_indices=True)
+        gut = ~inside & (d <= ISLAND_PAD_PX * im.shape[0] / 1024.0) & isl[iy, ix]
+        gy, gx = np.nonzero(gut)
+        T = M["tri"][tid[iy[gy, gx], ix[gy, gx]]]       # треугольник острова ближайшего текселя: барицентры вне его
+        S_ = im.shape[0]
+        a_, b_, c_ = (M["uv"][T[:, k]] for k in range(3))
+        v0, v1 = b_ - a_, c_ - a_
+        v2 = np.stack([(gx + 0.5) / S_, (gy + 0.5) / S_], -1) - a_
+        d00, d01, d11 = (v0 * v0).sum(1), (v0 * v1).sum(1), (v1 * v1).sum(1)
+        d20, d21 = (v2 * v0).sum(1), (v2 * v1).sum(1)
+        den = np.where(np.abs(d00 * d11 - d01 * d01) < 1e-18, 1e-18, d00 * d11 - d01 * d01)
+        l1, l2 = (d11 * d20 - d01 * d21) / den, (d00 * d21 - d01 * d20) / den
+        P3 = (np.stack([1 - l1 - l2, l1, l2], -1)[:, :, None] * M["pos"][T]).sum(1)   # 3D-точка за краем острова
+        tid_b, bar_b = kit3d.raster_uv({"uv": M["uv"], "tri": M["tri"]}, S_)
+        my, mx = np.nonzero(inside & ~isl)
+        Pm = (bar_b[my, mx][:, :, None] * M["pos"][M["tri"][tid_b[my, mx]]]).sum(1)
+        Nm = (bar_b[my, mx][:, :, None] * M["nrm"][M["tri"][tid_b[my, mx]]]).sum(1)
+        fr = Nm[:, 2] > -0.5                             # не подкладка переда (нормаль внутрь)
+        my, mx, Pm = my[fr], mx[fr], Pm[fr]
+        from scipy.spatial import cKDTree
+        dist, j = cKDTree(Pm).query(P3)
+        ok = dist < ISLAND_PAD_3D
+        old = im.copy()
+        im[gy[ok], gx[ok]] = old[my[j[ok]], mx[j[ok]]]
+        im[gy[~ok], gx[~ok]] = old[iy[gy[~ok], gx[~ok]], ix[gy[~ok], gx[~ok]]]
+        Image.fromarray(im, mode).save(path)
+        print("  поле острова в jersey_cm (island_pad_cm):", int(gut.sum()), "текселей, по 3D-точке", int(ok.sum()))
 
 
 def remap_island_maps(nm_path, sm_path, M):
@@ -461,11 +510,21 @@ SEAM_U = (0.3555, 0.6445)
 SLEEVE_V = (0.33, 0.67)
 TORSO_DELTA = None                 # (спереди, сзади), м: рисунок туловища выше на столько (задаётся сборкой кокетки)
 DELTA_Y = (1.52, 1.58)             # м: сдвиг — выше этой высоты (ниже — плавно на нет)
+TORSO_SHIFT = None                 # профиль torso_shift (23.10, пользователь, MTL дом: «полосу с логотипом опустить — в жизни
+#                                    она проходит посередине номера, сейчас выше середины»): [см, y0, y1, y2, y3] — рисунок
+#                                    туловища ниже на столько (точка на высоте y берёт источник с y + сдвиг): с y0 до y1
+#                                    сдвиг плавно растёт, до y2 — весь, к y3 — на нет (м, высоты Edge; спад — не короче
+#                                    1,5 × сдвига, иначе рисунок у спада повторяется). Герб (нашивка crest) — ниже на столько
+#                                    же (torso_shift_crest: нашивки ставятся по 3D-точке, не по развёртке). Или { форма = [...] }
+TORSO_SHIFT_KITS = None
 SLEEVE_BY_BONES = False            # прежний способ (рукав — по весам костей) — выключен
 SEAM_SMOOTH = 30                   # итераций сглаживания поля шва на сетке Edge
 TOP_X, TOP_Z = (-0.6, 0.6), (-0.3, 0.3)   # м: сетка проекции сверху (верх плеч)
 GRID_XZ = 0.001
 TOPP_NY = (0.55, 0.8)              # y нормали: от «наклонно» к «верх» — проекция сверху
+TOPP_NY_DEFAULT = TOPP_NY          # профиль top_proj = [от, до] (22.10, NYR выезд): у полос через плечи (белая, красная, белая,
+#                                    синяя у края кокетки) на наклонном верхе груди смесь туловища и проекции сверху гнула их
+#                                    петлями у ворота; выше — проекция только на самом верхе плеча
 FRONT_TH = (-2.0, -1.0)            # град: у середины переда — система ворота только на кромке (выключено: кромка
 #                                    рвалась у углов вставки; вставку рисует InsertPaint)
 FRONT_CW = (0.0, 0.004)            # м: там она — до 0 … 4 мм от края (кромка и вставка у NHL 24 — одного цвета)
@@ -715,6 +774,8 @@ class CoordMap:
             wf = Hy.smooth((N[:, 2] + 0.3) / 0.6)
             fade = Hy.smooth((P[:, 1] - DELTA_Y[0]) / (DELTA_Y[1] - DELTA_Y[0]))
             yq = P[:, 1] - (df * wf + db * (1 - wf)) * fade
+        if TORSO_SHIFT:                                  # полоса через туловище ниже (профиль torso_shift, MTL дом)
+            yq = yq + torso_shift_dy(P[:, 1])
         u_t, ok_t = _lookup_multi(self.g_torso, tt, yq, rr, -180, GRID_TH, 0.85, GRID_YT)
         out = np.where(ok_t[:, None], u_t, fallback)
         # ворот (у края — растяжение TRIM_K: кромка шире)
@@ -781,6 +842,9 @@ SLV_V = (0.30, 0.72)               # v развёртки Edge: рукав
 SLV_U24 = (0.03, 0.30)             # u NHL 24: рукав (левый; правый — 1 − u), манжета — у 0,03 (пройма — 0,335)
 SLV_U24_MIN = 0.042                # u NHL 24 — не ближе к манжете (у Edge рукав там уходит в краги)
 SLV_BLEND = 0.007                  # u Edge: у проймы — плавно к прежнему переносу (полосы кончаются у 0,222)
+SLV_BLEND_DEFAULT = SLV_BLEND      # профиль sleeve_blend (u, 22.10, WSH): переход шире — у панели вдоль руки (белая / красная
+#                                    WSH) на стыке карты рукава и ближайшей точки (u 0,234) край ступенькой ~1 см: карты
+#                                    расходятся по углу; на ширине перехода UV меняется плавно — край идёт наклонно
 HEM_H_DEFAULT = 0.09               # м: зона низа «от края» (fb.hem.HEM_H) без поля hem_h в профиле
 HEM_SHIFT = 0.0                    # м: профиль hem_shift_cm — полосы низа ниже на столько (точка на высоте d над краем
 #                                    берёт рисунок источника с d + сдвиг; LAK 22.10: «полоску внизу — пониже»)
@@ -790,6 +854,7 @@ NAME_ZONE_SCALE = 1.0              # профиль name_zone_scale: зона ф
 FONT_NAME_FIT = None               # профиль font_name_fit = "auto": шрифт и зона фамилии — расчётом (name_font_fit)
 NAME_ZONE_LIFT = 0.0               # см: профиль name_zone_lift_cm — зона фамилии выше на спине на столько (SEA 22.10)
 FONT_NAME_ANCHOR = "center"        # профиль font_name_anchor: center | top — верх букв на месте (мельче — место до номера, LAK)
+SLV_FILL_EXT_TOP = None            # sleeve_top24: заполнение тканью за концом рукава — до верха полос (+0,02), не меньше SLV_FILL_EXT
 SLV_FILL_EXT = 0.035               # u Edge за концом рукава (у проймы): при заполнении тканью (SLV_FILL_S24) — тоже ткань:
 SLV_FILL_BLEND = 0.01              # там ближайшая точка NHL 24 брала его верхнюю полосу — золотая дуга (BOS, 21.10)
 SLV_X = 0.15                       # м: |x| больше — рукав
@@ -810,6 +875,14 @@ BRAND_WIN = None                   # профиль brand_win: окно (дол�
 #                                    для своей надписи (kit_fix.BrandSwap, [brand] back.nhl24_win 0,02). 22.10, BUF выезд: в
 #                                    окно попадала золотая полоса под кокеткой — надпись выходила розоватой (медиана белого и
 #                                    золотого); 0,012 — только логотип. Нет — как было
+SLEEVE_TOP24 = None                # профиль sleeve_top24 (22.10, агент plain, SJS): верх полос рукава источника, s NHL 24 — когда
+#                                    блок полос выше конца рукава Edge (у SJS до 0,243 при конце карты рукава ~0,230: верхняя
+#                                    полоса — чёрная дома, бирюзовая в гостях — пропадала, а «ткань над полосами» бралась
+#                                    внутри неё — чёрный верх рукава) и граница не находится (дома доля кольца < 0,8: полосы
+#                                    у верха острова NHL 24 загибаются). Соответствие s Edge → s NHL 24 за концом рукава —
+#                                    продолжением по наклону (SleeveMap.s24_of), сжатие к кисти — до этого верха.
+#                                    Число или { форма = число }; нет — как было
+SLV_EXTRAP_W = 0.03                # s Edge: наклон s NHL 24 / s Edge для продолжения — по последним 0,03 карты рукава
 SLEEVE_FILL = None                 # профиль sleeve_fill = "below": ткань над полосами — цвет рукава под ними (у кисти), не
 #                                    над верхней границей (MTL дом 22.10: блок полос до конца рукава, над ним 1,5 мм красного —
 #                                    бралась белая полоса, верх рукавов выходил белым); None — как BOS (над верхней)
@@ -862,6 +935,8 @@ def armhole_sleeve(tu, tv, x):
 
 
 ARMHOLE_CLEAN = 0.02               # u: у armhole_split = "full" полоса у шва проймы, где цвет — с той же строки дальше от шва
+ARMHOLE_AA = False                 # профиль armhole_aa = true (23.10, агент review-d, WSH): у шва — смесь цвета рукава и ткани
+#                                    по доле текселя (иначе край панели рукава по шву — зубцами в тексель, у плеча ~3 мм)
 
 
 def armhole_clean(png, mesh, du=ARMHOLE_CLEAN):
@@ -887,8 +962,575 @@ def armhole_clean(png, mesh, du=ARMHOLE_CLEAN):
     ok = near & m[ys, xs_src]
     out = a.copy()
     out[ys[ok], xs[ok]] = a[ys[ok], xs_src[ok]]
+    if ARMHOLE_AA:                                       # у самого шва — смесь по доле текселя на стороне рукава (WSH)
+        cov = np.clip((au - sE) * S + 0.5, 0, 1)         # доля текселя до шва (рукав); шов — гладкая кривая armhole_u
+        mid = near & (cov > 0) & (cov < 1)
+        ts_ = au - du - 1.5 / S
+        tb_ = au + du + 1.5 / S
+        xs_s = np.clip(np.round(np.where(left, ts_, 1.0 - ts_) * S - 0.5).astype(int), 0, S - 1)
+        xs_b = np.clip(np.round(np.where(left, tb_, 1.0 - tb_) * S - 0.5).astype(int), 0, S - 1)
+        mid &= m[ys, xs_s] & m[ys, xs_b]
+        w_ = cov[mid][:, None]
+        out[ys[mid], xs[mid]] = np.round(a[ys[mid], xs_s[mid]] * w_ + a[ys[mid], xs_b[mid]] * (1 - w_)).astype(a.dtype)
     Image.fromarray(out).save(png)
     return int(ok.sum())
+
+
+SLEEVE_STRIPES = None              # профиль sleeve_stripes = "fit" (22.10, агент review-b, OTT): края полос рукава — гладкими
+#                                    кривыми (sleeve_stripes_fit). У OTT блок полос NHL 27 почти до плеча и наискосок, сжатия к
+#                                    кисти нет (граница не находится, sleeve_top24 гнул полосы галочкой): у конца карты рукава
+#                                    (SLV_U, переход SLV_BLEND к ближайшей точке) край полосы рвался — тонкий обрывок рядом с
+#                                    полосой, в реглане — ступеньки края. Нет — как было
+SLV_FIT_MIN_RUN = 4                # текселей: отрезок цвета в строке короче — сливается с соседом (обрывки)
+SLV_FIT_NEAR = 16                  # текселей от гладкого края: перекраска только рядом с ним (дальше — как перенеслось)
+SLV_FIT_DEG = 3                    # степень многочлена первого края по строке v; следующие — предыдущий + ширина (квадратика)
+SLV_FIT_TRIM = 0.75                # доля строк в подгонке по лучшим (LTS): обрывки и ступеньки — выбросы
+SLV_FIT_TOL = 2.0                  # текселей: строка ближе к кривой — своя
+SLV_FIT_MIX = 40                   # цвет ближе к отрезку между двумя цветами палитры — смесь на краю, тоже «свой»
+
+
+def _slv_palette(c, m, min_frac=0.04, merge=40):
+    """Основные цвета рукава: ячейки 16³ с долей ≥ min_frac, медиана; ближе merge к уже взятому — не новый."""
+    q = (c[m] // 16).astype(int)
+    key = q[:, 0] * 256 + q[:, 1] * 16 + q[:, 2]
+    keys, cnt = np.unique(key, return_counts=True)
+    pal = []
+    for i in np.argsort(-cnt):
+        if cnt[i] < min_frac * m.sum():
+            break
+        col = np.median(c[m][key == keys[i]], 0)
+        if all(np.abs(col - p).max() > merge for p in pal):
+            pal.append(col)
+    return np.array(pal)
+
+
+def _slv_runs(lab):
+    """Отрезки одной метки в строке [[метка, начало, конец)]; короче SLV_FIT_MIN_RUN — к соседу (с той же меткой по обе
+    стороны — склейка, иначе — к длинному)."""
+    out, s = [], 0
+    for i in range(1, len(lab) + 1):
+        if i == len(lab) or lab[i] != lab[s]:
+            out.append([int(lab[s]), s, i])
+            s = i
+    while True:
+        short = [j for j, r in enumerate(out) if r[2] - r[1] < SLV_FIT_MIN_RUN and 0 < j < len(out) - 1]
+        if not short:
+            return out
+        j = min(short, key=lambda j: out[j][2] - out[j][1])
+        L, R = out[j - 1], out[j + 1]
+        if L[0] == R[0]:
+            out[j - 1:j + 2] = [[L[0], L[1], R[2]]]
+        elif L[2] - L[1] >= R[2] - R[1]:
+            out[j - 1:j + 1] = [[L[0], L[1], out[j][2]]]
+        else:
+            out[j:j + 2] = [[R[0], out[j][1], R[2]]]
+
+
+def _slv_robust(v, b, deg):
+    """Многочлен b(v) с отсевом: сначала по доле SLV_FIT_TRIM лучших строк (LTS), потом — все ближе SLV_FIT_TOL (и 3σ)."""
+    deg = min(deg, max(0, len(v) // 40))
+    c = np.polyfit(v, b, deg)
+    keep = np.ones(len(v), bool)
+    for _ in range(8):
+        res = np.abs(b - np.polyval(c, v))
+        keep = res <= np.quantile(res, SLV_FIT_TRIM)
+        c = np.polyfit(v[keep], b[keep], deg)
+    for _ in range(4):
+        res = np.abs(b - np.polyval(c, v))
+        keep = res < max(SLV_FIT_TOL, 3.0 * (res[keep].std() + 1e-6))
+        c = np.polyfit(v[keep], b[keep], deg)
+    return c, keep
+
+
+def _slv_fit_side(a, reg):
+    """Один рукав (развёртка — как у левого: u вдоль руки, кольцо — строка v). -> (новый цвет, отчёт)."""
+    S = a.shape[0]
+    pal = _slv_palette(a, reg)
+    if len(pal) < 2:
+        return a, "один цвет — без изменений"
+    dist = np.stack([np.abs(a - p).max(-1) for p in pal], -1)
+    lab, dm = dist.argmin(-1), dist.min(-1)
+    for i in range(len(pal)):                            # смесь двух цветов (сглаженный край) — тоже «свой» цвет
+        for j in range(i + 1, len(pal)):
+            e = pal[j] - pal[i]
+            t = np.clip(((a - pal[i]) * e).sum(-1) / max((e * e).sum(), 1e-6), 0, 1)
+            dm = np.minimum(dm, np.abs(a - (pal[i] + t[..., None] * e)).max(-1))
+    ok = reg & (dm < SLV_FIT_MIX)
+    rows = np.nonzero(reg.any(1))[0]
+    data, seqs = {}, {}
+    for r in rows:                                       # строки с чужим цветом (нашивка) — не в замер
+        cols = np.nonzero(reg[r])[0]
+        x0, x1 = cols.min(), cols.max() + 1
+        if ok[r, x0:x1].all():
+            rr = _slv_runs(lab[r, x0:x1])
+            data[r] = (x0, rr)
+            key = tuple(q[0] for q in rr)
+            seqs[key] = seqs.get(key, 0) + 1
+    if not data:
+        return a, "нет строк без чужих цветов"
+    pat = max(seqs, key=lambda k: (len(k), seqs[k]) if seqs[k] > 0.15 * len(data) else (0, 0))
+    nb = len(pat) - 1
+    obs = [([], []) for _ in range(nb)]
+    for r, (x0, rr) in data.items():                     # весь рисунок или его начало (конец срезан проймой)
+        key = tuple(q[0] for q in rr)
+        if key == pat[:len(key)]:
+            for k in range(len(key) - 1):
+                obs[k][0].append(r)
+                obs[k][1].append(rr[k][2] + x0)
+    fits, rep = [], []
+    for k in range(nb):
+        v, b = np.array(obs[k][0], float), np.array(obs[k][1], float)
+        if len(v) < 20 or (k and fits[k - 1] is None):
+            fits.append(None)
+            continue
+        if k == 0:
+            c, keep = _slv_robust(v / S, b, SLV_FIT_DEG)
+            f = (lambda c: lambda t: np.polyval(c, t))(c)
+        else:                                            # ширина полосы (промежутка) по кольцу — гладкая
+            prev = fits[k - 1][0]
+            c, keep = _slv_robust(v / S, b - prev(v / S), 2)
+            f = (lambda c, prev: lambda t: prev(t) + np.polyval(c, t))(c, prev)
+        fits.append((f, v.min() - 3, v.max() + 3))
+        rep.append(f"край {k}: {int((~keep).sum())} из {len(v)} строк — выбросы, до {np.abs(b - f(v / S)).max():.0f} px")
+    out, n = a.copy(), 0
+    for r in rows:
+        bs = [(k, float(f[0]((r + 0.5) / S))) for k, f in enumerate(fits) if f is not None and f[1] <= r <= f[2]]
+        if not bs:
+            continue
+        cols = np.nonzero(reg[r])[0]
+        x = cols + 0.5
+        sel = ok[r, cols] & (np.min([np.abs(x - bv) for _, bv in bs], 0) < SLV_FIT_NEAR)
+        for i in np.nonzero(sel)[0]:
+            seg, frac = 0, None
+            for k, bv in bs:
+                if x[i] - 0.5 >= bv:
+                    seg = k + 1
+                elif x[i] + 0.5 > bv:
+                    frac = (k, bv - (x[i] - 0.5))        # доля текселя до края — смесь цветов
+            col = pal[pat[seg]] if frac is None else frac[1] * pal[pat[frac[0]]] + (1 - frac[1]) * pal[pat[frac[0] + 1]]
+            if np.abs(col - a[r, cols[i]]).max() > 3:
+                out[r, cols[i]] = col
+                n += 1
+    return out, (f"цвета {np.round(pal).astype(int).tolist()}, рисунок {pat}; " + "; ".join(rep) + f"; перекрашено {n}")
+
+
+def sleeve_stripes_fit(png, mesh):
+    """Профиль sleeve_stripes = "fit": края полос рукава — гладкие кривые по кольцу. Рукав развёртки Edge (SLV_V, до шва
+    проймы armhole_u) — строки v (кольцо вокруг руки), полосы — отрезки цвета вдоль u. В каждой строке — отрезки основных
+    цветов (обрывки короче SLV_FIT_MIN_RUN — к соседу), рисунок — самый частый их порядок; край k по строкам — многочлен с
+    отсевом выбросов (обрывки у конца карты рукава, ступеньки в реглане), следующий край — предыдущий плюс гладкая
+    ширина. Перекраска — только у кривых (SLV_FIT_NEAR) и только «своих» цветов (нашивки и прочее — как есть).
+    -> отчёт по рукавам."""
+    from PIL import Image
+    a = np.asarray(Image.open(png).convert("RGB")).astype(np.float64)
+    S = a.shape[0]
+    tid, bar = kit3d.raster_uv(mesh, S)
+    occ = tid >= 0
+    ys, xs = np.nonzero(occ)
+    X = np.zeros((S, S))
+    X[ys, xs] = (bar[ys, xs] * mesh["pos"][mesh["tri"][tid[ys, xs]]][:, :, 0]).sum(1)
+    vv = (np.arange(S) + 0.5) / S
+    band = (vv[:, None] >= SLV_V[0]) & (vv[:, None] <= SLV_V[1])
+    inner = vv[None, :] < armhole_u(vv)[:, None] + 0.5 / S   # столбец (как у левого рукава) — до шва проймы
+    out, rep = a.copy(), []
+    for side in (0, 1):
+        A = a if side == 0 else a[:, ::-1]
+        side_m = (occ & (X < 0)) if side == 0 else (occ & (X > 0))[:, ::-1]
+        reg = band & inner & side_m
+        res, r_ = _slv_fit_side(A, reg)
+        if side == 0:
+            out[reg] = res[reg]
+        else:
+            out[:, ::-1][reg] = res[reg]
+        rep.append(("левый: " if side == 0 else "правый: ") + r_)
+    Image.fromarray(np.clip(np.round(out), 0, 255).astype(np.uint8)).save(png)
+    return rep
+
+
+PIPING_FIT_KITS = None             # piping_fit таблицей по форме (use_kit)
+PIPING_FIT = None                  # профиль piping_fit (23.10, агент review-d, CBJ, WSH): [u0, v0, u1, v1] — окно развёртки
+#                                    (как у левого рукава; правый — зеркально) или { форма = [...] }: кант вдоль руки у шва
+#                                    проймы — гладкими кривыми (piping_fit). Нет — как было
+PIPING_NEAR = 12                   # текселей от гладкого края: перекраска только рядом с ним
+PIPING_RAMP = 12                   # текселей у концов окна по u: край — от своего (как перенёсся) к гладкому, без ступеньки
+PIPING_MIN_ROWS = 20               # столбцов с рисунком меньше — окно не трогается
+PIPING_MIX = False                 # профиль piping_mix = true (23.10, агент review-e, WSH): смесь у края канта — не «чужое».
+#                                    Фон над / под кантом в столбце — ближайший тексель, но если он смесь (не цвет палитры),
+#                                    а следующий — чистый цвет другой метки, фон — этот цвет (WSH дом: у подмышки тексель
+#                                    смеси канта и панели, ближе к красному, — фон «красный», край канта рисовался красной
+#                                    чёрточкой 1–4 текселя на белой панели, на обеих руках); пограничный тексель канта —
+#                                    «чужой» (как есть), только если он и не смесь фона с цветом канта (светлые зубцы в
+#                                    тексель на краю канта). Нет — как было
+
+
+
+
+def _piping_bg(rows, c, lab, pure):
+    """piping_mix: метка фона столбца c — ближайшая из rows (от канта наружу); смесь, за которой чистый тексель другой
+    метки, — не фон."""
+    r0 = rows[0]
+    if not pure[r0, c] and len(rows) > 1 and abs(int(rows[1]) - int(r0)) == 1 and pure[rows[1], c] and \
+            lab[rows[1], c] != lab[r0, c]:
+        return lab[rows[1], c]
+    return lab[r0, c]
+
+
+def _piping_mix(cur, bg, pc):
+    """piping_mix: цвет cur — смесь фона bg и цвета канта pc (как «смесь с кантом» снаружи канта)."""
+    e = pc - bg
+    tt = float(np.clip(((cur - bg) * e).sum() / max((e * e).sum(), 1e-6), 0, 1))
+    return tt > 0.15 and np.abs(cur - (bg + tt * e)).max() < SLV_FIT_MIX
+
+
+def _piping_side(a, reg):
+    """Один рукав (развёртка — как у левого). В столбце u (поперёк канта, по v) — отрезки основных цветов; кант — самый
+    частый порядок внутренних отрезков (не первого и не последнего), фон над ним и под ним — соседние с кантом отрезки
+    этого столбца (у WSH сверху красное, снизу — белая панель на рукаве и красное на туловище). Края канта — многочлен
+    по u с отсевом, у концов окна — переход к своему краю. Перекраска у кривых: внутри канта — его цвета, снаружи —
+    только цвет канта и его смесь (в соседний фон); прочее — как есть. -> (новый цвет, отчёт)."""
+    S = a.shape[0]
+    pal = _slv_palette(a, reg)
+    if len(pal) < 2:
+        return a, "один цвет — без изменений"
+    dist = np.stack([np.abs(a - p).max(-1) for p in pal], -1)
+    lab, dm = dist.argmin(-1), dist.min(-1)
+    for i in range(len(pal)):                            # смесь двух цветов (сглаженный край) — тоже «свой» цвет
+        for j in range(i + 1, len(pal)):
+            e = pal[j] - pal[i]
+            t = np.clip(((a - pal[i]) * e).sum(-1) / max((e * e).sum(), 1e-6), 0, 1)
+            dm = np.minimum(dm, np.abs(a - (pal[i] + t[..., None] * e)).max(-1))
+    ok = reg & (dm < SLV_FIT_MIX)
+    pure = dist.min(-1) < SLV_FIT_MIX                    # цвет палитры, не смесь (piping_mix)
+    cols = np.nonzero(reg.any(0))[0]                     # столбец u — поперёк канта (по v)
+    data, seqs = {}, {}
+    for c in cols:
+        rows = np.nonzero(reg[:, c])[0]
+        y0, y1 = rows.min(), rows.max() + 1
+        if not ok[y0:y1, c].all():
+            continue                                     # чужой цвет (нашивка) — не в замер
+        rr = _slv_runs(lab[y0:y1, c])
+        if len(rr) < 3:
+            continue
+        data[c] = (y0, rr)
+        key = tuple(q[0] for q in rr[1:-1])
+        seqs[key] = seqs.get(key, 0) + 1
+    if not seqs:
+        return a, "канта нет"
+    pat = max(seqs, key=seqs.get)
+    L = len(pat)
+    use = {}                                             # столбец → (y0, отрезки, индекс первого отрезка канта)
+    for c, (y0, rr) in data.items():
+        labs = [q[0] for q in rr]
+        hits = [i for i in range(1, len(rr) - L) if tuple(labs[i:i + L]) == pat]
+        if len(hits) == 1:
+            use[c] = (y0, rr, hits[0])
+    if len(use) < PIPING_MIN_ROWS:
+        return a, f"кант {pat}: столбцов {len(use)} — мало"
+    cs = np.array(sorted(use), float)
+    nb = L + 1                                           # края: начало канта, стыки его цветов, конец
+    obs = np.array([[use[c][0] + use[c][1][use[c][2] + k - 1][2] for k in range(nb)] for c in sorted(use)], float)
+    fits, rep = [], []
+    for k in range(nb):
+        if k == 0:
+            cf, keep = _slv_robust(cs / S, obs[:, 0], SLV_FIT_DEG)
+            f = (lambda cf: lambda t: np.polyval(cf, t))(cf)
+        else:
+            prev = fits[k - 1]
+            cf, keep = _slv_robust(cs / S, obs[:, k] - prev(cs / S), 2)
+            f = (lambda cf, prev: lambda t: prev(t) + np.polyval(cf, t))(cf, prev)
+        fits.append(f)
+        rep.append(f"край {k}: выбросов {int((~keep).sum())} из {len(cs)}, до {np.abs(obs[:, k] - f(cs / S)).max():.0f} px")
+    pipe = np.zeros(len(pal), bool)
+    pipe[list(pat)] = True
+    c0, c1 = cs.min(), cs.max()
+    out, n = a.copy(), 0
+    for c in cols:
+        if c < c0 or c > c1:
+            continue
+        own = use.get(c)
+        w = float(np.clip(min(c - c0, c1 - c) / max(PIPING_RAMP, 1), 0, 1)) if own is not None else 1.0
+        bs = [float(f((c + 0.5) / S)) for f in fits]
+        if own is not None:                              # у концов окна — к своему краю
+            y0, rr, i0 = own
+            mine = [y0 + rr[i0 + k - 1][2] for k in range(nb)]
+            bs = [w * b + (1 - w) * m_ for b, m_ in zip(bs, mine)]
+        rows_ = np.nonzero(reg[:, c])[0]
+        lr = lab[rows_, c]                               # фон по обе стороны канта — ближайший к нему не крайний цвет
+        up = rows_[ok[rows_, c] & (lr != pat[0]) & (rows_ + 0.5 < bs[0] - 1) & (rows_ + 0.5 > bs[0] - PIPING_NEAR - 4)]
+        dn = rows_[ok[rows_, c] & (lr != pat[-1]) & (rows_ + 0.5 > bs[-1] + 1) & (rows_ + 0.5 < bs[-1] + PIPING_NEAR + 4)]
+        if not len(up) or not len(dn):
+            continue
+        if PIPING_MIX:                                   # тексель смеси у края — не фон (WSH дом, 23.10)
+            top, bot = pal[_piping_bg(up[::-1], c, lab, pure)], pal[_piping_bg(dn, c, lab, pure)]
+        else:
+            top, bot = pal[lab[up.max(), c]], pal[lab[dn.min(), c]]
+        seg_col = [top] + [pal[p] for p in pat] + [bot]
+        rows = np.nonzero(reg[:, c])[0]
+        y = rows + 0.5
+        near = ok[rows, c] & (np.min([np.abs(y - b) for b in bs], 0) < PIPING_NEAR)
+        for i in np.nonzero(near)[0]:
+            r = rows[i]
+            seg, frac = 0, None
+            for k, b in enumerate(bs):
+                if y[i] - 0.5 >= b:
+                    seg = k + 1
+                elif y[i] + 0.5 > b:
+                    frac = (k, b - (y[i] - 0.5))
+            inside = 0 < seg <= L or frac is not None
+            if not inside:                               # снаружи канта — только его цвет и смесь с ним
+                bg = seg_col[seg]
+                cur = a[r, c]
+                stray = pipe[lab[r, c]]
+                if not stray:
+                    for p in pat:
+                        e = pal[p] - bg
+                        tt = float(np.clip(((cur - bg) * e).sum() / max((e * e).sum(), 1e-6), 0, 1))
+                        if tt > 0.15 and np.abs(cur - (bg + tt * e)).max() < SLV_FIT_MIX:
+                            stray = True
+                            break
+                if not stray:
+                    continue
+                col = bg
+            else:
+                col = seg_col[seg] if frac is None else frac[1] * seg_col[frac[0]] + (1 - frac[1]) * seg_col[frac[0] + 1]
+                if frac is not None and frac[0] in (0, L):  # пограничный тексель с фоном: фон чужой — как есть
+                    bgk = 0 if frac[0] == 0 else L + 1
+                    if not pipe[lab[r, c]] and np.abs(a[r, c] - seg_col[bgk]).max() > SLV_FIT_MIX and not (
+                            PIPING_MIX and _piping_mix(a[r, c], seg_col[bgk], seg_col[1] if bgk == 0 else seg_col[L])):
+                        continue
+            if np.abs(col - a[r, c]).max() > 3:
+                out[r, c] = col
+                n += 1
+    return out, f"цвета {np.round(pal).astype(int).tolist()}, кант {pat}; " + "; ".join(rep) + f"; перекрашено {n}"
+
+
+def piping_fit(png, mesh, box):
+    """Профиль piping_fit: кант вдоль руки у шва проймы (CBJ, WSH) — гладкими кривыми. На развёртке Edge кант там идёт
+    вдоль u (по руке), поперёк шва проймы, а перенос ближайшей точкой (реглан Edge, втачной рукав NHL 24) и armhole_clean
+    (цвет у шва — со строки дальше от шва) дают его краю ступеньки по 3–6 текселей — на свитере «лесенка» вдоль переда
+    плеча. В окне box (u0, v0, u1, v1 — как у левого рукава, правый — зеркально) в каждом столбце u — отрезки основных
+    цветов по v: кант — внутренние (самый частый их порядок), фон над и под ним — свой у столбца (панель рукава, ткань).
+    Края — многочлен по u с отсевом (как sleeve_stripes_fit), у концов окна — переход к своему краю (PIPING_RAMP).
+    Перекраска — только у кривых и только «своих» цветов. -> отчёт по рукавам."""
+    from PIL import Image
+    a = np.asarray(Image.open(png).convert("RGB")).astype(np.float64)
+    S = a.shape[0]
+    tid, bar = kit3d.raster_uv(mesh, S)
+    occ = tid >= 0
+    ys, xs = np.nonzero(occ)
+    X = np.zeros((S, S))
+    X[ys, xs] = (bar[ys, xs] * mesh["pos"][mesh["tri"][tid[ys, xs]]][:, :, 0]).sum(1)
+    cc = (np.arange(S) + 0.5) / S
+    u0, v0, u1, v1 = (float(x) for x in box)
+    win = ((cc[:, None] >= v0) & (cc[:, None] <= v1)) & ((cc[None, :] >= u0) & (cc[None, :] <= u1))
+    out, rep = a.copy(), []
+    for side in (0, 1):
+        A = a if side == 0 else a[:, ::-1]
+        side_m = (occ & (X < 0)) if side == 0 else (occ & (X > 0))[:, ::-1]
+        reg = win & side_m
+        res, r_ = _piping_side(A, reg)
+        if side == 0:
+            out[reg] = res[reg]
+        else:
+            out[:, ::-1][reg] = res[reg]
+        rep.append(("левый: " if side == 0 else "правый: ") + r_)
+    Image.fromarray(np.clip(np.round(out), 0, 255).astype(np.uint8)).save(png)
+    return rep
+
+
+CHEST_BANDS = None                 # профиль chest_bands (23.10, агент review-d, NYR выезд): [x0, x1, y0, y1] (м: |x| и высота)
+#                                    или { форма = [...] } — полосы через грудь у ворота прямыми, по источнику (chest_bands_fit)
+CHEST_BANDS_KITS = None
+CHEST_SRC_X = (0.11, 0.22)         # м по |x|: замер полос источника — прямой участок груди (ближе к середине — лацканы)
+CHEST_BIN = 0.001                  # м: шаг по высоте при разборе столбца источника на отрезки
+CHEST_MIN_RUN = 0.003              # м: отрезок цвета короче — к соседу (сглаженный край, строчка)
+CHEST_NEAR = 0.025                 # м от края полос: перекраска только ближе (у NYR «глазок» — до 2,1 см над полосами)
+CHEST_LAPEL_D = 0.037              # м от сгиба ворота: ближе — лацкан и кромка (NYR: красный лацкан до 3,6 см), не трогаются
+CHEST_LAPEL_D_DEFAULT = CHEST_LAPEL_D   # профиль chest_bands_lapel: м (CBJ 0,034 — ворот без лацканов, до обода) или "ring"
+#                                    — до края лацкана (шов обода, ring_field) + CHEST_RING_PAD: NYR, полосы до самого лацкана
+CHEST_RING_PAD = -0.5               # текселя за краем лацкана (chest_bands_lapel = "ring"): −0,5 — переход полосы и лацкана
+#                                    совпадает с мягким краем LapelPaint (иначе между ними — светлый шов в тексель: смесь с
+#                                    прежним переносом)
+CHEST_NZ = 0.1                     # нормаль вперёд больше — перед (и верх плеча у ворота: «глазок» NYR — 0,5; источник — тоже)
+CHEST_SPECK_PX = 12                # текселей 1024²: точка не больше — цветом вокруг (концы лацканов NYR: 9 текселей смеси у правого;
+#                                    люверсы — от 27, не трогаются)
+CHEST_SPECK_RING = 0.9             # доля кольца вокруг точки одного цвета — тогда точка им
+CHEST_SPECK_TOL = 25               # «тот же цвет» фона — ближе (max по каналам)
+CHEST_SPECK_DY = 0.02              # м ниже окна — тоже (под концами лацканов)
+CHEST_SPECK_D = 0.012              # м от края ворота: ближе — кромка, не трогается
+CHEST_END_MIN = 0.006              # м: крайний отрезок столбца источника короче — не фон (кромка ворота у верха окна)
+
+
+def chest_bands_source(code, kit, box):
+    """Полосы через грудь у источника (chest_bands): на сетке NHL 24 спереди (наружная оболочка, нормаль вперёд), в
+    столбцах |x| из CHEST_SRC_X шагом 1 см — отрезки цвета по высоте (окно box по высоте), самый частый порядок; края —
+    прямые по |x| (наименьшие квадраты). Перенос туловища — по высоте (TORSO_DELTA у формы без кокетки нет): высоты
+    источника годятся и для Edge. -> {"colors": [[R, G, B]…] снизу вверх (фон, полосы, фон), "fits": [(k, b)…] — край
+    i: y = k·θ + b, θ — угол от середины переда, град} или None."""
+    from scipy.sparse.csgraph import connected_components
+    n24 = kit3d.load_nhl24()
+    src = Hy.clean_color(code, kit)
+    tid, bar = kit3d.raster_uv(n24, src.shape[0])
+    ys, xs = np.nonzero(tid >= 0)
+    w_ = Hy.Welded(n24)
+    _, comp = connected_components(w_.A, directed=False)
+    shell = comp[w_.g[n24["tri"][tid[ys, xs], 0]]] == np.bincount(comp).argmax()
+    ys, xs = ys[shell], xs[shell]
+    T = n24["tri"][tid[ys, xs]]
+    b = bar[ys, xs]
+    P = (b[:, :, None] * n24["pos"][T]).sum(1)
+    P[:, 0] += 0.0035                                    # середина горловины NHL 24 — на оси (CoordMap.x_fix)
+    N = kit3d._unit((b[:, :, None] * n24["nrm"][T]).sum(1))
+    c = src[ys, xs, :3].astype(np.float64)
+    bnd = w_.boundary()                                  # край ворота NHL 24 (как CoordMap): ближе CHEST_LAPEL_D — кромка
+    main = np.bincount(comp).argmax()                    # и лацканы, не полосы
+    ring_poly = Hy.ring_polyline(w_, w_.neck(bnd[comp[bnd] == main]))
+    Dn = Hy.ring_dist(P, ring_poly)
+    x0, x1, y0, y1 = (float(v) for v in box)
+    sel = (P[:, 2] > 0) & (N[:, 2] > CHEST_NZ) & (P[:, 1] >= y0) & (P[:, 1] <= y1) & \
+        (Dn > (CHEST_LAPEL_D if not isinstance(CHEST_LAPEL_D, str) else CHEST_LAPEL_D_DEFAULT))
+    xa = np.abs(P[:, 0])
+    pal = _slv_palette(c, sel & (xa >= CHEST_SRC_X[0]) & (xa <= CHEST_SRC_X[1]))
+    if len(pal) < 2:
+        return None
+    lab = np.stack([np.abs(c - p).max(-1) for p in pal], -1).argmin(-1)
+    nmin = max(1, int(round(CHEST_MIN_RUN / CHEST_BIN)))
+    th = np.degrees(np.arctan2(np.abs(P[:, 0] - 0.0035), P[:, 2]))   # угол θ — как у переноса туловища (без сдвига x)
+    tsel = sel & (xa >= x0) & (xa <= x1)
+    t0, t1 = np.percentile(th[tsel], 1), np.percentile(th[tsel], 99)
+    cols, seqs = [], {}
+    for xc in np.arange(t0, t1 + 1e-9, 2.0):
+        for sg in (-1.0, 1.0):
+            m = sel & (np.abs(th - xc) < 1.0) & (np.sign(P[:, 0]) == sg)
+            if m.sum() < 30:
+                continue
+            yb = np.floor((P[m, 1] - y0) / CHEST_BIN).astype(int)
+            n = int(round((y1 - y0) / CHEST_BIN)) + 1
+            col = np.full(n, -1)
+            for k in np.unique(yb):
+                if 0 <= k < n:
+                    col[k] = np.bincount(lab[m][yb == k]).argmax()
+            for i in range(1, n):
+                if col[i] < 0:
+                    col[i] = col[i - 1]
+            if col[0] < 0:
+                continue
+            rr = _slv_runs(col)
+            while True:
+                short = [j for j, r in enumerate(rr) if r[2] - r[1] < nmin and 0 < j < len(rr) - 1]
+                if not short:
+                    break
+                j = short[0]
+                if rr[j - 1][0] == rr[j + 1][0]:
+                    rr[j - 1:j + 2] = [[rr[j - 1][0], rr[j - 1][1], rr[j + 1][2]]]
+                else:
+                    rr[j - 1:j + 1] = [[rr[j - 1][0], rr[j - 1][1], rr[j][2]]]
+            if len(rr) > 2 and (rr[-1][2] - rr[-1][1]) * CHEST_BIN < CHEST_END_MIN:
+                rr = rr[:-1]                             # у верха окна — край ворота (кромка): не полоса
+            if len(rr) > 2 and (rr[0][2] - rr[0][1]) * CHEST_BIN < CHEST_END_MIN:
+                rr = rr[1:]
+            key = tuple(q[0] for q in rr)
+            cols.append((xc, key, [y0 + q[2] * CHEST_BIN for q in rr[:-1]]))
+            seqs[key] = seqs.get(key, 0) + 1
+    if not seqs:
+        return None
+    pat = max(seqs, key=seqs.get)
+    xe = np.array([q[0] for q in cols if q[1] == pat])
+    he = np.array([q[2] for q in cols if q[1] == pat])
+    if len(xe) < 4 or len(pat) < 3:
+        return None
+    tq = np.unique(xe)                                   # края по углу: медиана сторон, сглажено медианой по 3
+    hq = np.array([np.median(he[xe == t], 0) for t in tq])
+    if len(tq) >= 3:
+        hq = np.stack([np.median(np.stack([np.r_[hq[:1, k], hq[:-1, k]], hq[:, k], np.r_[hq[1:, k], hq[-1:, k]]]), 0)
+                       for k in range(hq.shape[1])], 1)
+    return {"colors": [[round(float(v), 1) for v in pal[p]] for p in pat], "theta": tq.tolist(), "h": hq.tolist(),
+            "n": int(len(xe))}
+
+
+def chest_bands_fit(png, mesh, box, code, kit):
+    """Профиль chest_bands (23.10, агент review-d, NYR выезд): полосы через грудь у ворота — прямыми, по источнику. У NHL 27
+    NYR выезда под синей кокеткой — белая, красная, белая и синяя полосы, прямые по высоте до лацкана; переносом они у ворота
+    гнулись петлями (на наклонном верхе груди и плеча — смесь переноса туловища по высоте и проекции сверху): кусок верхних
+    белой и красной уходил вверх, в кокетку («глазок» на 1,68 м), у лацкана полосы опускались клином. Здесь края полос —
+    замер источника (chest_bands_source: прямые по |x|), в окне box ([|x| от, до, высота от, до], м; перед: z > 0, нормаль
+    вперёд > CHEST_NZ; дальше CHEST_LAPEL_D от сгиба ворота — лацкан, кромка и вставка не трогаются) тексели цветов полос и
+    фона ближе CHEST_NEAR к краям — по краям (у края — долей текселя). Цвета — свои, ближайшие к цветам источника; нашивки
+    (чужой цвет) не трогаются. -> отчёт."""
+    from PIL import Image
+    s_ = chest_bands_source(code, kit, box)
+    if s_ is None:
+        return ["полос у источника не нашлось — без изменений"]
+    a = np.asarray(Image.open(png).convert("RGB")).astype(np.float64)
+    G = relief_geometry(mesh, a.shape[0])
+    P, N, m, D, ts = G["P"], G["N"], G["m"], G["D"], G["TS"]
+    x0, x1, y0, y1 = (float(v) for v in box)
+    ax = np.abs(P[..., 0])
+    tx = np.maximum(ts, 1e-4)                            # у края окна у ворота (D) — переход в тексель, без ступенек
+    if CHEST_LAPEL_D == "ring":                         # до края лацкана (шов обода; у середины — LAPEL_CENTER_D)
+        R, _, _ = ring_field(G)
+        dlim = np.where(np.isfinite(R), R, LAPEL_CENTER_D) + CHEST_RING_PAD * tx
+    else:
+        dlim = CHEST_LAPEL_D
+    wD = np.clip((D - dlim) / tx + 0.5, 0, 1)
+    win = m & (P[..., 2] > 0) & (N[..., 2] > CHEST_NZ) & (ax >= x0) & (ax <= x1) & (P[..., 1] >= y0) & \
+        (P[..., 1] <= y1) & (wD > 0)
+    pal = _slv_palette(a, win)
+    if len(pal) < 2:
+        return ["один цвет — без изменений"]
+    dist = np.stack([np.abs(a - p).max(-1) for p in pal], -1)
+    lab, dm = dist.argmin(-1), dist.min(-1)
+    for i in range(len(pal)):                            # смесь двух цветов (сглаженный край) — тоже «свой» цвет
+        for j in range(i + 1, len(pal)):
+            e = pal[j] - pal[i]
+            t = np.clip(((a - pal[i]) * e).sum(-1) / max((e * e).sum(), 1e-6), 0, 1)
+            dm = np.minimum(dm, np.abs(a - (pal[i] + t[..., None] * e)).max(-1))
+    seq = [int(np.abs(pal - np.asarray(cs)).max(-1).argmin()) for cs in s_["colors"]]   # свои цвета полос
+    cols = pal[seq]
+    ys, xs = np.nonzero(win & (dm < SLV_FIT_MIX) & np.isin(lab, seq))
+    xx, yy = np.degrees(np.arctan2(ax[ys, xs], P[ys, xs, 2])), P[ys, xs, 1]   # угол θ, как у переноса туловища
+    tq, hq = np.asarray(s_["theta"]), np.asarray(s_["h"])
+    bs = np.stack([np.interp(xx, tq, hq[:, k]) for k in range(hq.shape[1])], 1)   # края снизу вверх в точке текселя
+    near = np.abs(yy[:, None] - bs).min(1) < CHEST_NEAR
+    ys, xs, yy, bs = ys[near], xs[near], yy[near], bs[near]
+    h = np.maximum(ts[ys, xs], 1e-4)
+    cov = np.clip((yy[:, None] - bs) / h[:, None] + 0.5, 0, 1)   # доля текселя выше края k
+    out_c = cols[0][None, :] * (1 - cov[:, :1])
+    nb = bs.shape[1]
+    for k in range(nb):
+        nxt = cov[:, k:k + 1] - (cov[:, k + 1:k + 2] if k + 1 < nb else 0)
+        out_c = out_c + cols[k + 1][None, :] * nxt
+    w_ = wD[ys, xs][:, None]
+    out_c = a[ys, xs] * (1 - w_) + out_c * w_
+    ch = np.abs(a[ys, xs] - out_c).max(-1) > 3
+    out = a.copy()
+    out[ys[ch], xs[ch]] = out_c[ch]
+    # точки цвета полос у концов лацканов и под ними (1–4 текселя: хвост прежнего переноса вне окна) — цветом вокруг
+    from scipy import ndimage as ndi
+    zs = m & (P[..., 2] > 0) & (N[..., 2] > CHEST_NZ) & (ax <= x1) & (P[..., 1] >= y0 - CHEST_SPECK_DY) & \
+        (P[..., 1] <= y1) & (D > CHEST_SPECK_D)
+    n_sp, st = 0, np.ones((3, 3), bool)
+    for col_ in np.unique(cols, axis=0):                 # фон-цвет: точки не его цвета, вокруг — почти только он
+        same = np.abs(out - col_).max(-1) < CHEST_SPECK_TOL
+        lb, n = ndi.label(zs & ~same, st)
+        if not n:
+            continue
+        size = np.bincount(lb.ravel(), minlength=n + 1)
+        small = size <= CHEST_SPECK_PX * (a.shape[0] / 1024.0) ** 2
+        small[0] = False
+        labc = np.where(small[lb], lb, 0)
+        ring_lab = ndi.grey_dilation(labc, footprint=st)
+        ring = (ring_lab > 0) & (labc == 0)
+        tot = np.bincount(ring_lab[ring], minlength=n + 1)
+        okr = np.bincount(ring_lab[ring & same & zs], minlength=n + 1)
+        good = small & (tot > 0) & (okr >= CHEST_SPECK_RING * tot)
+        sp = good[labc] & (labc > 0)
+        out[sp] = col_
+        n_sp += int(sp.sum())
+    Image.fromarray(np.clip(np.round(out), 0, 255).astype(np.uint8)).save(png)
+    edges = ", ".join(f"{np.interp(60.0, tq, hq[:, k]):.3f}" for k in range(hq.shape[1]))
+    return [f"полосы источника (снизу вверх) {s_['colors']}, θ {tq.min():.0f}…{tq.max():.0f}°, края на 60°: {edges} (столбцов {s_['n']}); "
+            f"свои цвета {np.round(cols).astype(int).tolist()}; перекрашено {int(ch.sum())}, точек {n_sp} текселей"]
 
 
 def armhole_dist(G):
@@ -1003,6 +1645,31 @@ class SleeveMap:
         return dict(s=s_, C=C, A=A, e1=e1, e2=e2, tab=tab)
 
     @staticmethod
+    def s24_slope(e, sm):
+        """Наклон s NHL 24 по s Edge у конца карты рукава (для продолжения за конец, SLEEVE_TOP24)."""
+        k_ = e["s"] >= e["s"][-1] - SLV_EXTRAP_W
+        slope = float(np.polyfit(e["s"][k_], sm[k_], 1)[0]) if k_.sum() >= 3 else 0.0
+        if slope < 0.3:                                  # у конца карта сглажена и «упирается» — средний наклон
+            slope = float((sm[-1] - sm[0]) / max(e["s"][-1] - e["s"][0], 1e-6))
+        return slope
+
+    def s24_of(self, ss, e, sm):
+        """s Edge (рисунок) → s NHL 24; с SLEEVE_TOP24 за концом карты рукава — продолжение по наклону, иначе — упор."""
+        out = np.interp(ss, e["s"], sm)
+        if SLEEVE_TOP24 is not None:
+            over = ss > e["s"][-1]
+            out = np.where(over, sm[-1] + (ss - e["s"][-1]) * self.s24_slope(e, sm), out)
+        return out
+
+    def edge_of(self, s24, side=-1):
+        """s NHL 24 → s Edge (обратное s24_of, с продолжением за конец карты рукава)."""
+        d = self.sides[side]
+        e, sm = d["e"], d["s24"]
+        if s24 <= sm[-1]:
+            return float(np.interp(s24, sm, e["s"]))
+        return float(e["s"][-1] + (s24 - sm[-1]) / self.s24_slope(e, sm))
+
+    @staticmethod
     def src_s(s):
         """Сжатие рисунка к манжете: s Edge → s, откуда брать рисунок (до колена knee = k·d_top — s/k, дальше —
         линейно до конца рукава SLV_U[1], где без сдвига)."""
@@ -1066,7 +1733,7 @@ class SleeveMap:
         for sgn, d in self.sides.items():
             sE = tu if sgn < 0 else 1.0 - tu
             fill = SLV_FILL_S24 is not None and SLV_COMPRESS is not None
-            ext = SLV_FILL_EXT if fill else 0.0
+            ext = (SLV_FILL_EXT_TOP or SLV_FILL_EXT) if fill else 0.0
             k = (sE >= SLV_U[0]) & (sE <= SLV_U[1] + ext) & (tv > SLV_V[0]) & (tv < SLV_V[1]) & (P[:, 0] * sgn > SLV_X)
             if not k.any():
                 continue
@@ -1078,7 +1745,7 @@ class SleeveMap:
             e2 = np.stack([np.interp(s, e["s"], e["e2"][:, i]) for i in range(3)], -1)
             q = P[k] - C
             ph = np.degrees(np.arctan2((q * e2).sum(1), (q * e1).sum(1)))
-            s24 = np.interp(ss, e["s"], d["s24"])
+            s24 = self.s24_of(ss, e, d["s24"])
             if SLV_FILL_S24 is not None and SLV_COMPRESS is not None:   # над полосами места нет (BOS): выше колена — ткань
                 s24 = np.where(s > SLV_COMPRESS[0] * SLV_COMPRESS[1], SLV_FILL_S24, s24)   # над верхней границей
             # строка NHL 24: билинейно по столбцу (s) и углу
@@ -1208,6 +1875,22 @@ BRAND_BASE_ROW = 2.7
 BRAND_PAD = 2
 BRAND_SS = 16
 BRAND_SM_UP = 4                    # блеск букв выше ткани (у EA: 20 при ткани 16)
+BRAND_Y = None                     # профиль brand_y (м, 23.10, агент review-d, CBJ): центр надписи сзади на этой высоте —
+#                                    у CBJ на 1,663 м (REEBOK_BACK_UV) — белая полоса под кокеткой (1,649–1,669), надпись
+#                                    на ней; у NHL 27 логотип выше полос, в кокетке (~1,682). Нет — REEBOK_BACK_UV
+# высота середины спины Edge → v развёртки (замер по сетке слота, x = 0, 23.10)
+BRAND_Y_V = ((1.6169, 0.3911), (1.6381, 0.4028), (1.6571, 0.4146), (1.6632, 0.4185), (1.6754, 0.4263),
+             (1.6808, 0.4302), (1.6845, 0.4341), (1.6882, 0.4380), (1.6955, 0.4438), (1.7001, 0.4478))
+
+
+def brand_uv():
+    """Центр надписи сзади (uv): REEBOK_BACK_UV или (профиль brand_y) — на высоте brand_y."""
+    if BRAND_Y is None:
+        return REEBOK_BACK_UV
+    ys_, vs_ = zip(*BRAND_Y_V)
+    return [REEBOK_BACK_UV[0], round(float(np.interp(BRAND_Y, ys_, vs_)), 4)]
+
+
 REEBOK_BACK_UV = [0.5, 0.4183]  # 1,663 м — между 0,4205 (1,666: «чуть-чуть пониже») и 0,416 (1,66: «слишком
 #                                    низко»), пользователь, 19.10; у EA — 0,4085 (1,648)
 #                                        # у EA — 0,4085 (на 2,6 см ниже места логотипа adidas NHL 24, 1,674 м)
@@ -1254,20 +1937,32 @@ def use_club(code):
     kitsrc.use(prof.get("source", "nhl24"), prof.get("source_kits"))   # source_kits: метка → папка источника
     kit_hybrid.MERGE_PARTS = tuple(prof.get("merge_parts", ()))         # части одной нашивки (герб TBL) — одной
     BASE_NM_DECALS = prof.get("base_normal_decals")
+    global BN_KEEP_LACE
+    BN_KEEP_LACE = bool(prof.get("base_normal_keep_lace", False))   # шнуровка — рельеф источника (NYI, 23.10)
     YOKE = {(code, k): {"from": v} for k, v in prof.get("yoke", {}).items()}
     YOKE_KIND = prof.get("yoke_color", "green")
     BODY_KIND = prof.get("body_color", "light")
     COLLAR = prof.get("collar", "lace")
     COLLAR_TRIM = prof.get("collar_trim", "auto")
+    global COLLAR_TRIM_KITS                              # и таблицей по форме (22.10, агент yokes, STL выезд: кромка цвета
+    COLLAR_TRIM_KITS = dict(COLLAR_TRIM) if isinstance(COLLAR_TRIM, dict) else None   # кокетки — «half», дома — auto)
+    if COLLAR_TRIM_KITS:
+        COLLAR_TRIM = "auto"
     TRIM_MEASURE = prof.get("trim_measure", "percentile")
+    global SLV_BLEND
+    SLV_BLEND = float(prof.get("sleeve_blend", SLV_BLEND_DEFAULT))   # переход карты рукава к ближайшей точке (WSH)
+    global TOPP_NY
+    TOPP_NY = tuple(map(float, prof.get("top_proj", TOPP_NY_DEFAULT)))   # проекция сверху — с какого наклона (NYR выезд)
+    global TRIM_STEP_FROM
+    TRIM_STEP_FROM = float(prof.get("trim_step_from", 0.0))   # вставка цвета кромки у середины — не кромка (NYI дом)
     global TRIM_CLEAR_MODE
     TRIM_CLEAR_MODE = prof.get("trim_clear")             # "angle": зачистка за кромкой — цветом источника по углу (CHI)
     if TRIM_CLEAR_MODE not in (None, "angle"):
         sys.exit(f"[{code}] trim_clear = {TRIM_CLEAR_MODE!r} — только \"angle\"")
     global COLLAR_BAND
     COLLAR_BAND = dict(prof.get("collar_band", {}))       # двухцветный ворот: форма → "full" (UTA выезд) | "back" (TOR)
-    if any(v not in ("full", "back") for v in COLLAR_BAND.values()):
-        sys.exit(f"[{code}] collar_band = {COLLAR_BAND!r} — {{ форма = \"full\" | \"back\" }}")
+    if any(v not in ("full", "back", "frame") for v in COLLAR_BAND.values()):
+        sys.exit(f"[{code}] collar_band = {COLLAR_BAND!r} — {{ форма = \"full\" | \"back\" | \"frame\" }}")
     kit_hybrid.MERGE_NEAR = float(prof.get("merge_near", 0.0))   # буквы надписи-герба — одной нашивкой (UTA выезд)
     FONT_NAME_SCALE = prof.get("font_name_scale", 1.0)   # число или [ширина, высота] (LAK 22.10: мельче и плотнее)
     FONT_NAME_SCALE = float(FONT_NAME_SCALE) if np.isscalar(FONT_NAME_SCALE) else tuple(map(float, FONT_NAME_SCALE))
@@ -1278,8 +1973,10 @@ def use_club(code):
     FONT_CAPTAIN_X = float(prof.get("font_captain_x", 1.0))
     global FONT_NAME_ANCHOR, NAME_ZONE_SCALE, NAME_ZONE_LIFT, FONT_NAME_FIT
     FONT_NAME_FIT = prof.get("font_name_fit")
-    if FONT_NAME_FIT not in (None, "auto"):
-        sys.exit(f"[{code}] font_name_fit = {FONT_NAME_FIT!r} — только \"auto\"")
+    global FONT_PLATE
+    FONT_PLATE = bool(prof.get("font_plate", False))     # фамилия на подложке (PHI): атлас букв — как у источника
+    if FONT_NAME_FIT not in (None, "auto", "measured"):  # measured — auto и проверка по готовому атласу (SJS 22.10)
+        sys.exit(f"[{code}] font_name_fit = {FONT_NAME_FIT!r} — только \"auto\" или \"measured\"")
     if FONT_NAME_FIT and ("font_name_scale" in prof or "name_zone_scale" in prof):
         sys.exit(f"[{code}] font_name_fit = \"auto\" считает font_name_scale и name_zone_scale сам — уберите их из профиля")
     FONT_NAME_ANCHOR = prof.get("font_name_anchor", "center")
@@ -1296,20 +1993,91 @@ def use_club(code):
     YOKE_SIDE_BLEND = prof.get("yoke_side_blend")
     global BRAND_WIN
     BRAND_WIN = float(prof["brand_win"]) if "brand_win" in prof else None   # окно цвета логотипа сзади (BUF выезд)
+    global SLEEVE_TOP24, SLEEVE_TOP24_KITS
+    _t = prof.get("sleeve_top24")
+    SLEEVE_TOP24_KITS = dict(_t) if isinstance(_t, dict) else None
+    SLEEVE_TOP24 = None if (_t is None or SLEEVE_TOP24_KITS is not None) else float(_t)
     global SLEEVE_FILL
+    global SLEEVE_STRIPES
+    SLEEVE_STRIPES = prof.get("sleeve_stripes")          # "fit": края полос рукава — гладкие кривые (OTT 22.10)
+    if SLEEVE_STRIPES not in (None, "fit"):
+        sys.exit(f"[{code}] sleeve_stripes = {SLEEVE_STRIPES!r} — только \"fit\"")
+    global PIPING_FIT, PIPING_FIT_KITS, ARMHOLE_AA, YOKE_MIX_KEEP, BRAND_Y, PIPING_MIX
+    _pf = prof.get("piping_fit")                         # кант вдоль руки у шва проймы — гладко (23.10, review-d: CBJ, WSH)
+    PIPING_FIT_KITS = dict(_pf) if isinstance(_pf, dict) else None
+    PIPING_FIT = None if (_pf is None or PIPING_FIT_KITS is not None) else [float(x) for x in _pf]
+    for _b in ([PIPING_FIT] if PIPING_FIT else []) + list((PIPING_FIT_KITS or {}).values()):
+        if len(_b) != 4:
+            sys.exit(f"[{code}] piping_fit = {_pf!r} — [u0, v0, u1, v1] или {{ форма = [u0, v0, u1, v1] }}")
+    ARMHOLE_AA = bool(prof.get("armhole_aa", False))     # шов проймы — со сглаживанием (23.10, review-d: WSH)
+    PIPING_MIX = bool(prof.get("piping_mix", False))     # смесь у края канта — не «чужое» (23.10, review-e: WSH)
+    global TORSO_SHIFT, TORSO_SHIFT_KITS
+    _ts = prof.get("torso_shift")                        # полоса через туловище ниже (23.10, пользователь: MTL дом)
+    TORSO_SHIFT_KITS = dict(_ts) if isinstance(_ts, dict) else None
+    TORSO_SHIFT = None if (_ts is None or TORSO_SHIFT_KITS is not None) else [float(x) for x in _ts]
+    for _b in ([TORSO_SHIFT] if TORSO_SHIFT else []) + list((TORSO_SHIFT_KITS or {}).values()):
+        _yy = np.arange(0.9, 1.8, 0.001)
+        if (len(_b) not in (5, 7) or not (_b[1] < _b[2] <= _b[3] < _b[4])
+                or not (np.diff(_yy + torso_shift_dy(_yy, _b)) > 0).all()):
+            sys.exit(f"[{code}] torso_shift = {_ts!r} — [см, y0, y1, y2, y3] или [см, y0, y1, y2, y3, k, yc] (y0 < y1 ≤ y2 "
+                     "< y3; спад короче 1,5 × сдвига — рисунок у спада повторяется) или {{ форма = [...] }}")
+    global CHEST_BANDS, CHEST_BANDS_KITS
+    _cb = prof.get("chest_bands")                        # полосы через грудь у ворота — по источнику (23.10, NYR выезд)
+    CHEST_BANDS_KITS = dict(_cb) if isinstance(_cb, dict) else None
+    CHEST_BANDS = None if (_cb is None or CHEST_BANDS_KITS is not None) else [float(x) for x in _cb]
+    for _b in ([CHEST_BANDS] if CHEST_BANDS else []) + list((CHEST_BANDS_KITS or {}).values()):
+        if len(_b) != 4:
+            sys.exit(f"[{code}] chest_bands = {_cb!r} — [|x| от, до, высота от, до] или {{ форма = [...] }}")
+    global CHEST_LAPEL_D                                 # окно у ворота: дальше стольких м от края (CBJ — 0,034: до обода)
+    _cl = prof.get("chest_bands_lapel", CHEST_LAPEL_D_DEFAULT)   # "ring" — до края лацкана (NYR)
+    CHEST_LAPEL_D = _cl if _cl == "ring" else float(_cl)
+    from . import pant_decals                            # нашивки шорт (23.10, review-d: WSH — три звезды, WPG — пояс)
+    pant_decals.MERGE_PX = int(prof.get("pant_merge_px", 0))
+    pant_decals.Y_MAX = float(prof["pant_decal_ymax"]) if "pant_decal_ymax" in prof else None
+    YOKE_MIX_KEEP = bool(prof.get("yoke_mix_keep", False))   # смесь у полос рукава — как перенеслась (23.10, WPG выезд)
+    BRAND_Y = float(prof["brand_y"]) if "brand_y" in prof else None   # надпись сзади на этой высоте (23.10, CBJ)
     SLEEVE_FILL = prof.get("sleeve_fill")                # "below": ткань над полосами рукава — цвет под ними (MTL дом)
     if SLEEVE_FILL not in (None, "below"):
         sys.exit(f"[{code}] sleeve_fill = {SLEEVE_FILL!r} — только \"below\"")
+    global YOKE_RGB_DIST                                 # кокетка [R, G, B]: насколько близко к цвету (22.10, агент plain, CAR дом:
+    YOKE_RGB_DIST = float(prof.get("yoke_rgb_dist", 60.0))   # тёмно-серая (38, 49, 51) на чёрном (27, 26, 27) — Δ 33 < 60)
+    global YOKE_CLEAN_DEPTH                              # красное YokePaint — не ниже края кокетки на столько (CAR дом)
+    YOKE_CLEAN_DEPTH = float(prof["yoke_clean_depth"]) if "yoke_clean_depth" in prof else None
     global YOKE_STRIPE, YOKE_BACK
-    YOKE_STRIPE = prof.get("yoke_stripe")                # "source": полоса под кокеткой — по источнику (BUF выезд, 22.10)
-    if YOKE_STRIPE not in (None, "source"):
-        sys.exit(f"[{code}] yoke_stripe = {YOKE_STRIPE!r} — только \"source\"")
+    YOKE_STRIPE = prof.get("yoke_stripe")                # "source": полоса под кокеткой — по источнику (BUF выезд, 22.10);
+    #                                                      "bands": полосы у края кокетки (над ним и под ним, STL выезд)
+    if YOKE_STRIPE not in (None, "source", "bands"):
+        sys.exit(f"[{code}] yoke_stripe = {YOKE_STRIPE!r} — \"source\" или \"bands\"")
     YOKE_BACK = prof.get("yoke_back")                    # "source": край кокетки сзади — как у источника, не EA
+    global YOKE_FRONT
+    YOKE_FRONT = prof.get("yoke_front")                  # "flat": край спереди ровный и у середины (COL: вставка цвета ткани)
+    if YOKE_FRONT not in (None, "flat", "source"):      # "source": у середины ровно, к руке — край источника (COL, 22.10)
+        sys.exit(f"[{code}] yoke_front = {YOKE_FRONT!r} — \"flat\" или \"source\"")
+    global YOKE_SLEEVE
+    YOKE_SLEEVE = prof.get("yoke_sleeve")                # "keep": рукав цвета кокетки — не трогать (WPG выезд, 22.10)
+    if YOKE_SLEEVE not in (None, "keep", "band"):       # "band": кокетка переходит в полосу по верху рукава (COL, PHI)
+        sys.exit(f"[{code}] yoke_sleeve = {YOKE_SLEEVE!r} — \"keep\" или \"band\"")
     if YOKE_BACK not in (None, "source"):
         sys.exit(f"[{code}] yoke_back = {YOKE_BACK!r} — только \"source\"")
+    global YOKE_BAND_SEAM, YOKE_BAND_SKIP                # замер полосы рукава (yoke_sleeve = "band"; 23.10, review-d, WPG)
+    YOKE_BAND_SEAM = float(prof.get("yoke_band_seam", YOKE_BAND_SEAM_DEFAULT))
+    YOKE_BAND_SKIP = tuple(map(float, prof["yoke_band_skip"])) if "yoke_band_skip" in prof else None
+    global YOKE_SPECKS                                   # точки чужого цвета в перекрашенной ткани (22.10, агент review-c, EDM)
+    YOKE_SPECKS = bool(prof.get("yoke_specks", False))
+    # цвет кокетки по форме — таблица { home = [R, G, B], away = [R, G, B] } (22.10, агент yokes: EDM, COL, PHI — кокетка
+    # у обеих форм разного цвета: дома оранжевая на синем, в гостях синяя на белом; один цвет-среднее не узнавал ни ту,
+    # ни другую, а у COL — и ткань). Значение формы ставит use_kit(kit) на время её сборки; число — как раньше
+    global YOKE_KIND_KITS, YOKE_EA_KIND_KITS
+    YOKE_KIND_KITS = dict(YOKE_KIND) if isinstance(YOKE_KIND, dict) else None
+    YOKE_EA_KIND_KITS = dict(YOKE_EA_KIND) if isinstance(YOKE_EA_KIND, dict) else None
     for k_, v_ in (("yoke_color", YOKE_KIND), ("yoke_shape_color", YOKE_EA_KIND)):
-        if v_ is not None and not (v_ in ("green", "dark") or (isinstance(v_, list) and len(v_) == 3)):
-            sys.exit(f"[{code}] {k_} = {v_!r} — green, dark или [R, G, B]")
+        for vv_ in (v_.values() if isinstance(v_, dict) else (v_,)):
+            if vv_ is not None and not (vv_ in ("green", "dark") or (isinstance(vv_, list) and len(vv_) == 3)):
+                sys.exit(f"[{code}] {k_} = {v_!r} — green, dark, [R, G, B] или {{ форма = … }}")
+    if YOKE_KIND_KITS:
+        YOKE_KIND = next(iter(YOKE_KIND_KITS.values()))
+    if YOKE_EA_KIND_KITS:
+        YOKE_EA_KIND = next(iter(YOKE_EA_KIND_KITS.values()))
     SHIELD_OFFSET_CM = list(prof.get("shield_offset_cm", _SHIELD_DEFAULT[0]))
     SHIELD_SCALE = float(prof.get("shield_scale", _SHIELD_DEFAULT[1]))
     # щит по зазору под кромкой (21.10): shield_gap_mm, а без него — у ворота без шнуровки SHIELD_GAP_DEFAULT_MM; задан
@@ -1319,15 +2087,33 @@ def use_club(code):
     INSERT_KITS = {(code, k) for k in prof.get("insert", [])}
     global INSERT_COLOR
     INSERT_COLOR = prof.get("insert_color")
+    global INSERT_CLEAN
+    INSERT_CLEAN = prof.get("insert_clean")              # "blend": прежний перенос вокруг вставки — и смесь (NYI, 22.10)
+    if INSERT_CLEAN not in (None, "blend"):
+        sys.exit(f"[{code}] insert_clean = {INSERT_CLEAN!r} — только \"blend\"")
     if INSERT_COLOR not in (None, "source"):
         sys.exit(f"[{code}] insert_color = {INSERT_COLOR!r} — только \"source\"")
     SLOT_KITS = {k: dict(v) for k, v in prof.get("slot", {}).items()}
     LETTER_ZONES_FROM = dict(prof.get("letter_zones_from", {}))
     SLEEVE_ZONES_FROM = prof.get("sleeve_zones_from", SLEEVE_ZONES_REF)
+    global SLEEVE_ZONES_AT
+    SLEEVE_ZONES_AT = prof.get("sleeve_zones_at")       # "shoulder": номера на плечах у ворота (FLA, 22.10)
+    if SLEEVE_ZONES_AT not in (None, "shoulder"):
+        sys.exit(f"[{code}] sleeve_zones_at = {SLEEVE_ZONES_AT!r} — только \"shoulder\"")
     global NAME_ZONES_FROM, ARMHOLE_SPLIT_ZONES
     NAME_ZONES_FROM = prof.get("name_zones_from")
     global LETTER_SHIFT_CM, COLLAR_PANEL, LETTERING, INSERT_HW
     INSERT_HW = INSERT_HW_NHL27 if prof.get("insert_color") == "source" else INSERT_HW_MIN
+    if prof.get("insert_contour") not in (None, "nhl27"):
+        sys.exit(f"[{code}] insert_contour = {prof.get('insert_contour')!r} — только \"nhl27\"")
+    global INSERT_CONTOUR
+    INSERT_CONTOUR = prof.get("insert_contour")
+    if prof.get("insert_contour") == "nhl27":           # контур вставки NHL 27 с язычком до 1,591 (FLA, 23.10)
+        INSERT_HW = INSERT_HW_NHL27_FULL
+    global ISLAND_PAD_CM, ISLAND_PAD_CM_KITS
+    _ip = prof.get("island_pad_cm", False)              # поле острова в jersey_cm (23.10, review-e: NYR выезд)
+    ISLAND_PAD_CM_KITS = {k_ for k_, v_ in _ip.items() if v_} if isinstance(_ip, dict) else None
+    ISLAND_PAD_CM = bool(_ip) if ISLAND_PAD_CM_KITS is None else False
     LETTERING = prof.get("lettering", "standard")
     global NAME_ARCH
     NAME_ARCH = bool(prof.get("name_arch", False))
@@ -1336,9 +2122,17 @@ def use_club(code):
     COLLAR_PANEL = bool(prof.get("collar_panel", False))
     global COLLAR_LINING
     COLLAR_LINING = prof.get("collar_lining", "source")
-    global COLLAR_LAPEL, YOKE_MESH
+    global COLLAR_LAPEL, YOKE_MESH, LAPEL_CLEAN
     YOKE_MESH = bool(prof.get("yoke_mesh", True))
+    LAPEL_CLEAN = bool(prof.get("lapel_clean", False))  # true: перенос лацкана за краем LapelPaint — тканью (MTL, DAL)
     COLLAR_LAPEL = prof.get("collar_lapel")             # "source": лацканы цвета источника (MTL, DAL — белые, 22.10)
+    global COLLAR_LAPEL_KITS                             # { форма = "source" } — лацканы только у этих форм (NYI, 22.10:
+    COLLAR_LAPEL_KITS = None                             # дома кромка ступенькой без лацканов, в гостях синие лацканы);
+    if isinstance(COLLAR_LAPEL, dict):                   # COLLAR_LAPEL ставит цикл форм cmd_kit
+        COLLAR_LAPEL_KITS = dict(COLLAR_LAPEL)
+        COLLAR_LAPEL = "source" if any(COLLAR_LAPEL_KITS.values()) else None
+        if any(v != "source" for v in COLLAR_LAPEL_KITS.values()):
+            sys.exit(f"[{code}] collar_lapel = {COLLAR_LAPEL_KITS!r} — \"source\" или {{ форма = \"source\" }}")
     if COLLAR_LAPEL not in (None, "source"):
         sys.exit(f"[{code}] collar_lapel = {COLLAR_LAPEL!r} — только \"source\"")
     if COLLAR_LAPEL and COLLAR != "lace":
@@ -1347,13 +2141,80 @@ def use_club(code):
         SHIELD_SCALE, SHIELD_GAP_MM = SHIELD_PANEL_SCALE, "panel"
     LETTER_SHIFT_CM = tuple(map(float, prof["letter_zone_shift_cm"])) if "letter_zone_shift_cm" in prof else None
     split = prof.get("armhole_split", "zones")
-    if split not in ("zones", "full"):
-        sys.exit(f"[{code}] armhole_split = {split!r} — zones или full")
+    # по форме — таблица { away = "full" } (22.10, агент plain, CAR: в гостях красные рукава на белом — по шву Edge, дома
+    # тёмная кокетка с красной полосой заходит с плеч на руку — шов по всей пройме резал её вертикальной красной чертой);
+    # формы вне таблицы — zones. Значение формы ставит use_kit(kit); строка — как раньше, у всех форм
+    global ARMHOLE_SPLIT_KITS
+    ARMHOLE_SPLIT_KITS = dict(split) if isinstance(split, dict) else None
+    for v_ in (ARMHOLE_SPLIT_KITS.values() if ARMHOLE_SPLIT_KITS is not None else (split,)):
+        if v_ not in ("zones", "full"):
+            sys.exit(f"[{code}] armhole_split = {split!r} — zones, full или {{ форма = \"full\" }}")
+    if ARMHOLE_SPLIT_KITS is not None:
+        split = "zones"
     ARMHOLE_SPLIT_ZONES = ARMHOLE_SPLIT_FULL if split == "full" else ARMHOLE_ZONES
     for kit, spec in SLOT_KITS.items():                  # подпись в меню — «Home (NHL 27)»: форма и источник
         spec.setdefault("label", f"{'Home' if kit == 'home' else 'Away'} ({SOURCE_NAME()})")
     SOCK_PARTS = tuple((float(w), tuple(c)) for w, c in prof.get("sock_parts", SOCK_PARTS))
     return prof
+
+
+YOKE_KIND_KITS = None              # профиль yoke_color таблицей по форме (use_club) — значение формы ставит use_kit
+COLLAR_TRIM_KITS = None            # профиль collar_trim таблицей по форме — то же
+SLEEVE_TOP24_KITS = None           # профиль sleeve_top24 таблицей по форме — значение формы ставит use_kit
+ARMHOLE_SPLIT_KITS = None          # профиль armhole_split таблицей по форме (CAR, 22.10) — значение формы ставит use_kit
+YOKE_EA_KIND_KITS = None           # то же для yoke_shape_color
+
+
+def torso_shift_dy(y, ts=None):
+    """Сдвиг рисунка туловища на высоте y (профиль torso_shift), м: точка берёт источник с y + сдвиг. С [k, yc] — и
+    полоса выше в k раз вокруг yc (высота Edge после сдвига): источник с yc + сдвиг + (y − yc) / k."""
+    ts = TORSO_SHIFT if ts is None else ts
+    cm, y0, y1, y2, y3 = ts[:5]
+    k, yc = (ts[5], ts[6]) if len(ts) == 7 else (1.0, 0.0)
+    w = Hy.smooth((y - y0) / (y1 - y0)) * (1.0 - Hy.smooth((y - y2) / (y3 - y2)))
+    return w * (cm / 100.0 + (y - yc) * (1.0 / k - 1.0))
+
+
+def torso_shift_crest(placed):
+    """Герб (нашивка crest) ниже на сдвиг torso_shift: нашивки ставятся по 3D-точке центра (кадр _frame), не по
+    развёртке — без этого полоса уходила бы из-под герба."""
+    for pl in placed:
+        if pl["name"] != "crest":
+            continue
+        cL, nL, pinv, R, sc, rad, u_c, v_c = pl["_frame"]
+        cL = np.asarray(cL, np.float64).copy()
+        cL[1] -= TORSO_SHIFT[0] / 100.0
+        pl["_frame"] = (cL, nL, pinv, R, sc, rad, u_c, v_c)
+        print(f"  герб: ниже на {TORSO_SHIFT[0]} см вместе с полосой (torso_shift), центр {cL[1]:.3f} м")
+
+
+def use_kit(kit):
+    """Поля профиля, заданные по форме (yoke_color, yoke_shape_color, collar_trim таблицей { home = …, away = … }), — на время
+    сборки формы kit (cmd_kit, kitport yoke). У профиля без таблиц ничего не меняет."""
+    global YOKE_KIND, YOKE_EA_KIND, ARMHOLE_SPLIT_ZONES, COLLAR_TRIM
+    if COLLAR_TRIM_KITS:                                 # collar_trim по формам (STL): вне таблицы — auto
+        COLLAR_TRIM = COLLAR_TRIM_KITS.get(kit, "auto")
+    global SLEEVE_TOP24
+    if SLEEVE_TOP24_KITS is not None:                    # sleeve_top24 по формам: вне таблицы — нет
+        SLEEVE_TOP24 = float(SLEEVE_TOP24_KITS[kit]) if kit in SLEEVE_TOP24_KITS else None
+    if ARMHOLE_SPLIT_KITS is not None:                   # armhole_split по формам (CAR): вне таблицы — zones
+        ARMHOLE_SPLIT_ZONES = ARMHOLE_SPLIT_FULL if ARMHOLE_SPLIT_KITS.get(kit, "zones") == "full" else ARMHOLE_ZONES
+    global PIPING_FIT
+    if PIPING_FIT_KITS is not None:                      # piping_fit по формам: вне таблицы — нет
+        PIPING_FIT = [float(x) for x in PIPING_FIT_KITS[kit]] if kit in PIPING_FIT_KITS else None
+    global ISLAND_PAD_CM
+    if ISLAND_PAD_CM_KITS is not None:                   # island_pad_cm по формам: вне таблицы — нет
+        ISLAND_PAD_CM = kit in ISLAND_PAD_CM_KITS
+    global TORSO_SHIFT
+    if TORSO_SHIFT_KITS is not None:                     # torso_shift по формам (MTL дом): вне таблицы — нет
+        TORSO_SHIFT = [float(x) for x in TORSO_SHIFT_KITS[kit]] if kit in TORSO_SHIFT_KITS else None
+    global CHEST_BANDS
+    if CHEST_BANDS_KITS is not None:                     # chest_bands по формам: вне таблицы — нет
+        CHEST_BANDS = [float(x) for x in CHEST_BANDS_KITS[kit]] if kit in CHEST_BANDS_KITS else None
+    if YOKE_KIND_KITS:
+        YOKE_KIND = YOKE_KIND_KITS.get(kit, YOKE_KIND)
+    if YOKE_EA_KIND_KITS:
+        YOKE_EA_KIND = YOKE_EA_KIND_KITS.get(kit, YOKE_EA_KIND)
 
 
 def yoke_mask(img, lum_max=70, kind=None):
@@ -1373,6 +2234,10 @@ YOKE_EA_KIND = None                # профиль yoke_shape_color: цвет �
 YOKE_SIDE_BLEND = None             # профиль yoke_side_blend: полуширина (м по z) перехода высоты края кокетки от
 #                                    переда к спине — у широкой кокетки на плечах (MTL, ANA?) край на руке — одна прямая
 #                                    наискосок, без «лесенки» (пользователь, 21.10, рисунок); None — скачок на боку (z = 0)
+YOKE_CLEAN_DEPTH = None            # профиль yoke_clean_depth, м (22.10, агент plain, CAR дом): красное (прежняя кромка и
+#                                    вставка) YokePaint перекрашивает только не ниже края кокетки на столько. У кокетки
+#                                    «на плечо» (yoke_side_blend: боков нет) зона перекраски — всё выше 1,45 м, и красные
+#                                    полосы рукава у локтя (CAR дом — на 16 см ниже края) стирались линзой. Нет — как было
 YOKE_RGB_DIST = 60.0               # yoke_color / yoke_shape_color списком [R, G, B]: ближе — кокетка (22.10, MTL, BUF, DAL)
 # Полоса под кокеткой (профиль yoke_stripe = "source", 22.10, BUF выезд: золотая ~0,9 см под синей кокеткой спереди,
 # сзади и на руке; у мыса со щитом её нет — кончается у V). Цвет и ширина — замер источника под краем кокетки
@@ -1401,6 +2266,12 @@ def body_color(img, yoke=True):
     box = img[int(v0 * S):int(v1 * S), int(u0 * S):int(u1 * S)].reshape(-1, 3)
     if yoke:
         box = box[~yoke_mask(box)]
+    if TORSO_SHIFT:                                      # полоса опущена (torso_shift, MTL дом 23.10) и заходит в середину
+        box = img.reshape(-1, 3)                         # спины: медиана по каналам смеси красного, синего и белого давала
+        q = np.round(box / 16.0).astype(np.int64)        # фиолетовый (134, 41, 101), самый частый цвет окна — синий
+        key = (q[:, 0] * 64 + q[:, 1]) * 64 + q[:, 2]    # полосы (41 % против 40 % красного) — InsertPaint красил ими V
+        ks, cnt = np.unique(key, return_counts=True)     # у вставки; здесь — самый частый цвет всей развёртки (ткань,
+        box = box[key == ks[cnt.argmax()]]               # 53 %)
     return np.median(box, axis=0)
 
 
@@ -1523,7 +2394,8 @@ def yoke_heights(code, kit):
     delta = (float(np.median((hf - f0)[core])), float(np.median((hb - b0)[core])))
     # перед — ровно от YOKE_FLAT_X к бокам (у NHL 24 линия к рукаву опускается на 1,4 см: на сетке Edge у угла с кривой
     # стороны EA выходил «зубец»)
-    hf = np.where(x_all > YOKE_FLAT_X, np.interp(YOKE_FLAT_X, x_all, hf), hf)
+    if YOKE_FRONT != "source":                           # "source" (COL) — к руке край источника, ниже (yoke_front)
+        hf = np.where(x_all > YOKE_FLAT_X, np.interp(YOKE_FLAT_X, x_all, hf), hf)
     res = {"front": (x_all, hf), "back": (x_all, hb), "delta": delta}
     back_from = YOKE.get((code, kit), {}).get("from") or YOKE_BACK_FROM
     if back_from and YOKE_BACK != "source":              # спина — как у EA-формы клуба (её край ниже: 1,60 м)
@@ -1538,11 +2410,31 @@ def yoke_heights(code, kit):
         y_c, x_c = INSERT_CORNER                         # к углу). Был подъём на 3 мм у конца лацкана на 1 см (сборка 3
         y_k = y_c + LAPEL_YOKE_GAP                       # MTL: красная черта) — крючки шва и белый зубец у конца лацкана
         res["front"] = (xs_, np.full_like(hs_, y_k))     # (пользователь, 22.10, DAL и MTL)
+    if YOKE_SLEEVE == "band":                            # полоса по верху рукава (COL, PHI): край — по источнику
+        res["band_fit"] = sleeve_band_fit(P, c, YOKE_KIND, n24["pos"])
+    if YOKE_FRONT == "flat":                             # край спереди ровный и у середины (22.10, агент yokes, COL): вставка
+        xs_, hs_ = res["front"]                          # V цвета ткани врезана в кокетку — замер «низа кокетки» у неё
+        core_ = (xs_ >= 0.07) & (xs_ <= 0.13)            # опускался на 2 см (1,630 у |x| 4 см), кант шёл вдоль сторон V
+        res["front"] = (xs_, np.full_like(hs_, float(np.median(hs_[core_]))))
+    elif YOKE_FRONT == "source":                         # у середины ровно (как "flat": вставка V цвета ткани опускала
+        xs_, hs_ = res["front"]                          # замер), с YOKE_FLAT_X к руке — край источника, не выше (22.10,
+        core_ = (xs_ >= 0.07) & (xs_ <= 0.13)            # агент review-c, COL: у NHL 27 кант к пройме опускается — 1,654
+        lvl = float(np.median(hs_[core_]))               # на |x| 0,12 → 1,613 на 0,24 и 1,600 на 0,26; ровный край на
+        hn_ = np.where(xs_ < YOKE_FLAT_X, lvl, np.minimum(hs_, lvl))   # 1,653 давал «квадратные плечи»)
+        # за концом замера (|x| 0,26) — тем же наклоном ещё YOKE_FRONT_EXT: ровный 1,600 дальше с полосой рукава (smooth_max)
+        # давал на канте у подмышки «горб» (сборка 1 review-c, вид 30–45°); с наклоном кант — одна дуга, как у NHL 27
+        k_ = min(float((hn_[-1] - hn_[-3]) / max(xs_[-1] - xs_[-3], 1e-6)), 0.0)
+        xe_ = np.arange(xs_[-1] + 0.01, xs_[-1] + YOKE_FRONT_EXT + 1e-9, 0.01)
+        res["front"] = (np.concatenate([xs_, xe_]), np.concatenate([hn_, hn_[-1] + k_ * (xe_ - xs_[-1])]))
     if COLLAR_PANEL and COLLAR != "lace":                # мыс со щитом — V шаблона ворота (BUF выезд, 22.10)
         notch_on_v(res)
     if YOKE_STRIPE == "source":                          # полоса под кокеткой (BUF выезд): цвет и ширина источника
         res["stripe"] = yoke_stripe_source(P, N, c, g, out)
         print("  полоса под кокеткой (yoke_stripe):", res["stripe"])
+    elif YOKE_STRIPE == "bands":                         # полосы у края кокетки (STL выезд): профиль источника
+        res["bands"] = yoke_bands_source(P, N, c, g, out)
+        print("  полосы у края кокетки (yoke_stripe = bands), см от края:",
+              [(b["color"], round(b["lo"] * 100, 2), round(b["hi"] * 100, 2)) for b in res["bands"] or ()])
     return res
 
 
@@ -1601,7 +2493,34 @@ def yoke_stripe_source(P, N, c, g, edges):
         print(f"  полосы под кокеткой нет: цвет {np.round(sc).astype(int).tolist()} (кокетка "
               f"{np.round(yc).astype(int).tolist()}, ткань {np.round(body).astype(int).tolist()}), ширина {w * 100:.2f} см")
         return None
-    return {"color": [round(float(v), 1) for v in sc], "width": round(w, 4)}
+    # на руке (22.10, агент yokes, NSH выезд): у NHL 27 полоса бывает только на туловище — у проймы кончается, на шапке
+    # рукава её нет (у BUF — есть). Замер: под нижним краем цвета кокетки на боку руки (|x| 0,24–0,30, |z| < 0,06)
+    fr = []
+    for x0 in (0.25, 0.27, 0.29):
+        col = (np.abs(np.abs(P[:, 0]) - x0) < 0.005) & (np.abs(P[:, 2]) < 0.06)
+        ga = col & g & (P[:, 1] > 1.5)
+        if ga.sum() > 20:
+            h_ = float(np.percentile(P[ga, 1], 1))
+            mm = col & (P[:, 1] < h_ - 0.0015) & (P[:, 1] > h_ - 0.006)
+            if mm.sum() >= 5:
+                fr.append(float((np.linalg.norm(c[mm] - sc, axis=1) < 60).mean()))
+    arm = bool(np.median(fr) > 0.4) if fr else True
+    out = {"color": [round(float(v), 1) for v in sc], "width": round(w, 4)}
+    if not arm:
+        out["arm"] = False
+        print(f"  полоса под кокеткой — только на туловище (на руке у источника её нет: доля {np.round(fr, 2).tolist()})")
+    return out
+
+
+def stripe_torso(U0, P, scale):
+    """Сторона туловища у шва проймы Edge (сглаженный, как armhole_split = "full"): > 0 — туловище, < 0 — рукав, в
+    единицах scale (доля развёртки → пиксели или метры); вне зоны шва — +inf. Для полосы под кокеткой только на
+    туловище (yoke_stripe, "arm": false)."""
+    vs, us = _armhole_full()
+    u, v = U0[..., 0], U0[..., 1]
+    sE = np.where(P[..., 0] < 0, u, 1.0 - u)
+    zone = (v >= vs[0]) & (v <= vs[-1]) & (np.abs(P[..., 0]) > ARMHOLE_X)
+    return np.where(zone, (sE - np.interp(v, vs, us)) * scale, np.inf)
 
 
 def yoke_stripe_band(P, hts):
@@ -1610,6 +2529,403 @@ def yoke_stripe_band(P, hts):
     hfl = yoke_edge_h(P, {"front": hts.get("front_flat", hts["front"]), "back": hts["back"]})
     vline = PANEL_TIP_Y + PANEL_SLOPE * np.abs(P[..., 0]) if hts.get("notch") else None
     return hfl, hfl - st["width"], vline
+
+
+# Полосы у края кокетки (профиль yoke_stripe = "bands"; 22.10, агент yokes, STL выезд): у NHL 27 в синей кокетке над
+# краем — синяя 1,1 см, золотая 0,9, синяя 1,0, белая 0,7, выше — синяя (у каждой полосы — два шва в base_normal);
+# YokePaint красил белую полосу в кокетке цветом кокетки (белое — «ткань»), золотую оставлял переносом (на месте
+# NHL 24, не параллельно своему краю). Полоса под краем (BUF, "source") — частный случай. Профиль цвета источника по
+# расстоянию от края (yoke_bands_source) → отрезки одного цвета; YokePaint рисует их параллельно краю без мыса (под краем —
+# до линии V, как "source"), перенос их цветов у края — перекрашивается; швы — по краям полос (design_seams)
+YOKE_BANDS_D = (-0.025, 0.05)      # м от края кокетки (− под ней, + в ней): где искать полосы
+YOKE_BANDS_STEP = 0.001            # м: шаг профиля
+YOKE_BANDS_MIN = 0.003             # м: отрезок уже — переход между цветами, не полоса
+YOKE_BANDS_TOL = 40.0              # max |Δ канала| до медианы отрезка: тот же цвет
+YOKE_BANDS_GAP_MAX = 0.08          # м: разрыв полосы сзади посередине (у логотипа) — не шире; дальше — полоса без разрыва
+
+
+def yoke_bands_source(P, N, c, g, edges):
+    """Полосы у края кокетки источника (yoke_stripe = "bands"): профиль цвета по расстоянию d от края (шаг
+    YOKE_BANDS_STEP, медиана столбцов спереди |x| 0,07–0,13 и сзади 0,02–0,13; край — замер yoke_heights без спины EA),
+    отрезки одного цвета не уже YOKE_BANDS_MIN, граница — середина перехода. Над краем — отрезки не цвета кокетки ниже
+    последнего её отрезка, под краем — не цвета ткани выше первого её отрезка (как yoke_stripe_source: ткань — 3–5 см
+    под краем). -> [{"color": [R, G, B], "lo": м, "hi": м}] (от края, + — вверх; у края — ровно 0) или None."""
+    ds = np.arange(YOKE_BANDS_D[0], YOKE_BANDS_D[1] + 1e-9, YOKE_BANDS_STEP)
+    prof, body, prof_side = [], [], {"front": [], "back": []}
+    for side, sel, xr in (("front", (P[:, 2] > 0) & (N[:, 2] > 0.3), (0.07, 0.13)),
+                          ("back", (P[:, 2] < 0) & (N[:, 2] < -0.3), (0.02, 0.13))):
+        for x0 in np.arange(xr[0], xr[1] + 1e-9, 0.01):
+            h0 = float(np.interp(x0, *edges[side]))
+            cm_ = sel & (np.abs(np.abs(P[:, 0]) - x0) < 0.004)
+            col = np.full((len(ds), 3), np.nan)
+            for i, d in enumerate(ds):
+                mm = cm_ & (np.abs(P[:, 1] - (h0 + d)) < YOKE_BANDS_STEP * 0.6)
+                if mm.sum() >= 2:
+                    col[i] = np.median(c[mm], axis=0)
+            prof.append(col)
+            prof_side[side].append(col)
+            mb = cm_ & (P[:, 1] < h0 - 0.03) & (P[:, 1] > h0 - 0.05)
+            if mb.sum() >= 5:
+                body.append(np.median(c[mb], axis=0))
+    prof = np.stack(prof)
+    ok = (~np.isnan(prof).any(-1)).sum(0) >= 3
+    p = np.full((len(ds), 3), np.nan)
+    p[ok] = np.nanmedian(prof[:, ok], axis=0)
+    yc = np.median(c[g], axis=0)
+    wc = np.median(body, axis=0) if body else None
+    runs, i = [], 0                                      # отрезки: подряд точки ближе YOKE_BANDS_TOL к медиане отрезка
+    while i < len(ds):
+        if not ok[i]:
+            i += 1
+            continue
+        j = i + 1
+        while j < len(ds) and ok[j] and np.abs(p[j] - np.median(p[i:j], 0)).max() < YOKE_BANDS_TOL:
+            j += 1
+        if (j - i) * YOKE_BANDS_STEP >= YOKE_BANDS_MIN:
+            runs.append([i, j, np.median(p[i:j], 0)])
+        i = j
+    if not runs:
+        return None
+    lo = [YOKE_BANDS_D[0]] + [(ds[a[1] - 1] + ds[b[0]]) / 2 for a, b in zip(runs, runs[1:])]
+    hi = lo[1:] + [YOKE_BANDS_D[1]]
+    same = lambda a, b: b is not None and np.abs(a - b).max() < YOKE_BANDS_TOL
+    out = []
+    top_y = max((k for k, r in enumerate(runs) if same(r[2], yc)), default=None)    # последний отрезок кокетки
+    bot_w = min((k for k, r in enumerate(runs) if same(r[2], wc) and hi[k] <= 0.002), default=None)
+    for k, r in enumerate(runs):
+        mid = (lo[k] + hi[k]) / 2
+        if mid > 0 and top_y is not None and k < top_y and not same(r[2], yc):
+            out.append({"color": [round(float(v), 1) for v in r[2]], "lo": max(lo[k], 0.0), "hi": hi[k]})
+        elif mid < 0 and bot_w is not None and k > bot_w and not same(r[2], wc) and not same(r[2], yc):
+            out.append({"color": [round(float(v), 1) for v in r[2]], "lo": lo[k], "hi": min(hi[k], 0.0)})
+    for b in out:                                        # у края — ровно по краю кокетки
+        b["lo"] = 0.0 if abs(b["lo"]) < 0.002 else round(float(b["lo"]), 4)
+        b["hi"] = 0.0 if abs(b["hi"]) < 0.002 else round(float(b["hi"]), 4)
+        # разрыв сзади посередине (STL выезд: полосы прерваны у логотипа — у нас там «mgrhs»): полуширина — от середины
+        # спины до первого столбца с цветом полосы на её средней высоте
+        sel = (P[:, 2] < 0) & (N[:, 2] < -0.3)
+        dc, gap = (b["lo"] + b["hi"]) / 2, None
+        for x0 in np.arange(0.0, YOKE_BANDS_GAP_MAX + 1e-9, 0.0025):
+            h0 = float(np.interp(x0, *edges["back"]))
+            mm = sel & (np.abs(np.abs(P[:, 0]) - x0) < 0.00125) & (np.abs(P[:, 1] - (h0 + dc)) < 0.0015)
+            if mm.sum() >= 2:
+                if np.abs(np.median(c[mm], axis=0) - np.asarray(b["color"])).max() < YOKE_BANDS_TOL:
+                    gap = x0
+                    break
+        b["gap_back"] = round(float(gap), 4) if gap else 0.0
+    gmax = max((b["gap_back"] for b in out), default=0.0)   # разрыв у логотипа — общий (замер узкой белой полосы STL
+    for b in out:                                        # попадал на сам логотип, белый)
+        b["gap_back"] = gmax
+    # границы полос — и по сторонам (22.10, агент review-c, STL выезд): у NHL 27 спереди белая 3,3–3,9 см над краем, сзади
+    # 3,0–3,5 — медиана столбцов переда и спины вместе давала их пересечение, 3,2–3,6 (на свитере белая вдвое тоньше
+    # источника, сзади — волосок 2 мм). Спереди и сзади — свои lo/hi (тот же разбор на отрезки по столбцам своей стороны),
+    # между ними на плече — переход, как у края кокетки (band_lohi); у края (0) — ровно 0
+    for sd, key in (("front", "f"), ("back", "b")):
+        if len(prof_side[sd]) < 3:
+            continue
+        pr = np.stack(prof_side[sd])
+        ok_s = (~np.isnan(pr).any(-1)).sum(0) >= 2
+        ps = np.full((len(ds), 3), np.nan)
+        ps[ok_s] = np.nanmedian(pr[:, ok_s], axis=0)
+        rs, i = [], 0
+        while i < len(ds):
+            if not ok_s[i]:
+                i += 1
+                continue
+            j = i + 1
+            while j < len(ds) and ok_s[j] and np.abs(ps[j] - np.median(ps[i:j], 0)).max() < YOKE_BANDS_TOL:
+                j += 1
+            if (j - i) * YOKE_BANDS_STEP >= YOKE_BANDS_MIN:
+                rs.append([i, j, np.median(ps[i:j], 0)])
+            i = j
+        lo_s = [YOKE_BANDS_D[0]] + [(ds[a[1] - 1] + ds[b_[0]]) / 2 for a, b_ in zip(rs, rs[1:])]
+        hi_s = lo_s[1:] + [YOKE_BANDS_D[1]]
+        for b in out:
+            mid = (b["lo"] + b["hi"]) / 2
+            cand = [k for k, r in enumerate(rs) if np.abs(r[2] - np.asarray(b["color"])).max() < YOKE_BANDS_TOL]
+            if not cand:
+                continue
+            k = min(cand, key=lambda k: abs((lo_s[k] + hi_s[k]) / 2 - mid))
+            lo_k, hi_k = (0.0 if b["lo"] == 0 else lo_s[k]), (0.0 if b["hi"] == 0 else hi_s[k])
+            if abs((lo_k + hi_k) / 2 - mid) < 0.01 and hi_k > lo_k:
+                b["lo_" + key], b["hi_" + key] = round(float(lo_k), 4), round(float(hi_k), 4)
+    for b in out:                                        # обе стороны или ни одной
+        if not all(k_ in b for k_ in ("lo_f", "hi_f", "lo_b", "hi_b")):
+            for k_ in ("lo_f", "hi_f", "lo_b", "hi_b"):
+                b.pop(k_, None)
+    return out or None
+
+
+def band_lohi(b, P):
+    """Границы полосы yoke_stripe = "bands" в точках P: спереди — lo_f / hi_f, сзади — lo_b / hi_b, на плече — переход
+    по z, как у края кокетки (yoke_edge_h: YOKE_SIDE_BLEND, с плеча — YOKE_BLEND_X); без них — lo / hi. -> (lo, hi)."""
+    if "lo_f" not in b:
+        return b["lo"], b["hi"]
+    zb = YOKE_SIDE_BLEND or 0.1
+    w = np.clip((P[..., 2] + zb) / (2 * zb), 0, 1)
+    ax = np.abs(P[..., 0])
+    wx = np.clip((ax - YOKE_BLEND_X[0]) / (YOKE_BLEND_X[1] - YOKE_BLEND_X[0]), 0, 1)
+    wx = wx * wx * (3 - 2 * wx)
+    w = (P[..., 2] >= 0) * (1 - wx) + w * wx
+    return b["lo_b"] + (b["lo_f"] - b["lo_b"]) * w, b["hi_b"] + (b["hi_f"] - b["hi_b"]) * w
+
+
+def yoke_bands_ref(P, hts):
+    """Полосы у края кокетки в точках P: (высота края без мыса, линия V мыса — или None)."""
+    hfl = yoke_edge_h(P, {"front": hts.get("front_flat", hts["front"]), "back": hts["back"]})
+    vline = PANEL_TIP_Y + PANEL_SLOPE * np.abs(P[..., 0]) if hts.get("notch") else None
+    return hfl, vline
+
+
+YOKE_BANDS_REACH = 0.07            # м от края: дальше — расстояние по высоте (полос там нет)
+YOKE_BANDS_3D_X = (0.20, 0.28)     # м по |x|: ближе к середине — высота над краем, дальше — по поверхности (переход). Было
+#                                    (0,10; 0,15): у |x| ≈ 0,125 спереди расстояние по поверхности давало белой и золотой полосе STL
+#                                    «горб» на 2–3 мм (22.10, агент review-c; при любом весе 3D там — горб, высота — ровно); купол
+#                                    плеча (петля по высоте) — дальше 0,2 м. Поле только у yoke_stripe = "bands" (STL)
+YOKE_BANDS_TRAP_GAP = 0.004        # м: полосы в кокетке спереди кончаются на столько от боковины вставки V (как у NHL 27)
+
+
+def yoke_band_dist(P, m, hfl, tol):
+    """Знаковое расстояние (м) от края кокетки без мыса — по поверхности (3D до ближайшей точки края, + — в кокетке): у
+    полос yoke_stripe = "bands" по высоте над краем на куполе плеча (поверхность почти горизонтальна) контур полосы
+    шёл петлёй — крючок у переда плеча и ступенька сзади (STL выезд, сборка 1). Точки края — растр, |P_y − hfl| < tol
+    (полтекселя); дальше YOKE_BANDS_REACH — высота над краем."""
+    from scipy.spatial import cKDTree
+    dy = np.where(m, P[..., 1] - hfl, 0.0)
+    edge = m & (np.abs(dy) < tol) & (np.abs(P[..., 0]) > YOKE_BANDS_3D_X[0])
+    s = dy.copy()
+    near = m & (np.abs(dy) < YOKE_BANDS_REACH) & (np.abs(P[..., 0]) > YOKE_BANDS_3D_X[0])
+    if edge.sum() > 10:
+        d, _ = cKDTree(P[edge]).query(P[near])
+        # у ворота (|x| < YOKE_BANDS_3D_X[0]) — высота: там поверхность почти отвесна, а ближайшая точка края в 3D уводила
+        # белую полосу STL крючком вверх к вороту (сборка 4); к плечу — по поверхности, переход плавный
+        wx = np.clip((np.abs(P[near][:, 0]) - YOKE_BANDS_3D_X[0]) / (YOKE_BANDS_3D_X[1] - YOKE_BANDS_3D_X[0]), 0, 1)
+        wx = wx * wx * (3 - 2 * wx)
+        s[near] = dy[near] * (1 - wx) + np.sign(dy[near]) * d * wx
+    return s
+
+
+def yoke_bands_paint(new_out, new_in, c, P, GY, dside, cov, zone, keep, cloth, hts, g, w):
+    """Полосы yoke_stripe = "bands" поверх кокетки (new_in — цвет кокетки, new_out — ткани под ней) → (цвет, cloth):
+    у полосы над краем, начинающейся от края, — только верхняя граница (нижняя — край кокетки, cov), под краем — так же
+    верхняя; спереди под краем — до линии V мыса. Перенос цветов кокетки, ткани и полос (и смесей) у края — перекраска."""
+    bands = hts.get("bands") or ()
+    hfl, vline = yoke_bands_ref(P, hts)
+    m_ = GY > 0
+    s = yoke_band_dist(P, m_, hfl, 0.6 * GY / AA_PX)     # по поверхности (GY — м на тексель × AA_PX)
+    GS = px_size(s, m_)                                  # сглаживание края полосы — по полю расстояния
+    lo_all = min(min(b["lo"], b.get("lo_f", b["lo"]), b.get("lo_b", b["lo"])) for b in bands)
+    hi_all = max(max(b["hi"], b.get("hi_f", b["hi"]), b.get("hi_b", b["hi"])) for b in bands)
+    near = s > lo_all - YOKE_STRIPE_CLEAN
+    pal = [g, w] + [np.asarray(b["color"], np.float64) for b in bands]
+    for i_ in range(len(pal)):
+        for j_ in range(i_ + 1, len(pal)):
+            a_, sg = pal[i_], pal[j_] - pal[i_]
+            ts = np.clip(((c - a_) * sg).sum(-1) / max(float((sg * sg).sum()), 1e-6), 0, 1)
+            cloth = cloth | ((np.linalg.norm(c - (a_ + ts[..., None] * sg), axis=-1) < 40) & near & zone & ~keep)
+    # у самих полос (± YOKE_STRIPE_CLEAN) — всё: смесь трёх цветов переноса полос источника (не на отрезке двух) оставалась
+    # светлыми точками над белой полосой сзади (STL, сборка 2); нашивки и надпись ложатся потом
+    band_zone = (s > lo_all - YOKE_STRIPE_CLEAN) & (s < hi_all + YOKE_STRIPE_CLEAN)
+    cloth = cloth | (band_zone & zone & ~keep)
+    trap = hts.get("trap")
+    tcut = None
+    if trap is not None:                                 # шаблон ворота: полосы спереди — до боковины вставки V (STL выезд:
+        y_top, y_bot = trap                              # иначе у щита — золотые капли и белый крючок к вороту, сборка 4)
+        tt_ = np.clip((y_top - P[..., 1]) / max(y_top - y_bot, 1e-6), 0, 1)
+        xs_ = TRAP_X[0] + (TRAP_X[1] - TRAP_X[0]) * tt_ + YOKE_BANDS_TRAP_GAP
+        tcut = np.where(P[..., 2] > 0.03, (np.abs(P[..., 0]) - xs_) / GS, np.inf)
+    for b in bands:
+        col = np.asarray(b["color"], np.float64)[None, None]
+        lo_, hi_ = band_lohi(b, P)                       # по сторонам (STL выезд, 22.10) или как было
+        up = (hi_ - s) / GS
+        gp = dside if tcut is None else np.minimum(dside, tcut)
+        if b.get("gap_back"):                            # разрыв сзади посередине (у логотипа, STL выезд)
+            gp = np.where(P[..., 2] < 0, np.minimum(gp, (np.abs(P[..., 0]) - b["gap_back"]) / GY), gp)
+        if b["lo"] >= 0:                                 # в кокетке
+            db = up if b["lo"] == 0 else np.minimum(up, (s - lo_) / GS)
+            cb = np.clip(0.5 + np.minimum(db, gp), 0, 1)[..., None]
+            new_in = new_in * (1 - cb) + col * cb
+        else:                                            # под краем
+            db = (s - lo_) / GS if b["hi"] == 0 else np.minimum(up, (s - lo_) / GS)
+            if vline is not None:
+                db = np.where(P[..., 2] > 0, np.minimum(db, (vline - P[..., 1]) / GY), db)
+            cb = np.clip(0.5 + np.minimum(db, gp), 0, 1)[..., None]
+            new_out = new_out * (1 - cb) + col * cb
+    return new_out * (1 - cov[..., None]) + new_in * cov[..., None], cloth
+
+
+def yoke_bands_field(G, yk):
+    """Швы по краям полос yoke_stripe = "bands" на растре G: м до ближайшего края полосы (кроме края кокетки — его шов
+    и так есть), где полоса видна; None — полос нет."""
+    bands = yk.h.get("bands")
+    if not bands:
+        return None
+    P, N, U0 = G["P"], G["N"], G["U0"]
+    Q = yk.poly
+    uL, uR = np.interp(U0[..., 1], *Q["left"]), np.interp(U0[..., 1], *Q["right"])
+    dside = yoke_open(np.where(U0[..., 0] < 0.5, U0[..., 0] - uL, uR - U0[..., 0]) * G["MPU"])
+    hfl, vline = yoke_bands_ref(P, yk.h)
+    s = yoke_band_dist(P, G["m"], hfl, 0.6 * G["TS"])   # по поверхности, как YokePaint
+    d = np.full(s.shape, np.inf)
+    for b in bands:
+        lo_, hi_ = band_lohi(b, P)                       # по сторонам (STL выезд, 22.10) или как было
+        for e0, e in ((b["lo"], lo_), (b["hi"], hi_)):
+            if e0 == 0:
+                continue
+            de = np.abs(s - e)
+            if b.get("gap_back"):                        # разрыв сзади посередине — без шва
+                de = np.where((P[..., 2] < 0) & (np.abs(P[..., 0]) < b["gap_back"]), np.inf, de)
+            if e0 < 0 and vline is not None:
+                de = np.where((P[..., 2] > 0) & (P[..., 1] > vline), np.inf, de)
+            d = np.minimum(d, de)
+    if yk.h.get("trap") is not None:                     # спереди — до боковин вставки V (как YokePaint)
+        y_top, y_bot = yk.h["trap"]
+        tt_ = np.clip((y_top - P[..., 1]) / max(y_top - y_bot, 1e-6), 0, 1)
+        xs_ = TRAP_X[0] + (TRAP_X[1] - TRAP_X[0]) * tt_ + YOKE_BANDS_TRAP_GAP
+        d = np.where((P[..., 2] > 0.03) & (np.abs(P[..., 0]) < xs_), np.inf, d)
+    return np.where(dside > 0, d, np.inf)
+
+
+# Кокетка, переходящая в полосу по верху рукава (профиль yoke_sleeve = "band"; 22.10, агент yokes, COL и PHI): у NHL 27
+# кокетка (синяя / бордовая COL, белая / оранжевая PHI) кончается на груди и спине прямым краем, а на руке продолжается
+# полосой по верху рукава до манжеты — край идёт вдоль руки спереди и сзади, низ рукава — цвета ткани; серебряный кант
+# COL — по всему краю. Перенос как есть (сборка 1 COL) давал на стыке туловища и рукава ступеньки канта и зубцы (там, где
+# туловище и рукав переносятся по-разному). Здесь край — два поля в метрах: туловище — высота над краем кокетки (как
+# YokePaint), рукав — дуга до края полосы в кадре оси руки (угол края полосы — прямая по длине руки, замер по переносу
+# рукава вдали от проймы и манжеты), полоса рукава кончается у шва проймы Edge; кокетка — их гладкое объединение
+# (smooth_max, скругление YOKE_BAND_R), кант — полоса ширины источника вдоль всего края
+YOKE_BAND_SEAM = 0.18              # м по оси руки от плеча (|x| 0,30 у NHL 24) — ближе замер полосы рукава не берётся: там полоса
+#                                    сливается с кокеткой и расширяется (COL: 10° → 41°) — на руке выходил горб края; у плеча
+#                                    край — крайний замер, дальше — объединение с кокеткой (smooth_max)
+YOKE_BAND_CUFF = 0.05              # м от конца рукава — тоже
+YOKE_BAND_SEAM_DEFAULT = YOKE_BAND_SEAM   # профиль yoke_band_seam (м; 23.10, агент review-d, WPG выезд — 0,06)
+YOKE_BAND_SKIP = None              # профиль yoke_band_skip = [d от, до] (м от манжеты; 23.10, review-d, WPG выезд): зона полос
+#                                    рукава — не в замер полосы (между соседями — интерполяция). У WPG в полосах рукава есть
+#                                    тёмно-синяя (цвета кокетки) — замер там рвался (край сзади…спереди −40…−24°), а сглаживание
+#                                    (медиана 5 см) тянуло и соседей: выше полос до плеча (замер кончался на 0,27 м от манжеты,
+#                                    YOKE_BAND_SEAM 0,18) полоса выходила −40…40° вместо −120…40° у NHL 27 — белый клин на
+#                                    переде плеча. Нет — как было
+YOKE_BAND_R = 0.06                 # м: скругление угла кокетки и полосы рукава (3 см — угол заметен, у NHL 27 — плавная дуга)
+YOKE_BAND_Y0 = 0.9                 # м: зона перекраски на рукаве (за швом проймы) — вся рука; туловище — от 1,45, как обычно
+YOKE_BAND_SEAM_IN = 0.03           # м: полоса рукава кончается за швом проймы на туловище (мягко, YOKE_BAND_R) — без угла
+YOKE_BAND_CLEAN = 0.12             # м под краем: перенос канта источника (у проймы он уходит вниз) — перекраска (сборка 1 COL:
+#                                    серебряные крючки на груди у плеча)
+
+
+def smooth_max(a, b, r):
+    """Гладкий максимум полей (объединение областей «> 0» со скруглением r)."""
+    h = np.clip(0.5 + 0.5 * (a - b) / r, 0, 1)
+    return b + (a - b) * h + r * h * (1 - h)
+
+
+def arm_axes(pos):
+    """Оси рук Edge: {−1: …, +1: …} — (центр, ось наружу, «вверх», «вперёд», конец рукава t) по вершинам |x| > 0,30."""
+    out = {}
+    for sg in (-1.0, 1.0):
+        a = pos[pos[:, 0] * sg > 0.30]
+        c0 = a.mean(0)
+        _, _, vt = np.linalg.svd(a - c0, full_matrices=False)
+        ax = vt[0] * np.sign(vt[0][0] * sg)
+        up = np.array([0.0, 1.0, 0.0]) - ax[1] * ax
+        up /= np.linalg.norm(up)
+        fr = np.cross(ax, up)
+        fr *= np.sign(fr[2])
+        out[sg] = (c0, ax, up, fr, float(((a - c0) @ ax).max()))
+    return out
+
+
+def arm_coords(P, axes):
+    """(t вдоль оси руки, φ — угол от верха, + к переду, ρ — до оси) точек P по стороне x."""
+    t, ph, rho = (np.zeros(P.shape[:-1]) for _ in range(3))
+    for sg, (c0, ax, up, fr, _) in axes.items():
+        sel = P[..., 0] * sg > 0
+        d = P[sel] - c0
+        tt = d @ ax
+        r = d - tt[:, None] * ax
+        t[sel], ph[sel], rho[sel] = tt, np.arctan2(r @ fr, r @ up), np.linalg.norm(r, axis=1)
+    return t, ph, rho
+
+
+def armhole_side_dist(P, m, U):
+    """Знаковое расстояние (м, 3D) до шва проймы Edge (сглаженный, как armhole_split = "full"): + — рукав. P, m, U —
+    точки, маска и развёртка растра. -> (поле, маска рукава, точки шва)."""
+    from scipy.spatial import cKDTree
+    vs, us = _armhole_full()
+    u, v = U[..., 0], U[..., 1]
+    sE = np.where(P[..., 0] < 0, u, 1.0 - u)
+    au = np.interp(v, vs, us)
+    inz = m & (v >= vs[0]) & (v <= vs[-1]) & (np.abs(P[..., 0]) > ARMHOLE_X)
+    sleeve = inz & (sE < au)
+    edge = inz & (np.abs(sE - au) < 1.5 / P.shape[1])
+    d = np.full(P.shape[:2], 1.0)
+    d[m], _ = cKDTree(P[edge]).query(P[m])
+    return np.where(sleeve, d, -d), sleeve, P[edge]
+
+
+def sleeve_band_fit(P, c, kind, pos24):
+    """Край полосы по верху рукава — по источнику (P, c — точки наружной оболочки сетки NHL 24 и цвет, pos24 — её
+    вершины для оси руки): углы φ кокетки по длине руки (шаг 1 см) от конца рукава d = t_end − t (у Edge и NHL 24 рукав
+    почти одной длины и так же согнут: манжета — общий отсчёт); углы — от середины полосы (у PHI белое у манжеты —
+    кольцом, низ полосы — через ±180°), 1-й / 99-й процентиль; кольцо целиком — ±180°, без кокетки (манжета) — пусто;
+    сглажено по длине (медиана 5 см). Замер по переносу на Edge (сборка 1 PHI) у проймы путался: плечо выходило
+    оранжевым. -> {сторона: (d, φ_back(d), φ_front(d), φ0)} или None."""
+    from scipy.ndimage import median_filter
+    axes = arm_axes(pos24)
+    t, ph, _ = arm_coords(P, axes)
+    yk = yoke_mask(c, 80, kind)
+    out = {}
+    for sg, (c0, ax, *_r, t_end) in axes.items():
+        arm = P[:, 0] * sg > 0.30
+        d = t_end - t
+        d_max = float(d[arm].max())
+        rng = arm & yk & (d < d_max - YOKE_BAND_SEAM)
+        if rng.sum() < 100:
+            return None
+        ph0 = float(np.angle(np.exp(1j * ph[rng]).mean()))
+        ps = np.angle(np.exp(1j * (ph - ph0)))
+        db, lo, hi = [], [], []
+        for d0 in np.arange(0.0, d_max - YOKE_BAND_SEAM, 0.01):
+            if YOKE_BAND_SKIP and YOKE_BAND_SKIP[0] <= d0 + 0.005 <= YOKE_BAND_SKIP[1]:
+                continue                                 # зона полос рукава (yoke_band_skip, WPG) — без замера
+            sel = arm & (np.abs(d - d0 - 0.005) < 0.005)
+            if sel.sum() < 30:
+                continue
+            yy = sel & yk
+            db.append(d0 + 0.005)
+            if yy.sum() >= 0.97 * sel.sum():             # кольцо целиком
+                lo.append(-np.pi - 0.5)
+                hi.append(np.pi + 0.5)
+            elif yy.sum() < 30:                          # кокетки нет (манжета)
+                lo.append(0.5)
+                hi.append(-0.5)
+            else:
+                lo.append(float(np.percentile(ps[yy], 1)))
+                hi.append(float(np.percentile(ps[yy], 99)))
+        if len(db) < 4:
+            return None
+        from scipy.ndimage import gaussian_filter1d
+        lo = gaussian_filter1d(median_filter(np.array(lo), 5, mode="nearest"), 2.0, mode="nearest") + ph0
+        hi = gaussian_filter1d(median_filter(np.array(hi), 5, mode="nearest"), 2.0, mode="nearest") + ph0
+        out[sg] = (np.array(db), lo, hi, ph0)
+        k = np.linspace(0, len(db) - 1, 6).astype(int)
+        print(f"  полоса рукава ({'левый' if sg < 0 else 'правый'}, источник): от манжеты, м / край сзади…спереди, ° — "
+              + ", ".join(f"{db[i]:.2f}: {np.degrees(lo[i]):.0f}…{np.degrees(hi[i]):.0f}" for i in k))
+    return out
+
+
+def sleeve_band_field(P, m, U, axes, fit):
+    """Поле полосы по верху рукава (м, + внутри): дуга до ближайшего края полосы; на туловище — не дальше
+    YOKE_BAND_SEAM_IN за швом проймы (мягкое пересечение: прямой срез по шву давал угол «<» у подмышки). -> (поле,
+    расстояние до шва со знаком: + рукав)."""
+    s_dist, _, _ = armhole_side_dist(P, m, U)
+    t, ph, rho = arm_coords(P, axes)
+    F = np.full(P.shape[:2], -1.0)
+    for sg, (db, lo, hi, ph0) in fit.items():
+        sel = m & (P[..., 0] * sg > 0)
+        tt = axes[sg][4] - t[sel]                        # от конца рукава Edge (за краями замера — крайние значения)
+        ps = np.angle(np.exp(1j * (ph[sel] - ph0))) + ph0   # угол — около середины полосы (без скачка у ±180° под ней)
+        F[sel] = rho[sel] * np.minimum(ps - np.interp(tt, db, lo), np.interp(tt, db, hi) - ps)
+    return -smooth_max(-F, -(s_dist + YOKE_BAND_SEAM_IN), YOKE_BAND_R), s_dist
 
 
 def yoke_open(dside):
@@ -1636,6 +2952,63 @@ def yoke_edge_h(P, hts):
 
 
 YOKE_BLEND_X = (0.12, 0.18)        # м по |x|: переход края кокетки «на плечо» по z — с плеча (у ворота — перед / спина)
+YOKE_FRONT = None                  # профиль yoke_front = "flat": край кокетки спереди — ровный до середины; "source" (COL, 22.10,
+#                                    review-c): у середины ровный, с YOKE_FLAT_X к руке — край источника (вниз)
+YOKE_FRONT_EXT = 0.10              # м: yoke_front = "source" — край спереди за концом замера продолжается наклоном у конца
+YOKE_SPECKS = False                # профиль yoke_specks = true (22.10, агент review-c, EDM): точки чужого цвета внутри ткани,
+#                                    которую перекрашивает YokePaint, — тоже перекрашиваются (yoke_specks)
+YOKE_SPECK_PX = 16                 # тексели на 1024² (по площади): часть не больше — «точка»
+YOKE_SPECK_RING = 0.9              # доля кольца вокруг точки (1 тексель), что перекрашивается: меньше — деталь рисунка
+
+
+def yoke_specks(cloth, zone, width):
+    """Одиночные точки в перекрашиваемой ткани (yoke_specks, 22.10, агент review-c, EDM): связные части зоны YokePaint не
+    цвета ткани / кокетки (cloth = False) не больше YOKE_SPECK_PX текселей 1024², вокруг которых (кольцо в 1 тексель) почти
+    всё перекрашивается (≥ YOKE_SPECK_RING), — тоже перекрашиваются. У EDM сзади в кокетке на 1,654 м оставался пунктир
+    строчки источника (у NHL 27 — шов по краю белой / оранжевой полосы под кокеткой, у нас кокетка ниже): серые и розовые
+    чёрточки 1–6 текселей, крупно видны (сборка 2 агента yokes: 12 / 33 точки). Детали рисунка крупнее или не окружены
+    тканью (нашивки — keep, вне зоны), надпись сзади ложится позже. -> cloth | точки."""
+    from scipy import ndimage as ndi
+    rest = zone & ~cloth
+    st = np.ones((3, 3), bool)
+    lab, n = ndi.label(rest, st)
+    if not n:
+        return cloth
+    size = np.bincount(lab.ravel(), minlength=n + 1)
+    small = size <= YOKE_SPECK_PX * (width / 1024.0) ** 2
+    small[0] = False
+    labc = np.where(small[lab], lab, 0)
+    ring_lab = ndi.grey_dilation(labc, footprint=st)
+    ring = (ring_lab > 0) & (labc == 0)
+    tot = np.bincount(ring_lab[ring], minlength=n + 1)
+    ok = np.bincount(ring_lab[ring & cloth], minlength=n + 1)
+    good = small & (tot > 0) & (ok >= YOKE_SPECK_RING * tot)
+    sp = good[labc] & (labc > 0)
+    print(f"  кокетка: точки чужого цвета в ткани (yoke_specks) — {int(good.sum())} шт., {int(sp.sum())} текселей")
+    return cloth | sp
+YOKE_MIX_KEEP = False              # профиль yoke_mix_keep = true (23.10, агент review-d, WPG выезд): yoke_mix_keep
+YOKE_MIX_T = (0.1, 0.9)            # доля пути «кокетка — ткань»: смесь (не сам цвет кокетки или ткани)
+YOKE_MIX_PX = 5                    # текселей 1024²: смесь не дальше стольких от пикселя чужого цвета (полосы) — каёмка полосы
+
+
+def yoke_mix_keep(cloth, t, dseg, zone, width):
+    """Каёмки полос (yoke_mix_keep, 23.10, агент review-d, WPG выезд): YokePaint перекрашивает ткань двух цветов и их смесь —
+    а серебристые каёмки голубых полос рукава WPG (серое между тёмно-синим и белым) и есть такая «смесь»: на полосе по верху
+    рукава (yoke_sleeve = "band") они пропадали, полосы — голые голубые. С полем смесь (YOKE_MIX_T, ближе 40 к отрезку
+    «кокетка — ткань») не дальше YOKE_MIX_PX от пикселя чужого цвета (полосы: дальше 40 от отрезка) остаётся как перенеслась;
+    сглаженный край самой кокетки (смесь без чужого цвета рядом) перекрашивается, как раньше. -> cloth без каёмок."""
+    from scipy import ndimage as ndi
+    mix = cloth & (dseg < 40) & (t > YOKE_MIX_T[0]) & (t < YOKE_MIX_T[1])
+    other = zone & (dseg >= 40)
+    r = max(1, int(round(YOKE_MIX_PX * width / 1024.0)))
+    near = ndi.binary_dilation(other, iterations=r)
+    kept = mix & near
+    print(f"  кокетка: смесь у полос другого цвета — как перенеслась (yoke_mix_keep), текселей {int(kept.sum())}")
+    return cloth & ~kept
+
+
+YOKE_SLEEVE = None                 # профиль yoke_sleeve = "keep" (22.10, WPG выезд: рукав целиком цвета кокетки) — YokePaint
+#                                    не трогает рукав за швом проймы; без поля под краем кокетки на руке — ткань (MTL, BUF, DAL)
 
 
 class YokePaint:
@@ -1661,6 +3034,17 @@ class YokePaint:
             self._geo[shape] = (P, m, px_size(P[..., 1], m), U0)
         return self._geo[shape]
 
+    def sleeve_side(self, shape):
+        """Тексели рукава — за швом проймы Edge (armhole_u, деление «full»): |x| > ARMHOLE_X, ближе к краю развёртки."""
+        P, m, _, _ = self.geo(shape)
+        Hs, Ws = shape
+        tu = np.broadcast_to((np.arange(Ws) + 0.5) / Ws, shape)
+        tv = np.broadcast_to(((np.arange(Hs) + 0.5) / Hs)[:, None], shape)
+        sE = np.where(P[..., 0] < 0, tu, 1.0 - tu)
+        vs, us = _armhole_full()
+        au = np.interp(np.clip(tv, ARMHOLE_ZONES[0][0], ARMHOLE_ZONES[-1][1]), vs, us)
+        return m & (np.abs(P[..., 0]) > ARMHOLE_X) & (sE < au)
+
     def __call__(self, out, msk):
         from PIL import Image
         Hs, Ws = msk.shape
@@ -1675,12 +3059,25 @@ class YokePaint:
         ax = np.abs(P[..., 0])
         h = yoke_edge_h(P, self.h)
         dh = (P[..., 1] - h) / GY
+        Fs = None
+        if YOKE_SLEEVE == "band":                        # кокетка и полоса по верху рукава (COL, PHI): гладкое объединение
+            self.band_fit = self.h.get("band_fit")      # замер по источнику (yoke_heights)
+            self.axes = arm_axes(self.mesh["pos"])
+            if self.band_fit is not None:
+                Fs, s_arm = sleeve_band_field(P, m, U0, self.axes, self.band_fit)
+                Fu = smooth_max(P[..., 1] - h, Fs, YOKE_BAND_R)
+                dh = Fu / px_size(Fu, m)
         dmin = np.minimum(dside, dh)
         cov = np.clip(0.5 + dmin, 0, 1)
         lace = (P[..., 2] > 0) & (ax < YOKE_LACE_X) & (P[..., 1] < YOKE_LACE_Y)   # вставка и шнурки — как есть
         if COLLAR != "lace":
             lace = np.zeros_like(lace)
-        zone = m & msk & (P[..., 1] > 1.45) & (dside > -YOKE_PAD * Ws) & ~lace
+        high = P[..., 1] > 1.45
+        if Fs is not None:                               # полоса рукава: и весь рукав (за швом проймы, без низа туловища)
+            high = high | ((s_arm > -YOKE_BAND_SEAM_IN) & (P[..., 1] > YOKE_BAND_Y0))
+        zone = m & msk & high & (dside > -YOKE_PAD * Ws) & ~lace
+        if YOKE_SLEEVE == "keep":                        # рукав цвета кокетки (WPG выезд): рукав за швом проймы — как
+            zone &= ~self.sleeve_side((Hs, Ws))          # перенёсся (иначе под краем кокетки на руке — белая ткань)
         keep = np.asarray(Image.fromarray(self.keep.astype(np.uint8) * 255).resize((Ws, Hs), Image.NEAREST)) > 0
         c = out[..., :3]
         g, w = Q["green"], Q["white"]
@@ -1688,14 +3085,27 @@ class YokePaint:
         t = np.clip(((c - g) * seg).sum(-1) / (seg * seg).sum(), 0, 1)
         dseg = np.linalg.norm(c - (g + t[..., None] * seg), axis=-1)
         trimc = (c[..., 0] > c[..., 1] + 60) & (c[..., 0] > 80)   # прежняя кромка/вставка (перерисуются позже)
+        if YOKE_CLEAN_DEPTH is not None:                 # у кокетки «на плечо» зона — вся рука выше 1,45 м: красные полосы
+            trimc &= P[..., 1] > h - YOKE_CLEAN_DEPTH     # рукава там — не кромка (CAR дом, 22.10: разрыв полос на предплечье)
         cloth = ((dseg < 40) | trimc) & zone & ~keep
         st = self.h.get("stripe")
-        if st:                                           # полоса под кокеткой (yoke_stripe): под краем без мыса, у мыса —
+        if self.h.get("bands"):                          # полосы у края кокетки (yoke_stripe = "bands", STL выезд)
+            new, cloth = yoke_bands_paint(w[None, None] + 0 * c, g[None, None] + 0 * c, c, P, GY, dside, cov, zone, keep,
+                                          cloth, self.h, g, w)
+        elif st:                                           # полоса под кокеткой (yoke_stripe): под краем без мыса, у мыса —
             sc = np.asarray(st["color"], np.float64)     # ниже V; перенос полосы источника (и её смеси) — тоже ткань
             hfl, hlo, vline = yoke_stripe_band(P, self.h)
             ds_ = np.minimum(dside, (P[..., 1] - hlo) / GY)
+            yfl = P[..., 1] - hfl                        # высота над краем без мыса (м)
+            if Fs is not None:                           # кант — и вдоль полосы рукава (COL): ширина по полю объединения
+                yfl = smooth_max(yfl, Fs, YOKE_BAND_R)
+                ds_ = np.minimum(dside, (yfl + st["width"]) / px_size(yfl, m))
+                hlo = P[..., 1] - yfl - st["width"] - (YOKE_BAND_CLEAN - YOKE_STRIPE_CLEAN)   # near ниже: под краем — до
+                #                                          YOKE_BAND_CLEAN по тому же полю
             if vline is not None:
                 ds_ = np.where(P[..., 2] > 0, np.minimum(ds_, (vline - P[..., 1]) / GY), ds_)
+            if st.get("arm") is False:                   # только на туловище (NSH выезд): у шва проймы кончается
+                ds_ = np.minimum(ds_, stripe_torso(U0, P, Ws / AA_PX))
             cs = np.clip(0.5 + ds_, 0, 1)
             near = P[..., 1] > hlo - YOKE_STRIPE_CLEAN   # и выше: полоса источника (у BUF сзади на 4 см выше нашей)
             #                                              оставалась золотыми чёрточками в синей кокетке (сборка 1, 22.10),
@@ -1708,6 +3118,10 @@ class YokePaint:
             new = base * (1 - cov[..., None]) + g[None, None] * cov[..., None]
         else:
             new = w[None, None] * (1 - cov[..., None]) + g[None, None] * cov[..., None]
+        if YOKE_SPECKS:                                  # точки чужого цвета в перекрашиваемой ткани (EDM, 22.10)
+            cloth = yoke_specks(cloth, zone & ~keep, Ws)
+        if YOKE_MIX_KEEP:                                # смесь ткани и кокетки у полос другого цвета — как перенеслась
+            cloth = yoke_mix_keep(cloth, t, dseg, zone & ~keep & ~trimc, Ws)
         out = out.copy()
         out[..., :3] = np.where(cloth[..., None], new, c)
         return out
@@ -1726,6 +3140,16 @@ INSERT_CORNER = (1.629, 0.0426)    # y, |x| самого широкого угл
 # 1,624 — 3,15; угол и верх — как у MIN (с ними сходятся швы планки и лацканы)
 INSERT_HW_NHL27 = ((1.604, 0.0), (1.608, 0.0035), (1.612, 0.005), (1.616, 0.0125), (1.620, 0.0225), (1.624, 0.0315),
                    INSERT_CORNER, (1.680, 0.0094))
+# Профиль insert_contour = "nhl27" (23.10, агент review-e, FLA): контур вставки — как у шаблона adidas NHL 27 (замер
+# основы FLA дома на сетке NHL 24, вид спереди, qa/review-e/insert_meas.py; у DAL дома тот же): язычок до 1,591 м между
+# нижними шнурками (0,9 мм на 1,594, 3 мм на 1,598), под верхними шнурками — шейка ±0,7–0,8 см (1,606–1,6135); выше —
+# стороны V INSERT_HW_NHL27 (наложение на рендер NHL 27, qa/review-e/tongue.py --contour: край золота V — по ним; замер
+# цвета там шире на 0,4–0,7 см — тёмная строчка шва за краем), угол и верх — общие (с ними сходятся лацканы и швы).
+# У INSERT_HW_NHL27 острие на 1,604 (решение по DAL) — у FLA язычок на 1,3 см короче NHL 27, острие вместо шейки (ревью 23.10)
+INSERT_HW_NHL27_FULL = (((1.591, 0.0), (1.598, 0.0030), (1.606, 0.0068), (1.6135, 0.0080))
+                        + tuple(p for p in INSERT_HW_NHL27 if p[0] >= 1.616))
+INSERT_CONTOUR = None              # профиль insert_contour (use_club)
+INSERT_OWN_TOL = 40.0              # insert_contour: ближе к отрезку «ткань — вставка» — своё (ниже INSERT_LACE_Y красится)
 # (угол — на высоте линии кокетки спереди у вставки, 1,629 м: на 1,625 между линией и углом торчал белый «зубец» —
 # лесенка у стыка вставки и кокетки, пользователь, 19.10; верхний край — по-прежнему прямая от угла к вороту)
 # (верх — продолжение той же прямой края к вороту, до кромки: раньше над 1,645 край шёл отвесно, и у угла с кромкой
@@ -1733,6 +3157,8 @@ INSERT_HW_NHL27 = ((1.604, 0.0), (1.608, 0.0035), (1.612, 0.005), (1.616, 0.0125
 INSERT_LACE_Y = 1.617              # ниже — шнурки поверх вставки (тёмное не перекрашивается; 1,607 — верхний
 #                                    шнурок прерывался)
 INSERT_BAND = 0.015                # м за краем вставки — красное перекрашивается в ткань (там прежний перенос)
+INSERT_CLEAN = None                # профиль insert_clean = "blend" (22.10, NYI): за краем вставки — и смесь её цвета с тканью
+INSERT_BLEND_T = 0.15              # доля цвета вставки в смеси — от стольких (меньше — ткань с шумом)
 INSERT_KITS = {("MIN", "away"), ("MIN", "home")}
 # Вставка не красная (22.10, TOR: у NHL 27 ворот со шнуровкой, как у MIN, но вставка — цвета ткани: синяя дома, белая в
 # гостях; insert_rule искал только красное — у TOR его нет). Профиль insert_color = "source": цвет вставки — медиана
@@ -1752,6 +3178,9 @@ TRIM_MEASURE = "percentile"        # профиль trim_measure: percentile —
 #                                    contiguous — сплошная полоса от края по углу (trim_profile; генератор — с DET 22.10)
 TRIM_K_MAX_ADD = 0.004             # м: прибавка TRIM_K при contiguous — не больше (узкой «чуть шире», широкой — нет)
 TRIM_STEP_RATIO = 2.0              # широкая часть во столько раз шире узкой — «ступенька»
+TRIM_STEP_FROM = 0.0               # профиль trim_step_from (град): узкая часть кромки и ступенька — замер с этого |θ|
+#                                    (22.10, NYI дом: оранжевая вставка шнуровки цвета кромки у середины давала «узкую»
+#                                    1,4 см и ступеньку на 15° вместо ~80° — кромка до обода по всему переду); 0 — как было
 TRIM_STEP_SOFT = 1.5               # град: переход ступеньки и концов у разрыва (≈ 1–2 текселя)
 AA_PX = 2.0                        # ширина сглаживания краёв — в текселях сверхвыборки (×2): ≈ 1 тексель карты
 TRIM_CLEAR = 0.008                  # м за кромкой — зубцы прежней кромки убираются
@@ -1836,6 +3265,14 @@ class InsertPaint:
         from scipy import ndimage as ndi
         lace = (y < INSERT_LACE_Y) & (np.linalg.norm(c - self.lace[None, None], axis=-1) < LACE_DIST)
         lace = ndi.binary_opening(lace, structure=np.ones((3, 3), bool), iterations=1)
+        if INSERT_CONTOUR:                               # insert_contour (FLA, 23.10): у шнуровки — только ткань, вставка
+            own = np.zeros(lace.shape, bool)             # и их смесь; края шнурков (смесь с тканью) и тени — как есть: язычок
+            for a_ in {tuple(self.white), tuple(self.green)}:   # NHL 27 под перекрестьем перекрашивал их (выезд —
+                a_ = np.asarray(a_, np.float64)          # белым: шнурки у перекрестья тоньше и светлее)
+                sg = self.red - a_
+                ts = np.clip(((c - a_) * sg).sum(-1) / max((sg * sg).sum(), 1e-6), 0, 1)
+                own |= np.linalg.norm(c - (a_ + ts[..., None] * sg), axis=-1) < INSERT_OWN_TOL
+            lace = lace | ((y < INSERT_LACE_Y) & ~own)
         # сначала красное прежнего переноса (и его смесь с тканью) вокруг и внутри контура → ткань, потом вставка с
         # мягким краем поверх чистой ткани: клин NHL 24 после переноса чуть правее нашего — справа край сглаживался
         # по красному и обрывался в ткань (ступенька у клина между шнурками, 19.10); кромку (у ворота) — не трогать
@@ -1843,7 +3280,20 @@ class InsertPaint:
         if INSERT_COLOR:                                 # вставка не красная (insert_color): прежний перенос — её цвета,
             redish = (np.linalg.norm(c - self.red[None, None], axis=-1) < 40) & \
                 bool(np.abs(self.red - self.white).max() >= 45)   # у вставки цвета ткани (TOR) — ничего
+            if INSERT_CLEAN == "blend" and np.abs(self.red - self.white).max() >= 45:
+                # и смесь цвета вставки с тканью / кокеткой (22.10, NYI: оранжевый пунктир под нижним краем вставки и
+                # «крючок» под её углом — сглаженный край прежнего переноса, до цвета вставки дальше 40)
+                for a_ in {tuple(self.white), tuple(self.green)}:
+                    a_ = np.asarray(a_, np.float64)
+                    sg = self.red - a_
+                    if np.abs(sg).max() < 45:
+                        continue
+                    ts = np.clip(((c - a_) * sg).sum(-1) / (sg * sg).sum(), 0, 1)
+                    redish |= (np.linalg.norm(c - (a_ + ts[..., None] * sg), axis=-1) < 30) & (ts > INSERT_BLEND_T)
         zone = front & (np.abs(x) < hw + INSERT_BAND) & (D > INSERT_TRIM) & redish & ~lace
+        lp = getattr(self, "lapel", None)                # лацкан цвета вставки (NYR выезд, 22.10: красные) — не «прежний
+        if lp is not None and getattr(lp, "last_cov", None) is not None and lp.last_cov.shape == zone.shape:
+            zone = zone & ~(lp.last_cov > 0.02)          # перенос»: у вставки лацкан перекрашивался в ткань — белая плашка
         tw = getattr(self, "trim_w", None)
         if tw is not None:                               # кромка цвета вставки (DAL дом: чёрные) — не «прежний перенос»:
             zone = zone & (D > np.interp(self._th[(Hs, Ws)], tw[0], tw[1], period=360) + 0.002)   # её ширина — по углу
@@ -2054,6 +3504,26 @@ FOLD_INPAINT = 4.0                 # текселей: складки под з�
 N24_RELIEF_FLAT = [(0.465, 0.125, 0.535, 0.172),   # u0, v0, u1, v1 base_normal NHL 24: бирка на спине (под номером),
                    (0.398, 0.598, 0.462, 0.662),   # спонсор на груди (TRIA — у MIN; в цвете снят правилом [sponsor])
                    (0.538, 0.598, 0.602, 0.662)]   # и место второго спонсора
+BN_KEEP_LACE = False               # профиль base_normal_keep_lace = true (23.10, агент review-d, NYI): base_normal_decals не
+#                                    выравнивает шнуровку (LACE_ZONE на сетке источника). У NYI маска нашивок (выпуклые оболочки
+#                                    щита и оранжевой вставки + DECAL_FLAT_GROW) накрывала всю шнуровку: люверсы и шнурки без
+#                                    рельефа, белые шнурки выезда на белом не видны. Нет — как было
+
+
+def lace_zone_src(src, size):
+    """Зона шнуровки (LACE_ZONE, мягкий край LACE_FADE) на развёртке сетки источника size² — вес 0…1 (base_normal_keep_lace).
+    Середина горловины NHL 24 — на 0,35 см левее оси (CoordMap.x_fix)."""
+    tid, bar = kit3d.raster_uv(src, size)
+    m = tid >= 0
+    P = np.zeros((size, size, 3))
+    P[m] = (bar[m][:, :, None] * src["pos"][src["tri"][tid[m]]]).sum(1)
+    f = LACE_FADE
+    x = np.abs(P[..., 0] + 0.0035)
+    z = m & (P[..., 2] > 0.03)
+    return z * Hy.smooth((LACE_ZONE[0] + f - x) / f) * Hy.smooth((P[..., 1] - LACE_ZONE[1] + f) / f) * \
+        Hy.smooth((LACE_ZONE[2] + f - P[..., 1]) / f)
+
+
 BASE_NM_DECALS = None              # профиль base_normal_decals: "flat" — рельеф нашивок, которые EA «запекла» в
 #                                    _base_normal (TBL ten, 21.10: молния герба и YMCA), выравнивается по маске
 #                                    «готовый − основа»: цвет герба [crest_fit] сдвигает и уменьшает, а рельеф стоял бы на
@@ -2470,6 +3940,9 @@ def yoke_field(G, yk):
     dside = yoke_open(np.where(U0[..., 0] < 0.5, U0[..., 0] - uL, uR - U0[..., 0]) * G["MPU"])
     h = yoke_edge_h(P, yk.h)
     dh = (y - h) / np.maximum(np.sqrt(np.clip(1 - N[..., 1] ** 2, 0, 1)), 0.3)
+    if yk.h.get("band_fit") is not None:                 # полоса по верху рукава (yoke_sleeve = "band", COL, PHI)
+        dh = smooth_max(dh, sleeve_band_field(P, G["m"], U0, arm_axes(yk.mesh["pos"]), yk.h["band_fit"])[0],
+                        YOKE_BAND_R)
     return np.minimum(dside, dh)
 
 
@@ -2482,11 +3955,17 @@ def yoke_stripe_field(G, yk):
     Q = yk.poly
     uL, uR = np.interp(U0[..., 1], *Q["left"]), np.interp(U0[..., 1], *Q["right"])
     dside = yoke_open(np.where(U0[..., 0] < 0.5, U0[..., 0] - uL, uR - U0[..., 0]) * G["MPU"])
-    _, hlo, vline = yoke_stripe_band(P, yk.h)
+    hfl, hlo, vline = yoke_stripe_band(P, yk.h)
     k = np.maximum(np.sqrt(np.clip(1 - N[..., 1] ** 2, 0, 1)), 0.3)
     F = np.minimum(dside, (P[..., 1] - hlo) / k)
+    if yk.h.get("band_fit") is not None:                 # кант и вдоль полосы рукава (COL)
+        F = np.minimum(dside, smooth_max((P[..., 1] - hfl) / k, sleeve_band_field(P, G["m"], U0, arm_axes(yk.mesh["pos"]),
+                                                                                   yk.h["band_fit"])[0],
+                                         YOKE_BAND_R) + yk.h["stripe"]["width"])
     if vline is not None:
         F = np.where(P[..., 2] > 0, np.minimum(F, (vline - P[..., 1]) / k), F)
+    if yk.h["stripe"].get("arm") is False:               # полоса только на туловище: на рукаве шва низа полосы нет
+        F = np.where(stripe_torso(U0, P, 1.0) < 0, np.inf, F)
     return F
 
 
@@ -2518,6 +3997,8 @@ def design_seams(mesh, painters, S=2048, out_S=1024):
     if tr is not None:
         wid = np.interp(TH, tr.width[0], tr.width[1], period=360)
         d_t = np.where(m & ~B & ~in_ins, np.abs(wid - D), inf)
+        if getattr(tr, "no_seam", False):                # лацканы цвета кромки (lapel_trim_band): шва по краю кромки нет
+            d_t = inf
         if getattr(tr, "band_back", False):              # collar_band = "back": шов полосы у края — по кругу, широкой
             wb = band_w(TH)                              # части — где она шире полосы (обод, ступенька от полосы)
             d_t = np.where(m & ~B & ~in_ins, np.minimum(np.where(wid > wb + 0.001, np.abs(wid - D), inf),
@@ -2547,6 +4028,12 @@ def design_seams(mesh, painters, S=2048, out_S=1024):
         F_s = yoke_stripe_field(G, yk)                   # полоса под кокеткой: шов и по её нижнему краю (BUF, 22.10)
         if F_s is not None:
             d_y = np.minimum(d_y, np.where(m & ~B & ~in_ins & (D > wid + 0.002) & (y > 1.45), np.abs(F_s), inf))
+        F_b = yoke_bands_field(G, yk)                    # полосы у края кокетки (STL выезд): швы по их краям
+        if F_b is not None:
+            bmask = m & ~B & ~in_ins & (D > wid + 0.002) & (y > 1.45)
+            if template:
+                bmask &= ~inside
+            d_y = np.minimum(d_y, np.where(bmask, F_b, inf))
     # планка под шнуровкой (как у NHL 24: PLACKET_HALF) — отрезки в виде спереди (x, y), середина горловины — x = 0
     d_p = inf.copy()
     pz = m & ~B & (N[..., 2] > 0.2) & (P[..., 2] > 0.03)
@@ -2690,6 +4177,8 @@ def rebuild_relief(nm_path, code, kit, mesh, cmap, n_jt, painters=None):
               f"ровно на {(fl & ~ok).mean():.0%}")
     if BASE_NM_DECALS == "flat":                         # профиль base_normal_decals: нашивки, «запечённые» в рельеф
         w = decal_mask(code, kit, bn.shape[0])[..., None]
+        if BN_KEEP_LACE and COLLAR == "lace":            # шнуровка — рельеф источника (NYI, 23.10): не выравнивать
+            w = w * (1 - lace_zone_src(cmap.src, bn.shape[0]))[..., None]
         bn[..., :3] = bn[..., :3] * (1 - w) + np.array([128.0, 128.0, 255.0]) * w
         print(f"  рельеф источника: нашивки выровнены (base_normal_decals), {int((w > 0.5).sum())} текселей 2048")
     nxy = bn[..., :2] / 127.5 - 1.0
@@ -2897,6 +4386,8 @@ class TrimPaint:
         if self.trap is not None:                       # шаблон ворота: во вставке со щитом полосы нет (как у NHL 27)
             PP = self._P[(Hs, Ws)]
             narrow = wid < band_w(TH) + 0.002
+            if getattr(self, "band_frame", False):      # collar_band = "frame" (NSH дом): вставка — цветом ткани и у
+                narrow = np.ones_like(narrow)            # широкой кромки (кромка — рамкой вокруг вставки)
             a_in = trap_cover(PP, m & ~B & (PP[..., 2] > 0.03), self.trap, texel) * narrow
             cov = cov * (1 - a_in)                      # край полосы по боковине — сглажен
         zone = m & msk & (D < wid + 3 * texel)
@@ -2946,6 +4437,7 @@ class TrimPaint:
         return out
 
 
+COLLAR_LAPEL_KITS = None           # профиль collar_lapel = { форма = "source" }: лацканы только у этих форм (NYI, 22.10)
 COLLAR_LAPEL = None                # профиль collar_lapel = "source" (22.10, MTL, DAL): ворот со шнуровкой (крой MIN), но
 #                                    между кромкой и швом обода — лацканы другого цвета (у MTL и DAL — белые; у MIN — цвета
 #                                    ткани). Рисует LapelPaint: от края до шва обода (ring_field; у середины — от верха
@@ -2959,9 +4451,45 @@ class LapelPaint:
     цветом источника, край у обода сглажен по текселю; кромку и вставку рисуют потом TrimPaint и InsertPaint (их края —
     тоже по швам: вставка поверх лацкана — без каймы прежнего цвета). Подворот не трогается."""
 
-    def __init__(self, mesh, color, yoke=None, body=None):
+    def __init__(self, mesh, color, yoke=None, body=None, fabric=None):
         self.mesh, self.color = mesh, np.asarray(color, np.float64)
         self.yoke, self.body = yoke, body                # у формы с кокеткой — её цвет и ткань (островки у концов)
+        self.fabric = fabric                             # ткань за лацканом (lapel_clean): у кокетки — body, иначе за ободом
+
+    def clean(self, out, msk, G, R, cov):
+        """lapel_clean (22.10, агент review-a, MTL и DAL дом): перенос лацкана источника за краем LapelPaint — тканью.
+        LapelPaint только докрашивает лацкан до своего края, а белый лацкан источника после переноса ложится на сетку Edge
+        иначе: у угла вставки он на 5 мм ниже угла (1,624 при угле 1,629) и вдоль нижнего края на 2–5 мм ниже шва — конец
+        лацкана выходил тупым «сапожком» с вертикальным срезом по боку вставки (у NHL 27 — острый угол в угол вставки), край
+        цвета — не по шву. Перекрашиваются цвет лацкана и его смесь с тканью (ближе LAPEL_CLEAN_TOL к отрезку «ткань —
+        лацкан», доля лацкана от INSERT_BLEND_T) спереди у концов лацканов: |θ| < LAPEL_CLEAN_TH, не дальше LAPEL_CLEAN_D
+        за краем лацкана, выше угла вставки − LAPEL_CLEAN_DY (ниже — планка и шнурки), у середины — только у угла вставки
+        (там щит и вставка). И под концом лацкана (ниже угла вставки на LAPEL_CLEAN_DY, |x| от угла − 5 мм до
+        LAPEL_TIP_X за ним) — всё не цвета ткани: там у NHL 27 только ткань, вставку InsertPaint рисует потом поверх (сборка 1
+        DAL дом: тёмная вертикальная черта 7 мм под углом — смесь ткани с чёрной вставкой источника). Лацкан цвета ткани
+        (выезды MTL, DAL — белые на белом) — ничего."""
+        fab = np.asarray(self.fabric, np.float64)
+        if np.abs(self.color - fab).max() < 45:
+            return out
+        m, D, B, P, TH = G["m"], G["D"], G["B"], G["P"], G["TH"]
+        ok = np.isfinite(R)
+        y_c, x_c = INSERT_CORNER
+        c = out[..., :3]
+        sg = self.color - fab
+        ts = np.clip(((c - fab) * sg).sum(-1) / (sg * sg).sum(), 0, 1)
+        lapish = (np.linalg.norm(c - (fab + ts[..., None] * sg), axis=-1) < LAPEL_CLEAN_TOL) & (ts > INSERT_BLEND_T)
+        front = m & msk & ~B & (P[..., 2] > 0.03)
+        zone = (front & (np.abs(TH) < LAPEL_CLEAN_TH)
+                & (D < np.where(ok, R, LAPEL_CENTER_D) + LAPEL_CLEAN_D) & (P[..., 1] > y_c - LAPEL_CLEAN_DY)
+                & (ok | (np.abs(P[..., 0]) > x_c - 0.003)) & lapish & (cov < 0.98))
+        ax = np.abs(P[..., 0])
+        under = (front & (P[..., 1] < y_c) & (P[..., 1] > y_c - LAPEL_CLEAN_DY) & (ax > x_c - 0.005)
+                 & (ax < x_c + LAPEL_TIP_X) & (cov < 0.02) & (np.abs(c - fab).max(-1) > LAPEL_CLEAN_TOL))
+        zone |= under
+        out[..., :3] = np.where(zone[..., None], fab[None, None], c)
+        print(f"  лацканы (lapel_clean): перенос лацкана за краем у концов — {int(zone.sum())} текселей → ткань "
+              f"{np.round(fab).astype(int).tolist()}")
+        return out
 
     def __call__(self, out, msk):
         from scipy import ndimage as ndi
@@ -2981,7 +4509,10 @@ class LapelPaint:
         tip = (P[..., 2] > 0.03) & (np.abs(P[..., 0]) < x_c + LAPEL_TIP_X)
         cov = np.where(tip, cov * np.clip(0.5 + (P[..., 1] - y_c) / gy, 0, 1), cov)
         cov = np.where(m & msk & ~B, cov, 0.0)
+        self.last_cov = cov                              # для InsertPaint: лацкан цвета вставки не «прежний перенос»
         out = out.copy()
+        if LAPEL_CLEAN and self.fabric is not None:      # перенос лацкана за краем — тканью (MTL, DAL дом)
+            out = self.clean(out, msk, G, R, cov)
         out[..., :3] = out[..., :3] * (1 - cov[..., None]) + self.color[None, None] * cov[..., None]
         if self.yoke is not None:                        # кокетка у конца лацкана (MTL выезд, сборка 1: красные точки у
             # углов вставки): между швом обода (он у планки уходит вниз, к S) и краем кокетки — клин тоньше 2–3 текселей,
@@ -3011,6 +4542,30 @@ LAPEL_CENTER_D = 0.06              # м от края: у середины пе�
 LAPEL_YOKE_GAP = 0.003             # м: край кокетки у концов лацканов — выше среза лацкана на столько (без черты на стыке)
 LAPEL_TRIM_TH = 26.0               # град: у лацканов ширина кромки ближе к середине — как здесь (там вставка, у DAL дома — тоже
 #                                    чёрная: замер «сплошной полосой» давал 5 см и с ±25° сглаживания — кромку на лацканах)
+LAPEL_CLEAN = False                # профиль lapel_clean = true (22.10, MTL, DAL): перенос лацкана за краем LapelPaint — тканью
+LAPEL_CLEAN_TH = 50.0              # град: зона чистки — концы лацканов спереди (|θ| меньше; дальше перенос и край совпадают)
+LAPEL_CLEAN_D = 0.012              # м за краем лацкана (ring_field; у середины — LAPEL_CENTER_D): перенос шёл ниже на 2–5 мм
+LAPEL_CLEAN_DY = 0.010             # м ниже угла вставки — не ниже (там планка и белые шнурки)
+LAPEL_CLEAN_TOL = 30.0             # |ΔRGB| до отрезка «ткань — лацкан»: смесь (сглаженный край переноса)
+
+
+def lapel_trim_band(lapel, trim):
+    """Лацканы цвета кромки (22.10, NYI выезд — синие, кромки другого цвета у края нет): замер кромки «сплошной полосой»
+    брал весь лацкан (4,4 см у вставки), и у середины переда кромка шла ниже угла вставки — синий хвостик под её нижним
+    краем (лацкан там срезан, LapelPaint). Тогда кромка — только полоса у края (BAND_KNOTS), лацкан — LapelPaint (края по
+    швам), шва рельефа по краю кромки нет (у NHL 27 его нет: лацкан и полоса — один цвет). У MTL, DAL (белые лацканы,
+    кромка синяя / чёрная) — как было."""
+    if lapel is None or trim is None:
+        return
+    if np.abs(np.asarray(lapel.color, np.float64) - np.asarray(trim.color, np.float64)).max() >= LAPEL_SAME_COLOR:
+        return
+    f_, w_ = trim.width
+    trim.width = (f_, np.minimum(w_, band_w(f_)))
+    trim.no_seam = True
+    print("  лацканы цвета кромки: кромка — полоса у края (BAND_KNOTS), без шва по её краю")
+
+
+LAPEL_SAME_COLOR = 45.0            # max |ΔRGB|: лацкан и кромка одного цвета (lapel_trim_band)
 
 
 def lapel_rule(code, kit, mesh, yoke=None, body=None):
@@ -3045,7 +4600,7 @@ def lapel_rule(code, kit, mesh, yoke=None, body=None):
     if np.abs(lap - beyond).max() < 45:
         print("  лацканы цвета ткани за ободом — не рисуются")
         return None
-    return LapelPaint(mesh, lap, yoke, body)
+    return LapelPaint(mesh, lap, yoke, body, fabric=body if body is not None else beyond)
 
 
 TRIM_WIDTH_FROM = {}               # профиль trim_width_from: форма → форма клуба, по чьей кромке мерить ширину. Нужен,
@@ -3095,7 +4650,7 @@ def trim_rule(code, kit, mesh, with_yoke=False):
         print(f"  кромка цвета ткани: ширина — по форме {wkit} (trim_width_from), цвет — свой")
     else:
         is_trim = np.linalg.norm(c - col, axis=1) < 60
-    prof = trim_profile(d, th, is_trim)
+    prof = trim_profile(d, th, is_trim, TRIM_STEP_FROM)
     back = COLLAR_BAND.get(kit) == "back"                # collar_band = "back" (TOR дом): второй цвет — только сзади от
     if back:                                             # ступеньки до обода; цвет — по широкой части
         col = np.median(c[(d > COLLAR_BAND_D[0]) & (d < COLLAR_BAND_D[1]) & (np.abs(th) >= COLLAR_BAND_BACK_TH)], axis=0)
@@ -3223,6 +4778,7 @@ def trim_rule(code, kit, mesh, with_yoke=False):
     tp.panel_c = panel_c
     tp.band_back = back                                  # collar_band = "back": спереди — одна полоса у края
     tp.band_col = band_col                               # двухцветный ворот (collar_band): полоса у края своим цветом
+    tp.band_frame = COLLAR_BAND.get(kit) == "frame"      # "frame" — как "full", но вставка со щитом цветом ткани (NSH дом)
     return tp
 
 
@@ -3252,10 +4808,11 @@ def trim_body_by_angle(d, th, c, full, wf, w_src, trim_col=None, body_c=None):
     return np.asarray(full, dtype=np.float64), cols
 
 
-def trim_profile(d, th, is_trim):
+def trim_profile(d, th, is_trim, skip=0.0):
     """Ширина кромки источника по углу от середины переда (|θ|, шаг 1°): сплошная полоса цвета кромки от края ворота —
     до первого миллиметра, где кромки меньше половины (ткань того же цвета ниже кокетки, NJD дома, — не кромка), и
-    её вид: разрыв спереди (до какого угла кромки нет), узкая и широкая части, угол ступеньки. -> dict."""
+    её вид: разрыв спереди (до какого угла кромки нет), узкая и широкая части, угол ступеньки. skip — град: ближе к
+    середине узкая часть и ступенька не ищутся (профиль trim_step_from: вставка шнуровки цвета кромки, NYI дом). -> dict."""
     a_ = np.arange(0, 181, 1.0)
     wd = np.zeros(len(a_))
     ath = np.abs(th)
@@ -3273,10 +4830,11 @@ def trim_profile(d, th, is_trim):
         wd[i] = k * 0.001
     have = wd > 0.003
     gap = float(a_[np.argmax(have)]) if not have[0] and have.any() else 0.0
-    narrow = float(np.median(wd[(a_ >= gap + 3) & (a_ <= gap + 30)]))
+    g0 = max(gap, float(skip))
+    narrow = float(np.median(wd[(a_ >= g0 + 3) & (a_ <= g0 + 30)]))
     wide = float(np.median(wd[a_ >= 150]))
     step = wide > 0.02 and wide >= TRIM_STEP_RATIO * max(narrow, 1e-4)
-    at = float(a_[(a_ > gap) & (wd > (narrow + wide) / 2)][0]) if step else None
+    at = float(a_[(a_ > g0) & (wd > (narrow + wide) / 2)][0]) if step else None
     return {"angles": a_, "width": wd, "gap": gap, "narrow": narrow, "wide": wide, "step": step, "step_at": at}
 
 
@@ -3822,7 +5380,7 @@ def cmd_kit(a):
         import copy
         t = copy.deepcopy(orig_fix_rules(path))
         if "brand" in t and "back" in t["brand"]:        # Reebok сзади — на высоте логотипа adidas NHL 24
-            t["brand"]["back"] = dict(t["brand"]["back"], center=REEBOK_BACK_UV)
+            t["brand"]["back"] = dict(t["brand"]["back"], center=brand_uv())
             if BRAND_WIN is not None:                    # окно замера цвета логотипа источника (профиль brand_win)
                 t["brand"]["back"]["nhl24_win"] = BRAND_WIN
         return t
@@ -3851,7 +5409,7 @@ def cmd_kit(a):
         u0, v0 = int(round(sb[0] * 1024)), int(round(sb[1] * 1024))   # у EA — и край кокетки (давал черту)
         box[v0:v0 + self.src_a.shape[0], u0:u0 + self.src_a.shape[1]] = self.src_a > 0.25
         m = ndi.gaussian_filter(ndi.binary_dilation(box, iterations=2).astype(np.float64), 1.0)
-        dy = int(round((REEBOK_BACK_UV[1] - (sb[1] + sb[3]) / 2) * 1024))
+        dy = int(round((brand_uv()[1] - (sb[1] + sb[3]) / 2) * 1024))
         for path, name in ((nm_path, "jersey_nm.png"), (sm_path, "jersey_sm.png")):
             mode = Image.open(path).mode
             cur = np.asarray(Image.open(path).convert(mode).resize((1024, 1024))).astype(np.float64)
@@ -3885,8 +5443,8 @@ def cmd_kit(a):
         kr, kg, r0, g0, b0 = brand_relief_model(ea_nm[v0:v0 + ea_a.shape[0], u0:u0 + ea_a.shape[1]], ea_a)
         a = wordmark_alpha()
         ph, pw = a.shape
-        x0 = int(round(REEBOK_BACK_UV[0] * 1024 - pw / 2))
-        y0 = int(round(REEBOK_BACK_UV[1] * 1024 - ph / 2))
+        x0 = int(round(brand_uv()[0] * 1024 - pw / 2))
+        y0 = int(round(brand_uv()[1] * 1024 - ph / 2))
         A = np.zeros((1024, 1024))
         A[y0:y0 + ph, x0:x0 + pw] = a
         h = ndi.gaussian_filter(A, 0.7)
@@ -3939,6 +5497,8 @@ def cmd_kit(a):
         placed, soft = orig_plan_decals(comp, lab, patches, rules, defaults, src, dst_, tid24)
         if CREST_SIZE_CM:
             crest_to_size(placed)
+        if TORSO_SHIFT:                                  # герб — вместе с полосой (torso_shift)
+            torso_shift_crest(placed)
         if SHIELD_GAP_MM is not None and yoke_rule.get("trim") is not None:
             fit_shield_gap(placed, soft, comp, src, dst_, tid24, yoke_rule["trim"], a.club, cur_kit["kit"])
         return placed, soft
@@ -3956,6 +5516,15 @@ def cmd_kit(a):
         if ARMHOLE_SPLIT_ZONES is ARMHOLE_SPLIT_FULL:     # рукав другого цвета: граница ровно по шву (VGK, DET 22.10)
             print("  пройма: граница рукава по шву, перекрашено текселей:",
                   armhole_clean(os.path.join(od, "jersey_cm.png"), E2))
+        if SLEEVE_STRIPES == "fit":                       # края полос рукава — гладкие (профиль sleeve_stripes; OTT 22.10)
+            for r_ in sleeve_stripes_fit(os.path.join(od, "jersey_cm.png"), E2):
+                print("  полосы рукава (sleeve_stripes = fit):", r_)
+        if PIPING_FIT:                                    # кант вдоль руки у шва проймы — гладкий (CBJ, WSH; 23.10)
+            for r_ in piping_fit(os.path.join(od, "jersey_cm.png"), E2, PIPING_FIT):
+                print("  кант у проймы (piping_fit):", r_)
+        if CHEST_BANDS:                                   # полосы через грудь у ворота — прямые, по источнику (NYR; 23.10)
+            for r_ in chest_bands_fit(os.path.join(od, "jersey_cm.png"), E2, CHEST_BANDS, a.club, cur_kit["kit"]):
+                print("  полосы через грудь (chest_bands):", r_)
         return dict(sleeve_plan)
     pilot.sleeve_rule = sleeve_rule
     keep = collar_keep_mask({k: E2[k] for k in ("pos", "uv", "nrm", "tri")}, 1024)
@@ -3988,6 +5557,10 @@ def cmd_kit(a):
     try:
         for kit in a.kits.split(","):
             yoke_rule.pop("cur", None)
+            use_kit(kit)                                 # yoke_color по форме (EDM, COL, PHI: дома и в гостях разный)
+            if COLLAR_LAPEL_KITS is not None:            # collar_lapel по формам (NYI): лацканы — только у этой формы
+                globals()["COLLAR_LAPEL"] = COLLAR_LAPEL_KITS.get(kit)
+                _RGEO.clear()                            # обод с лацканами и без — разная геометрия (кэш relief_geometry)
             globals()["SLV_COMPRESS"] = None             # первая сборка комплекта — без сжатия (план — по ней)
             globals()["SLV_FILL_S24"] = None
             yr = YOKE.get((a.club, kit))
@@ -4010,17 +5583,23 @@ def cmd_kit(a):
                 save_yoke_shape(a.club, poly, heights)
             yoke_rule["trim"] = trim_rule(a.club, kit, {k: E2[k] for k in ("pos", "uv", "nrm", "tri")},
                                           with_yoke=yr is not None)
+            if heights is not None and heights.get("bands") and getattr(yoke_rule["trim"], "trap", None) is not None:
+                heights["trap"] = yoke_rule["trim"].trap   # полосы в кокетке — до боковин вставки шаблона (STL выезд)
             yoke_rule.pop("lapel", None)
             if COLLAR_LAPEL:                             # лацканы другого цвета (MTL, DAL: белые) — от края до шва обода
                 cy = yoke_rule.get("cur")
                 yoke_rule["lapel"] = lapel_rule(a.club, kit, {k: E2[k] for k in ("pos", "uv", "nrm", "tri", "uv0")},
                                                 *((cy.poly["green"], cy.poly["white"]) if cy is not None else ()))
+                lapel_trim_band(yoke_rule.get("lapel"), yoke_rule.get("trim"))
             cur_kit["kit"] = kit                       # для щита по зазору (plan_decals)
             if (a.club, kit) in INSERT_KITS:
                 if "cur" not in yoke_rule:              # цвета — с первой сборки (как у кокетки)
                     pilot.cmd_build(SimpleNamespace(club=a.club, kits=kit, reuse=False))
                 yoke_rule["insert"] = insert_rule(os.path.join(KITS_OUT, f"{a.club}_{kit}", "jersey_cm.png"), E2,
                                                   a.club, kit)
+                lp_ = yoke_rule.get("lapel")             # лацкан цвета вставки (NYR выезд): InsertPaint его не трогает
+                if lp_ is not None and np.abs(lp_.color - yoke_rule["insert"].red).max() < LAPEL_SAME_COLOR:
+                    yoke_rule["insert"].lapel = lp_
                 if COLLAR_LAPEL and yoke_rule.get("trim") is not None:   # лацканы (DAL дом, 22.10): кромка у вставки
                     yoke_rule["insert"].trim_w = yoke_rule["trim"].width   # шире INSERT_TRIM — не перекрашивать её
                     #                                                        (сборка 2: зелёные выемки в чёрной кромке)
@@ -4088,6 +5667,11 @@ def sleeve_compress(cmap, code, kit, od, plan_out):
     try:
         tex = np.asarray(Image.open(J.n24_tex(Hy.CLUB_NAME[code], kit, "base_color")).convert("RGB")).astype(np.float64)
         b24, bE = cmap.sleeve.stripes(tex)
+        if SLEEVE_TOP24 is not None:                     # верх полос — из профиля (SJS): выше конца рукава Edge
+            b24 = np.append(b24[b24 < SLEEVE_TOP24], SLEEVE_TOP24)
+            bE = np.append(bE[: len(b24) - 1], cmap.sleeve.edge_of(SLEEVE_TOP24))
+            print(f"  полосы рукава: верх — sleeve_top24 {SLEEVE_TOP24} (s Edge {bE[-1]:.4f}, конец карты рукава "
+                  f"{cmap.sleeve.sides[-1]['e']['s'][-1]:.4f}, наклон {cmap.sleeve.s24_slope(cmap.sleeve.sides[-1]['e'], cmap.sleeve.sides[-1]['s24']):.3f})")
     finally:
         SLV_COMPRESS = keep
     if not len(bE):
@@ -4108,14 +5692,18 @@ def sleeve_compress(cmap, code, kit, od, plan_out):
         want = min(d_top * r["base_k"], d_zone - r["gap_min"] - px)
         ks[z] = min(max(want / d_top, r["min_k"]), 1.0)
     k = min(ks.values()) if ks else r["base_k"]
-    global SLV_FILL_S24
+    global SLV_FILL_S24, SLV_FILL_EXT_TOP
     SLV_FILL_S24 = None
+    SLV_FILL_EXT_TOP = None
     margin = sleeve_top_margin(cmap, d_top)
     if margin < SLV_TOP_MARGIN:                          # над полосами у рукава Edge места нет (BOS): выше колена — ткань
         SLV_FILL_S24 = float(b24.max()) + SLV_FILL_TEXELS / 2048.0
         if SLEEVE_FILL == "below":                       # ткань — рукава под полосами (MTL дом, 22.10: над верхней белой
             SLV_FILL_S24 = float(b24.min()) - SLV_FILL_TEXELS / 2048.0   # полосой у конца рукава — 1,5 мм красного,
             #                                              бралась белая: верх рукавов белый)
+        if SLEEVE_TOP24 is not None:                     # верх полос далеко за концом рукава (OTT: до 0,30) — ткань и в
+            SLV_FILL_EXT_TOP = max(SLV_FILL_EXT, d_top - SLV_U[1] + 0.02)   # реглане до верха полос: иначе там прежние
+            #                                              полосы источника ближайшей точкой — второй блок у плеча (сборка 2)
         print(f"  ! полосы рукава: верх полос в {margin * 100:.1f} см от конца рукава (< {SLV_TOP_MARGIN * 100:g}) — "
               f"выше колена {k * d_top:.4f} ткань над полосами (s NHL 24 {SLV_FILL_S24:.4f})")
     plan_out.clear()
@@ -4485,6 +6073,8 @@ def standard_lettering(slot_dir):
     k, b = back_m_per_v()
     row = lambda yy: (yy - b) / k * H                   # строка карты (вниз по картинке — вверх по свитеру)
     f = np.asarray(Image.open(os.path.join(slot_dir, "font_cm.png")).convert("RGBA"))[..., 3] > 40
+    if FONT_PLATE:                                      # фамилия на подложке (PHI): буквы — по цвету против плашки
+        f = plate_letters(os.path.join(slot_dir, "font_cm.png"))
     hs, ws = [], []
     for r_, (y0, y1) in enumerate(((1, 48), (49, 98))):
         cx = J.FONT_SLOTS[r_]
@@ -4552,6 +6142,29 @@ def name_zone_rows(png, zone=0):
     return int(m[:, xs[len(xs) // 2]].sum()) if len(xs) else 0
 
 
+FONT_PLATE = False                 # профиль font_plate = true (22.10, агент yokes, PHI): фамилия на подложке — в атласе буквы на
+#                                    непрозрачной плашке (у NHL 27 и у EA PHI: дома чёрные на белом, в гостях белые на
+#                                    чёрном). Растяжка букв в клетках (name_font_fit, scale_glyphs) мерит буквы по альфе — у
+#                                    плашки это вся строка: строки букв разрушались (сборка 1 PHI). С полем буквы атласа — как у
+#                                    источника, высота букв для стандарта спины — по цвету против плашки (plate_letters)
+PLATE_DIFF = 120                   # сумма |ΔR| + |ΔG| + |ΔB| до цвета плашки — больше: буква
+
+
+def plate_letters(font_png):
+    """Маска букв фамилии на плашке (font_plate): в строках букв (1–98, до столбца C и A) — пиксели не цвета плашки
+    (медиана строк); вне строк букв — альфа, как раньше. -> маска 512²."""
+    from PIL import Image
+    from .fonts import CAPTAIN_BOX
+    a = np.asarray(Image.open(font_png).convert("RGBA")).astype(np.int32)
+    f = a[..., 3] > 40
+    rows = a[1:98, :CAPTAIN_BOX[0]]
+    op = rows[..., 3] > 200
+    if op.mean() > 0.5:
+        plate = np.median(rows[op][:, :3], axis=0)
+        f[1:98, :CAPTAIN_BOX[0]] = op & (np.abs(rows[..., :3] - plate).sum(-1) > PLATE_DIFF)
+    return f
+
+
 def name_font_fit(slot_dir):
     """Профиль font_name_fit = "auto" (22.10, правило пользователя по SEA и VGK: «расстояние между буквами меньше»,
     «фамилии не крупнее»): буквы фамилии в клетках атласа — во всю высоту строки (sy) и шире, пока промежуток не станет
@@ -4580,6 +6193,36 @@ def name_font_fit(slot_dir):
     zh = name_zone_rows(os.path.join(slot_dir, "name_cm.png"))
     k = min(1.0, NAME_FIT_REF[0] * NAME_FIT_REF[1] / max(zh * h * sy, 1))
     return round(sx, 2), round(sy, 2), round(k, 2), (w, h, zh)
+
+
+NAME_FIT_ITER = 2                  # font_name_fit = "measured": замеров готового атласа и пересчётов растяжки — не больше
+
+
+def name_fit_measured(slot_dir, src_dir, sx, sy, w0):
+    """Профиль font_name_fit = "measured" (22.10, агент review-b, SJS): name_font_fit считает растяжку по ширине букв до
+    неё, а растяжка (LANCZOS) сглаживает край — по альфе > 40 буква выходит уже на 1–1,5 px (SJS: 18 px × 1,24 → 21 вместо
+    22,3; промежуток 0,24 высоты при норме ≤ NAME_FIT_GAP, kitport lettering). Здесь — замер готового атласа тем же
+    способом, что у kitport lettering, и растяжка заново от атласа формы (src_dir), пока ширина букв не станет не меньше
+    NAME_CELL_W − NAME_FIT_GAP × высоты (с округлением вверх). Высота — как была. -> описание."""
+    import math
+    import shutil
+    from .fonts import scale_glyphs
+    rep = []
+    for _ in range(NAME_FIT_ITER):
+        w1, h1 = name_font_fit(slot_dir)[3][:2]
+        tgt = math.ceil(NAME_CELL_W - NAME_FIT_GAP * h1)
+        if w1 >= tgt:
+            break
+        sx = min(sx * tgt / w1, (NAME_CELL_W - 2) / w0)
+        for f in ("font_cm", "font_nm", "font_sm"):
+            shutil.copy2(os.path.join(src_dir, f + ".png"), os.path.join(slot_dir, f + ".png"))
+        if FONT_CAPTAIN_X != 1.0:                        # буквы капитана — как в первом проходе
+            scale_glyphs(slot_dir, 1.0, FONT_CAPTAIN_X)
+        scale_glyphs(slot_dir, (round(sx, 3), sy))
+        rep.append(f"буквы {w1:.0f} px (нужно ≥ {tgt}) → ×{sx:.3f}×{sy}")
+    w1, h1 = name_font_fit(slot_dir)[3][:2]
+    rep.append(f"итог: буквы {w1:.0f}×{h1:.0f} px, промежуток {(NAME_CELL_W - w1) / h1:.2f} высоты")
+    return "; ".join(rep)
 
 
 def lift_name_zone(png, cm, zone=0):
@@ -4656,6 +6299,51 @@ def shift_zones(png, out_cm, up_cm, zones=None):
             sys.exit(f"{png}: зона {z} со сдвигом {d} наезжает на другую зону")
         a[ny, nx] = color
     Image.fromarray(a, "RGBA").save(png)
+    return res
+
+
+# Номера «на рукаве» у ворота (профиль sleeve_zones_at = "shoulder", 22.10, FLA: пользователь — «у Флориды номера на
+# ключицах, рядом с шеей, на кокетке, там, где у MIN логотипы на плечах; это особенность формы, сохранить»). Центр зоны —
+# у плечевой нашивки MIN NHL 24 (kit_rules shoulder_r / shoulder_l: верх плеча у ворота, |x| 0,14–0,27 м, y 1,69–1,72;
+# на развёртке Edge её центр — (0,398; 0,484) / (0,594; 0,484), замер 22.10): зона 2 — x < 0, зона 3 — x > 0. Центр — на
+# 4 текселя 256² к плечу и на 3 к переду (верх плеча спереди, |x| ≈ 0,235 м, y ≈ 1,69 м): зона размера рукава у самой
+# нашивки задевала вырез горловины на развёртке. Размер — тот же в см, что у зоны рукава (MIN 1_14_4: ~13,6 × 12,8 см),
+# тексели — по якобиану развёртки (у ворота она реже)
+SHOULDER_ZONE_UV = {2: (0.383, 0.496), 3: (0.611, 0.496)}
+SLEEVE_ZONES_AT = None             # профиль sleeve_zones_at: None — рукав (как у MIN), "shoulder" — плечо у ворота (FLA)
+
+
+def shoulder_zones(name_png):
+    """Зоны 2 и 3 карты номеров — на плечи у ворота (SHOULDER_ZONE_UV), размер в см — как у прежней зоны. -> {зона:
+    (u, v центра, ширина × высота текселей было → стало)}."""
+    from PIL import Image
+    a = np.asarray(Image.open(name_png).convert("RGBA")).copy()
+    S = a.shape[0]
+    M = mesh_for(0, 1, 2)
+    tid, _ = kit3d.raster_uv(M, S)
+    res = {}
+    for z, (uc, vc) in SHOULDER_ZONE_UV.items():
+        m = (a[..., 0] > 128) & (a[..., 1] > 128) & (a[..., 2] == z)
+        if not m.any():
+            continue
+        ys, xs = np.nonzero(m)
+        w0, h0 = int(xs.max() - xs.min() + 1), int(ys.max() - ys.min() + 1)
+        t_old = tid[int(np.median(ys)), int(np.median(xs))]
+        t_new = tid[int(vc * S), int(uc * S)]
+        if t_old < 0 or t_new < 0:
+            sys.exit(f"sleeve_zones_at: зона {z} — центр вне сетки")
+        jo, jn = J.uv_jacobian(M, t_old, S), J.uv_jacobian(M, t_new, S)
+        w = max(4, int(round(w0 * np.linalg.norm(jo[:, 0]) / np.linalg.norm(jn[:, 0]))))
+        h = max(4, int(round(h0 * np.linalg.norm(jo[:, 1]) / np.linalg.norm(jn[:, 1]))))
+        x0, y0 = int(round(uc * S - w / 2)), int(round(vc * S - h / 2))
+        box = (slice(y0, y0 + h), slice(x0, x0 + w))
+        other = (a[box][..., 2] != 255) & (a[box][..., 2] != z)
+        if other.any() or (tid[box] < 0).mean() > 0.02:   # (1–2 текселя щели растра у шва развёртки — не край)
+            sys.exit(f"sleeve_zones_at: зона {z} на плече задевает другую зону или край развёртки")
+        a[m] = (255, 255, 255, 255)
+        a[box] = (255, 255, z, 255)
+        res[z] = ((uc, vc), f"{w0}×{h0} → {w}×{h}")
+    Image.fromarray(a, "RGBA").save(name_png)
     return res
 
 
@@ -5113,11 +6801,15 @@ def cmd_slot(a):
             print(f"  буква капитана {kit}: зоны {LETTER_ZONES} сдвинуты на {LETTER_SHIFT_CM} см (наружу, вверх):",
                   shift_zones(os.path.join(d, "name_cm.png"), *LETTER_SHIFT_CM))
         std = LETTERING == "standard"
-        if FONT_NAME_FIT == "auto" or (std and FONT_NAME_SCALE == 1.0):   # шрифт фамилии расчётом (VGK 22.10); в
-            from .fonts import scale_glyphs             # стандарте спины — у всех, у кого нет своих font_name_scale
+        if FONT_PLATE:                                  # фамилия на подложке (PHI): буквы атласа — как у источника
+            print(f"  фамилия {kit}: на подложке (font_plate) — атлас букв как у источника, без растяжки")
+        elif FONT_NAME_FIT in ("auto", "measured") or (std and FONT_NAME_SCALE == 1.0):   # шрифт фамилии расчётом (VGK
+            from .fonts import scale_glyphs             # 22.10); в стандарте спины — у всех, у кого нет своих font_name_scale
             sx, sy, k_, (w_, h_, zh_) = name_font_fit(d)
             print(f"  фамилия {kit}: буквы {w_:.0f}×{h_:.0f} px, зона {zh_} строк → буквы ×{sx}×{sy}, зона ×{k_}")
             print(f"  шрифт {kit}:", "; ".join(scale_glyphs(d, (sx, sy))))   # буквы капитана — выше, своим полем
+            if FONT_NAME_FIT == "measured":              # промежуток — по готовому атласу (SJS 22.10: край сглажен)
+                print(f"  фамилия {kit} (font_name_fit = measured):", name_fit_measured(d, src, sx, sy, w_))
             if not std:                                 # в стандарте высоту зоны задаёт standard_lettering
                 print(f"  фамилия {kit}: зона ×{k_} по высоте (было, стало):",
                       scale_name_zone(os.path.join(d, "name_cm.png"), k_))
@@ -5138,6 +6830,9 @@ def cmd_slot(a):
                 J.unpack_kit(SLEEVE_ZONES_FROM, ref)
             print(f"  номера на рукавах {kit}: зоны {SLEEVE_ZONES} — как у {SLEEVE_ZONES_FROM}:",
                   copy_zones(os.path.join(d, "name_cm.png"), os.path.join(ref, "name_cm.png"), SLEEVE_ZONES))
+        if SLEEVE_ZONES_AT == "shoulder":                # номера не на рукаве, а на плечах у ворота (FLA, 22.10)
+            print(f"  номера на плечах {kit} (sleeve_zones_at): зоны {SLEEVE_ZONES} — у ворота, на месте нашивок MIN:",
+                  shoulder_zones(os.path.join(d, "name_cm.png")))
         flat_src = os.path.join(KITS_OUT, f"{a.club}_{flat_kit or kit}", "sock_cm.png")
         if spec["sock"] == "auto":                       # ровные полосы по гетрам источника этой формы
             parts = sock_parts_auto(os.path.join(src, "sock_cm.png"))

@@ -108,6 +108,95 @@ box = [0.401, 0.598, 0.460, 0.661]
 [club.MIN.away.chest_patch]
 box = [0.401, 0.598, 0.460, 0.661]
 
+# WSH дом (агент lace, 22.10): подложка рекламы coupang зашита в base_color NHL 27 — прямоугольник (148, 6, 5) на красном
+# (159, 14, 10), разница 24 — окном не узнаётся (порог 39); на свитере оставался тёмный прямоугольник. Снимается весь, как Tria MIN
+[club.WSH.home.chest_patch]
+box = [0.412, 0.598, 0.461, 0.644]
+
+# NYR дом и выезд (агент lace, 22.10): рекламы на груди у NHL 27 нет — на месте chest_patch (uv 0,417; 0,639) лежит буква R
+# надписи-герба «RANGERS» (4900 px): правило снимало её как спонсора — на свитере «ANGERS». skip — правила у формы нет,
+# буква уходит к гербу (merge_parts + merge_near профиля)
+[club.NYR.home.chest_patch]
+skip = true
+
+[club.NYR.away.chest_patch]
+skip = true
+
+# Ложные «нашивки» на рукавах NHL 27 (агент plain, 22.10): у PIT eleven (оба рукава, u 0,157 / 0,843) и VAN eleven
+# (правый, u 0,795) готовый свитер у границы полос рукава отличается от основы (base_color) тонкой дугой — find_patches
+# брал её за нашивку и ставил декалью на старое место, а полосы рукава сжаты к кисти: на Edge выше полос шла тёмная
+# (PIT) / зелёная (VAN) черта; SJS eleven — оба рукава (u 0,243 / 0,757), бирюзовая. Не ставятся — полосы и так переносятся с основы.
+[club.PIT.away.stripe_edge_l]
+uv = [0.157, 0.499]
+enabled = false
+
+[club.PIT.away.stripe_edge_r]
+uv = [0.843, 0.499]
+enabled = false
+
+[club.VAN.away.stripe_edge_r]
+uv = [0.7954, 0.499]
+enabled = false
+
+[club.SJS.away.stripe_edge_l]
+uv = [0.2429, 0.5]
+enabled = false
+
+[club.SJS.away.stripe_edge_r]
+uv = [0.7571, 0.4988]
+enabled = false
+
+# NYI ten / eleven (ревью, агент review-d, 23.10) — то же: дуга у границы полос рукава (u 0,216 / 0,784, ~630 px) на Edge
+# выше сжатых к кисти полос — тонкая оранжевая (дом) / синяя (выезд) черта поперёк плеча
+[club.NYI.home.stripe_edge_l]
+uv = [0.2161, 0.499]
+enabled = false
+
+[club.NYI.home.stripe_edge_r]
+uv = [0.7839, 0.5]
+enabled = false
+
+[club.NYI.away.stripe_edge_l]
+uv = [0.2161, 0.499]
+enabled = false
+
+[club.NYI.away.stripe_edge_r]
+uv = [0.7839, 0.5005]
+enabled = false
+
+# CGY ten / eleven — то же у границ полос рукава и низа (готовый свитер и основа совпадают на глаз, разница — в 1 тексель)
+[club.CGY.home.stripe_edge_1]
+uv = [0.2195, 0.4988]
+enabled = false
+
+[club.CGY.home.stripe_edge_2]
+uv = [0.7805, 0.501]
+enabled = false
+
+[club.CGY.home.stripe_edge_3]
+uv = [0.1516, 0.499]
+enabled = false
+
+[club.CGY.home.stripe_edge_4]
+uv = [0.8484, 0.499]
+enabled = false
+
+[club.CGY.home.hem_edge_1]
+uv = [0.8276, 0.0833]
+enabled = false
+
+[club.CGY.home.hem_edge_2]
+uv = [0.1885, 0.1082]
+enabled = false
+
+[club.CGY.away.hem_edge_1]
+uv = [0.1619, 0.0513]
+enabled = false
+
+[club.CGY.away.stripe_edge_1]
+uv = [0.8469, 0.5]
+enabled = false
+
 # Решение пользователя (10.10, 09:00): в слот «третья» — обычная альтернативная форма клуба, а не форма разового
 # матча (Winter Classic, Stadium Series) и не копия домашней. Папка комплекта NHL 24 (adidas/<папка>) для третьей;
 # у остальных клубов — adidas/three.

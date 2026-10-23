@@ -38,6 +38,9 @@ def load_rules(path, club=None, kit=None, profiles=()):
     if club and kit:
         for k, v in r.get("club", {}).get(club, {}).get(kit, {}).items():
             rules.setdefault(k, {}).update(v)
+    # skip = true в [club.<К>.<форма>.<правило>] — правила у этой формы нет (22.10, NYR: буква R надписи-герба «RANGERS»
+    # лежит на месте спонсорской нашивки chest_patch — снималась как реклама; без правила она уходит к гербу, merge_near)
+    rules = {k: v for k, v in rules.items() if not v.get("skip")}
     sp = r.get("sponsor", {})
     if sp.get("drop"):
         for k in sp.get("patches", []):

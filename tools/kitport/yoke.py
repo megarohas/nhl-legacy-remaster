@@ -115,9 +115,10 @@ def cmd_yoke(a):
         club = CLUB_NAME[code]
         pilot.extract_club(club)                                    # выгрузка источника (есть — не повторяется)
         kits = [k for k in a.kits.split(",") if k] or sorted({k for _, k in E.YOKE}) or ["home", "away"]
-        kind = prof.get("yoke_color", "green")
-        is_yoke = (lambda c, k=kind: E.yoke_mask(c, 80, k))
         for kit in kits:
+            kind = prof.get("yoke_color", "green")
+            kind = kind.get(kit, next(iter(kind.values()))) if isinstance(kind, dict) else kind   # по форме (EDM)
+            is_yoke = (lambda c, k=kind: E.yoke_mask(c, 80, k))
             src = J.n24_tex(club, kit, "color")
             if not os.path.exists(src):
                 print(f"{code} {kit}: нет текстуры источника {src}")

@@ -1069,6 +1069,8 @@ def font_glyphs(font_png):
             if g[..., 3].min() > 150:                  # непрозрачная подложка — строки по цвету знака
                 bgc = np.median(g[..., :3].reshape(-1, 3), axis=0)
                 ys = np.nonzero((np.abs(g[..., :3].astype(np.int32) - bgc).sum(-1) > 120).any(1))[0]
+            if not len(ys):                            # пустая клетка (22.10, PHI: знака нет в атласе) — пропустить
+                continue
             out[(row, ch)] = g[ys.min():ys.max() + 1]
     return out
 
