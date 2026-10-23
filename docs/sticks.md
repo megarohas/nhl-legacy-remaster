@@ -46,6 +46,7 @@ cd tools
 python -m fb.sticks build                  # все слоты плана → game/work/equipment27/out/texlib_<N>.png
 python -m fb.sticks sheet                  # лист плана: NHL 27 (своя модель) | в игре (модель Legacy) → sheet-plan.png
 python -m fb.sticks sheet --pairs "C=105:bauer_vapor_flylite_base"   # нынешняя Legacy N | NHL 27 на модели Legacy
+python -m fb.sticks fe-sheet               # превью в редакторе: EA → новое
 python -m kitport build --stages pack,overlay && python -m kitport install --tag sticks --yes   # в игру (игра закрыта)
 ```
 
@@ -58,6 +59,28 @@ python -m kitport build --stages pack,overlay && python -m kitport install --tag
 Источник NHL 27: выгрузка `FB_GAME=nhl27 python -m fb.extract "/player_stick_(…)_color$" --out gear27`
 (`game/work/nhl27/extract/gear27`). Модели NHL 27 кэшируются в `game/work/equipment27/stick27_meshes.pkl`
 (`fb.heads.mesh`, PS5). Модели перечислены в `game/work/equipment27/nhl27_catalog.json` (108 клюшек, 30 коньков).
+
+## Превью в редакторе
+
+В карточке клюшки в редакторе стоит отдельная картинка: `fe/ion/artassets/createplayer/sticks/stick<N>.big`
+(BIGF/Apt, текстура 8888 256×128, картинка 140×108 в левом верхнем углу). Если её не заменить, карточка показывает
+старую клюшку (пользователь заметил 23.10.2026 после первой установки). У EA это рендер низа клюшки с белой лентой
+на крюке, ракурс у всех превью один.
+
+`render_fe` рисует клюшку из плана тем же ракурсом. Модель и лента взяты у EA из renderboot, без нашего мода ленты,
+чтобы выглядело как у EA. `write_fe` кладёт результат в контейнер по шаблону превью EA этого слота. `pack` добавляет
+превью в пакет вместе с текстурой (`type: stick`).
+
+Ракурс `FE_POSE` и свет `FE_LIGHT` подобраны по превью EA (`python -m fb.sticks fe-fit`):
+- **ракурс** — по силуэту `stick105`: перебор стороны и крена через 15°, затем Нелдер — Мид по семи параметрам
+  (повороты, сдвиг, масштаб, перспектива). Расхождение силуэта — 1,6 % пикселей;
+- **свет** — наименьшими квадратами по пяти превью (105, 94, 72, 108, 35): направление, окружение и рассеянный,
+  отдельно для древка и ленты. Средняя яркость старых текстур в нашем рендере — в пределах ±10 % от EA. Оставшаяся
+  разница — в мелких деталях: рисунок на модели слегка смещён.
+
+Лист «EA → новое» — `python -m fb.sticks fe-sheet` (`game/work/equipment27/sheet-fe.png`). У многих клюшек NHL 27
+надпись бренда стоит выше по древку, чем у старых EA, и в кадр превью не попадает. Видна только нижняя часть рисунка,
+это рисунок самой клюшки.
 
 ## План (`stick_slots.toml`)
 

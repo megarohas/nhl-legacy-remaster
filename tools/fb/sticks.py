@@ -15,6 +15,8 @@
   python -m fb.sticks build [МОДЕЛЬ…] [--out DIR]        # PNG 1024×128 в развёртке Legacy (без моделей — все слоты плана)
   python -m fb.sticks sheet [--out FILE]                 # лист плана: NHL 27 | в игре (Legacy), лицо и обратная сторона
   python -m fb.sticks sheet --pairs A=105:bauer_vapor_flylite_base,…   # лист: нынешняя Legacy N | NHL 27 на Legacy
+  python -m fb.sticks fe-sheet [--out FILE]              # превью в редакторе: EA → новое (stick<N>.big в пакете)
+  python -m fb.sticks fe-fit                             # подбор ракурса и света превью по превью EA
 
 Источник: выгрузка FB_GAME=nhl27 python -m fb.extract "/player_stick_(bauer|ccm|…)_[a-z0-9_]+_color$" --out gear27
 (game/work/nhl27/extract/gear27), сетки NHL 27 — fb.heads.mesh (PS5), кэш — game/work/equipment27/stick27_meshes.pkl.
@@ -65,8 +67,187 @@ def slot_image(src):
     return convert(v)
 
 
+# Превью в редакторе (карточка клюшки): fe/ion/artassets/createplayer/sticks/stick<N>.big — BIGF/Apt, текстура 8888
+# 256×128, картинка 140×108 в левом верхнем углу; у EA — рендер низа клюшки с белой лентой, ракурс у всех один.
+# Без своего превью карточка показывает старую клюшку (пользователь 23.10.2026). Рендер — модель и лента EA
+# (renderboot, без нашего мода ленты: так, как на превью EA).
+FE_REL = "fe/ion/artassets/createplayer/sticks/stick{}.big"
+FE_SIZE = (140, 108)
+TAPE_MESH = os.path.join(LEGACY_BIG, "renderboot", "rendering", "playerstick", "playersticktape_0_2.rx2")
+TAPE_TEX = os.path.join(LEGACY_BIG, "renderboot", "rendering", "playerstick", "texlib_999.rx2")
+# ракурс (fe_fit, 23.10.2026): подбор по силуэту превью EA stick105 — расхождение 1,6 % пикселей; рыскание, тангаж,
+# крен (рад), сдвиг x, y (пкс), масштаб (пкс/м), перспектива; центр — середина низа клюшки (вершины с x > 1 м)
+FE_POSE = (3.376, -0.501, 0.797, -39.47, 23.297, 219.609, -0.019)
+# свет (fe_fit): направление (θ, φ), древко — окружение и рассеянный, лента — то же; подбор по пяти превью EA
+# (105, 94, 72, 108, 35): средняя ошибка цвета 33 против 87 у света «на глаз»
+FE_LIGHT = (-1.609, -0.107, 0.611, 0.452, 0.585, 0.747)
+
+
+def _fe_parts():
+    if "fe" not in _M:
+        sys.path.insert(0, os.path.join(REPO, "tools"))
+        import rw4mesh as rm
+        import teamart as ta
+        import kitpaint as kp
+        parts = []
+        for path in (LEG_MESH, TAPE_MESH):
+            L = rm.Mesh(open(path, "rb").read())
+            parts.append({"pos": np.asarray(L.pos, np.float64)[:, :3], "uv": np.asarray(L.uv, np.float64)[:, :2],
+                          "tri": np.asarray(L.tris, np.int64), "nrm": np.asarray(L.nrm, np.float64)[:, :3]})
+        rw = ta.Rw4(open(TAPE_TEX, "rb").read(), TAPE_TEX)
+        t = [t for t in rw.textures if "sticktape_1_cm" in t.name][0]        # белая лента, как у EA
+        w, h, px = kp.tex_decode(rw, t, 0)
+        parts[1]["tex"] = np.frombuffer(bytes(px), np.uint8).reshape(h, w, 4).astype(np.float64)
+        c = np.concatenate([parts[0]["pos"], parts[1]["pos"]])
+        _M["fe"] = (parts, c[c[:, 0] > 1.0].mean(0))
+    return _M["fe"]
+
+
+def _fe_rot(yaw, pitch, roll):
+    cy, sy, cp, sp, cr, sr = np.cos(yaw), np.sin(yaw), np.cos(pitch), np.sin(pitch), np.cos(roll), np.sin(roll)
+    Ry = np.array([[cy, 0, sy], [0, 1, 0], [-sy, 0, cy]])
+    Rx = np.array([[1, 0, 0], [0, cp, -sp], [0, sp, cp]])
+    Rz = np.array([[cr, -sr, 0], [sr, cr, 0], [0, 0, 1]])
+    return Rz @ Rx @ Ry @ np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]])     # толщина клюшки (y) — к камере
+
+
+def _fe_raster(parts, pose, c, ss=1, size=FE_SIZE):
+    """Кадр превью: (покрытие, альбедо, нормаль в осях камеры, номер части) в разрешении size × ss."""
+    W, H = size[0] * ss, size[1] * ss
+    R = _fe_rot(*pose[:3])
+    ox, oy, sc, ps = pose[3:]
+    zb = np.full((H, W), -np.inf)
+    alb, nrm, part = np.zeros((H, W, 3)), np.zeros((H, W, 3)), np.full((H, W), -1)
+    for k, p in enumerate(parts):
+        q = (p["pos"] - c) @ R.T
+        s = sc / np.maximum(1 - ps * q[:, 2], 0.05)
+        x = (size[0] / 2 + ox + s * q[:, 0]) * ss
+        y = (size[1] / 2 + oy - s * q[:, 1]) * ss
+        z, uv, tx, nr = q[:, 2], p["uv"], p.get("tex"), p["nrm"] @ R.T
+        for a, b, cc in p["tri"]:
+            xa, xb, xc, ya, yb, yc = x[a], x[b], x[cc], y[a], y[b], y[cc]
+            ix0, ix1 = max(int(min(xa, xb, xc)), 0), min(int(max(xa, xb, xc)) + 1, W - 1)
+            iy0, iy1 = max(int(min(ya, yb, yc)), 0), min(int(max(ya, yb, yc)) + 1, H - 1)
+            den = (yb - yc) * (xa - xc) + (xc - xb) * (ya - yc)
+            if ix1 < ix0 or iy1 < iy0 or abs(den) < 1e-12:
+                continue
+            xs, ys = np.meshgrid(np.arange(ix0, ix1 + 1) + 0.5, np.arange(iy0, iy1 + 1) + 0.5)
+            l0 = ((yb - yc) * (xs - xc) + (xc - xb) * (ys - yc)) / den
+            l1 = ((yc - ya) * (xs - xc) + (xa - xc) * (ys - yc)) / den
+            l2 = 1 - l0 - l1
+            m = (l0 >= 0) & (l1 >= 0) & (l2 >= 0)
+            if not m.any():
+                continue
+            L0, L1, L2 = l0[m], l1[m], l2[m]
+            zz = L0 * z[a] + L1 * z[b] + L2 * z[cc]
+            py, px = (ys[m] - 0.5).astype(int), (xs[m] - 0.5).astype(int)
+            keep = zz > zb[py, px]
+            if not keep.any():
+                continue
+            py, px, L0, L1, L2 = py[keep], px[keep], L0[keep], L1[keep], L2[keep]
+            zb[py, px] = zz[keep]
+            part[py, px] = k
+            if tx is not None:
+                u = L0 * uv[a, 0] + L1 * uv[b, 0] + L2 * uv[cc, 0]
+                v = L0 * uv[a, 1] + L1 * uv[b, 1] + L2 * uv[cc, 1]
+                alb[py, px] = kit3d.sample_bilinear(tx, u, v)[:, :3]
+            nn = L0[:, None] * nr[a] + L1[:, None] * nr[b] + L2[:, None] * nr[cc]
+            nrm[py, px] = nn / np.maximum(np.linalg.norm(nn, axis=1, keepdims=True), 1e-12)
+    return np.isfinite(zb), alb, nrm, part
+
+
+def _fe_shade(alb, nrm, part, light=FE_LIGHT):
+    th, ph, a0, d0, a1, d1 = light
+    lam = np.clip(nrm @ np.array([np.cos(ph) * np.sin(th), np.sin(ph), np.cos(ph) * np.cos(th)]), 0, 1)
+    k = np.where(part == 1, a1 + d1 * lam, a0 + d0 * lam)
+    return alb * k[..., None]
+
+
+def render_fe(tex_img, ss=4):
+    """Превью клюшки для редактора (как у EA) по текстуре playerstick_<N>_cm. -> RGBA FE_SIZE."""
+    parts, c = _fe_parts()
+    parts = [{**parts[0], "tex": np.asarray(tex_img.convert("RGBA")).astype(np.float64)}, parts[1]]
+    cov, alb, nrm, part = _fe_raster(parts, FE_POSE, c, ss)
+    col = _fe_shade(alb, nrm, part) * cov[..., None]
+    W, H = FE_SIZE
+    a = cov.reshape(H, ss, W, ss).mean((1, 3))
+    rgb = col.reshape(H, ss, W, ss, 3).sum((1, 3)) / np.maximum(cov.reshape(H, ss, W, ss).sum((1, 3)), 1)[..., None]
+    img = np.concatenate([rgb, a[..., None] * 255], -1)
+    return Image.fromarray(np.clip(np.round(img), 0, 255).astype(np.uint8), "RGBA")
+
+
+def fe_ea(n):
+    """Превью EA слота N из архива Legacy. -> RGBA FE_SIZE."""
+    sys.path.insert(0, os.path.join(REPO, "tools"))
+    import teamart as ta
+    o = ta.UiLogo.load(os.path.join(LEGACY_BIG, "cache", *FE_REL.format(n).split("/")))
+    w, h, px = o.decode()
+    return Image.frombytes("RGBA", (w, h), bytes(px)).crop((0, 0) + FE_SIZE)
+
+
+def fe_fit(ns=(105, 94, 72, 108, 35), log=print):
+    """Подбор ракурса и света превью по превью EA (для FE_POSE, FE_LIGHT; запускать, если сменятся модели):
+    ракурс — по силуэту stick<ns[0]> (перебор рыскания 0/π и крена через 15°, затем Нелдер — Мид), свет — наименьшими
+    квадратами по всем ns. -> (поза, свет)."""
+    from scipy.optimize import least_squares, minimize
+    from scipy.ndimage import binary_erosion
+    parts, c = _fe_parts()
+    bare = [{**p, "tex": None} for p in parts]
+    A = np.asarray(fe_ea(ns[0]))[..., 3] > 127
+    ay, ax = np.nonzero(A)
+
+    def loss(q):
+        return float((A ^ _fe_raster(bare, q, c)[0]).mean())
+
+    def centred(q):
+        yy, xx = np.nonzero(_fe_raster(bare, q, c)[0])
+        if len(xx):
+            q = q.copy()
+            q[3] += ax.mean() - xx.mean()
+            q[4] += ay.mean() - yy.mean()
+        return q
+    cands = sorted(((loss(q), q) for q in (centred(np.array([yaw, 0.0, np.radians(r), 0, 0, sc, 0.0]))
+                                           for yaw in (0.0, np.pi) for r in range(0, 360, 15)
+                                           for sc in (110, 150, 200))), key=lambda t: t[0])
+    step = np.array([0.35, 0.35, 0.35, 12, 12, 25, 0.4])
+    best = None
+    for _, q in cands[:8]:
+        r = minimize(loss, q, method="Nelder-Mead", options={"maxiter": 1500, "xatol": 1e-3, "fatol": 1e-6,
+                                                             "initial_simplex": np.vstack([q] + [q + np.eye(7)[i] * step[i] for i in range(7)])})
+        log(f"  ракурс: {r.fun:.4f} {np.round(r.x, 3).tolist()}")
+        if best is None or r.fun < best[0]:
+            best = (r.fun, r.x)
+    pose = best[1]
+    data = []
+    for n in ns:
+        cov, alb, nrm, part = _fe_raster([{**parts[0], "tex": np.asarray(Image.open(legacy_png(n)).convert("RGBA"))
+                                           .astype(np.float64)}, parts[1]], pose, c)
+        ea = np.asarray(fe_ea(n)).astype(np.float64)
+        ok = binary_erosion(ea[..., 3] > 250) & binary_erosion(cov)
+        data.append((alb[ok], nrm[ok], part[ok], ea[..., :3][ok]))
+    al, nr, pa, E = (np.concatenate([d[i] for d in data]) for i in range(4))
+    r = least_squares(lambda q: (_fe_shade(al, nr, pa, q) - E).ravel(), [0.0, 0.5, 0.45, 0.7, 0.45, 0.7])
+    log(f"  ракурс {np.round(pose, 3).tolist()} (силуэт {best[0]:.4f}), свет {np.round(r.x, 3).tolist()}, "
+        f"ошибка цвета {np.abs(_fe_shade(al, nr, pa, r.x) - E).mean():.1f}")
+    return pose, r.x
+
+
+def write_fe(img, n, out):
+    """Превью img (RGBA FE_SIZE) → stick<N>.big по шаблону EA (BIGF/Apt, 8888) в out."""
+    sys.path.insert(0, os.path.join(REPO, "tools"))
+    import teamart as ta
+    import playerhead as ph
+    tpl = ta.UiLogo.load(os.path.join(LEGACY_BIG, "cache", *FE_REL.format(n).split("/")))
+    tw, th = tpl.fetch.width, tpl.fetch.height
+    rgba = ph.place(img.convert("RGBA").tobytes(), img.size[0], img.size[1], tw, th)
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    with open(out, "wb") as f:
+        f.write(tpl.build(rgba, "md5"))
+
+
 def pack(man, cache):
-    """Клюшки плана в пакет (edge_kit pack): texlib_<N>.rx2 по шаблону архива Legacy, запись type stick и имена —
+    """Клюшки плана в пакет (edge_kit pack): texlib_<N>.rx2 по шаблону архива Legacy, превью в редакторе
+    stick<N>.big (render_fe), записи type stick и имена —
     в man["loc"] (nhl24.py build пишет их в локализацию накладки). Слоты плана заменяют прежние записи пакета (клюшки
     NHL 24 из fb.pilot sticks — у тех же N). -> число."""
     import hashlib
@@ -79,11 +260,16 @@ def pack(man, cache):
             print(f"  клюшка {lab} ({num}): нет {rel} в архивах Legacy")
             continue
         q = os.path.join(cache, *rel.split("/"))
-        P.write_rx2_rgba(tpl, slot_image(src), q)
-        e = {"file": rel, "type": "stick", "md5": hashlib.md5(open(q, "rb").read()).hexdigest(),
-             "size": os.path.getsize(q), "action": "replace",
-             "note": f"клюшка {lab}: {src} (fb.sticks, stick_slots.toml)" + (f" — «{name}»" if name else "")}
-        man["files"] = [x for x in man["files"] if x["file"] != rel] + [e]
+        img = slot_image(src)
+        P.write_rx2_rgba(tpl, img, q)
+        fe = FE_REL.format(num)
+        qf = os.path.join(cache, *fe.split("/"))
+        write_fe(render_fe(img), num, qf)
+        for f, path, what in ((rel, q, "клюшка"), (fe, qf, "превью в редакторе")):
+            e = {"file": f, "type": "stick", "md5": hashlib.md5(open(path, "rb").read()).hexdigest(),
+                 "size": os.path.getsize(path), "action": "replace",
+                 "note": f"{what} {lab}: {src} (fb.sticks, stick_slots.toml)" + (f" — «{name}»" if name else "")}
+            man["files"] = [x for x in man["files"] if x["file"] != f] + [e]
         if key and name:
             man.setdefault("loc", {})[key] = name
         n += 1
@@ -336,6 +522,35 @@ def sheet_plan(out):
     print(out, sh.size)
 
 
+def cmd_fe_sheet(a):
+    """Лист превью редактора: EA (нынешнее в архиве) → новое, по слотам плана, ×3."""
+    font = _font(15)
+    z = 3
+    W, H = FE_SIZE
+    items = slots()
+    cols = 3
+    cw, ch = (W * z) * 2 + 30, H * z + 30
+    rows = (len(items) + cols - 1) // cols
+    sh = Image.new("RGB", (cols * cw + 10, rows * ch + 10), (20, 20, 24))
+    d = ImageDraw.Draw(sh)
+    for i, (lab, n, src, key, name) in enumerate(items):
+        x, y = 10 + (i % cols) * cw, 10 + (i // cols) * ch
+        d.text((x, y), f"{lab} · {n} · {name}", fill=(255, 220, 140), font=font)
+        for j, im in enumerate((fe_ea(n), render_fe(slot_image(src)))):
+            bg = Image.new("RGBA", im.size, (58, 60, 68, 255))
+            bg.alpha_composite(im)
+            sh.paste(bg.convert("RGB").resize((W * z, H * z), Image.NEAREST), (x + j * (W * z + 10), y + 22))
+    out = a.out or os.path.join(WORK, "sheet-fe.png")
+    sh.save(out)
+    print(out, sh.size)
+
+
+def cmd_fe_fit(a):
+    pose, light = fe_fit()
+    print("FE_POSE =", tuple(round(float(v), 3) for v in pose))
+    print("FE_LIGHT =", tuple(round(float(v), 3) for v in light))
+
+
 def cmd_sheet(a):
     if not a.pairs:
         return sheet_plan(a.out or os.path.join(WORK, "sheet-plan.png"))
@@ -377,8 +592,11 @@ def main():
     s = sub.add_parser("sheet")
     s.add_argument("--pairs", help="метка=N:модель через запятую (A=108:bauer_nexus_tracer_base); без — лист плана")
     s.add_argument("--out")
+    s = sub.add_parser("fe-sheet", help="превью редактора: EA → новое по плану")
+    s.add_argument("--out")
+    sub.add_parser("fe-fit", help="подбор FE_POSE и FE_LIGHT по превью EA (если сменятся модели)")
     a = ap.parse_args()
-    return {"build": cmd_build, "sheet": cmd_sheet}[a.cmd](a)
+    return {"build": cmd_build, "sheet": cmd_sheet, "fe-sheet": cmd_fe_sheet, "fe-fit": cmd_fe_fit}[a.cmd](a)
 
 
 if __name__ == "__main__":

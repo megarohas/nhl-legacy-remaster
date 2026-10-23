@@ -861,3 +861,6 @@ adidas, сейв ROSTER дописывается в конец). Шорты и �
   27 имён в `fe/loc/NHL_ENG_US.db` накладки (поле `loc` манифеста). Обновились 28 файлов: 27
   `rendering/playerstick/texlib_<N>.rx2` (новые в cache:) и `NHL_ENG_US.db`; копия — `backup-cache/user-20261023-sticks27`;
   база и сейв ROSTER — без изменений (у игроков прежний номер клюшки).
+- 23.10 12:59 — превью клюшек в редакторе (пользователь: в карточках остались старые): 27
+  `fe/ion/artassets/createplayer/sticks/stick<N>.big` — рендер ракурсом EA (`fb.sticks.render_fe`, docs/sticks.md
+  «Превью в редакторе»), новые в cache:; копия — `backup-cache/user-20261023-sticks27fe`.
