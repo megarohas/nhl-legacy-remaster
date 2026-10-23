@@ -882,3 +882,7 @@ adidas, сейв ROSTER дописывается в конец). Шорты и �
   копия базы игры — `roster-merge/old-cache-nhlng-2248.db`; сейв ROSTER совпадает с базой (roster_merge — 0 таблиц).
 - 23.10 22:55 — exe порта с разблокировкой (`nhllegacy_unlock.cpp`, 84d018bc + иконка → 69a99534), лаунчер 0.12.0; прежние —
   `out/build/win-amd64-release/backup-20261023-<хэш>`.
+- 23.10 23:27 — экипировка игроков из NHL 27 (`equipment27.py --write`, docs/equipment27.md): база и draft_roster;
+  копия — `backup-cache/user-20261023-equipment27`. Сейвы (разрешение пользователя: «переписать мои изменения, и во
+  франшизе Миннесоты»): ROSTER 20261023161612 — `roster_merge` + `equipment27.py save`, DYNASTY 20261023154708 —
+  `equipment27.py save`; копии до правки — `backup-saves/equip27-20261023-*` и рядом с отчётами инструментов.
