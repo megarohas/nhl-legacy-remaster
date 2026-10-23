@@ -877,3 +877,8 @@ adidas, сейв ROSTER дописывается в конец). Шорты и �
   WSH — литера и герб на 3 см ниже канта; NYR — номер 28 см; и 4 головы NHL 27 вместо голов EA (docs/heads-nhl24.md).
   Обновились 18 файлов: свитер и превью `0_24_7`, свитера и карты номеров `0_29_5`, `0_29_6`, карты `0_19_7`, `0_19_8`,
   головы `player_/texlib_` 6840, 7507, 9753, 10753; копия — `backup-cache/user-20261023-stl-wsh-nyr-heads`; база и сейв — без изменений.
+- 23.10 22:49 — коньки NHL 27 в 11 слотах (`fb.skates`, docs/skates.md: `texlib_<N>` и превью `skate<N>.big`), имена в
+  локализации; база — история наград (`awards27.py`, docs/awards.md). 25 файлов; копия — `backup-cache/user-20261023-skates-awards`,
+  копия базы игры — `roster-merge/old-cache-nhlng-2248.db`; сейв ROSTER совпадает с базой (roster_merge — 0 таблиц).
+- 23.10 22:55 — exe порта с разблокировкой (`nhllegacy_unlock.cpp`, 84d018bc + иконка → 69a99534), лаунчер 0.12.0; прежние —
+  `out/build/win-amd64-release/backup-20261023-<хэш>`.
