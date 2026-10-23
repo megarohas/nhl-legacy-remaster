@@ -853,3 +853,6 @@ adidas, сейв ROSTER дописывается в конец). Шорты и �
   снят у BUF, ANA, CGY, STL выезда и EDM (`notch_seam = "edge"`) и у NJD по краю кокетки (`notch_seam = "yoke"`); SEA
   выезд — правый рукав зеркалом левого (`sleeve_mirror`, агент fix-c). `kitport audit` — 0 замечаний. Обновились 20
   файлов, копия — `backup-cache/user-20261023-answers`; сейв ROSTER — без изменений.
+- 23.10 11:15 — центры льда NHL 27 у всех 32 клубов (`fb.ice --source nhl27`, `edge_kit.pack_ice_centers`;
+  docs/logos-arenas.md, «Центр льда из NHL 27»): 32 файла `centerlogo_<арт>_cm.rx2` (5 заменены, 27 новых в cache:),
+  копия — `backup-cache/user-20261023-ice27`; сейв ROSTER — без изменений.

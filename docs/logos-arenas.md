@@ -110,6 +110,27 @@ t/s/d/c/w 76 и 20087.
 игрой для обычного матча не используется. Особые арены (тренировка, EASHL, Winter Classic) ставят
 свои центры 500/502/507/508/510/511/512/514.
 
+### Центр льда из NHL 27 (23.10.2026, все 32 клуба)
+
+Пользователь: «перенести центры льда для всех команд». У NHL 27 лёд устроен как у Legacy: центр — отдельная текстура
+на клуб `content/worlds/rink/textures/centerlogo/ice_centerlogo_<N>_color` (1024² BC7, кольцо r 378–383 — как у Legacy
+380,5–385,5), отдельно разметка `lines/ice_lines_<N>` (2048×4096, у Legacy 1024×2048 — рисунок тот же), красная линия
+`centerline/ice_centerline_<N>` (64×4096), надписи `hotspot/ice_hotspot_*` и общие слои материала (`common/`: снег,
+грязь, следы заливки — у Legacy другой шейдер, не переносятся). Отличие центра: у NHL 27 вокруг логотипа прозрачно (лёд
+даёт сам материал), у Legacy диск льда и прозрачная полоса под красную линию — в текстуре. Номер N = арт EA (0 ANA …
+29 WSH = artid Legacy), 30 — Юта (Delta Center, у нас арт 104), 32 — VGK (арт 101), 33 — SEA (арт 100); 22 (прежняя
+Аризона) и 31 (Матч всех звёзд) не берутся. Названия арен — нынешние (MIN — Grand Casino Arena).
+
+Порядок (повторить для нового сезона):
+1. Выгрузка: `FB_GAME=nhl27 python -m fb.extract "rink/textures/centerlogo/ice_centerlogo_([0-9]|[1-3][0-9])_color$"
+   --out ice27` → `game/work/nhl27/extract/ice27/…`.
+2. `python -m fb.ice --source nhl27 build` — картинка NHL 27 поверх основы Legacy (`fb.ice.convert`: диск (231, 233, 231)
+   r 388, кольцо, полоса x 494–529 прозрачная) → `game/work/nhl27/out/ice/centerlogo_<КОД>.png`; `sheet` — лист «Legacy
+   сейчас | из NHL 27» (`game/work/nhl27/compare/ice_center_32.png`).
+3. `python -m kitport build --stages pack,overlay` — `edge_kit.pack_ice_centers` кладёт их в пакет (`centerlogo_<арт>_cm.rx2`
+   по шаблону: наш файл из `legacy-data/out` у SEA, VGK, UTA, иначе архив Legacy), затем `kitport install`.
+   Сейв ROSTER центры льда не хранит.
+
 ## 3. Номера арта SEA = 98, VGK = 99: проверка
 
 - **Архивы** (оглавления всех `.big` диска и TU2): ни одного файла с номером 98/99 ни в одном наборе,

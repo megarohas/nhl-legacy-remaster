@@ -7349,6 +7349,9 @@ def cmd_pack(a):
         if rel in have:
             man["files"] = [x for x in man["files"] if x["file"] != rel]
         man["files"].append(e)
+    n_ice = pack_ice_centers(man, cache)                 # центры льда NHL 27 у всех клубов (23.10)
+    if n_ice:
+        print(f"центры льда NHL 27 (fb.ice --source nhl27): {n_ice}")
     # в пакет (в игру) — только одобренные клубы: все формы слота с default = true (правило 21.10); черновики — нет
     prof = club_profiles()
     built = [c for c in prof if all(os.path.isdir(os.path.join(WORK, "slot", "kits", f"{c}_{k}"))
@@ -7362,6 +7365,38 @@ def cmd_pack(a):
     with open(os.path.join(a.out, "manifest.json"), "w", encoding="utf-8", newline="\n") as f:
         json.dump(man, f, ensure_ascii=False, indent=1)
     print(f"{a.out}: сеток заменено {n_mesh}, форм {len(man['kits'])}, файлов {len(man['files'])}")
+
+
+ICE_CENTERS = os.path.join(REPO, "game", "work", "nhl27", "out", "ice")   # центры льда NHL 27 (fb.ice --source nhl27 build)
+
+
+def pack_ice_centers(man, cache):
+    """Центры льда NHL 27 в пакет (23.10, пользователь: «перенести центры льда для всех команд»): PNG из ICE_CENTERS
+    (python -m fb.ice --source nhl27 build: картинка NHL 27 на основе Legacy — диск, кольцо, полоса под красную линию)
+    → centerlogo_<арт>_cm.rx2 по шаблону (наш файл из legacy-data/out — SEA, VGK, UTA, иначе — архив Legacy), запись
+    type center в manifest (прежняя — заменяется: у CHI, MIN, SEA, VGK были центры NHL 24). Нет папки — ничего. -> число."""
+    import hashlib
+    from PIL import Image
+    from . import ice, pack
+    if not os.path.isdir(ICE_CENTERS):
+        return 0
+    n = 0
+    for club, art, code, num in ice.clubs("nhl27"):
+        png = os.path.join(ICE_CENTERS, f"centerlogo_{code}.png")
+        rel = f"rendering/icesurface/centerlogo_{art}_cm.rx2"
+        ours = os.path.join(REPO, "game", "work", "legacy-data", "out", *rel.split("/"))
+        tpl = ours if os.path.exists(ours) else pack.legacy_has(rel)
+        if not os.path.exists(png) or not tpl:
+            print(f"  центр льда {code}: нет", "PNG" if not os.path.exists(png) else "шаблона")
+            continue
+        q = os.path.join(cache, *rel.split("/"))
+        pack.write_rx2_rgba(tpl, Image.open(png), q)
+        e = {"file": rel, "type": "center", "md5": hashlib.md5(open(q, "rb").read()).hexdigest(),
+             "size": os.path.getsize(q), "club": code, "action": "replace",
+             "note": f"центр льда NHL 27 (ice_centerlogo_{num}) на основе Legacy (диск, кольцо, полоса), fb.ice"}
+        man["files"] = [x for x in man["files"] if x["file"] != rel] + [e]
+        n += 1
+    return n
 
 
 def pack_club(a, code, regmap, man, have, put, phase=2):
