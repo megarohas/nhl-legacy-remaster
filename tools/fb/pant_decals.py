@@ -19,6 +19,9 @@
     from fb import pant_decals
     img = pant_decals.apply(img, color, base, src_mesh, dst_aligned, dst_mesh, size)
 
+4. Полосы по низу штанин (профиль pant_hem, 23.10, NYR) — hem(): у края штанины тексель Legacy берёт цвет точки источника
+   с тем же углом вокруг ноги и той же высотой над краем (полосы вдоль края, толщины NHL 27), выше — переход к переносу.
+
 Проверка — `python -m fb.pant_decals sheet CLUB KIT` (рендер шорт источника и наш, спереди, сзади, сбоку).
 """
 import numpy as np
@@ -34,6 +37,13 @@ MERGE_PX = 0                       # профиль pant_merge_px (23.10, аге
 Y_MAX = None                       # профиль pant_decal_ymax, м (23.10, агент review-d, WPG): нашивка с центром выше на сетке
 #                                    источника — не нашивка (пояс шорт под свитером: у WPG обрывки разницы у шнурка пояса
 #                                    шли в места гербов EA — тёмные пятна на обеих ногах). None — как было
+HEM_H = None                       # профиль pant_hem, м (23.10, агент fix-a, NYR): полосы низа шорт — от края штанины до
+#                                    этой высоты (hem). У NHL 27 NYR по низу штанин две полосы (белая, синяя, белая) и боковые
+#                                    полосы переходят в них буквой «Т»; шорты Legacy короче и с подворотом, переносом по
+#                                    ближайшей точке полосы низа рвались на клочки (пользователь, 23.10: «артефакты на
+#                                    трусах»). None — как было
+HEM_BLEND = 0.03                   # м: верх зоны hem — плавный переход к прежнему переносу
+HEM_SS = 4                         # сверхвыборка hem (у ss 2 края полос в 512² лесенкой по текселю)
 # места нашивок шорт EA (uv развёртки шорт Legacy pant_1_0_0_2; центры рамок): щит — одна рамка у всех 84 форм EA,
 # герб слева — среднее рамок 1_14_0, 1_16_2, 1_1_3, 1_23_0, 1_24_3, справа — 1_20_0, 1_131_0, 1_20_3, 1_23_6
 EA_SLOTS = {"back": {"uv": (0.1275, 0.3545), "h": 0.055},
@@ -216,6 +226,121 @@ def apply(img, color, base, src_mesh, dst_aligned, dst_mesh, size=512, ss=2, rep
     return out, rep
 
 
+def leg_frame(m, leg, nh=3):
+    """Нога шорт (leg −1 / +1 — знак x) у низа: центр (x, z) и край низа по углу φ вокруг ноги (0 — перед, 90 — наружу,
+    ±180 — сзади): минимум y поверхности (тексели 1024²) в секторах 3°, сглажено рядом Фурье до nh гармоник — край без
+    зубцов от редких вершин подворота Legacy. -> (cx, cz, φ секторов, y края)."""
+    from . import kit3d
+    if "_dense" not in m:
+        tid, bar = kit3d.raster_uv(m, 1024)
+        ok = tid >= 0
+        m["_dense"] = (bar[ok][:, :, None] * m["pos"][m["tri"][tid[ok]]]).sum(1)
+    P = m["_dense"]
+    s = np.sign(P[:, 0]) == leg
+    low = s & (P[:, 1] < P[s, 1].min() + 0.15)
+    cx, cz = P[low, 0].mean(), P[low, 2].mean()
+    phi = np.degrees(np.arctan2((P[low, 0] - cx) * leg, P[low, 2] - cz))
+    bins = np.arange(-180, 181, 3.0)
+    c = (bins[:-1] + bins[1:]) / 2
+    yb = np.full(len(c), np.nan)
+    for i in range(len(c)):
+        q = (phi >= bins[i]) & (phi < bins[i + 1])
+        if q.any():
+            yb[i] = P[low][q, 1].min()
+
+    def basis(th):
+        return np.column_stack([np.ones(len(th))] + [f(k * th) for k in range(1, nh + 1) for f in (np.cos, np.sin)])
+    ok = ~np.isnan(yb)
+    coef = np.linalg.lstsq(basis(np.radians(c[ok])), yb[ok], rcond=None)[0]
+    return cx, cz, c, basis(np.radians(c)) @ coef
+
+
+def _leg_coords(P, N, frame, leg):
+    """Точки ноги → (φ, высота над краем низа d, радиальная доля нормали: > 0 — снаружи, < 0 — изнанка)."""
+    cx, cz, c, yb = frame
+    rx, rz = P[:, 0] - cx, P[:, 2] - cz
+    phi = np.degrees(np.arctan2(rx * leg, rz))
+    d = P[:, 1] - np.interp(phi, c, yb, period=360)
+    radn = (rx * N[:, 0] + rz * N[:, 2]) / np.maximum(np.hypot(rx, rz), 1e-9)
+    return phi, d, radn
+
+
+def _column_shift(phL, phS, d, outer, d0, d1, step=1.0):
+    """Поправка угла «источник − Legacy» по столбцам (секторы step° угла Legacy): медиана снаружи у верха зоны (d0…d1 —
+    там, где hem переходит в перенос), между секторами — линейно по кругу. Угол точки переноса у паха менялся с высотой —
+    концы полос у внутренней стороны бедра шли наискось и зубцами (NYR 23.10); с поправкой край полосы — по углу Legacy,
+    вертикально, а у верха зоны угол — как у переноса (боковые полосы — одной линией). -> поправка, град."""
+    dl = (phS - phL + 180) % 360 - 180
+    sel = outer & (d >= d0) & (d <= d1)
+    c = np.arange(-180, 180, step) + step / 2
+    ib = np.clip(((phL[sel] + 180) / step).astype(int), 0, len(c) - 1)
+    med = np.full(len(c), np.nan)
+    for i in np.unique(ib):
+        med[i] = np.median(dl[sel][ib == i])
+    ok = ~np.isnan(med)
+    if not ok.any():
+        return dl
+    return np.interp(phL, c[ok], med[ok], period=360)
+
+
+def hem(img, base, src_mesh, dst_aligned, dst_mesh, size=512, ss=None, h=None, blend=None):
+    """Низ шорт «от края штанины» (как fb.hem у свитера, но по каждой ноге): тексель Legacy у низа (d < h над краем) →
+    точка источника той же ноги с тем же φ и той же высотой над своим краем (d в метрах — полосы толщины NHL 27) → цвет
+    base. φ — у точки, найденной переносом (ближайшая точка выровненной сетки, kit3d.project): боковые полосы над зоной
+    и в ней — одной линией. Снаружи и изнанка — по своим слоям источника (у края они сходятся подворотом). Выше h − blend
+    — плавно к прежнему переносу img. img — перенос base (size², RGB float). -> картинка."""
+    from . import kit3d
+    from . import hem as H
+    h = HEM_H if h is None else h
+    blend = HEM_BLEND if blend is None else blend
+    ss = HEM_SS if ss is None else ss
+    if not h:
+        return img
+    S = size * ss
+    tid, bar = kit3d.raster_uv(dst_mesh, S)
+    mask = tid >= 0
+    b = bar[mask]
+    T = dst_mesh["tri"][tid[mask]]
+    Pd = (b[:, :, None] * dst_mesh["pos"][T]).sum(1)
+    Nd = kit3d._unit((b[:, :, None] * dst_mesh["nrm"][T]).sum(1))
+    Pa = (b[:, :, None] * dst_aligned["pos"][T]).sum(1)
+    Na = kit3d._unit((b[:, :, None] * dst_aligned["nrm"][T]).sum(1))
+    sP, sT = src_mesh["pos"], src_mesh["tri"]
+    col = np.zeros((len(Pd), 3))
+    w = np.zeros(len(Pd))
+    for leg in (-1, 1):
+        fs, fd = leg_frame(src_mesh, leg), leg_frame(dst_mesh, leg)
+        phs, ds, rs = _leg_coords(sP, src_mesh["nrm"], fs, leg)
+        _, dL, rL = _leg_coords(Pd, Nd, fd, leg)
+        zone = (np.sign(Pd[:, 0]) == leg) & (dL < h)
+        if not zone.any():
+            continue
+        st, sb, _ = kit3d.project(Pa[zone], Na[zone], src_mesh)
+        Ps = (sb[:, :, None] * sP[sT[st]]).sum(1)
+        phq = np.degrees(np.arctan2((Ps[:, 0] - fs[0]) * leg, Ps[:, 2] - fs[1]))
+        phL = _leg_coords(Pd[zone], Nd[zone], fd, leg)[0]   # одна поправка угла на столбец Legacy (по верху зоны)
+        phq = phL + _column_shift(phL, phq, dL[zone], rL[zone] > 0, h - blend, h)
+        idx = np.nonzero(zone)[0]
+        side = np.sign(sP[:, 0]) == leg
+        for outer in (True, False):
+            tri = sT[side[sT].all(1) & ((rs[sT].mean(1) > 0) == outer)]
+            grid = H.polar_grid(tri, phs, ds, src_mesh["uv"], h + 0.01)
+            q = (rL[zone] > 0) == outer
+            uv, found = H.lookup(grid, phq[q], dL[zone][q], reach=40)
+            j = idx[q][found]
+            col[j] = kit3d.sample_bilinear(base[..., :3], uv[found, 0], uv[found, 1])
+            t = np.clip((h - dL[j]) / blend, 0, 1)
+            w[j] = t * t * (3 - 2 * t)
+    L = np.zeros((S, S, 3))
+    W = np.zeros((S, S))
+    L[mask], W[mask] = col * w[:, None], w
+    L = L.reshape(size, ss, size, ss, 3).mean((1, 3))
+    W = W.reshape(size, ss, size, ss).mean((1, 3))
+    out = np.array(img, dtype=np.float64, copy=True)
+    out[..., :3] = out[..., :3] * (1 - W[..., None]) + L
+    return out
+
+
 def main():
     """sheet: шорты источника на его сетке | прежний перенос | с наклейками — спереди, сзади, сбоку (PNG)."""
     import argparse
@@ -229,6 +354,8 @@ def main():
     p.add_argument("--kit", required=True, help="папка комплекта (home, ten …)")
     p.add_argument("--source", default=os.environ.get("FB_GAME", "nhl24"), help="nhl24 | nhl27 (откуда текстуры)")
     p.add_argument("--out", default=None)
+    p.add_argument("--hem", type=float, default=None, help="м: полосы низа от края штанины до этой высоты "
+                   "(профиль pant_hem, NYR 0,15)")
     a = ap.parse_args()
     if os.environ.get("FB_GAME", "nhl24") != "nhl24":
         sys.exit("запуск с FB_GAME=nhl24: сетка шорт-источника — из дампа NHL 24 (текстуры — по --source)")
@@ -247,6 +374,8 @@ def main():
     pLa = kit3d.aligned(pL, bN, kit3d.bbox(pL))
     old = kit3d.transfer(color, pN, pLa, 512, 2)[0]
     new = kit3d.transfer(base, pN, pLa, 512, 2)[0]
+    if a.hem:
+        new = hem(new, base, pN, pLa, pL, 512, h=a.hem)
     new, rep = apply(new, color, base, pN, pLa, pL, 512)
     for r in rep:
         print("нашивка:", r)

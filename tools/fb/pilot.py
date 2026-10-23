@@ -268,6 +268,9 @@ def fe_preview(jersey_mesh, tex, size=256):
 
 
 NAME_CONTRAST = 3.0  # фамилия должна читаться: контраст букв со свитером там, где она стоит (по WCAG), не ниже
+NAME_CONTRAST_OFF = set()  # формы (метки home, away), где буквы фамилии не перекрашиваются — профиль name_contrast
+#                            (23.10, агент fix-a, NYR дом: красные буквы с белой тенью на синем перекрашивались в белые —
+#                            «шрифт простой, а должен быть специфический», пользователь). Пусто — как было
 
 
 def _lum(c):
@@ -383,7 +386,10 @@ def build_font(rec, folder, ok, p, family, club, kit, od, tpl_kit, own_name):
         rec["font"] = "нет текстуры шрифта — останется шаблона"
         return
     cm = resize_premult(np.asarray(Image.open(png(folder, fc)).convert("RGBA")), 512)
-    cm, fix = name_contrast(cm, os.path.join(od, "jersey_cm.png"), name_zone(tpl_kit, own_name))
+    if rec.get("kit") in NAME_CONTRAST_OFF:          # буквы как у источника (профиль name_contrast, NYR дом)
+        fix = None
+    else:
+        cm, fix = name_contrast(cm, os.path.join(od, "jersey_cm.png"), name_zone(tpl_kit, own_name))
     if fix:
         rec["font_fix"] = fix
     nm = normal_map(png(folder, fn), 512) if fn in ok else np.dstack(
@@ -530,6 +536,9 @@ def cmd_build(a):
             from . import pant_decals
             pcol, pbase = kit3d.load_tex(png(folder, pc)), kit3d.load_tex(png(folder, pb))
             pimg = kit3d.transfer(pbase, pN, pLa, 512, 2)[0]
+            if pant_decals.HEM_H:                        # полосы низа — от края штанины (профиль pant_hem, NYR 23.10)
+                pimg = pant_decals.hem(pimg, pbase, pN, pLa, pL, 512)
+                rec["pant_hem"] = pant_decals.HEM_H
             pimg, prep = pant_decals.apply(pimg, pcol, pbase, pN, pLa, pL, 512)
             Image.fromarray(np.clip(pimg, 0, 255).astype(np.uint8)).convert("RGB").save(os.path.join(od, "pant_cm.png"))
             rec["pant"] = f"ok (3D, нашивок наклейками: {len(prep)})"
