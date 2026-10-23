@@ -35,7 +35,7 @@
 | **Правила** | `legacy_settings.py` читает правила (ID 9…27), записи нет; cvar `nhl_settings_from_profile` | legacy-port.md | — |
 | **Сейвы** | `tdb.py verify/live/states/setstate/set`, команда `save` у каждого этапа | [save-editing.md](save-editing.md) | И по отдельности; общего «всё в ROSTER» нет |
 | **Установка модов** | `build-all.sh [ЭТАП…] [--ahl32]`, `install-legacy-data.sh`, `uninstall-legacy-data.sh`; для форм — `kitport diff/install/rollback` | legacy-data.md, kitport.md | И, но `status`/`verify` у общего установщика нет |
-| **Порт (exe)** | `xmatch.py`, `team_hooks.py`, `year_hooks.py`, `find_indirect_targets.py`, `ppcdis.py`, `stackpeek.py`, `gameshot.ps1` | legacy-port.md, [sdk-build.md](sdk-build.md) | И; `gameshot` и `stackpeek` — П (пути и exe NHL 13) |
+| **Порт (exe)** | `xmatch.py`, `team_hooks.py`, `year_hooks.py`, `find_indirect_targets.py`, `ppcdis.py`, `xrefs.py`, `unlockables.py`, `stackpeek.py`, `gameshot.ps1` | legacy-port.md, [sdk-build.md](sdk-build.md) | И; `gameshot` и `stackpeek` — П (пути и exe NHL 13) |
 | **Новый источник — дамп Frostbite** (NHL 27 PS5) | `python -m fb.source`, `fb.probe`, `fb.scan/catalog/toc/extract` | [frostbite-sources.md](frostbite-sources.md) | И (чтение); перенос форм, голов, фото пишет пути NHL 24 — П |
 
 ## 2. Что мешает собрать набор из публичного репозитория
