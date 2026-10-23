@@ -332,6 +332,10 @@ def main():
     s = sub.add_parser("lettering", help="фамилия, номер и промежутки букв на спине (см) против эталона")
     s.add_argument("--clubs", default="", help="клубы через запятую (по умолчанию — все в слоте)")
     s.add_argument("--ref", default="MIN,NJD,TBL,BOS,DET,LAK,SEA,VGK", help="эталон — одобренные клубы")
+    s = sub.add_parser("audit", help="автопроверка форм слота: номера на рукавах и литера на полосах, размеры спины, "
+                                     "низ гетр, каска (--helmets) — что пользователь находил в игре")
+    s.add_argument("--clubs", default="", help="клубы через запятую (по умолчанию — все в слоте)")
+    s.add_argument("--helmets", action="store_true", help="и строки шлема NHL 27 (нужна база NHL 27)")
     s = sub.add_parser("survey", help="обзор форм клубов источника: перед, плечо, ворот (разбор по типам)")
     s.add_argument("--source", default="nhl27")
     s.add_argument("--clubs", default="", help="папки клубов через запятую (по умолчанию — все)")
@@ -345,6 +349,9 @@ def main():
                    help="не сверять прочие разделы с git HEAD (параллельная работа: у других клубов правки не закоммичены);"
                         "сверка с файлом до записи остаётся")
     a = p.parse_args()
+    if a.cmd == "audit":
+        from . import audit
+        return audit.cmd_audit(a)
     if a.cmd == "profile":
         from . import profile
         return profile.cmd_profile(a)

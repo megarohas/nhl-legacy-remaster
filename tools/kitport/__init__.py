@@ -25,4 +25,5 @@
     python -m kitport lettering [--clubs CHI]   # фамилия, номер и промежутки букв на спине (см) против эталона
     python -m kitport backs [--clubs MIN,BUF]   # спины всех форм слота одним листом — фамилия и номер, как в игре
     python -m kitport profile --club BOS [--write]   # генератор профиля клуба из NHL 27: профиль, номера, каска
+    python -m kitport audit [--clubs ANA] [--helmets]   # автопроверка: номера на полосах, спина, низ гетр, каска
 """
