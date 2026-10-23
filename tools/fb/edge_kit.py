@@ -2098,6 +2098,11 @@ def use_club(code):
     SLEEVE_ZONES_FROM = prof.get("sleeve_zones_from", SLEEVE_ZONES_REF)
     global SLEEVE_ZONES_AT
     SLEEVE_ZONES_AT = prof.get("sleeve_zones_at")       # "shoulder": номера на плечах у ворота (FLA, 22.10)
+    global SLEEVE_ZONE_SHIFT, SLEEVE_ZONE_SHIFT_KITS, SLEEVE_ZONE_SCALE
+    _zs = prof.get("sleeve_zone_shift_cm")               # зоны номеров рукава — сдвиг (23.10: ANA, OTT, WPG)
+    SLEEVE_ZONE_SHIFT_KITS = dict(_zs) if isinstance(_zs, dict) else None
+    SLEEVE_ZONE_SHIFT = None if (_zs is None or SLEEVE_ZONE_SHIFT_KITS is not None) else tuple(map(float, _zs))
+    SLEEVE_ZONE_SCALE = float(prof.get("sleeve_zone_scale", 1.0))
     if SLEEVE_ZONES_AT not in (None, "shoulder"):
         sys.exit(f"[{code}] sleeve_zones_at = {SLEEVE_ZONES_AT!r} — только \"shoulder\"")
     global NAME_ZONES_FROM, ARMHOLE_SPLIT_ZONES
@@ -2205,6 +2210,9 @@ def use_kit(kit):
     global ISLAND_PAD_CM
     if ISLAND_PAD_CM_KITS is not None:                   # island_pad_cm по формам: вне таблицы — нет
         ISLAND_PAD_CM = kit in ISLAND_PAD_CM_KITS
+    global SLEEVE_ZONE_SHIFT
+    if SLEEVE_ZONE_SHIFT_KITS is not None:               # sleeve_zone_shift_cm по формам: вне таблицы — нет
+        SLEEVE_ZONE_SHIFT = tuple(map(float, SLEEVE_ZONE_SHIFT_KITS[kit])) if kit in SLEEVE_ZONE_SHIFT_KITS else None
     global TORSO_SHIFT
     if TORSO_SHIFT_KITS is not None:                     # torso_shift по формам (MTL дом): вне таблицы — нет
         TORSO_SHIFT = [float(x) for x in TORSO_SHIFT_KITS[kit]] if kit in TORSO_SHIFT_KITS else None
@@ -6302,6 +6310,38 @@ def shift_zones(png, out_cm, up_cm, zones=None):
     return res
 
 
+def scale_zones(png, k, zones):
+    """Зоны карты номеров (прямоугольники на развёртке) — в k раз вокруг середины (игра вписывает знак в зону: мельче и
+    номер). -> {зона: (ширина × высота текселей было, стало)}."""
+    from PIL import Image
+    a = np.asarray(Image.open(png).convert("RGBA")).copy()
+    res = {}
+    for z in zones:
+        m = (a[..., 0] > 128) & (a[..., 1] > 128) & (a[..., 2] == z)
+        if not m.any():
+            continue
+        color = a[m][0].copy()
+        ys, xs = np.nonzero(m)
+        cy, cx = (ys.min() + ys.max()) / 2.0, (xs.min() + xs.max()) / 2.0
+        hh, hw = (ys.max() - ys.min() + 1) * k / 2.0, (xs.max() - xs.min() + 1) * k / 2.0
+        a[m] = (255, 255, 255, 255)
+        y0, y1, x0, x1 = int(round(cy - hh + 0.5)), int(round(cy + hh + 0.5)), int(round(cx - hw + 0.5)), int(round(cx + hw + 0.5))
+        a[y0:y1, x0:x1] = color
+        res[z] = (f"{xs.max() - xs.min() + 1}×{ys.max() - ys.min() + 1}", f"{x1 - x0}×{y1 - y0}")
+    Image.fromarray(a, "RGBA").save(png)
+    return res
+
+
+SLEEVE_ZONE_SHIFT = None           # профиль sleeve_zone_shift_cm (23.10, пользователь: «номер на рукаве ложится на полосу —
+#                                    поправь»; ANA, OTT, WPG): [наружу, вверх] см или { форма = [...] } — зоны номеров на
+#                                    рукавах (2, 3) сдвинуты (shift_zones). У OTT полосы — красно-чёрно-красный блок на всё
+#                                    плечо: номер — посередине чёрной полосы; у WPG выезда — целиком на тёмно-синем верхе
+#                                    рукава (был у края белого); выше ~5 см зона выходит за развёртку рукава (номер режется)
+SLEEVE_ZONE_SHIFT_KITS = None
+SLEEVE_ZONE_SCALE = 1.0            # профиль sleeve_zone_scale: зоны номеров на рукавах в k раз (scale_zones) — ANA: «крыло»
+#                                    полос наискосок до плеча, номер полного размера над ним не помещается
+
+
 # Номера «на рукаве» у ворота (профиль sleeve_zones_at = "shoulder", 22.10, FLA: пользователь — «у Флориды номера на
 # ключицах, рядом с шеей, на кокетке, там, где у MIN логотипы на плечах; это особенность формы, сохранить»). Центр зоны —
 # у плечевой нашивки MIN NHL 24 (kit_rules shoulder_r / shoulder_l: верх плеча у ворота, |x| 0,14–0,27 м, y 1,69–1,72;
@@ -6833,6 +6873,12 @@ def cmd_slot(a):
         if SLEEVE_ZONES_AT == "shoulder":                # номера не на рукаве, а на плечах у ворота (FLA, 22.10)
             print(f"  номера на плечах {kit} (sleeve_zones_at): зоны {SLEEVE_ZONES} — у ворота, на месте нашивок MIN:",
                   shoulder_zones(os.path.join(d, "name_cm.png")))
+        if SLEEVE_ZONE_SCALE != 1.0:                    # номер на рукаве мельче (профиль sleeve_zone_scale; ANA 23.10)
+            print(f"  номера на рукавах {kit}: зоны {SLEEVE_ZONES} ×{SLEEVE_ZONE_SCALE}:",
+                  scale_zones(os.path.join(d, "name_cm.png"), SLEEVE_ZONE_SCALE, SLEEVE_ZONES))
+        if SLEEVE_ZONE_SHIFT:                            # номер на рукаве — мимо полос (профиль sleeve_zone_shift_cm)
+            print(f"  номера на рукавах {kit}: зоны {SLEEVE_ZONES} сдвинуты на {SLEEVE_ZONE_SHIFT} см (наружу, вверх):",
+                  shift_zones(os.path.join(d, "name_cm.png"), *SLEEVE_ZONE_SHIFT, zones=SLEEVE_ZONES))
         flat_src = os.path.join(KITS_OUT, f"{a.club}_{flat_kit or kit}", "sock_cm.png")
         if spec["sock"] == "auto":                       # ровные полосы по гетрам источника этой формы
             parts = sock_parts_auto(os.path.join(src, "sock_cm.png"))
