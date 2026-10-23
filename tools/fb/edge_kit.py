@@ -2103,6 +2103,8 @@ def use_club(code):
     SLEEVE_ZONE_SHIFT_KITS = dict(_zs) if isinstance(_zs, dict) else None
     SLEEVE_ZONE_SHIFT = None if (_zs is None or SLEEVE_ZONE_SHIFT_KITS is not None) else tuple(map(float, _zs))
     SLEEVE_ZONE_SCALE = float(prof.get("sleeve_zone_scale", 1.0))
+    global SLEEVE_ZONE_AT
+    SLEEVE_ZONE_AT = tuple(map(float, prof["sleeve_zone_at"])) if "sleeve_zone_at" in prof else None
     if SLEEVE_ZONES_AT not in (None, "shoulder"):
         sys.exit(f"[{code}] sleeve_zones_at = {SLEEVE_ZONES_AT!r} — только \"shoulder\"")
     global NAME_ZONES_FROM, ARMHOLE_SPLIT_ZONES
@@ -6322,16 +6324,62 @@ def scale_zones(png, k, zones):
             continue
         color = a[m][0].copy()
         ys, xs = np.nonzero(m)
-        cy, cx = (ys.min() + ys.max()) / 2.0, (xs.min() + xs.max()) / 2.0
-        hh, hw = (ys.max() - ys.min() + 1) * k / 2.0, (xs.max() - xs.min() + 1) * k / 2.0
+        cy, cx = (ys.min() + ys.max() + 1) / 2.0, (xs.min() + xs.max() + 1) / 2.0
+        nh = max(1, int(round((ys.max() - ys.min() + 1) * k)))   # размер — одним округлением: у зон 2 и 3 одинаковый
+        nw = max(1, int(round((xs.max() - xs.min() + 1) * k)))   # (иначе 16 и 14 столбцов — номер на руках разной ширины)
         a[m] = (255, 255, 255, 255)
-        y0, y1, x0, x1 = int(round(cy - hh + 0.5)), int(round(cy + hh + 0.5)), int(round(cx - hw + 0.5)), int(round(cx + hw + 0.5))
+        y0, x0 = int(round(cy - nh / 2.0)), int(round(cx - nw / 2.0))
+        y1, x1 = y0 + nh, x0 + nw
         a[y0:y1, x0:x1] = color
         res[z] = (f"{xs.max() - xs.min() + 1}×{ys.max() - ys.min() + 1}", f"{x1 - x0}×{y1 - y0}")
     Image.fromarray(a, "RGBA").save(png)
     return res
 
 
+def zones_to_point(png, zones, x_to, y_to):
+    """Зоны карты номеров (2, 3) — середина на точку свитера своей стороны с |x| = x_to и высотой y_to (м), ближайшую на
+    развёртке к прежней середине (сдвиг вокруг руки к верху: shift_zones «вверх» ведёт зону вдоль руки к плечу, высота
+    почти не меняется — у ANA +6 см давали +1,3 см). -> {зона: (сдвиг строк, столбцов; точка было → стало)}."""
+    from PIL import Image
+    a = np.asarray(Image.open(png).convert("RGBA")).copy()
+    S = a.shape[0]
+    M = mesh_for(0, 1, 2)
+    tid, bar = kit3d.raster_uv(M, S)
+    yy, xx = np.nonzero(tid >= 0)
+    P = (bar[yy, xx][:, :, None] * M["pos"][M["tri"][tid[yy, xx]]]).sum(1)
+    res = {}
+    for z in zones:
+        m = (a[..., 0] > 128) & (a[..., 1] > 128) & (a[..., 2] == z)
+        if not m.any():
+            continue
+        ys, xs = np.nonzero(m)
+        cy, cx = int(round(ys.mean())), int(round(xs.mean()))
+        dd = (yy - cy) ** 2 + (xx - cx) ** 2
+        c3 = P[np.argmin(dd)]
+        cand = ((np.sign(P[:, 0]) == np.sign(c3[0])) & (np.abs(np.abs(P[:, 0]) - x_to) < 0.004)
+                & (np.abs(P[:, 1] - y_to) < 0.004))
+        if not cand.any():
+            sys.exit(f"{png}: зона {z} — на свитере нет точки |x| {x_to}, y {y_to} (sleeve_zone_at)")
+        t = int(np.argmin(np.where(cand, dd, np.inf)))
+        d = (int(yy[t] - cy), int(xx[t] - cx))
+        ny, nx = ys + d[0], xs + d[1]
+        if ny.min() < 0 or nx.min() < 0 or ny.max() >= S or nx.max() >= S:
+            sys.exit(f"{png}: зона {z} со сдвигом {d} выходит за карту")
+        color = a[m][0].copy()
+        a[m] = (255, 255, 255, 255)
+        other = (a[..., 0] > 128) & (a[..., 1] > 128) & (a[..., 2] < 16)
+        if other[ny, nx].any():
+            sys.exit(f"{png}: зона {z} со сдвигом {d} наезжает на другую зону")
+        a[ny, nx] = color
+        res[z] = (d, np.round(c3, 3).tolist(), np.round(P[t], 3).tolist())
+    Image.fromarray(a, "RGBA").save(png)
+    return res
+
+
+SLEEVE_ZONE_AT = None              # профиль sleeve_zone_at = [|x|, y] (м; 23.10, пользователь, ANA: «подними номера на руках,
+#                                    если нужно — сделай поменьше»): середина зон номеров на рукавах — на верх руки у плеча
+#                                    (zones_to_point). У ANA «крыло» полос наискосок у зоны MIN (|x| 0,385) — до самого
+#                                    верха руки; оранжевое свободно ближе к плечу: |x| 0,33, y 1,55–1,60 (замер по кольцу)
 SLEEVE_ZONE_SHIFT = None           # профиль sleeve_zone_shift_cm (23.10, пользователь: «номер на рукаве ложится на полосу —
 #                                    поправь»; ANA, OTT, WPG): [наружу, вверх] см или { форма = [...] } — зоны номеров на
 #                                    рукавах (2, 3) сдвинуты (shift_zones). У OTT полосы — красно-чёрно-красный блок на всё
@@ -6876,6 +6924,9 @@ def cmd_slot(a):
         if SLEEVE_ZONE_SCALE != 1.0:                    # номер на рукаве мельче (профиль sleeve_zone_scale; ANA 23.10)
             print(f"  номера на рукавах {kit}: зоны {SLEEVE_ZONES} ×{SLEEVE_ZONE_SCALE}:",
                   scale_zones(os.path.join(d, "name_cm.png"), SLEEVE_ZONE_SCALE, SLEEVE_ZONES))
+        if SLEEVE_ZONE_AT:                               # номер на рукаве — на верх руки у плеча (профиль sleeve_zone_at; ANA)
+            print(f"  номера на рукавах {kit}: зоны {SLEEVE_ZONES} — середина на |x|, y {SLEEVE_ZONE_AT} м:",
+                  zones_to_point(os.path.join(d, "name_cm.png"), SLEEVE_ZONES, *SLEEVE_ZONE_AT))
         if SLEEVE_ZONE_SHIFT:                            # номер на рукаве — мимо полос (профиль sleeve_zone_shift_cm)
             print(f"  номера на рукавах {kit}: зоны {SLEEVE_ZONES} сдвинуты на {SLEEVE_ZONE_SHIFT} см (наружу, вверх):",
                   shift_zones(os.path.join(d, "name_cm.png"), *SLEEVE_ZONE_SHIFT, zones=SLEEVE_ZONES))
