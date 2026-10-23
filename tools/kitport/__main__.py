@@ -322,6 +322,12 @@ def main():
     s.add_argument("--frame", default=None, help="кадр x0,x1,y0,y1 (м; по умолчанию — ворот): любое место крупно — стыки "
                                                  "полосы с гербом, концы кантов (MTL, WSH 23.10)")
     s.add_argument("--width", type=int, default=None, help="ширина вида, px (по умолчанию 420)")
+    s = sub.add_parser("arm", help="рукав крупно со всех сторон вокруг оси предплечья: полосы у манжеты, шов снизу")
+    s.add_argument("--clubs", required=True, help="коды клубов через запятую (STL)")
+    s.add_argument("--kits", default="home,away", help="формы через запятую")
+    s.add_argument("--x0", type=float, default=0.30, help="м: рука — вершины с x больше (и начало кадра)")
+    s.add_argument("--x1", type=float, default=0.52, help="м: конец кадра по x")
+    s.add_argument("--width", type=int, default=420, help="ширина вида, px")
     s = sub.add_parser("yoke", help="кокетка и плечи: наш и источник в одних видах с линиями высот, замер края кокетки")
     s.add_argument("--clubs", required=True, help="коды клубов через запятую (MTL,BUF)")
     s.add_argument("--kits", default="", help="формы через запятую (по умолчанию — с кокеткой в профиле)")
@@ -373,6 +379,9 @@ def main():
     if a.cmd == "collar":
         from . import collar
         return collar.cmd_collar(a)
+    if a.cmd == "arm":
+        from . import arm
+        return arm.cmd_arm(a)
     if a.cmd == "yoke":
         from . import yoke
         return yoke.cmd_yoke(a)
