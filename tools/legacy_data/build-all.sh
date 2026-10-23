@@ -5,7 +5,7 @@
 #   LEGACY_DATA_WORK=папка bash tools/legacy_data/build-all.sh …   # сухой прогон: всё (и out) — в эту папку;
 #        входы, которые этапом не пересобираются (например, составы без сети), — положить туда заранее
 #        этапы: base roster photos equip collect retire fixdb utah ahl europe chl stats27 nhlattrs useredits tape players
-#        contracts awards goaliegear photos24 heads scans24 fonts
+#        equip27 contracts awards goaliegear photos24 heads scans24 fonts
 #        music models art logos menu nhl24
 #        (без этапов — все по порядку;
 #        --ahl32 — ещё вариант «АХЛ на 32», накладка game/work/legacy-data/out-ahl32; nhl24 — накладка out-nhl24
@@ -28,7 +28,7 @@ L=game/other/legacy/big/cacheboot
 AHL32=0
 stages=()
 for a in "$@"; do [ "$a" = "--ahl32" ] && AHL32=1 || stages+=("$a"); done
-[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah ahl europe chl stats27 nhlattrs useredits tape players contracts awards goaliegear photos24
+[ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah ahl europe chl stats27 nhlattrs useredits tape players equip27 contracts awards goaliegear photos24
                                   heads scans24 fonts music models art logos menu nhl24)
 want() { for s in "${stages[@]}"; do [ "$s" = "$1" ] && return 0; done; return 1; }
 say() { echo "== $(date +%H:%M:%S) $*"; }
@@ -228,6 +228,20 @@ if want players; then
     done
   else
     say "свои игроки: нет $AP/*.json — этап пропущен"
+  fi
+fi
+if want equip27; then
+  # экипировка из NHL 27 (tools/legacy_data/equipment27.py, docs/equipment27.md; просьба пользователя
+  # 23.10): клюшка, коньки, шлем, краги, шорты, визор, обмотка, заправка свитера и гетр — опознанным по имени и
+  # дате рождения; модели — в слоты каталога Legacy (fb/stick_slots.toml, fb/skate_slots.toml). После useredits (правки
+  # пользователя перезаписываются — по его решению), tape и players; обмотка игроков tape_players.json ставится и здесь
+  # (решение пользователя главнее). До goaliegear (у вратарей — только обмотка и заправка). Копия базы — $W/equipment27/
+  # backup/, draft_roster.db — заново. Повтор ничего не меняет. Сейвы — отдельно: equipment27.py save СЕЙВ --write
+  if [ -f "${NHL27_DB:-game/work/nhl27/db/nhl_game.db}" ]; then
+    say "экипировка из NHL 27 (equipment27.py)"
+    python $T/equipment27.py --write
+  else
+    say "экипировка из NHL 27: нет базы NHL 27 — этап пропущен"
   fi
 fi
 if want contracts; then
