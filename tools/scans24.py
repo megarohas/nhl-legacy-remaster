@@ -23,7 +23,8 @@ mat_head NHL 24 3157), вершины сопоставляются 1:1 по UV. 
   python tools/scans24.py match            # → <work>/scans24/match-<вариант>.json: ok / спорные / конфликты
   python tools/scans24.py build [--jobs 6] [--disputed]   # → <work>/scans24/cache/<id>/, ok → out/rendering/player/
   python tools/scans24.py apply            # headid + stockplayerheads в out/db и out-ahl32/db, draft_roster.db заново
-  python tools/scans24.py save СЕЙВ [--write] [--variant out-ahl32]   # то же в сейве ROSTER (копия, проверка CRC)
+  python tools/scans24.py save СЕЙВ [--write] [--variant out-ahl32]   # то же в сейве ROSTER (копия, проверка CRC) или
+                                           # во франшизе DYNASTY (игроки по имени и дате рождения, только headid)
   python tools/scans24.py sheet [--n 60] [--names "Имя Фамилия,…"]   # лист «типовая сейчас | NHL 24 | наш»
                                            # (+ спорные, + 5 в шлеме)
   python tools/scans24.py styles --source nhl27            # каталог общих причёсок NHL 27 → <work>/scans27/styles*
@@ -74,6 +75,7 @@ VERSION = 7                                   # версия сборки гол
 EA_PLAYER = os.path.join(G.big, 'cacherender', 'rendering', 'player')
 COMMON = os.path.join(G.big, 'renderboot', 'rendering', 'player_common', 'texlib_999.rx2')
 BIO, HEADS, PLACE = 'exhibitionplayerbiotable', 'stockplayerheads', 'stockplayerhelmetplacement'
+LBIO = 'leagueplayerbiotable'                 # франшиза DYNASTY и «Стань профи»: свои игроки, game_id не базы
 TYPICAL = 60000
 NECK = (1.60, 1.66)                           # низ шеи — от шаблона (у сканов EA общий), переход
 CAP_ADD, CAP_MAX, CAP_MIN = 0.004, 0.012, 0.0015
@@ -1322,46 +1324,123 @@ def heads24_old(v):
     return {r['game_id']: {r.get('old'), r.get('new')} for r in json.load(open(fn, encoding='utf-8'))}
 
 
-def cmd_save(save, write, v):
-    done = {r['game_id']: r for r in json.load(open(applied_fn(v), encoding='utf-8'))}
-    h24 = heads24_old(v)
-    meta = load_meta(os.path.join(P24.work(), v, 'db', 'nhlng-meta.xml'))
-    sf = SaveFile(open(save, 'rb').read(), meta)
-    db = sf.db
-    ch = same = other = 0
-    need = set()
-    for x in db.live_rows(BIO):
-        r = done.get(db.get(BIO, 'game_id', x))
-        if not r:
-            continue
-        h = db.get(BIO, 'headid', x)
+def league_pairs(L, db):
+    """{game_id базы: строка leagueplayerbiotable} — однозначные пары по имени, фамилии и дате рождения (без диакритики).
+    У франшизы game_id свой (другие люди под теми же номерами, docs/equipment27.md), а имя и дату она берёт из базы,
+    из которой создана. Проба 24.10.2026 на франшизе Миннесоты: 2275 пар, неоднозначных — 0."""
+    def people(t, bio, key):
+        out = defaultdict(list)
+        for r in t.live_rows(bio):
+            ln = t.get_string(bio, 'lastname', r)
+            if ln.strip():
+                out[(norm(t.get_string(bio, 'firstname', r)), norm(ln), t.get(bio, 'year', r), t.get(bio, 'month', r),
+                     t.get(bio, 'day', r))].append(t.get(bio, key, r) if key else r)
+        return out
+    lp, fp = people(L, BIO, 'game_id'), people(db, LBIO, None)
+    return {v[0]: fp[k][0] for k, v in lp.items() if len(v) == 1 and len(fp.get(k, ())) == 1}
+
+
+def save_plan(db, bio, pairs, h24):
+    """[(строка, новая голова)], уже стоит, другая голова, {головы этапа в сейве}. Голова ставится, только если у игрока
+    прежняя (до этапа) — иное значит правку пользователя в редакторе."""
+    ch, same, other, need = [], 0, 0, set()
+    for x, r in pairs:
+        h = db.get(bio, 'headid', x)
         if h == r['new']:
             same += 1
             need.add(r['new'])
         elif h == r['old'] or h in h24.get(r['game_id'], set()):
-            db.set(BIO, 'headid', x, r['new'])
-            ch += 1
+            ch.append((x, r['new']))
             need.add(r['new'])
         else:
             other += 1
-    line = heads_rows(db, need) if need else f'{HEADS}: не нужно'
+    return ch, same, other, need
+
+
+def same_but(before, after, table, field, rows):
+    """Ошибки: что изменилось вне поля field строк rows таблицы table (всё прочее — байт в байт)."""
+    bad = []
+    for t, info in before.by_name.items():
+        if t != table:
+            if [before.record(t, r) for r in before.live_rows(t)] != [after.record(t, r) for r in after.live_rows(t)]:
+                bad.append(f'{t}: записи изменились')
+            continue
+        for r in before.live_rows(t):
+            for f in info['fields']:
+                if (f != field or r not in rows) and before.get(t, f, r) != after.get(t, f, r):
+                    bad.append(f'{t} строка {r} поле {f}')
+                    break
+    return bad[:10]
+
+
+def cmd_save(save, write, v):
+    """headid голов этапа в сейве. ROSTER — exhibitionplayerbiotable по game_id и свой stockplayerheads (строки новых голов
+    на места доноров). Франшиза (DYNASTY, 24.10.2026: «арены и головы — да») — leagueplayerbiotable, игроки по имени и
+    дате рождения (league_pairs); своего stockplayerheads у неё нет — он из базы игры, меняется только headid."""
+    done = {r['game_id']: r for r in json.load(open(applied_fn(v), encoding='utf-8'))}
+    h24 = heads24_old(v)
+    meta = load_meta(os.path.join(P24.work(), v, 'db', 'nhlng-meta.xml'))
+    raw = open(save, 'rb').read()
+    sf = SaveFile(raw, meta)
+    db = sf.db
+    if BIO in db.by_name and db.live_rows(BIO):
+        bio, league = BIO, False
+        pairs = [(x, done[g]) for x in db.live_rows(BIO) if (g := db.get(BIO, 'game_id', x)) in done]
+    elif LBIO in db.by_name:
+        bio, league = LBIO, True
+        L = Tdb(open(os.path.join(P24.work(), v, 'db', 'nhlng.db'), 'rb').read(), meta)
+        lp = league_pairs(L, db)
+        pairs = [(lp[g], r) for g, r in done.items() if g in lp]
+    else:
+        raise SystemExit(f'{save}: нет таблицы игроков ({BIO} или {LBIO})')
+    before = Tdb(bytes(db.d), meta)
+    ch, same, other, need = save_plan(db, bio, pairs, h24)
+    for x, h in ch:
+        db.set(bio, 'headid', x, h)
+    if league:
+        line = f'{HEADS}: во франшизе своей нет (берётся из базы игры)'
+    else:
+        line = heads_rows(db, need) if need else f'{HEADS}: не нужно'
     out = sf.bytes()
     chk = SaveFile(out, meta)
     bad = chk.verify()
-    print(f'{os.path.basename(save)}: голов этапа в {v}: {len(done)}; в сейве к замене {ch}, уже стоит {same}, другая '
-          f'голова (правка пользователя — не трогаю) {other}, нет игрока {len(done) - ch - same - other}; {line}; '
-          f'CRC после правки: {"ок" if not bad else bad}; {HEADS} в сейве {chk.db.counts(HEADS)[:2]}')
+    if league:
+        bad += same_but(before, chk.db, LBIO, 'headid', {x for x, _ in ch})
+        if len(out) != len(raw):
+            bad.append(f'размер сейва изменился ({len(raw)} → {len(out)})')
+        if save_plan(chk.db, LBIO, [(lp[g], r) for g, r in done.items() if g in lp], h24)[0]:
+            bad.append('повторный план не пуст')
+    print(f'{os.path.basename(save)}: голов этапа в {v}: {len(done)}; в сейве к замене {len(ch)}, уже стоит {same}, другая '
+          f'голова (правка пользователя — не трогаю) {other}, нет игрока {len(done) - len(ch) - same - other}; {line}; '
+          f'проверка после правки: {"ок" if not bad else bad}'
+          + ('' if league else f'; {HEADS} в сейве {chk.db.counts(HEADS)[:2]}'))
     if not write:
         print('без --write: сейв не изменён')
         return
     if bad:
         raise SystemExit('проверка не прошла — сейв не записан')
+    if not ch and league:
+        print('сейв уже такой — не пишу')
+        return
+    if game_running():
+        raise SystemExit('запущена игра (tasklist: nhl…) — сейв не пишу; закройте игру')
     bk = os.path.join(P24.work(), 'backup-saves', 'scans24-' + time.strftime('%Y%m%d-%H%M%S'))
     os.makedirs(bk, exist_ok=True)
     shutil.copyfile(save, os.path.join(bk, os.path.basename(save)))
     with open(save, 'wb') as f:
         f.write(out)
+    if SaveFile(open(save, 'rb').read(), meta).verify():
+        shutil.copyfile(os.path.join(bk, os.path.basename(save)), save)
+        raise SystemExit('после записи проверка не прошла — сейв возвращён из копии')
     print(f'записано; копия до правки — {bk}')
+
+
+def game_running():
+    try:
+        out = subprocess.run(['tasklist'], capture_output=True, text=True, errors='replace').stdout
+    except OSError:
+        return False
+    return any('nhl' in line.lower().split(' ')[0] for line in out.splitlines() if line.strip())
 
 
 # ------------------------------------------------------------------ причёски NHL 27 по фото
@@ -1955,7 +2034,7 @@ def main():
         cmd_apply(variants)
     elif a.cmd == 'save':
         if not a.save:
-            raise SystemExit('нужен путь к сейву ROSTER')
+            raise SystemExit('нужен путь к сейву (ROSTER или DYNASTY)')
         cmd_save(a.save, a.write, (a.variant or ['out-ahl32'])[0])
     elif a.cmd == 'sheet':
         names = [x.strip() for x in a.names.split(',')] if a.names else STARS if a.stars else None
