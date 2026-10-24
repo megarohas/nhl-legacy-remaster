@@ -7,7 +7,7 @@ fb/skate_slots.toml; в игру — edge_kit pack (pack()) и kitport install, 
   бренд — только текстура cacherender/rendering/skate/texlib_<N>.rx2: skate_<N>_cm 1024×512 (верхняя половина — левый и
   правый конёк зеркально, нижняя пустая), _nm 512×256, _rm 256×128, _sm 512×256; N = exhibitionskaterequipment.skatebrand;
 - NHL 27: модель у пяти коньков своя (OWN_MESH), у прочих — общая модель бренда (bauer|ccm|true/common), вариант
-  notuck (без заправленной гетры); текстура player_skate_<модель>_color 1024×1024 (верх — один конёк, низ — другой).
+  notuck (MESH_VAR); текстура player_skate_<модель>_color (верх — один конёк, низ — другой).
   Обе модели — в одной системе (подошва на 0, носок к +z), конёк NHL 27 шире (|x| до 0,237 против 0,177) и выше
   (0,267 против 0,242): перед переносом каждый конёк NHL 27 вписывается в рамку своего конька Legacy по осям.
 
@@ -38,20 +38,26 @@ LEG_TEX = os.path.join(LEGACY_BIG, "cacherender", "rendering", "skate", "texlib_
 SKATE_REL = "rendering/skate/texlib_{}.rx2"
 SLOTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "skate_slots.toml")
 SIZE = (1024, 512)
-MESH27 = "content/character/skater/player/skate/{path}/components/player_skate_{name}_notuck_mesh"
+MESH27 = "content/character/skater/player/skate/{path}/components/player_skate_{name}_{var}_mesh"
+MESH_VAR = "notuck"                 # вариант модели NHL 27 (24.10, лист qa/configs.png): у notuck высота ботинка — как у модели
+#                                    Legacy (верх 0,26 и 0,24 м); у fulltuck язык и задник выше (до 0,33) — вписанный в Legacy
+#                                    ботинок сжимался, у Bauer с отдельными слоями языка и задника рисунок рассыпался. Белые пятна
+#                                    у языка и подкладки были не от варианта, а от шнурков NHL 27 и изнанки — их правят LACE и INNER
+#                                    (варианты: notuck — гетра поверх, без языка и задника; fronttuck, backtuck, fulltuck — с ними)
 OWN_MESH = {"bauer_supreme_fuse": "bauer/supreme/fuse", "bauer_supreme_shadow": "bauer/supreme/shadow",
             "bauer_vapor_flylite": "bauer/vapor/flylite", "ccm_tacks_xf652": "ccm/tacks/xf652",
             "true_catalyst_9x4": "true/catalyst/9x4"}
 _M = {}
 
 
-def mesh_of(model):
-    """Модель NHL 27 для текстуры: своя (OWN_MESH) или общая бренда. -> путь ресурса."""
+def mesh_of(model, var=None):
+    """Модель NHL 27 для текстуры: своя (OWN_MESH) или общая бренда, вариант var (MESH_VAR). -> путь ресурса."""
+    var = var or MESH_VAR
     for k, path in OWN_MESH.items():
         if model == k or model.startswith(k + "_"):
-            return MESH27.format(path=path, name=k)
+            return MESH27.format(path=path, name=k, var=var)
     brand = model.split("_")[0]
-    return MESH27.format(path=f"{brand}/common", name=f"{brand}_common")
+    return MESH27.format(path=f"{brand}/common", name=f"{brand}_common", var=var)
 
 
 def _normals(pos, tri):
@@ -99,6 +105,162 @@ def mesh_legacy():
         m["nrm"] = np.asarray(L.nrm, np.float64)[:, :3] if len(L.nrm) else _normals(m["pos"], m["tri"])
         _M["leg"] = m
     return _M["leg"]
+
+
+LACE_TRIS = 600                    # шнурки NHL 27 — острова UV не больше стольких треугольников, большей частью (> LACE_TOP)
+LACE_TOP = 0.5                      # вершин в верхней полосе своей половины текстуры (v от начала половины < LACE_V)…
+LACE_V = 0.07
+LACE_Y = (0.10, 0.25)               # …целиком на этих высотах (м) и спереди (середина по z > LACE_Z): у общих моделей бренда
+LACE_Z = -0.02                      # шнурки — 48 островов по 72–304 треугольника; ободки подошвы в той же полосе — ниже 0,1
+HOLDER_Y = 0.105                    # м: остров UV NHL 27 целиком ниже — стакан (у общих моделей бренда стакан с ботинком
+#                                    одной сеткой, но своими островами; у своих моделей — отдельный кусок)
+BOOT, HOLDER, LACE, INNER = 0, 1, 2, 3
+
+
+def _components(m, uv_too):
+    """Связные куски сетки (по сваренным вершинам; uv_too — и по UV: острова развёртки) → метка у треугольника."""
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.csgraph import connected_components
+    k = np.round(m["pos"] * 2000)
+    if uv_too:
+        k = np.c_[k, np.round(m["uv"] * 8192)]
+    _, vid = np.unique(k.astype(np.int64), axis=0, return_inverse=True)
+    vid = vid.ravel()
+    T = vid[m["tri"]]
+    n = int(vid.max()) + 1
+    A = coo_matrix((np.ones(T.size), (T.ravel(), np.roll(T, 1, 1).ravel())), shape=(n, n))
+    _, lab = connected_components(A, directed=False)
+    return lab[T[:, 0]]
+
+
+def parts27(path):
+    """Части модели NHL 27 по треугольникам: BOOT | HOLDER | LACE (23–24.10, пользователь после игры: «у языка и задней
+    панели текстура частично белая, ботинок заходит на стакан»): шнурки — отдельные куски с UV в верхней полосе
+    половины текстуры (у Legacy шнуровка нарисованная — из них брать нечего, а ближайшей точкой с них на язык и края
+    шнуровки ложились белые пятна); стакан — острова UV ниже HOLDER_Y."""
+    key = ("parts27", path)
+    if key in _M:
+        return _M[key]
+    m = mesh27(path)
+    lab = np.full(len(m["tri"]), BOOT)
+    isl = _components(m, True)
+    cnt = np.bincount(isl)
+    P = m["pos"][m["tri"]]
+    top = (np.mod(m["uv"][m["tri"]][:, :, 1], 0.5) < LACE_V).mean(1)   # v от начала своей половины (верх — 0)
+    frac = np.bincount(isl, weights=top) / np.maximum(cnt, 1)
+    ymin = np.full(len(cnt), 9.0)
+    np.minimum.at(ymin, isl, P[:, :, 1].min(1))
+    ymax0 = np.zeros(len(cnt))
+    np.maximum.at(ymax0, isl, P[:, :, 1].max(1))
+    zc = np.bincount(isl, weights=P[:, :, 2].mean(1)) / np.maximum(cnt, 1)
+    lace = (frac > LACE_TOP) & (cnt <= LACE_TRIS) & (ymin >= LACE_Y[0]) & (ymax0 <= LACE_Y[1]) & (zc > LACE_Z)
+    lab[lace[isl]] = LACE
+    ymax = np.zeros(isl.max() + 1)
+    np.maximum.at(ymax, isl, m["pos"][m["tri"]][:, :, 1].max(1))
+    lab[(lab == BOOT) & (ymax[isl] <= HOLDER_Y)] = HOLDER
+    _M[key] = lab
+    return lab
+
+
+INNER_ROWS = 470                    # строка skate_cm 512: острова целиком ниже и малые (< INNER_TEX) — изнанка ботинка (стелька
+INNER_TEX = 2000                    # и подкладка задника): у EA — тёмные; переносом на них ложились стакан и белая подкладка
+
+
+def parts_legacy():
+    """Части модели Legacy по треугольникам: BOOT | HOLDER | INNER (острова развёртки: стакан — крупный остров в нижней
+    четверти, изнанка — малые острова в самом низу развёртки, остальное — ботинок)."""
+    if "parts_leg" in _M:
+        return _M["parts_leg"]
+    m = mesh_legacy()
+    isl = _components(m, True)
+    lab = np.full(len(m["tri"]), BOOT)
+    H = SIZE[1]
+    tid, _ = kit3d.raster_uv(m, SIZE)
+    texels = np.bincount(isl[tid[tid >= 0]], minlength=isl.max() + 1)
+    vmin = np.full(isl.max() + 1, 1.0)
+    np.minimum.at(vmin, isl, m["uv"][m["tri"]][:, :, 1].min(1))
+    for i in range(isl.max() + 1):
+        if vmin[i] * H >= INNER_ROWS and texels[i] < INNER_TEX:
+            lab[isl == i] = INNER
+        elif vmin[i] >= HOLDER_V and texels[i] >= INNER_TEX:
+            lab[isl == i] = HOLDER
+    _M["parts_leg"] = lab
+    return lab
+
+
+def _sub(m, keep):
+    return {"pos": m["pos"], "uv": m["uv"], "nrm": m["nrm"], "tri": m["tri"][keep]}
+
+
+PARTS = True                       # стакан — со стакана, ботинок — с ботинка (False — весь конёк одной рамкой, как до 24.10)
+FIT = "box"                        # вписывание части NHL 27 в часть Legacy: box — рамкой по осям; contour — и по высоте
+#                                    между низом и верхом ботинка в каждом сечении (у моделей Bauer с отдельными слоями языка и
+#                                    задника рисунок от этого рассыпался — 24.10, лист qa/variants.png)
+CONTOUR_BINS = 40                  # сечений по длине конька (z): верх и низ ботинка — по ним (верх — язык спереди, задник
+#                                    сзади, край голенища по бокам; у NHL 27 язык и задник выше, чем у Legacy, — сжимаются в свои)
+
+
+def _contour(t, y):
+    """Низ и верх по сечениям t ∈ [0, 1] (CONTOUR_BINS), пустые — по соседям, сглажено медианой по 3. -> (низ, верх)."""
+    from scipy.ndimage import median_filter
+    b = np.full(CONTOUR_BINS, np.nan)
+    top = np.full(CONTOUR_BINS, np.nan)
+    i = np.clip((t * CONTOUR_BINS).astype(int), 0, CONTOUR_BINS - 1)
+    for k in range(CONTOUR_BINS):
+        sel = i == k
+        if sel.any():
+            b[k], top[k] = y[sel].min(), y[sel].max()
+    g = np.arange(CONTOUR_BINS)
+    ok = ~np.isnan(b)
+    b, top = np.interp(g, g[ok], b[ok]), np.interp(g, g[ok], top[ok])
+    return median_filter(b, 3, mode="nearest"), median_filter(top, 3, mode="nearest")
+
+
+def part_pair(path, part):
+    """(часть NHL 27, вписанная по сторонам в рамку той же части Legacy; та же часть Legacy) — для переноса по частям."""
+    key = ("pair", path, part, FIT, PARTS)
+    if not PARTS:                                        # без частей: весь конёк NHL 27 (без шнурков) — в рамку конька Legacy
+        if key not in _M:
+            src, dst = mesh27(path), mesh_legacy()
+            keep = parts27(path) != LACE
+            p = src["pos"].copy()
+            for sgn in (1.0, -1.0):
+                vs = np.unique(src["tri"][keep].ravel())
+                vs = vs[src["pos"][vs, 0] * sgn > 0]
+                kd = dst["pos"][:, 0] * sgn > 0
+                s0, s1 = src["pos"][vs].min(0), src["pos"][vs].max(0)
+                d0, d1 = dst["pos"][kd].min(0), dst["pos"][kd].max(0)
+                p[vs] = d0 + (src["pos"][vs] - s0) * (d1 - d0) / np.maximum(s1 - s0, 1e-9)
+            ld = parts_legacy()
+            sm = {"pos": p, "uv": src["uv"], "tri": src["tri"][keep], "nrm": _normals(p, src["tri"])}
+            _M[key] = (sm, _sub(dst, ld != INNER) if part == BOOT else _sub(dst, ld == -1))
+        return _M[key]
+    if key in _M:
+        return _M[key]
+    src, dst = mesh27(path), mesh_legacy()
+    ls, ld = parts27(path), parts_legacy()
+    s_sub, d_sub = _sub(src, ls == part), _sub(dst, ld == part)
+    p = src["pos"].copy()
+    for sgn in (1.0, -1.0):
+        vs = np.unique(s_sub["tri"].ravel())
+        vs = vs[src["pos"][vs, 0] * sgn > 0]
+        vd = np.unique(d_sub["tri"].ravel())
+        vd = vd[dst["pos"][vd, 0] * sgn > 0]
+        s0, s1 = src["pos"][vs].min(0), src["pos"][vs].max(0)
+        d0, d1 = dst["pos"][vd].min(0), dst["pos"][vd].max(0)
+        p[vs] = d0 + (src["pos"][vs] - s0) * (d1 - d0) / np.maximum(s1 - s0, 1e-9)
+        if part == BOOT and FIT == "contour":            # по высоте — между низом и верхним краем ботинка в своём сечении
+            ts = (src["pos"][vs, 2] - s0[2]) / max(s1[2] - s0[2], 1e-9)
+            td = (dst["pos"][vd, 2] - d0[2]) / max(d1[2] - d0[2], 1e-9)
+            sb, st = _contour(ts, src["pos"][vs, 1])
+            db, dt = _contour(td, dst["pos"][vd, 1])
+            g = (np.arange(CONTOUR_BINS) + 0.5) / CONTOUR_BINS
+            b_s, t_s = np.interp(ts, g, sb), np.interp(ts, g, st)
+            b_d, t_d = np.interp(ts, g, db), np.interp(ts, g, dt)
+            p[vs, 1] = b_d + (src["pos"][vs, 1] - b_s) * (t_d - b_d) / np.maximum(t_s - b_s, 1e-6)
+    sm = {"pos": p, "uv": src["uv"], "tri": s_sub["tri"], "nrm": _normals(p, src["tri"])}
+    _M[key] = (sm, d_sub)
+    return _M[key]
 
 
 def fitted27(path):
@@ -162,17 +324,25 @@ def lace_mask(n):
     return m
 
 
-def convert(model, n=None):
+def convert(model, n=None, var=None):
     """Текстура конька NHL 27 → RGBA 1024×512 в развёртке Legacy (вне развёртки — ближайший тексель, для мипов);
     с n — шнуровка (lace_mask) — нарисованная Legacy (слота LACE_REF)."""
     from scipy import ndimage as ndi
-    src, dst = fitted27(mesh_of(model)), mesh_legacy()
     tex = kit3d.load_tex(src_png(model))
-    img, mask, _d, _i = kit3d.transfer(tex, src, dst, SIZE, 2)
-    img = np.asarray(img, np.float64)[..., :3]
-    m = np.asarray(mask, bool)
-    if m.shape != img.shape[:2]:
-        m = np.asarray(Image.fromarray(m.astype(np.uint8) * 255).resize(img.shape[1::-1], Image.NEAREST)) > 0
+    img, m = None, None
+    for part in (BOOT, HOLDER):                          # ботинок — с ботинка, стакан — со стакана (каждый в своей рамке)
+        src, dst = part_pair(mesh_of(model, var), part)
+        if not len(dst["tri"]):
+            continue
+        im_p, mk, _d, _i = kit3d.transfer(tex, src, dst, SIZE, 2)
+        im_p = np.asarray(im_p, np.float64)[..., :3]
+        mk = np.asarray(mk, bool)
+        if mk.shape != im_p.shape[:2]:
+            mk = np.asarray(Image.fromarray(mk.astype(np.uint8) * 255).resize(im_p.shape[1::-1], Image.NEAREST)) > 0
+        if img is None:
+            img, m = np.zeros_like(im_p), np.zeros(mk.shape, bool)
+        m |= mk
+        img[mk] = im_p[mk]
     _, (iy, ix) = ndi.distance_transform_edt(~m, return_indices=True)
     img = img[iy, ix]
     rgba = np.dstack([np.clip(np.round(img), 0, 255).astype(np.uint8), np.full(img.shape[:2], 255, np.uint8)])
@@ -182,8 +352,22 @@ def convert(model, n=None):
         lm = lace_mask(LACE_REF)
         out = np.asarray(im).copy()
         out[lm] = np.asarray(Image.open(legacy_png(LACE_REF)).convert("RGBA").resize(SIZE))[lm]
+        inner = part_texels(INNER, SIZE)                  # изнанка (стелька, подкладка задника) — тёмная, как у EA (слот
+        out[inner] = np.asarray(Image.open(legacy_png(LACE_REF)).convert("RGBA").resize(SIZE))[inner]   # LACE_REF: у 45 — светлая
         im = Image.fromarray(out, "RGBA")
     return im
+
+
+def part_texels(part, size):
+    """Тексели развёртки Legacy (size) на треугольниках части part, с запасом 2 текселя за край острова (мипы)."""
+    from scipy import ndimage as ndi
+    key = ("ptex", part, tuple(size))
+    if key not in _M:
+        tid, _ = kit3d.raster_uv(mesh_legacy(), size)
+        lab = parts_legacy()
+        k = (tid >= 0) & (lab[np.maximum(tid, 0)] == part)
+        _M[key] = ndi.binary_dilation(k, iterations=2) & ~((tid >= 0) & (lab[np.maximum(tid, 0)] != part))
+    return _M[key]
 
 
 HOLDER_V = 0.72                     # остров с серединой ниже (v) — стакан с лезвием (строки 373–508 из 512): рельеф гладкий
@@ -230,18 +414,26 @@ def islands(size):
     return isl
 
 
-def maps(model, n):
+def maps(model, n, var=None):
     """Рельеф и блик слота n по модели NHL 27: nm — перенос normal NHL 27 (kit3d.transfer_normals), sm — канал G
     coeff NHL 27 (гладкость деталей), подогнанный по каждому острову к среднему и разбросу блика Legacy слота n (уровни
     материалов игры — как были, рисунок — новый). -> (nm RGBA 512×256, sm RGBA 512×256). Карты Legacy нарисованы под
     прежний дизайн (окна стакана Tuuk, «X» Supreme 1S) — под новым рисунком они проступали бы."""
-    src, dst = fitted27(mesh_of(model)), mesh_legacy()
     nsz = (SIZE[0] // 2, SIZE[1] // 2)
     nt = kit3d.load_tex(src27(model, "normal"))
-    nm = kit3d.transfer_normals(nt, src, dst, nsz, 2)
-    co = kit3d.load_tex(src27(model, "coeff"))
-    g, _m, _d, _i = kit3d.transfer(np.repeat(np.asarray(co)[..., 1:2], 3, -1), src, dst, nsz, 2)
-    g = np.asarray(g, np.float64)[..., 0]
+    co = np.repeat(np.asarray(kit3d.load_tex(src27(model, "coeff")))[..., 1:2], 3, -1)
+    nm = np.zeros((nsz[1], nsz[0], 3))
+    nm[...] = (127.5, 127.5, 255.0)
+    g = np.zeros((nsz[1], nsz[0]))
+    for part in (BOOT, HOLDER):                          # по частям, как цвет (convert)
+        src, dst = part_pair(mesh_of(model, var), part)
+        if not len(dst["tri"]):
+            continue
+        k = (kit3d.raster_uv(dst, nsz)[0] >= 0) & (part_texels(part, nsz) if PARTS else True)
+        nm_p = kit3d.transfer_normals(nt, src, dst, nsz, 2)
+        g_p, _m, _d, _i = kit3d.transfer(co, src, dst, nsz, 2)
+        nm[k] = np.asarray(nm_p)[k]
+        g[k] = np.asarray(g_p, np.float64)[..., 0][k]
     old = legacy_map(n, "sm")
     if old.shape[:2] != g.shape:
         old = np.asarray(Image.fromarray(old.astype(np.uint8)).resize(g.shape[::-1], Image.BILINEAR)).astype(np.float64)
@@ -262,6 +454,13 @@ def maps(model, n):
     nm = np.asarray(nm, np.float64).copy()
     nm[lm] = ref_nm[lm][:, :3]
     sm[lm] = ref_sm[lm][:, 0]
+    inner = part_texels(INNER, nsz)                      # изнанка — рельеф и блик Legacy этого слота
+    own_nm, own_sm = legacy_map(LACE_REF, "nm"), legacy_map(LACE_REF, "sm")
+    if own_nm.shape[:2] != inner.shape:
+        own_nm = np.asarray(Image.fromarray(own_nm.astype(np.uint8)).resize(nsz, Image.BILINEAR)).astype(np.float64)
+        own_sm = np.asarray(Image.fromarray(own_sm.astype(np.uint8)).resize(nsz, Image.BILINEAR)).astype(np.float64)
+    nm[inner] = own_nm[inner][:, :3]
+    sm[inner] = own_sm[inner][:, 0]
     vv = (np.arange(nsz[1]) + 0.5) / nsz[1]
     for i in np.unique(isl[isl >= 0]):
         k = isl == i
@@ -286,8 +485,8 @@ def slots():
     return out
 
 
-def slot_image(src, n=None):
-    return convert(src.partition(":")[2], n)
+def slot_image(src, n=None, var=None):
+    return convert(src.partition(":")[2], n, var)
 
 
 # Превью в редакторе: fe/ion/artassets/createplayer/skates/skate<N>.big (BIGF/Apt, 8888 256×128, картинка 140×108) — у EA
