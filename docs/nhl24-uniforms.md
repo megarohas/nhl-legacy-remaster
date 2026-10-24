@@ -889,3 +889,7 @@ adidas, сейв ROSTER дописывается в конец). Шорты и �
 - 24.10 00:21 — рельеф шорт под гербом (пользователь: «у DET значок выше и сбоку от рельефного следа»; docs/kitport.md §12.1):
   гербы образца стёрты в `pant_nm/sm`, рельеф — по маске нашего герба; 49 файлов `rendering/pant/texlib_0_*` у 25 клубов;
   копия — `backup-cache/user-20261024-pant-relief`; база и сейвы — без изменений.
+- 24.10 05:19 — кресла 4 арен (пользователь: «кресла для 4 арен можешь обновлять»; docs/arenas.md): BOS 2, DET 10, PHI 21,
+  VAN 28 — `rendering/crowddata/crowd_<N>.cwd` (новые в cache:, `stadium.py pack` из `edge_kit pack`, рецепты
+  `arena_seats.toml` со status = approved); копия — `backup-cache/user-20261024-arena-seats`. Читает ли игра .cwd из
+  cache: — проверить в матче (откат — убрать файл).

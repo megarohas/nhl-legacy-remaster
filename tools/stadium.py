@@ -139,8 +139,8 @@ def game_file(rel):
 
 def resolve(arg, rel_tmpl):
     """N или путь к файлу → (байты, подпись)."""
-    if os.path.isfile(arg):
-        return open(arg, 'rb').read(), arg
+    if isinstance(arg, str) and os.path.isfile(arg):   # число — не путь: os.path.isfile(2) — проверка дескриптора 2 (stderr):
+        return open(arg, 'rb').read(), arg             # при выводе в файл он «файл», open(2) читал и закрывал stderr (24.10)
     if not re.fullmatch(r'\d+', str(arg)):
         raise SystemExit(f'{arg}: ни номер арены, ни файл')
     rel = rel_tmpl.format(n=int(arg))
@@ -1053,6 +1053,31 @@ def cmd_recipe(a):
                    f'{r.get("club", "")} {r.get("building", "")}'.strip())
         done += 1
     print(f'готово арен: {done}')
+
+
+def pack(man, cache):
+    """Кресла одобренных рецептов (status = approved) в пакет (fb.edge_kit pack): crowd_<N>.cwd — копия EA с новым цветом
+    кресел, запись type crowd в манифесте. -> число арен."""
+    import hashlib
+    rec = load_recipes()
+    n = 0
+    for k in sorted(rec):
+        r = rec[k]
+        if r.get('status') != 'approved' or not r.get('rules'):
+            continue
+        cr = Crowd.load(k)
+        apply_rules(cr, r['rules'])
+        rel = CROWD_REL.format(n=k)
+        p, _ = write_out(k, cr, cache)
+        q = os.path.join(cache, *rel.split('/'))
+        if os.path.abspath(p) != os.path.abspath(q):
+            raise SystemExit(f'{p}: ожидался {q}')
+        e = {'file': rel, 'type': 'crowd', 'md5': hashlib.md5(open(q, 'rb').read()).hexdigest(),
+             'size': os.path.getsize(q), 'action': 'replace',
+             'note': f'кресла {r.get("club", "")} {r.get("building", "")}: {", ".join(r["rules"])} (stadium.py, arena_seats.toml)'}
+        man['files'] = [x for x in man['files'] if x['file'] != rel] + [e]
+        n += 1
+    return n
 
 
 NHL_MODELS = [n for n in range(30) if n != 22] + [255]     # 22 — арена «Финикса» (у Legacy её никто не берёт)

@@ -7540,6 +7540,11 @@ def cmd_pack(a):
     n_stick = sticks.pack(man, cache)
     if n_stick:
         print(f"клюшки (fb.sticks, stick_slots.toml): {n_stick}, имён {len(man.get('loc', {}))}")
+    sys.path.insert(0, os.path.join(REPO, "tools"))
+    import stadium                                       # кресла арен (24.10, arena_seats.toml: status = approved)
+    n_crowd = stadium.pack(man, cache)
+    if n_crowd:
+        print(f"кресла арен (stadium.py, arena_seats.toml): {n_crowd}")
     from . import skates                                 # коньки NHL 27 (23.10, skate_slots.toml)
     n_skate = skates.pack(man, cache)
     if n_skate:

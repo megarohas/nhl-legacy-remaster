@@ -210,7 +210,9 @@ python tools/stadium.py check                     # разбор всех 64 м�
 ## 6. Как поставить и проверить (не делалось)
 
 1. `python tools/stadium.py recipe --approved` — готовые `.cwd` в `game/work/legacy-data/arenas/out/`.
-2. Положить `rendering/crowddata/crowd_<N>.cwd` в `cache:` порта. Можно включить этапом в legacy-data (сейчас этапа нет) или скопировать
+2. Положить `rendering/crowddata/crowd_<N>.cwd` в `cache:` порта. С 24.10 это делает сборка: `stadium.pack` из `edge_kit pack` кладёт
+   рецепты со `status = "approved"` в пакет (тип `crowd` манифеста), дальше `kitport build --stages pack,overlay` и `kitport install`.
+   Раньше: Можно включить этапом в legacy-data (сейчас этапа нет) или скопировать
    вручную. Только при закрытой игре.
 3. В логе порта не должно быть `NtCreateFile FAILED … crowddata\crowd_<N>.cwd`. Файл из `cache:` главнее архива ([modding.md](modding.md)).
    Читает ли игра несжатый `.cwd` из `cache:` (в архиве он `chunklzx`), не проверено. У `.rx2` так работает.
