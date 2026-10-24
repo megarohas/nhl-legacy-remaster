@@ -12,7 +12,8 @@ mat_head NHL 24 3157), вершины сопоставляются 1:1 по UV. 
     поворачиваются вслед за поверхностью; кости, веса, UV, индексы — шаблона;
   * глаза шаблона — сдвиг по поверхности глаза источника, поворот — зрачок в середину разреза век (v7, headeyes.py);
   * haircap — полем смещений головы, высота над скальпом — по прядям NHL 24, не больше шаблонной + 4 мм и не больше
-    12 мм (место под шлемом);
+    12 мм; в зоне шлема — не ближе 1,5 мм к оболочке самого тесного шлема Legacy, ниже края шлема — как есть
+    (headhelmet.py, 24.10.2026: «волосы вылазят через шлем»);
   * поза привязки файла: лицевые суставы шаблона (отличные от общего скелета) — сдвиг по весам кожи;
   * head_<id>_cm — цвет NHL 24 1024 → 512; hair_<id>_cm — пряди NHL 24, запечённые на развёртку haircap.
 База: headid игрока → ID EA; stockplayerheads (есть у каждой головы игрока, упорядочена по headid) — строка новой головы
@@ -29,6 +30,8 @@ mat_head NHL 24 3157), вершины сопоставляются 1:1 по UV. 
   python tools/scans24.py hairplan --source nhl27          # hair-plan.json (стиль по фото, цвет из базы) и листы
   python tools/scans24.py check [--ea] [--only папка,…] [--cache ПАПКА]   # глаза: против глаза источника, зрачок,
                                            # край шапочки (headeyes.py); --ea — эталон по сканам EA
+  python tools/scans24.py helmet [--ea] [--only папка,…] [--cache ПАПКА]  # волосы под шлемом: выступ видимой шапки
+                                           # (и кожи) за оболочку каждого шлема Legacy (headhelmet.py)
 
 <work> — game/work/legacy-data (LEGACY_DATA_WORK). Нужен питон с numpy, scipy, Pillow (PHOTOS24_PYTHON) и дамп NHL 24 с
 каталогом (tools/fb). Повтор ничего не меняет (кэш голов по версии сборки, apply/save — по applied-<вариант>.json).
@@ -55,6 +58,7 @@ sys.path.insert(0, TOOLS)
 os.environ.setdefault('NHL_GAME', 'legacy')
 import photos24 as P24  # noqa: E402
 import headeyes as HE  # noqa: E402
+import headhelmet as HH  # noqa: E402
 import rw4mesh as R  # noqa: E402
 from tdb import Tdb, SaveFile  # noqa: E402
 from tdb_read import load_meta  # noqa: E402
@@ -584,6 +588,17 @@ def source_eyes(N, rigid):
     return (e - rigid[1]) @ rigid[0].T + rigid[2] if rigid is not None else e
 
 
+_HENV = None
+
+
+def helmet_env():
+    """Оболочки шлемов Legacy (headhelmet.Envelope), кэш <work>/helmet-envelope.npz — общий для источников."""
+    global _HENV
+    if _HENV is None:
+        _HENV = HH.Envelope.load(P24.work())
+    return _HENV
+
+
 def build_one(job):
     """job: {'new', 'folder', 'tpl'} → <work>/scans24/cache/<new>/ (player/texlib + info.json)."""
     os.environ['KITPAINT_SERIAL'] = '1'
@@ -592,7 +607,8 @@ def build_one(job):
     new, folder, tpl = job['new'], job['folder'], job['tpl']
     out = os.path.join(work(), 'cache', str(new))
     info_fn = os.path.join(out, 'info.json')
-    key = {'version': VERSION, 'eyes': HE.RULE, 'folder': folder, 'tpl': tpl, 'old_head': job.get('old_head'),
+    key = {'version': VERSION, 'eyes': HE.RULE, 'helmet': HH.RULE, 'folder': folder, 'tpl': tpl,
+           'old_head': job.get('old_head'),
            'style': job.get('style'), 'face_hair': FACE_HAIR if P24.SOURCE in FACE_HAIR_SOURCES else None,
            'hair_color': job.get('hair_color')}
     if os.path.exists(info_fn):
@@ -647,6 +663,31 @@ def build_one(job):
                              'vs_lids_mm': np.round((t - t_lids) * 1000, 2).tolist(),
                              'ahead_v6_mm': HE.ahead(pts, q + t_lids), 'ahead_mm': HE.ahead(pts, q + t)}
         eye_shift[name] = t
+    # поза привязки: лицевые суставы шаблона (до шапки: её выступ за шлем считается в позе игры)
+    J0, Jt = joints(skeleton_inv()), joints(inv)
+    bones = np.concatenate([P['head']['bones'], P['mouthbag']['bones']])
+    wts = np.concatenate([P['head']['w'], P['mouthbag']['w']])
+    inv2 = inv.copy()
+    moved = 0
+    for bone in range(len(inv)):
+        if np.linalg.norm(Jt[bone] - J0[bone]) <= 1e-4:
+            continue
+        ws = ((bones == bone) * wts).sum(1)
+        if ws.sum() < 1e-6:
+            continue
+        jn = Jt[bone] + (disp * ws[:, None]).sum(0) / ws.sum()
+        inv2[bone, 3, :3] = -(jn @ inv[bone, :3, :3])
+        moved += 1
+    inv0 = skeleton_inv()
+    for bone in EYE_BONES:
+        inv2[bone] = inv0[bone]
+    for name, bone in GAZE_BONES.items():      # ось взгляда — вместе с глазом
+        jn = Jt[bone] + eye_shift[name]
+        inv2[bone] = inv[bone].copy()
+        inv2[bone][3, :3] = -(jn @ inv[bone][:3, :3])
+    struct.pack_into('>%df' % inv2.size, raw, bpo + 16, *inv2.reshape(-1))
+    rep['joints_moved'] = moved
+    rep['eye_bones_global'] = len(EYE_BONES)
     # haircap: поле смещений + высота по прядям NHL 24
     cap = P['haircap']
     d, ii = th.query(cap['pos'], k=8)
@@ -723,6 +764,12 @@ def build_one(job):
         h = (g / c)[cgid]
     cap_new = follow + capn * (h - h_follow)[:, None]
     rep.update(cap_with_hair=int(has.sum()), cap_vertices=len(has), cap_height_mm_p50=round(float(np.median(h) * 1000), 2))
+    # шлем (24.10.2026, пользователь: «у Капризова, Болди и других волосы часто вылазят через шлем»): шапка в зоне шлема —
+    # не ближе HH.MARGIN к оболочке самого тесного шлема Legacy (поза игры), сдвиг вдоль нормали к скальпу, разглажен;
+    # ниже края шлема — как есть. Шлем у наших голов стоит по умолчанию (строк stockplayerhelmetplacement нет), как у
+    # сканов EA без строк — у тех видимая шапка внутри оболочки (headhelmet.py, docs/heads-nhl24.md «Волосы под шлемом»)
+    cap_new, rep['helmet'] = HH.fit_cap(cap_new, capn, game_pose(cap, cap_new, inv2) - cap_new, h, cap['tri'], cgid,
+                                        helmet_env(), head_new)
     # пряди → hair_cm (UV шапки)
     capmesh = {'pos': cap_new, 'tri': cap['tri'], 'nrm': outward(cap_new, weld_normals(cap_new, cap['tri'], cgid))}
     if hair:
@@ -745,31 +792,6 @@ def build_one(job):
         gid = weld_ids(p['pos'])
         a, b = weld_normals(p['pos'], p['tri'], gid), weld_normals(q, p['tri'], gid)
         put(name, q, rotate_frames(a, b, p['nrm']), rotate_frames(a, b, p['tan']))
-    # поза привязки: лицевые суставы шаблона
-    J0, Jt = joints(skeleton_inv()), joints(inv)
-    bones = np.concatenate([P['head']['bones'], P['mouthbag']['bones']])
-    wts = np.concatenate([P['head']['w'], P['mouthbag']['w']])
-    inv2 = inv.copy()
-    moved = 0
-    for bone in range(len(inv)):
-        if np.linalg.norm(Jt[bone] - J0[bone]) <= 1e-4:
-            continue
-        ws = ((bones == bone) * wts).sum(1)
-        if ws.sum() < 1e-6:
-            continue
-        jn = Jt[bone] + (disp * ws[:, None]).sum(0) / ws.sum()
-        inv2[bone, 3, :3] = -(jn @ inv[bone, :3, :3])
-        moved += 1
-    inv0 = skeleton_inv()
-    for bone in EYE_BONES:
-        inv2[bone] = inv0[bone]
-    for name, bone in GAZE_BONES.items():      # ось взгляда — вместе с глазом
-        jn = Jt[bone] + eye_shift[name]
-        inv2[bone] = inv[bone].copy()
-        inv2[bone][3, :3] = -(jn @ inv[bone][:3, :3])
-    struct.pack_into('>%df' % inv2.size, raw, bpo + 16, *inv2.reshape(-1))
-    rep['joints_moved'] = moved
-    rep['eye_bones_global'] = len(EYE_BONES)
     # глаза: поворот шапочки вокруг центра — зрачок в середину разреза век головы в позе игры (v7)
     hp_game = game_pose(P['head'], newp[:nh], inv2)
     for name, side in (('eyel', 1), ('eyer', -1)):
@@ -1087,6 +1109,7 @@ def bake_hair(hair, hair_tex, capmesh, cap_uv, kit3d, size=256, ss=2):
 def cmd_build(jobs, disputed, only=None, legacy_hair=LEGACY_HAIR):
     """only — папки источника или имена игроков (через запятую): собрать только их (пилот одной головы)."""
     lib = templates()
+    helmet_env()                               # оболочки шлемов — до процессов сборки (кэш на диске)
     from fb import heads
     want = {}
     for v in VARIANTS:
@@ -1535,6 +1558,81 @@ def cmd_check(jobs, only=None, ea=False, cache=None):
     print('→', fn)
 
 
+# ------------------------------------------------------------------ проверка: волосы под шлемом
+
+def helmet_one(a):
+    """(метка, player_<id>.rx2, texlib_<id>.rx2) → выступ видимой шапки и кожи за оболочку каждого шлема (поза игры)."""
+    import kitpaint
+    import teamart
+    key, mesh_p, tex_p = a
+    try:
+        P, _, inv = parse_rx2(open(mesh_p, 'rb').read())
+    except Exception:  # noqa: BLE001
+        return None
+    if 'haircap' not in P or P['head']['nv'] != 2623 or not os.path.exists(tex_p):
+        return None
+    R.use_game('legacy')
+    rw = teamart.Rw4.load(tex_p)
+    alpha = None
+    for t in rw.textures:
+        if t.name.startswith('hair'):
+            w, h, rgba = kitpaint.tex_decode(rw, t)
+            alpha = np.frombuffer(bytes(rgba), np.uint8).reshape(h, w, 4)[..., 3:4].astype(np.float32)
+    c = P['haircap']
+    pts = HH.visible_points(game_pose(c, c['pos'], inv), c['uv'], c['tri'], alpha) if alpha is not None \
+        else np.zeros((0, 3))
+    return dict(key=key, **HH.head_report(pts, game_pose(P['head'], P['head']['pos'], inv), helmet_env()))
+
+
+def cmd_helmet(jobs, only=None, ea=False, cache=None):
+    """Волосы под шлемом у собранных голов этапа (built.json; cache — другая папка с player_/texlib_<id>.rx2, например
+    <work>/before-helmet); --ea — и сканы EA Legacy (номер < 20000; со строками посадки шлема и без).
+    → <work>/check-helmet[-<папка>].json и сводка: у скольких голов видимая шапка снаружи шлема, выступ, мм."""
+    built = json.load(open(os.path.join(work(), 'built.json'), encoding='utf-8'))
+    keys = {norm(x) for x in only} if only else None
+    todo = []
+    for k, v in built.items():
+        if v.get('kind') != 'ok' or (keys and norm(v['folder']) not in keys):
+            continue
+        d = cache or os.path.join(work(), 'cache', k)
+        if os.path.exists(os.path.join(d, f'player_{k}.rx2')):
+            todo.append((f"{k} {v['folder']}", os.path.join(d, f'player_{k}.rx2'), os.path.join(d, f'texlib_{k}.rx2')))
+    eas = []
+    if ea:
+        d = os.path.join(P24.work(), 'out-ahl32', 'db')
+        db = Tdb(open(os.path.join(d, 'nhlng.db'), 'rb').read(), load_meta(os.path.join(d, 'nhlng-meta.xml')))
+        place = {db.get(PLACE, 'headid', r) for r in db.live_rows(PLACE)}
+        for x in sorted(os.listdir(EA_PLAYER)):
+            if x.startswith('player_') and x[7:-4].isdigit() and int(x[7:-4]) < 20000:
+                h = int(x[7:-4])
+                eas.append((f"EA {h} {'rows' if h in place else 'default'}", os.path.join(EA_PLAYER, x),
+                            os.path.join(EA_PLAYER, f'texlib_{h}.rx2')))
+    helmet_env()
+    with ProcessPoolExecutor(max_workers=jobs) as ex:
+        rows = [r for r in ex.map(helmet_one, todo + eas, chunksize=2) if r]
+    pc = lambda a: np.percentile(a, [50, 90, 100]).round(1).tolist() if len(a) else None
+
+    def line(label, rr):
+        o = [r['tight']['out_mm'] for r in rr if r['tight']['out_mm'] is not None]
+        sc = [r['tight']['scalp_mm'] for r in rr if r['tight']['scalp_mm'] is not None]
+        per = {M: sum(1 for r in rr if (r[M]['out_mm'] or -1) > 0) for M in rr[0] if M not in ('key', 'tight')} \
+            if rr else {}
+        print(f'{label}: голов {len(rr)}; шапка снаружи самого тесного шлема — у {sum(1 for x in o if x > 0)}, выступ, мм, '
+              f'p50/p90/max {pc(o)}; голов снаружи по шлемам {per}; кожа (уши) снаружи — у '
+              f'{sum(1 for x in sc if x > 0)}, max {max(sc) if sc else None}')
+    line(os.path.basename(cache) if cache else f'{os.path.basename(work())} ({HH.RULE})',
+         [r for r in rows if not r['key'].startswith('EA ')])
+    for tag in ('default', 'rows'):
+        rr = [r for r in rows if r['key'].startswith('EA ') and r['key'].endswith(tag)]
+        if rr:
+            line(f'сканы EA, шлем {"по умолчанию (строк посадки нет)" if tag == "default" else "со строками посадки"}', rr)
+    worst = sorted((r for r in rows if not r['key'].startswith('EA ')), key=lambda r: -(r['tight']['out_mm'] or -99))[:8]
+    print('больше всего снаружи:', ', '.join(f"{r['key']} {r['tight']['out_mm']}" for r in worst))
+    fn = os.path.join(work(), f'check-helmet{"-" + os.path.basename(cache) if cache else ""}.json')
+    json.dump(rows, open(fn, 'w', encoding='utf-8'), ensure_ascii=False, indent=0)
+    print('→', fn)
+
+
 # ------------------------------------------------------------------ лист проверки (офлайн-рендер)
 
 FRAME = (-0.17, 0.17, 1.52, 2.00)
@@ -1712,11 +1810,15 @@ def nhl24_parts(folder):
     return out
 
 
-def helmet_parts():
+def helmet_parts(model=11):
     R.use_game('legacy')
     out = []
-    for rel, col in (('rendering/helmet/helmet_11_2.rx2', (111, 38, 61)), ('rendering/helmet/chinstrap_11_2.rx2', (25, 25, 28))):
-        m = R.Mesh.game(rel)
+    for rel, col in ((f'rendering/helmet/helmet_{model}_2.rx2', (111, 38, 61)),
+                     (f'rendering/helmet/chinstrap_{model}_2.rx2', (25, 25, 28))):
+        try:
+            m = R.Mesh.game(rel)
+        except (SystemExit, OSError):         # ремешка у части шлемов нет
+            continue
         tex = np.zeros((4, 4, 4), np.uint8)
         tex[...] = (*col, 255)
         out.append({'pos': np.array([p[:3] for p in m.pos]), 'tri': np.array(m.tris, np.int64),
@@ -1743,18 +1845,18 @@ def sheet_cell(job):
         imgs.append(render(nhl24_parts(job['folder']), width=W))
     ours = legacy_parts(os.path.join(cache, f'player_{job["new"]}.rx2'), os.path.join(cache, f'texlib_{job["new"]}.rx2'))
     imgs.append(render(ours, width=W))
-    if job.get('helmet'):
-        hp = helmet_parts()
-        imgs.append(render(ours + hp, np.radians(35), width=W, frame=FRAME_HELMET))
-        imgs.append(render(ours + hp, np.radians(90), width=W, frame=FRAME_HELMET))
+    if job.get('helmet'):                      # 3/4 спереди, сбоку, 3/4 сзади (волосы лезли сквозь шлем на затылке)
+        hp = helmet_parts(job.get('helmet_model') or 11)
+        for a in (35, 90, 150):
+            imgs.append(render(ours + hp, np.radians(a), width=W, frame=FRAME_HELMET))
     h = max(i.size[1] for i in imgs)
     cell = Image.new('RGB', (len(imgs) * (W + 4) + 4, h + 40), (28, 28, 32))
     for k, i in enumerate(imgs):
         cell.paste(i, (4 + k * (W + 4), 36))
     d = ImageDraw.Draw(cell)
     d.text((6, 2), f"{job['name']} ({job.get('league', '')}) — {job.get('tag', '')}", fill=(255, 220, 140), font=font)
-    d.text((6, 18), f"сейчас {job.get('old')} | {P24.LABEL} {job['folder']} | наш {job['new']} (шаблон {job.get('tpl')})",
-           fill=(200, 200, 200), font=font)
+    d.text((6, 18), f"сейчас {job.get('old')} | {P24.LABEL} {job['folder']} | наш {job['new']} (шаблон {job.get('tpl')})"
+           + (f" | шлем {job.get('helmet_model')}" if job.get('helmet') else ''), fill=(200, 200, 200), font=font)
     p = os.path.join(work(), 'sheet', f"{job['new']}{'_h' if job.get('helmet') else ''}.png")
     os.makedirs(os.path.dirname(p), exist_ok=True)
     cell.save(p)
@@ -1766,7 +1868,16 @@ STARS = ('Auston Matthews', 'Nikita Kucherov', 'Connor Bedard', 'David Pastrnak'
          'Andrei Vasilevskiy', 'Connor Hellebuyck', 'Cale Makar')
 
 
-def cmd_sheet(n, jobs, variant='out-ahl32', names=None, helmets=5, disputed=True):
+def player_helmets(variant='out-ahl32'):
+    """game_id → helmetbrand (номер модели rendering/helmet/helmet_<N>) из exhibitionskaterequipment базы варианта."""
+    d = os.path.join(P24.work(), variant, 'db')
+    db = Tdb(open(os.path.join(d, 'nhlng.db'), 'rb').read(), load_meta(os.path.join(d, 'nhlng-meta.xml')))
+    t = 'exhibitionskaterequipment'
+    return {db.get(t, 'game_id', r): db.get(t, 'helmetbrand', r) for r in db.live_rows(t)}
+
+
+def cmd_sheet(n, jobs, variant='out-ahl32', names=None, helmets=5, disputed=True, helmet_model=None, out=None):
+    """helmet_model — шлем в клетках «в шлеме» (номер модели); None — шлем игрока из базы (нет сетки — 11)."""
     from PIL import Image
     m = json.load(open(os.path.join(work(), f'match-{variant}.json'), encoding='utf-8'))
     built = json.load(open(os.path.join(work(), 'built.json'), encoding='utf-8'))
@@ -1790,9 +1901,12 @@ def cmd_sheet(n, jobs, variant='out-ahl32', names=None, helmets=5, disputed=True
                 jobs_l.append({'name': f"{r['name']} ≟ {c['name']} {c['birth']}", 'league': r['league'], 'tag': r['why'],
                                'old': r['old'], 'folder': c['folder'], 'new': c['artid'],
                                'tpl': built[str(c['artid'])]['tpl']})
+    own = player_helmets(variant) if helmets and helmet_model is None else {}
+    have = set(HH.helmet_models()) if helmets else set()
     for r in pick[:helmets]:
-        jobs_l.append(dict(r, tag='в шлеме (3/4, сбоку)', helmet=True, tpl=built[str(r['new'])]['tpl'],
-                           old=None))
+        hm = helmet_model or own.get(r['game_id'])
+        jobs_l.append(dict(r, tag='в шлеме (3/4, сбоку, сзади)', helmet=True, tpl=built[str(r['new'])]['tpl'],
+                           old=None, helmet_model=hm if hm in have else 11))
     with ProcessPoolExecutor(max_workers=jobs) as ex:
         cells = list(ex.map(sheet_cell, jobs_l))
     ims = [Image.open(c) for c in cells]
@@ -1803,14 +1917,15 @@ def cmd_sheet(n, jobs, variant='out-ahl32', names=None, helmets=5, disputed=True
     sheet = Image.new('RGB', (cols * (cw + 6), rows * (ch + 6)), (20, 20, 24))
     for k, im in enumerate(ims):
         sheet.paste(im, ((k % cols) * (cw + 6), (k // cols) * (ch + 6)))
-    out = os.path.join(work(), f'sheet-{variant}.png')
+    out = out or os.path.join(work(), f'sheet-{variant}.png')
     sheet.save(out)
     print(f'лист: {len(ims)} клеток → {out}')
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('cmd', choices=('match', 'build', 'apply', 'save', 'sheet', 'one', 'check', 'styles', 'hairplan'))
+    ap.add_argument('cmd', choices=('match', 'build', 'apply', 'save', 'sheet', 'one', 'check', 'helmet', 'styles',
+                                    'hairplan'))
     ap.add_argument('save', nargs='?')
     ap.add_argument('--variant', action='append', choices=VARIANTS)
     ap.add_argument('--write', action='store_true')
@@ -1820,12 +1935,16 @@ def main():
     ap.add_argument('--stars', action='store_true', help='sheet: 15 звёзд (STARS) вместо случайных')
     ap.add_argument('--names', help='sheet: эти игроки (имя фамилия через запятую) вместо случайных')
     ap.add_argument('--helmets', type=int, default=5)
+    ap.add_argument('--helmet-model', type=int, help='sheet: шлем в клетках «в шлеме» (номер модели helmet_<N>; '
+                    'по умолчанию — шлем игрока из базы)')
+    ap.add_argument('--out', help='sheet: файл листа (по умолчанию <work>/sheet-<вариант>.png)')
     ap.add_argument('--source', choices=tuple(P24.SOURCES), default=P24.SOURCE, help='игра-источник сканов (nhl24, nhl27)')
     ap.add_argument('--only', help='build: только эти папки источника через запятую (пилот: --only macklin_celebrini)')
-    ap.add_argument('--ea', action='store_true', help='check: и сканы EA Legacy (эталон)')
+    ap.add_argument('--ea', action='store_true', help='check, helmet: и сканы EA Legacy (эталон)')
     ap.add_argument('--legacy-hair', action='store_true',
                     help='build: и головы без волос источника — с волосами нынешней типовой головы (иначе не в out)')
-    ap.add_argument('--cache', help='check: папка с player_<id>.rx2 другой версии (например, <work>/scans24/before-v7)')
+    ap.add_argument('--cache', help='check, helmet: папка с player_<id>.rx2 (и texlib_<id>.rx2) другой версии '
+                    '(например, <work>/scans24/before-v7)')
     a = ap.parse_args()
     variants = a.variant or list(VARIANTS)
     if a.cmd == 'match':
@@ -1840,13 +1959,16 @@ def main():
         cmd_save(a.save, a.write, (a.variant or ['out-ahl32'])[0])
     elif a.cmd == 'sheet':
         names = [x.strip() for x in a.names.split(',')] if a.names else STARS if a.stars else None
-        cmd_sheet(a.n, a.jobs, names=names, helmets=a.helmets, disputed=a.disputed)
+        cmd_sheet(a.n, a.jobs, names=names, helmets=a.helmets, disputed=a.disputed, helmet_model=a.helmet_model,
+                  out=a.out)
     elif a.cmd == 'styles':
         cmd_styles(a.jobs)
     elif a.cmd == 'hairplan':
         cmd_hairplan()
     elif a.cmd == 'check':
         cmd_check(a.jobs, a.only.split(',') if a.only else None, a.ea, a.cache)
+    elif a.cmd == 'helmet':
+        cmd_helmet(a.jobs, a.only.split(',') if a.only else None, a.ea, a.cache)
     elif a.cmd == 'one':                       # отладка: python scans24.py one 20185:cale_makar
         new, folder = a.save.split(':')
         lib = templates()
