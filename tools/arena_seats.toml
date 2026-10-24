@@ -12,6 +12,7 @@
 # nhl27 — основной цвет текстур кресел NHL 27 crowd_chair_<город>_0…3 (`stadium.py nhl27`), в скобках — оттенок
 # Legacy ×1.43 (калибровка по TB и BUF, NHL27_GAIN в stadium.py). Какой вариант NHL 27 стоит в каком секторе —
 # неизвестно (раскладка кресел NHL 27 не разбиралась), поэтому где у NHL 27 несколько цветов — берётся основной.
+# clone_of, arenas — у своих моделей (копий модели игры под новым номером, docs/arenas.md §9), см. [arena.222] ниже.
 
 [arena.0]
 club = "ANA"
@@ -292,14 +293,57 @@ confidence = "medium"
 rules = ["#494a49"]
 
 [arena.255]
-club = "UTA/SEA/VGK"
-building = "EA SPORTS Arena (Delta Center, Climate Pledge, T-Mobile)"
+club = "EA SPORTS Arena"
+building = "EA SPORTS Arena (созданные команды, проспекты)"
 legacy = "#923f48 (бордовые — копия Анахайма)"
 nhl27 = "у SEA/UTA/VGK общий набор: #292a29, #313131, #1b1b1b, #42201b (#3b3c3b)"
 status = "proposed"
+confidence = "low"
+rules = ["#3b3c3b"]
+note = "С 24.10 у UTA, SEA, VGK свои модели 222/230/231 (копии 255, ниже); на 255 остались «EA SPORTS Arena» (строка 181: созданные команды, Top Prospects). Своей арены у неё нет — цвет на вкус."
+
+# --- свои модели (24.10.2026): копии 255 под своим номером, чтобы у клуба был свой цвет кресел ---
+# clone_of — модель игры, копию которой пишет `stadium.py clone` (номер в именах растров и эффектов переписан);
+# arenas — строки exhibitionarena (поле index), которым этап legacy-data arenas ставит arenaartid = N
+# (tools/legacy_data/arenas.py). Номер 2xx = 200 + строка клуба (UTA 22, SEA 30, VGK 31): три цифры, как у 255
+# (имена той же длины), не занят ни моделью игры, ни artid клуба, ни записью AttribDB (stadium.py clone --check).
+# Пользователь 24.10.2026 одобрил отдельные арены для UTA/SEA/VGK и отдельный цвет кресел — status approved.
+
+[arena.222]
+club = "UTA"
+building = "Delta Center"
+clone_of = 255
+arenas = [22]
+legacy = "#923f48 (как у 255)"
+nhl27 = "общий набор SEA/UTA/VGK: #292a29, #313131, #1b1b1b, #42201b"
+status = "approved"   # пользователь 24.10.2026: свои арены UTA/SEA/VGK, отдельный цвет кресел
+confidence = "medium"
+rules = ["#2a3a5c"]
+note = "Кресла Jazz navy blue (Hussey, 2017: nba.com «New Jazz Blue Cushioned Seats», arenadigest.com 21.03.2017); в перестройке 2025–2027 кресла обновляют, о новом цвете не сообщалось. NHL 27 своего цвета у Юты не даёт (общий тёмный набор). Оттенок — как TB (#313f64), чуть темнее."
+
+[arena.230]
+club = "SEA"
+building = "Climate Pledge Arena"
+clone_of = 255
+arenas = [187]
+legacy = "#923f48 (как у 255)"
+nhl27 = "общий набор SEA/UTA/VGK: #292a29 ×1 (#3b3c3b), #313131, #1b1b1b, #42201b"
+status = "approved"   # пользователь 24.10.2026: свои арены UTA/SEA/VGK, отдельный цвет кресел
 confidence = "medium"
 rules = ["#3b3c3b"]
-note = "Модель 255 общая: Юта, Сиэтл, Вегас, «EA SPORTS Arena» (созданные команды, тренировки) и ещё несколько строк."
+note = "Тёмные (чёрные) кресла — по NHL 27 и фото; в обзорах цвет кресел не назван. Оттенок — как у прочих чёрных арен (#3b3c3b)."
+
+[arena.231]
+club = "VGK"
+building = "T-Mobile Arena"
+clone_of = 255
+arenas = [188]
+legacy = "#923f48 (как у 255)"
+nhl27 = "общий набор SEA/UTA/VGK: #313131 ×1 (#464646), #292a29, #1b1b1b, #42201b"
+status = "approved"   # пользователь 24.10.2026: свои арены UTA/SEA/VGK, отдельный цвет кресел
+confidence = "medium"
+rules = ["#464646"]
+note = "Чаша в серых, чёрных и золотых тонах, как форма клуба (Stadium Journey, обзор T-Mobile Arena); кресла — тёмно-серые. Оттенок — #313131 NHL 27 ×1,43, светлее чёрных SEA."
 
 [arena.363]
 club = "EDM (CHL)"

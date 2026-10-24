@@ -42,7 +42,7 @@
 - [equipment27.md](equipment27.md) — экипировка игроков из NHL 27 (`tools/legacy_data/equipment27.py`, этап `equip27`): клюшка, коньки, шлем, краги, шорты, визор, обмотка, заправка — в базы, сейв ROSTER и франшизу; соответствия моделей, охват
 - [logos-2026.md](logos-2026.md) — логотипы клубов НХЛ и АХЛ 2026/27 в Legacy: наборы интерфейса, этап `logos`
 - [logos-arenas.md](logos-arenas.md) — логотипы, арены и лёд Seattle и Vegas: форматы и поля базы (разбор на NHL 13, арт потом перенесён в Legacy)
-- [arenas.md](arenas.md) — арены NHL Legacy: модель чаши `stadium_<N>`, кресла `crowd_<N>.cwd` и их цвет, какая арена у какого клуба, перекраска кресел на 2026/27 (`tools/stadium.py`, рецепты `arena_seats.toml`); арены NHL 27 — как собраны, насколько реальны, можно ли перенести (`tools/fb/arena27.py`, §8)
+- [arenas.md](arenas.md) — арены NHL Legacy: модель чаши `stadium_<N>`, кресла `crowd_<N>.cwd` и их цвет, какая арена у какого клуба, перекраска кресел на 2026/27 (`tools/stadium.py`, рецепты `arena_seats.toml`); свои модели арен UTA/SEA/VGK — копии под новым номером (`stadium.py clone`, этап `legacy_data/arenas.py`, §9); арены NHL 27 — как собраны, насколько реальны, можно ли перенести (`tools/fb/arena27.py`, §8)
 
 ## Головы, лица, портреты
 

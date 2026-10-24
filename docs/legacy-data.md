@@ -26,6 +26,7 @@
 | Год 2015 → 2026 в надписях: стартовый экран, юридический текст, титры, подсказка FA | `tools/year2026_legacy.py` (legacy-fe, 12.10) | в игре не проверялось, не поставлено; в out и out-ahl32 ([fe-menu-legacy.md](fe-menu-legacy.md) §12) |
 | Сканы голов NHL 24 игрокам с типовой головой: 178 в out-ahl32 (сканы EA не трогаются), headid = ID EA, строки `stockplayerheads` на местах доноров | `tools/scans24.py` (этап `scans24`, [heads-nhl24.md](heads-nhl24.md)) | пилот Cale Makar ✔ (пользователь, 12.10); массово — ✔ стоит: 358 файлов голов в `cache:` совпадают с out (12.10 10:17–11:39), база — 178 номеров scans24, сейв ROSTER записан 12.10 (`backup-saves/scans24-20261012-101718`); сверка 20.10 |
 | История наград и Кубка Стэнли до 2025/26: НХЛ с 1994/95, АХЛ и CHL с 2008/09, 1 744 строки `stockawardstable` (index 11 бит) | `tools/legacy_data/awards27.py` (этап `awards`, [awards.md](awards.md)) | собрано в out и out-ahl32 23.10; в игре не проверено, сейвы не нужны |
+| Свои модели арен UTA/SEA/VGK: копии 255 под номерами 222/230/231, у каждой свой цвет кресел; `exhibitionarena.arenaartid` строк 22/187/188 | `tools/stadium.py clone`, `tools/legacy_data/arenas.py` (этап `arenas`, его же зовёт этап `nhl24`; [arenas.md](arenas.md) §9) | проверено в игре на копии 24.10 (три матча); пользователю не поставлено; сейв ROSTER — `arenas.py save` (игра берёт арены из него) |
 
 Набор — `game/work/legacy-data/out/` (дерево путей как в `cache:`); ставится при закрытой игре:
 
