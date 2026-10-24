@@ -893,3 +893,5 @@ adidas, сейв ROSTER дописывается в конец). Шорты и �
   VAN 28 — `rendering/crowddata/crowd_<N>.cwd` (новые в cache:, `stadium.py pack` из `edge_kit pack`, рецепты
   `arena_seats.toml` со status = approved); копия — `backup-cache/user-20261024-arena-seats`. Читает ли игра .cwd из
   cache: — проверить в матче (откат — убрать файл).
+- 24.10 05:33 — ещё 19 голов NHL 27 (тёзки и конфликты номеров, docs/heads-nhl24.md «Ручные решения»): база и 38 файлов
+  `rendering/player/*`; копия — `backup-cache/user-20261024-heads27-more`; сейв ROSTER — `roster_merge` (головы совпадают).

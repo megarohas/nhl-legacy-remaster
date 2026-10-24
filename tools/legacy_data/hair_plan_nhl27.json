@@ -209,6 +209,11 @@
   "color": 8,
   "name": "Cam York"
  },
+ "carson_soucy": {
+  "style": 37,
+  "color": 4,
+  "name": "Carson Soucy"
+ },
  "cody_ceci": {
   "style": 62,
   "color": 1,
@@ -459,6 +464,11 @@
   "color": 1,
   "name": "Igor Shesterkin"
  },
+ "ilya_mikheyev": {
+  "style": 28,
+  "color": 2,
+  "name": "Ilya Mikheyev"
+ },
  "ilya_sorokin": {
   "style": 0,
   "color": 2,
@@ -539,6 +549,11 @@
   "color": 3,
   "name": "Jake Neighbours"
  },
+ "jake_oettinger": {
+  "style": 23,
+  "color": 2,
+  "name": "Jake Oettinger"
+ },
  "jake_walman": {
   "style": 18,
   "color": 0,
@@ -568,6 +583,11 @@
   "style": 37,
   "color": 2,
   "name": "Jan Rutta"
+ },
+ "janis_jerome_moser": {
+  "style": 28,
+  "color": 4,
+  "name": "J.J. Moser"
  },
  "jared_mccann": {
   "style": 28,
@@ -624,6 +644,11 @@
   "color": 2,
   "name": "John Gibson"
  },
+ "john_jason_peterka": {
+  "style": 62,
+  "color": 2,
+  "name": "JJ Peterka"
+ },
  "john_marino": {
   "style": 30,
   "color": 1,
@@ -638,6 +663,11 @@
   "style": 8,
   "color": 3,
   "name": "Jonas Brodin"
+ },
+ "jonathan_lekkerimaki": {
+  "style": 62,
+  "color": 11,
+  "name": "Jonathan Lekkerimäki"
  },
  "jordan_binnington": {
   "style": 10,
@@ -739,6 +769,11 @@
   "color": 2,
   "name": "Logan Stankoven"
  },
+ "luca_delbelbelluz": {
+  "style": 62,
+  "color": 2,
+  "name": "Luca Del Bel Belluz"
+ },
  "lukas_reichel": {
   "style": 28,
   "color": 2,
@@ -748,6 +783,11 @@
   "style": 39,
   "color": 2,
   "name": "Luke Hughes"
+ },
+ "mackenzie_weegar": {
+  "style": 63,
+  "color": 1,
+  "name": "MacKenzie Weegar"
  },
  "marco_rossi": {
   "style": 9,
@@ -764,6 +804,11 @@
   "color": 2,
   "name": "Marcus Pettersson"
  },
+ "mario_ferraro": {
+  "style": 0,
+  "color": 2,
+  "name": "Mario Ferraro"
+ },
  "martin_fehervary": {
   "style": 10,
   "color": 4,
@@ -778,6 +823,11 @@
   "style": 71,
   "color": 6,
   "name": "Mason Lohrei"
+ },
+ "mason_marchment": {
+  "style": 23,
+  "color": 1,
+  "name": "Mason Marchment"
  },
  "mathew_barzal": {
   "style": 70,
@@ -870,6 +920,11 @@
   "color": 1,
   "name": "Mikael Backlund"
  },
+ "mikey_anderson": {
+  "style": 10,
+  "color": 2,
+  "name": "Mikey Anderson"
+ },
  "miles_wood": {
   "style": 37,
   "color": 2,
@@ -954,6 +1009,11 @@
   "style": 72,
   "color": 1,
   "name": "Noah Cates"
+ },
+ "olen_zellweger": {
+  "style": 70,
+  "color": 1,
+  "name": "Olen Zellweger"
  },
  "oliver_bjorkstrand": {
   "style": 63,
@@ -1180,6 +1240,11 @@
   "color": 1,
   "name": "Thomas Harley"
  },
+ "thomas_novak": {
+  "style": 42,
+  "color": 1,
+  "name": "Tommy Novak"
+ },
  "timothy_liljegren": {
   "style": 39,
   "color": 2,
@@ -1250,10 +1315,20 @@
   "color": 2,
   "name": "Vince Dunn"
  },
+ "vladislav_gavrikov": {
+  "style": 63,
+  "color": 2,
+  "name": "Vladislav Gavrikov"
+ },
  "warren_foegele": {
   "style": 61,
   "color": 3,
   "name": "Warren Foegele"
+ },
+ "will_cuylle": {
+  "style": 37,
+  "color": 2,
+  "name": "Will Cuylle"
  },
  "will_smith": {
   "style": 22,
@@ -1264,6 +1339,11 @@
   "style": 62,
   "color": 0,
   "name": "William Carrier"
+ },
+ "william_eklund": {
+  "style": 70,
+  "color": 4,
+  "name": "William Eklund"
  },
  "william_karlsson": {
   "style": 62,

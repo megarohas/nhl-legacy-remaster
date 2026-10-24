@@ -349,6 +349,20 @@ $P tools/scans24.py apply --source nhl27                          # headid + sto
 Поставлено 23.10 19:44 (`backup-cache/user-20261023-stl-wsh-nyr-heads`). Добавить игрока — в `REPLACE_EA`, затем
 `match`, `build --only <папка>`, `apply`, сборка накладки и установка.
 
+**Ручные решения сопоставления** (24.10, пользователь: «тёзок проверить по листу, конфликтам дать свободные номера голов»):
+`tools/legacy_data/scans_overrides_nhl27.json` (`scans24.overrides`). В нём три вида решений:
+- `accept` — 9 «спорных тёзок», признанных тем же человеком: у них дата рождения в базах разошлась (день и месяц
+  местами — Zellweger, Cuylle, Eklund, Marchment; опечатка — Soucy, Perreault, Lekkerimäki, Weegar; Tommy/Thomas
+  Novak). Шестеро — действительно другие люди: Elias Pettersson 2004 (защитник; скан — нападающий 1998), Matt Murray
+  1998, Jack Hughes 2003, Erik Gustafsson 1988, Sebastian Aho 1996, Jake Evans 2009;
+- `headid` — свободные номера 59991–59999 для 9 сканов, чей номер EA в архиве занят чужой головой (Oettinger, Fox,
+  Peterka, McTavish, Gavrikov, Mikheyev, Anderson, Ferraro, Del Bel Belluz);
+- `folder` — J.J. Moser → `janis_jerome_moser`.
+
+У 16 из 19 своих прядей нет — им подобраны стили по фото (`scans27/hairplan/new16.png`, в `hair-plan.json` и
+`tools/legacy_data/hair_plan_nhl27.json`). Поставлено 24.10 05:33 (`backup-cache/user-20261024-heads27-more`), в сейве
+ROSTER — `roster_merge`. Всего голов NHL 27 — 319. Без скана остались Lindblom (папки нет) и Milano (номер у головы NHL 24).
+
 **Опечатки EA в папках голов** (22.10, пользователь: «нет лицензированного лица у Панарина»). Папка ищется по имени из
 базы Legacy (`flat`, буквы без разделителей); у EA бывают опечатки: `artemi_parnarin` (и в NHL 24, и в NHL 27),
 `josh_morrisey`, `marcus_sorenson`. Теперь, если точной папки нет, `scans24.folder_typo` берёт единственную свободную
