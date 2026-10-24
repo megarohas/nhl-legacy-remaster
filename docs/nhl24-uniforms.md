@@ -895,3 +895,7 @@ adidas, сейв ROSTER дописывается в конец). Шорты и �
   cache: — проверить в матче (откат — убрать файл).
 - 24.10 05:33 — ещё 19 голов NHL 27 (тёзки и конфликты номеров, docs/heads-nhl24.md «Ручные решения»): база и 38 файлов
   `rendering/player/*`; копия — `backup-cache/user-20261024-heads27-more`; сейв ROSTER — `roster_merge` (головы совпадают).
+- 24.10 07:44 — коньки после игры (шнурки NHL 27 исключены, перенос по частям, тёмная изнанка; docs/skates.md), шорты: гербы
+  и щиты на сетке полевого (docs/kitport.md §6.6), свои арены UTA/SEA/VGK 222/230/231 (docs/arenas.md §9), волосы под
+  шлемом у 369 голов (docs/heads-nhl24.md). 839 файлов; копия — `backup-cache/user-20261024-skates-pants-arenas-hair`,
+  копия базы игры — `roster-merge/old-cache-nhlng-0744.db`; сейв ROSTER — `roster_merge` (арены), головы и база совпадают.
