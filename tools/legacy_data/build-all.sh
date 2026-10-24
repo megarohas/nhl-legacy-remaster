@@ -6,7 +6,7 @@
 #        входы, которые этапом не пересобираются (например, составы без сети), — положить туда заранее
 #        этапы: base roster photos equip collect retire fixdb utah ahl europe chl stats27 nhlattrs useredits tape players
 #        equip27 contracts awards goaliegear photos24 heads scans24 fonts
-#        music models art logos menu nhl24
+#        music models art logos menu arenas nhl24
 #        (без этапов — все по порядку;
 #        --ahl32 — ещё вариант «АХЛ на 32», накладка game/work/legacy-data/out-ahl32; nhl24 — накладка out-nhl24
 #        из пакета NHL 24, если он готов: game/work/nhl24/out/pack или NHL24_PACK=папка)
@@ -29,7 +29,7 @@ AHL32=0
 stages=()
 for a in "$@"; do [ "$a" = "--ahl32" ] && AHL32=1 || stages+=("$a"); done
 [ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah ahl europe chl stats27 nhlattrs useredits tape players equip27 contracts awards goaliegear photos24
-                                  heads scans24 fonts music models art logos menu nhl24)
+                                  heads scans24 fonts music models art logos menu arenas nhl24)
 want() { for s in "${stages[@]}"; do [ "$s" = "$1" ] && return 0; done; return 1; }
 say() { echo "== $(date +%H:%M:%S) $*"; }
 
@@ -402,6 +402,16 @@ if want menu; then
   say "год 2015 → 2026 в надписях (year2026_legacy)"
   python tools/year2026_legacy.py build
 fi
+if want arenas; then
+  # свои модели арен (docs/arenas.md §9, tools/arena_seats.toml: рецепты с clone_of, status approved): копии модели 255
+  # под номерами 222/230/231 (UTA/SEA/VGK) → out/rendering/… (кресла — цветом рецепта), exhibitionarena.arenaartid в
+  # out/db и out-ahl32/db. Сначала файлы, потом база. После всех этапов, которые пишут арены (utah, ahl…), до nhl24
+  # (накладка берёт базу из out/db). Повтор ничего не меняет; draft_roster.db арен не содержит
+  # питон с numpy (stadium.py): venv game/work/nhl24/venv, ARENAS_PYTHON=путь — свой
+  PYA=${ARENAS_PYTHON:-game/work/nhl24/venv/Scripts/python.exe}; [ -x "$PYA" ] || PYA=python
+  say "свои модели арен (arenas.py)"
+  "$PYA" $T/arenas.py --write --work "$WA"
+fi
 if want nhl24; then
   # после collect (берёт out/db и out-ahl32/db): пакет агента nhl24 — формы, шрифты номеров, центры и реклама льда,
   # наклейки на шлемах, шорты и гетры, клюшки, шайба — сверка по manifest.json → накладка out-nhl24 (+ out-nhl24-ahl32):
@@ -409,6 +419,12 @@ if want nhl24; then
   # Ставится install-legacy-data.sh [--ahl32] --nhl24, снимается uninstall-legacy-data.sh --nhl24.
   P=${NHL24_PACK:-game/work/nhl24/out/pack}
   if [ -f "$P/manifest.json" ]; then
+    # свои модели арен — и здесь, до накладки: kitport build --stages overlay зовёт только этап nhl24, а база накладки —
+    # из out/db (без этого после пересборки out/db — collect и т. п. — арены молча вернулись бы на 255). Повтор — без записи
+    # (ошибка здесь накладку не останавливает: arenas.py пишет файлы раньше базы — база на несуществующую модель не
+    # сошлётся; останется прежнее состояние арен)
+    PYA=${ARENAS_PYTHON:-game/work/nhl24/venv/Scripts/python.exe}; [ -x "$PYA" ] || PYA=python
+    want arenas || "$PYA" $T/arenas.py --write --work "$WA" || say "свои модели арен: ошибка — накладка без правки арен"
     say "пакет NHL 24 → накладка out-nhl24"
     python $T/nhl24.py build "$P"
   else
