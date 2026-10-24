@@ -73,10 +73,59 @@ def people(db, skip_created=True):
     return out
 
 
-def pairs(L, N):
-    """{game_id Legacy: game_id NHL 27} — однозначные пары по имени и дате рождения."""
+def pairs(L, N, how=None):
+    """{game_id Legacy: game_id NHL 27} — однозначные пары (одна строка с каждой стороны на ключ), по шагам:
+    1) имя, фамилия и дата рождения;
+    2) фамилия и дата, имя — та же первая буква или одно внутри другого (Matt/Matthew, Bo/Benoit-Olivier, Viliam/
+       Jozef-Viliam);
+    3) имя и фамилия одни на всю базу с обеих сторон, тот же год, совпал месяц или день либо они переставлены;
+    4) так же, только тот же год.
+    3–4 — у EA ошибки в датах NHL 27: месяц на один меньше (Дворский, Леккеримяки), день и месяц переставлены (Куилл,
+    Цельвегер), совсем другой день (Марчмент 06.03 вместо 18.06). Шаги 2–4 добавлены 24.10.2026: сверка с NHL 27 нашла
+    90 таких игроков без истории. Тёзки с другим годом (Matt Murray 1994 и 1998) и близнецы (Седины: первая буква
+    разная) — не сшиваются. how — Counter: сколько пар каким шагом."""
     a, b = people(L), people(N)
-    return {ga[0]: b[k][0] for k, ga in a.items() if len(ga) == 1 and len(b.get(k, [])) == 1}
+    out, used = {}, set()
+
+    def put(ga, gb, step):
+        if ga in out or gb in used:
+            return
+        out[ga] = gb
+        used.add(gb)
+        if how is not None:
+            how[step] += 1
+
+    for k, ga in a.items():
+        if len(ga) == 1 and len(b.get(k, [])) == 1:
+            put(ga[0], b[k][0], 'имя и дата')
+    la, lb = defaultdict(list), defaultdict(list)
+    for src, dst in ((a, la), (b, lb)):
+        for k, gs in src.items():
+            for g in gs:
+                dst[(k[1],) + k[2:]].append((g, k[0]))
+    for k, xs in la.items():
+        ys = lb.get(k, [])
+        if len(xs) == 1 and len(ys) == 1:
+            fa, fb = xs[0][1], ys[0][1]
+            if fa and fb and (fa[0] == fb[0] or fa in fb or fb in fa):
+                put(xs[0][0], ys[0][0], 'фамилия и дата')
+    na, nb = Counter(), Counter()
+    for src, cnt in ((a, na), (b, nb)):
+        for k, gs in src.items():
+            cnt[k[:2]] += len(gs)
+    ua = {k[:2]: (gs[0], k[2:]) for k, gs in a.items() if na[k[:2]] == 1}
+    ub = {k[:2]: (gs[0], k[2:]) for k, gs in b.items() if nb[k[:2]] == 1}
+    for strict in (True, False):
+        for k, (ga, d) in ua.items():
+            if k not in ub:
+                continue
+            gb, e = ub[k]
+            if d[0] != e[0]:
+                continue
+            if strict and not (d[1] == e[1] or d[2] == e[2] or (d[1], d[2]) == (e[2], e[1])):
+                continue
+            put(ga, gb, 'имя и год, дата похожа' if strict else 'имя и год')
+    return out
 
 
 def team_name(team_abbr, tm, year):
@@ -111,7 +160,7 @@ def stint_order(N, t27, rs, season_teams, year, last_year, now_teams):
 def convert(N, t27, rs, L, t, gid, team_abbr):
     """Строки NHL 27 одного сезона и лиги (по порядку) → {поле Legacy: значение}; несколько строк (обмен) — сумма."""
     v = {f: sum(N.value(t27, f, r) for r in rs) for f in N.by_name[t27]['fields'] if f not in KEYS27}
-    v['year'] = N.value(t27, 'year', rs[0])
+    v['year'], v['league'] = N.value(t27, 'year', rs[0]), N.value(t27, 'league', rs[0])
     out = {}
     for f in L.by_name[t]['fields']:
         if f in v:
@@ -143,7 +192,8 @@ def put_row(L, t, row, vals):
 def run(path, N, dry=False):
     meta = os.path.join(os.path.dirname(path), 'nhlng-meta.xml')
     L = Tdb(open(path, 'rb').read(), load_meta(meta))
-    pr = pairs(L, N)
+    how = Counter()
+    pr = pairs(L, N, how)
     team_abbr = {N.get('exhibitionteams', 'index', x): N.get_string('exhibitionteams', 'abbrname', x)
                  for x in N.live_rows('exhibitionteams')}
     by27 = {v: k for k, v in pr.items()}                       # game_id NHL 27 → game_id Legacy
@@ -156,7 +206,7 @@ def run(path, N, dry=False):
         for g in link.get(N.value('exhibitionrostertable', 'playerindex', r), ()):
             now[g].add(N.value('exhibitionrostertable', 'team', r))
     born = {L.value(B, 'game_id', r): L.value(B, 'year', r) + 1900 for r in L.live_rows(B)}
-    rep = {'db': path, 'pairs': len(pr), 'tables': {}, 'players': Counter()}
+    rep = {'db': path, 'pairs': len(pr), 'pairs_by': dict(how), 'tables': {}, 'players': Counter()}
     for t in TABLES:
         n27 = defaultdict(list)
         for r in N.live_rows(t):
@@ -217,12 +267,91 @@ def run(path, N, dry=False):
     return rep
 
 
+CHECK = {'S': ('gamesplayed', 'goals', 'assists', 'penaltyminutes', 'plusminus', 'shots', 'powerplaygoals',
+               'shorthandedgoals', 'gamewinninggoals'),
+         'G': ('gamesplayed', 'wins', 'losses', 'shutouts', 'goalsagainst', 'shotsagainst')}
+
+
+def check(path, N):
+    """Сверка базы с NHL 27 (эталон — пользователь 24.10.2026: «в NHL 27 уже норм… просто сверься по ней»): у каждой пары
+    игроков каждый сезон (год, лига) каждой таблицы — суммы NHL 27 по клубам против строки базы (CHECK, у вратарей ещё
+    минуты), набор клубов. Считается заново из строк NHL 27, без convert, — ловит и ошибки самого переноса. Плюс игроки
+    NHL 27 с историей, которых сшивка не нашла, но в базе есть тот же человек по имени или по фамилии и дате."""
+    L = Tdb(open(path, 'rb').read(), load_meta(os.path.join(os.path.dirname(path), 'nhlng-meta.xml')))
+    pr = pairs(L, N)
+    team_abbr = {N.get('exhibitionteams', 'index', x): N.get_string('exhibitionteams', 'abbrname', x)
+                 for x in N.live_rows('exhibitionteams')}
+    by27 = {v: k for k, v in pr.items()}
+    rep, ex = Counter(), defaultdict(list)
+    hist27 = set()
+    for t, kind in TABLES.items():
+        fields = CHECK[kind]
+        n = defaultdict(lambda: defaultdict(list))
+        for r in N.live_rows(t):
+            g27 = N.value(t, 'game_id', r)
+            hist27.add(g27)
+            if g27 in by27:
+                n[by27[g27]][(N.value(t, 'year', r), N.value(t, 'league', r))].append(r)
+        lrows = defaultdict(dict)
+        for r in L.live_rows(t):
+            gid = L.value(t, 'game_id', r)
+            if gid in n:
+                lrows[gid][(L.value(t, 'year', r), L.value(t, 'league', r))] = r
+        for gid, seasons in n.items():
+            for key, rs in seasons.items():
+                lr = lrows[gid].pop(key, None)
+                if lr is None:
+                    rep[f'{t}: сезона нет в базе'] += 1
+                    if len(ex[f'{t}: нет']) < 10:
+                        ex[f'{t}: нет'].append([gid, key[0] + 1900, key[1]])
+                    continue
+                want = {f: sum(N.value(t, f, r) for r in rs) for f in fields}
+                if kind == 'G':
+                    want['minutes'] = sum(N.value(t, 'timeinnetseconds', r) for r in rs) // 60
+                got = {f: L.value(t, f, lr) for f in want}
+                tw = {team_name(team_abbr, N.value(t, 'team', r), key[0]) for r in rs} - {None}
+                tg = set(L.get_string(t, 'teams', lr).split('-')) - {''}
+                bad = [f for f in want if want[f] != got[f]] + (['teams'] if (tw or tg) and {x[:3] for x in tw} != {x[:3] for x in tg} else [])
+                rep[f'{t}: {"совпало" if not bad else "не совпало"}'] += 1
+                if bad and len(ex[t]) < 15:
+                    ex[t].append([gid, key[0] + 1900, key[1], bad, {f: [want[f], got[f]] for f in bad if f != 'teams'},
+                                  sorted(tw), L.get_string(t, 'teams', lr)])
+            for key in lrows[gid]:
+                rep[f'{t}: лишний сезон в базе'] += 1
+    # пары, которые сшивка пропустила: тот же человек по имени (другая дата) или по фамилии и дате (другое имя)
+    lf, nf = people(L), people(N)
+    by_name, by_last = defaultdict(list), defaultdict(list)
+    for k, gs in lf.items():
+        by_name[k[:2]] += gs
+        by_last[(k[1],) + k[2:]] += gs
+    miss = []
+    for k, gs in nf.items():
+        if len(gs) != 1 or gs[0] not in hist27 or gs[0] in by27:
+            continue
+        near = sorted(set(by_name.get(k[:2], [])) | set(by_last.get((k[1],) + k[2:], [])))
+        if near:
+            miss.append([gs[0], f'{k[0]} {k[1]}', [k[2] + 1900, k[3] + 1, k[4] + 1], near])
+    rep['история NHL 27 без пары, но похожий игрок в базе'] = len(miss)
+    return {'db': path, 'pairs': len(pr), 'counts': dict(sorted(rep.items())), 'examples': ex, 'near_misses': miss}
+
+
 def main():
     sys.stdout.reconfigure(encoding='utf-8')
     args = sys.argv[1:]
     dry = '--dry-run' in args
     N = nhl27.open_db(args[args.index('--db27') + 1] if '--db27' in args else None)
     sets = [a for a in args if a in ('out', 'out-ahl32')] or ['out', 'out-ahl32']
+    if args and args[0] == 'check':
+        for s in sets:
+            path = os.path.join(W_DIR, s, 'db', 'nhlng.db')
+            if os.path.isfile(path):
+                rep = check(path, N)
+                fn = os.path.join(W_DIR, 'stats27', f'{s}-check.json')
+                json.dump(rep, open(fn, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
+                print(f"{s}: пар игроков {rep['pairs']}; отчёт — {fn}")
+                for k, v in rep['counts'].items():
+                    print(f'  {k}: {v}')
+        return
     for s in sets:
         path = os.path.join(W_DIR, s, 'db', 'nhlng.db')
         if not os.path.isfile(path):
@@ -230,7 +359,8 @@ def main():
         rep = run(path, N, dry)
         os.makedirs(os.path.join(W_DIR, 'stats27'), exist_ok=True)
         json.dump(rep, open(os.path.join(W_DIR, 'stats27', f'{s}.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
-        print(f"{s}: пар игроков {rep['pairs']}, с историей NHL 27 — {rep['players_with_new']}"
+        print(f"{s}: пар игроков {rep['pairs']} ({', '.join(f'{k} {v}' for k, v in rep['pairs_by'].items())}), "
+              f"с историей NHL 27 — {rep['players_with_new']}"
               + (' (проба, не записано)' if dry else '' if rep.get('written') else ' (база уже такая)'))
         for t, x in rep['tables'].items():
             yrs = x['by_year']
