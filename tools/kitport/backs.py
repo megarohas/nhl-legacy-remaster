@@ -1,6 +1,7 @@
 """Спины всех форм слота одним листом — фамилия и номер так, как их рисует игра: знак берётся клеткой атласа целиком
-(с полями клетки), клетка вписывается в зону карты номеров по высоте. Видно размер букв и номера, промежутки и
-отступы (от кокетки сверху, до полос снизу) у всех клубов сразу.
+(с полями клетки), клетка буквы вписывается в зону карты номеров по высоте; номер (проверено в игре 24.10) — холст из
+двух клеток цифр во всю зону 1 (клетка — шириной в половину зоны), однозначный — клетка в средней половине. Видно
+размер букв и номера, промежутки и отступы (от кокетки сверху, до полос снизу) у всех клубов сразу.
 
     python -m kitport backs [--clubs MIN,BUF] [--name ABCDEFGH] [--number 88] [--out FILE]
 
@@ -94,7 +95,24 @@ def cell_number(font, number):
         cell[:, a0 - x0:a1 - x0] = font[y0:y1, a0:a1]
         parts.append(_only_main(cell))
     h = max(p.shape[0] for p in parts)
-    return np.concatenate([np.pad(p, ((0, h - p.shape[0]), (0, 0), (0, 0))) for p in parts], 1)
+    num = np.concatenate([np.pad(p, ((0, h - p.shape[0]), (0, 0), (0, 0))) for p in parts], 1)
+    if len(parts) == 1:                               # однозначный — клетка в средней половине холста из двух клеток
+        num = np.pad(num, ((0, 0), (DIGIT_PITCH // 2, DIGIT_PITCH // 2), (0, 0)))
+    return num
+
+
+def zone_number(font, number, name_png):
+    """Номер под зону 1, как в игре: холст из двух клеток растянут по ширине до пропорции зоны на свитере
+    (edge_kit.zone_size_cm) — jersey_mesh.stamp вписывает его по высоте и он ложится во всю зону."""
+    from PIL import Image
+    from fb import edge_kit as E
+    num = cell_number(font, number)
+    zs = E.zone_size_cm(name_png, 1)
+    if not zs:
+        return num
+    th = num.shape[0]                                 # холст — всегда две клетки (однозначный — с полями)
+    w2 = max(1, int(round(th * zs[0] / zs[1])))
+    return np.asarray(Image.fromarray(num).resize((w2, th), Image.LANCZOS))
 
 
 def cmd_backs(a):
@@ -121,7 +139,7 @@ def cmd_backs(a):
         if 0 in rects:
             t = J.stamp(t, M, rects[0], cell_name(f, a.name.upper()))
         if 1 in rects:
-            t = J.stamp(t, M, rects[1], cell_number(f, a.number))
+            t = J.stamp(t, M, rects[1], zone_number(f, a.number, os.path.join(d, "name_cm.png")))
         im = S.render([{"pos": M["pos"], "nrm": nrm, "uv": M["uv"], "tri": M["tri"], "tex": t, "twosided": True}],
                       np.radians(180), 300, frame=FRAME)
         tile = Image.new("RGB", (im.size[0], im.size[1] + 22), (24, 24, 28))
@@ -137,4 +155,69 @@ def cmd_backs(a):
     out = a.out or os.path.join(core.COMPARE, f"backs-{datetime.datetime.now():%Y%m%d-%H%M}.png")
     sheet.save(out)
     print("лист →", out)
+    return 0
+
+
+def render_number(d, number, M, nrm, frame=(-0.24, 0.24, 1.12, 1.52), px=420):
+    """Спина формы из папки d (jersey_cm, font_cm, name_cm) с номером, как в игре, крупно: кадр — область номера."""
+    import scans24 as S
+    from PIL import Image
+    from fb import jersey_mesh as J
+    from .present import zone_rects
+    t = np.asarray(Image.open(os.path.join(d, "jersey_cm.png")).convert("RGB")).astype(np.float64)
+    f = np.asarray(Image.open(os.path.join(d, "font_cm.png")).convert("RGBA"))
+    rects = zone_rects(os.path.join(d, "name_cm.png"))
+    if 1 in rects:
+        t = J.stamp(t, M, rects[1], zone_number(f, number, os.path.join(d, "name_cm.png")))
+    return S.render([{"pos": M["pos"], "nrm": nrm, "uv": M["uv"], "tri": M["tri"], "tex": t, "twosided": True}],
+                    np.radians(180), px, frame=frame)
+
+
+def cmd_numbers(a):
+    """Номер на спине крупно: фото настоящей формы | снимок «было» (kitport snapshot) | слот сейчас — для сравнения
+    промежутка цифр (24.10). Спецификации — «КЛУБ_ФОРМА|НОМЕР|ФОТО|x0,y0,x1,y1» (фото и рамку можно опустить:
+    «CHI_away|98»). Фото настоящих — только для личного использования: лист — в compare/ (вне git)."""
+    os.environ.setdefault("PHOTOS_SOURCE", "nhl24")
+    sys.path.insert(0, core.TOOLS)
+    import scans24 as S
+    from PIL import Image, ImageDraw, ImageFont
+    from fb import edge_kit as E
+    before = a.before or core.latest_snapshot()
+    M = E.mesh_for(0, 1, 2)
+    nrm = S.weld_normals(M["pos"], M["tri"], S.weld_ids(M["pos"]))
+    font_ = ImageFont.truetype(os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts", "segoeui.ttf"), 15)
+    H = a.height
+    rows = []
+    for spec in a.specs:
+        parts = spec.split("|")
+        kit, number = parts[0], parts[1]
+        tiles = []
+        if len(parts) >= 4 and os.path.exists(parts[2]):
+            x0, y0, x1, y1 = map(int, parts[3].split(","))
+            im = Image.open(parts[2]).convert("RGB").crop((x0, y0, x1, y1))
+            tiles.append(("фото", im.resize((max(1, int(im.size[0] * H / im.size[1])), H), Image.LANCZOS)))
+        for tag, base in (("было", before), ("сейчас", core.slot_kits_dir())):
+            d = os.path.join(base, kit) if base else None
+            if d and os.path.exists(os.path.join(d, "font_cm.png")):
+                r = render_number(d, number, M, nrm)
+                tiles.append((tag, r.resize((int(r.size[0] * H / r.size[1]), H), Image.LANCZOS)))
+        row = Image.new("RGB", (130 + sum(t.size[0] + 6 for _, t in tiles), H + 4), (16, 16, 18))
+        dr = ImageDraw.Draw(row)
+        dr.text((6, H // 2 - 10), f"{kit} {number}", fill=(255, 220, 140), font=font_)
+        x = 130
+        for tag, t in tiles:
+            row.paste(t, (x, 2))
+            dr.text((x + 4, 4), tag, fill=(255, 255, 0), font=font_)
+            x += t.size[0] + 6
+        rows.append(row)
+    if not rows:
+        sys.exit("нет спецификаций «КЛУБ_ФОРМА|НОМЕР[|ФОТО|x0,y0,x1,y1]»")
+    sheet = Image.new("RGB", (max(r.size[0] for r in rows), sum(r.size[1] for r in rows)), (0, 0, 0))
+    y = 0
+    for r in rows:
+        sheet.paste(r, (0, y))
+        y += r.size[1]
+    out = a.out or os.path.join(core.COMPARE, f"numbers-{datetime.datetime.now():%Y%m%d-%H%M}.png")
+    sheet.save(out)
+    print("лист →", out, "(было —", before, ")")
     return 0

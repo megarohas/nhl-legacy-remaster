@@ -351,6 +351,11 @@ def main():
     s.add_argument("--number", default="88", help="номер")
     s.add_argument("--cols", type=int, default=8, help="форм в ряду")
     s.add_argument("--out", default=None, help="файл листа (по умолчанию — compare/kitport/backs-….png)")
+    s = sub.add_parser("numbers", help="номер на спине крупно: фото настоящей формы | снимок «было» | слот сейчас")
+    s.add_argument("specs", nargs="+", help="«КЛУБ_ФОРМА|НОМЕР[|ФОТО|x0,y0,x1,y1]», например \"CHI_away|98\"")
+    s.add_argument("--before", default=None, help="папка снимка kitport snapshot (по умолчанию — последний)")
+    s.add_argument("--height", type=int, default=300, help="высота плиток, px")
+    s.add_argument("--out", default=None, help="файл листа (по умолчанию — compare/kitport/numbers-….png)")
     s = sub.add_parser("lettering", help="фамилия, номер и промежутки букв на спине (см) против эталона")
     s.add_argument("--clubs", default="", help="клубы через запятую (по умолчанию — все в слоте)")
     s.add_argument("--ref", default="MIN,NJD,TBL,BOS,DET,LAK,SEA,VGK", help="эталон — одобренные клубы")
@@ -401,6 +406,9 @@ def main():
     if a.cmd == "backs":
         from . import backs
         return backs.cmd_backs(a)
+    if a.cmd == "numbers":
+        from . import backs
+        return backs.cmd_numbers(a)
     if a.cmd == "lettering":
         from . import lettering
         return lettering.cmd_lettering(a)

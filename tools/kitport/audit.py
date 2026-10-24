@@ -7,6 +7,8 @@
   второй цвет больше AUDIT_MIX доли — номер на полосе или на границе цветов («номер на руке ложится на полосу», OTT,
   ANA, WPG); зона вне развёртки больше AUDIT_OUT — номер режется (сдвиг зоны слишком далеко);
 - номер на спине: высота против профиля (`number_h_cm`, иначе стандарт edge_kit.LETTERING_NUM_H) ± AUDIT_NUM_TOL;
+  промежуток цифр (видимый край, к высоте цифры, как рисует игра — kitport lettering) против профиля `digit_gap`
+  (иначе edge_kit.DIGIT_GAP) ± lettering.DIGIT_GAP_TOL (24.10: «цифры можно ближе — как у настоящих»);
   фамилия — промежуток букв против edge_kit.NAME_FIT_GAP_MIN … NAME_FIT_GAP;
 - гетры: нижние строки своих гетр (flat_sock) против нижних строк перенесённых с источника — у NHL 27 низ бывает
   другого цвета («оранжевая полоска внизу гетр», ANA, COL, NSH);
@@ -20,7 +22,7 @@
 - --helmets: строка шлема NHL 27, из которой взята каска (kitport.profile.eq_pick) — общая (−1, −1) или первая era 2
   вместо своей строки формы (COL дом: чёрный вместо синего); нужна база NHL 27 (FB_GAME=nhl27 не обязателен).
 Принятое пользователем или проверенное глазами — поле профиля `audit_accept` (список проверок с причиной в комментарии:
-sleeve_mix, sleeve_out, letter_mix, letter_out, number, name_gap, sock, pant_relief, pant_place, helmet) — не замечание
+sleeve_mix, sleeve_out, letter_mix, letter_out, number, digit_gap, name_gap, sock, pant_relief, pant_place, helmet) — не замечание
 (печатается «принято»).
 Итог — таблица замечаний; код выхода 1, если они есть. Порядок работы с новыми формами — docs/kitport.md §12.11.
 """
@@ -89,6 +91,9 @@ def check_kit(club, kit, d, src_d, tid, prof, E, lettering):
     want = float(prof.get("number_h_cm", E.LETTERING_NUM_H * 100))
     if abs(r["num_h"] / want - 1) > AUDIT_NUM_TOL:
         flag("number", f"номер на спине {r['num_h']:.1f} см при заданных {want:g} ({r['num_h'] / want - 1:+.0%})")
+    gap_want = float(E.DIGIT_GAPS.get(kit, E.DIGIT_GAPS.get("*", E.DIGIT_GAP)))   # промежуток цифр (24.10, по фото)
+    if E.LETTERING == "standard" and r.get("digit_gap") is not None and abs(r["digit_gap"] - gap_want) > lettering.DIGIT_GAP_TOL:
+        flag("digit_gap", f"промежуток цифр номера {r['digit_gap']:.3f} высоты цифры при цели {gap_want:g} (digit_gap)")
     if prof.get("font_plate"):                        # фамилия на подложке (PHI): промежуток по альфе не мерится
         pass
     elif r["gap_ratio"] > E.NAME_FIT_GAP + 0.02:      # допуск — как у kitport lettering (одобренные DAL, SEA — 0,22–0,23)
