@@ -1,0 +1,109 @@
+{
+ "_note": "Ручные решения сопоставления голов NHL 27 (scans24.overrides; 24.10.2026, пользователь: «тёзок проверить по листу, конфликтам дать свободные номера голов»). accept — тот же человек (дата в базах: день и месяц местами или опечатка; сверено по датам рождения игроков): не тёзки — Elias Pettersson 2004 (защитник, у скана — нападающий 1998), Matt Murray 1998, Jack Hughes 2003, Erik Gustafsson 1988, Sebastian Aho 1996, Jake Evans 2009. headid — свободные номера (не в архиве Legacy, не в базе, не у другого источника) для голов, чей номер EA в архиве занят чужой головой.",
+ "accept": [
+  [
+   "Olen",
+   "Zellweger",
+   [
+    2003,
+    9,
+    10
+   ],
+   "olen_zellweger"
+  ],
+  [
+   "Will",
+   "Cuylle",
+   [
+    2002,
+    2,
+    5
+   ],
+   "will_cuylle"
+  ],
+  [
+   "Carson",
+   "Soucy",
+   [
+    1994,
+    7,
+    27
+   ],
+   "carson_soucy"
+  ],
+  [
+   "William",
+   "Eklund",
+   [
+    2002,
+    10,
+    12
+   ],
+   "william_eklund"
+  ],
+  [
+   "Gabe",
+   "Perreault",
+   [
+    2005,
+    5,
+    7
+   ],
+   "gabe_perreault"
+  ],
+  [
+   "Jonathan",
+   "Lekkerimäki",
+   [
+    2004,
+    7,
+    24
+   ],
+   "jonathan_lekkerimaki"
+  ],
+  [
+   "MacKenzie",
+   "Weegar",
+   [
+    1994,
+    1,
+    7
+   ],
+   "mackenzie_weegar"
+  ],
+  [
+   "Tommy",
+   "Novak",
+   [
+    1997,
+    4,
+    28
+   ],
+   "thomas_novak"
+  ],
+  [
+   "Mason",
+   "Marchment",
+   [
+    1995,
+    6,
+    18
+   ],
+   "mason_marchment"
+  ]
+ ],
+ "folder": {
+  "J.J. Moser": "janis_jerome_moser"
+ },
+ "headid": {
+  "adam_fox": 59999,
+  "ilya_mikheyev": 59998,
+  "jake_oettinger": 59997,
+  "john_jason_peterka": 59996,
+  "luca_delbelbelluz": 59995,
+  "mario_ferraro": 59994,
+  "mason_mctavish": 59993,
+  "mikey_anderson": 59992,
+  "vladislav_gavrikov": 59991
+ }
+}

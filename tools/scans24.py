@@ -92,6 +92,23 @@ PILOT_OLD = {('cale', 'makar', (1998, 10, 30)): 60112}
 # трогать» — кроме этих). Имя, фамилия (norm) → источник; headid тот же (файл player_<id> из out главнее архива).
 REPLACE_EA = {('sergei', 'bobrovsky'): 'nhl27', ('leon', 'draisaitl'): 'nhl27', ('sean', 'couturier'): 'nhl27',
               ('mathew', 'barzal'): 'nhl27'}
+
+
+def overrides():
+    """Ручные решения по сопоставлению (tools/legacy_data/scans_overrides_<источник>.json, 24.10.2026): accept — спорные
+    «тёзки», признанные тем же человеком (дата рождения в базах разошлась: день и месяц местами, опечатка), [имя, фамилия,
+    дата Legacy, папка]; folder — папка скана по имени (J.J. Moser → janis_jerome_moser); headid — свободный номер головы,
+    если номер EA занят чужой головой в архиве (Oettinger 20106 и др.). -> (accept {(norm имя+фамилия, дата): папка},
+    folder {norm: папка}, headid {папка: номер})."""
+    fn = os.path.join(TOOLS, 'legacy_data', f'scans_overrides_{P24.SOURCE}.json')
+    if not os.path.exists(fn):
+        return {}, {}, {}
+    d = json.load(open(fn, encoding='utf-8'))
+    acc = {(norm(a) + norm(b), tuple(dt)): f for a, b, dt, f in d.get('accept', [])}
+    fol = {norm(k.split(' ', 1)[0]) + norm(k.split(' ', 1)[1]): v for k, v in d.get('folder', {}).items()}
+    return acc, fol, {k: int(v) for k, v in d.get('headid', {}).items()}
+
+
 NICK = [('alex', 'alexander'), ('alex', 'aleksander'), ('alex', 'alexandre'), ('mitch', 'mitchell'), ('nick', 'nicholas'),
         ('nick', 'nicolas'), ('matt', 'matthew'), ('mike', 'michael'), ('josh', 'joshua'), ('zach', 'zachary'),
         ('zack', 'zachary'), ('jake', 'jacob'), ('chris', 'christopher'), ('tony', 'anthony'), ('dan', 'daniel'),
@@ -228,6 +245,8 @@ def cmd_match(variants):
         by_lb[(norm(p['last']), b)].append(i)
         by_name[norm(p['first']) + norm(p['last'])].append(i)
     ea = ea_head_files()
+    global ACCEPT, FOLDER_FIX, HEADID
+    ACCEPT, FOLDER_FIX, HEADID = overrides()
     from fb import heads
     flat = {re.sub(r'[^a-z]', '', f): f for f in heads.licensed_folders()}
     folder_set_taken = set(folder_of.values())
@@ -260,6 +279,12 @@ def cmd_match(variants):
             strong = sorted(set(A) | set(B) | set(C))
             rec = {'row': p['row'], 'game_id': p['game_id'], 'name': f"{p['first']} {p['last']}", 'birth': list(b),
                    'artid': p['artid'], 'old': h, 'league': p['league']}
+            acc = ACCEPT.get((nf + nl, b))
+            if acc and len(strong) != 1:                   # спорный, признанный вручную (scans_overrides_*.json)
+                cand = [i for i in set(A) | set(Aw) | set(B) | set(C) | set(Dw) | set(Ew) if folder_of.get(i) == acc]
+                if len(cand) == 1:
+                    strong, Dw, Ew = cand, [], []
+                    rec['accepted'] = acc
             if len(strong) == 1:
                 i = strong[0]
                 q = players[i]
@@ -267,7 +292,7 @@ def cmd_match(variants):
                 rec.update(nhl24={'name': f"{q['first']} {q['last']}", 'birth': q['birth'], 'artid': q['artid'],
                                   'headid': q['headid']}, how=how)
                 if i not in folder_of and i not in unsure_idx:
-                    f = flat.get(nf + nl)                      # папка по имени из базы Legacy (Gabriel / Gabe)
+                    f = flat.get(nf + nl) or FOLDER_FIX.get(nf + nl)   # папка по имени из базы Legacy (Gabriel / Gabe)
                     if f is None:                              # опечатка EA в имени папки (artemi_parnarin, 22.10):
                         f = folder_typo(nf + nl, flat, folder_set_taken)   # одна буква — единственная папка
                         if f:
@@ -285,7 +310,9 @@ def cmd_match(variants):
                 rec['folder'] = folder_of[i]
                 if replace:
                     rec['replace_ea'] = True
-                new = q['artid']
+                new = HEADID.get(folder_of[i], q['artid'])      # номер EA занят чужой головой — свой (overrides)
+                if new != q['artid']:
+                    rec['headid_override'] = new
                 rec['new'] = new
                 why = []
                 if new >= TYPICAL:
