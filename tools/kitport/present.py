@@ -241,7 +241,8 @@ def present_kit(code, kit, d, M, nrm, n24, a, font):
                     "буквы (зона 7)", ims, font))
 
     # 4. игрок целиком, каска, наклейка, шрифт
-    pL, sL = kit3d.load_legacy(pilot.PANT_L), kit3d.load_legacy(pilot.SOCK_L)
+    from fb import pant_decals
+    pL, sL = kit3d.load_legacy(pant_decals.GAME_MESH), kit3d.load_legacy(pilot.SOCK_L)   # шорты полевых в игре (24.10)
 
     def tex4(p):
         return np.asarray(Image.open(p).convert("RGBA"))

@@ -38,7 +38,8 @@ LEG = os.path.join(NHL24, "out", "_legacy_kits")
 REGISTRY = os.path.join(REPO, "tools", "legacy_data", "nhl24_kits.json")
 PANT_N24 = "content/character/skater/player/pant/common/components/player_pant_common_tightlong_lod0_mesh"
 SOCK_N24 = "content/character/skater/player/sock/common/components/player_sock_common_notuck_mesh"
-PANT_L = "rendering/pant/pant_1_0_0_2.rx2"
+PANT_L = "rendering/pant/pant_1_0_0_2.rx2"   # шорты вратаря (pant_G_X_U_L: G — вратарь); ткань шорт переносится на неё,
+#                                          нашивки — на шорты полевых в игре fb.pant_decals.GAME_MESH (24.10)
 SOCK_L = "rendering/sock/playersock_1_2.rx2"
 PANT_WAIST = 1.17  # у NHL 24 шорты с высоким поясом до груди; видимая часть — до ремня ~1,17 м
 # нашивки шорт (герб, щит NHL) — наклейками fb.pant_decals, ткань — перенос base_color: у Legacy шорты шире, перенос по
@@ -432,7 +433,7 @@ def build_pant(rec, folder, ok, p, family, club, kit, od, pN, pLa, pL):
             pimg = pant_decals.hem(pimg, pbase, pN, pLa, pL, 512)
             rec["pant_hem"] = pant_decals.HEM_H
         masks = {}
-        pimg, prep = pant_decals.apply(pimg, pcol, pbase, pN, pLa, pL, 512, masks=masks)
+        pimg, prep = pant_decals.apply(pimg, pcol, pbase, pN, 512, masks=masks)   # на сетку полевых (GAME_MESH)
         Image.fromarray(np.clip(pimg, 0, 255).astype(np.uint8)).convert("RGB").save(os.path.join(od, "pant_cm.png"))
         pant_decals.save_masks(os.path.join(od, pant_decals.MASKS), masks)
         rec["pant"] = f"ok (3D, нашивок наклейками: {len(prep)})"

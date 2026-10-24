@@ -1,8 +1,9 @@
-"""Нашивки шорт крупно (наша форма слота, pant = "source"): цвет и рельеф без цвета у нашего герба и у места герба
-образца Legacy — совпадает ли рельеф (pant_nm) с гербом (pant_cm). С --before — строки «было» из снимка
-(kitport snapshot: pant_nm, pant_sm с 23.10) или любой папки <КЛУБ>_<форма>/pant_nm.png.
+"""Нашивки шорт крупно (наша форма слота, pant = "source"): цвет и рельеф без цвета у нашего герба и щита NHL и у мест
+герба и щита образца Legacy — совпадает ли рельеф (pant_nm) с нашивками (pant_cm). С --before — строки «было» из снимка
+(kitport snapshot: pant_nm, pant_sm с 23.10) или любой папки <КЛУБ>_<форма>/pant_nm.png. Шорты — на сетке полевых в
+игре (fb.pant_decals.GAME_MESH; до 24.10 — на сетке вратаря pilot.PANT_L, где нашивки стояли иначе, чем в игре).
 
-    python -m kitport pants --clubs DET                     # лист на форму: виды спереди, ±30°
+    python -m kitport pants --clubs DET                     # лист на форму: герб — спереди и ±30°, щит — сзади и ±30°
     python -m kitport pants --clubs DET,BOS --kits home --before ../game/work/nhl24/compare/kitport/<снимок>
 
 Зачем (23.10, пользователь, DET: «логотип на трусах стоит выше и сбоку относительно рельефного места»): рельеф шорт
@@ -19,6 +20,7 @@ import numpy as np
 from . import core
 
 VIEWS = (0, 30, -30)       # град: спереди и повёрнуто в обе стороны (герб на любой ноге — к камере)
+BACK_VIEWS = (180, 150, 210)   # град: щит NHL сзади (24.10: наш щит ниже рамки EA — рельеф щита образца стирается)
 HALF = (0.10, 0.09)        # м: полкадра по x и y вокруг центра герба
 
 
@@ -33,23 +35,30 @@ def sheet(club, kit, d, before, width):
     spec = E.SLOT_KITS[kit]
     tpl = os.path.join(E.WORK, "cur_kits", spec["legacy"])
     masks = os.path.join(E.KITS_OUT, f"{club}_{kit}", PD.MASKS)
-    pL = kit3d.load_legacy(pilot.PANT_L)
+    pL = PD.game_mesh()[0]                              # шорты полевых в игре (24.10: не вратаря pilot.PANT_L)
     cm = np.asarray(Image.open(os.path.join(d, "pant_cm.png")).convert("RGB"))
-    A = (np.asarray(Image.open(masks))[..., 0] / 255.0 if os.path.exists(masks) else np.zeros(cm.shape[:2]))
-    centers = []
-    lab, n = ndi.label(A > 0.3)
-    ours = [PD._center3d(lab == i) for i in range(1, n + 1)]
-    centers += [("наш герб", c) for c in ours if c is not None]
+    AA = (np.asarray(Image.open(masks).convert("RGB")) / 255.0 if os.path.exists(masks)
+          else np.zeros(cm.shape[:2] + (3,)))
+    centers, ours = [], []
+    for ch, what, views in ((0, "наш герб", VIEWS), (1, "наш щит NHL", BACK_VIEWS)):
+        lab, n = ndi.label(ndi.binary_dilation(AA[..., ch] > 0.3, iterations=6))   # звёзды WSH — одна нашивка
+        for i in range(1, n + 1):
+            c = PD._center3d((lab == i) & (AA[..., ch] > 0.3))
+            if c is not None:
+                ours.append(c)
+                centers.append((what, c, views))
     for f in PD.template_patches(np.asarray(Image.open(os.path.join(tpl, "pant_cm.png")).convert("RGB"))):
         c = PD._center3d(f["mask"])
-        if c is not None and all(np.linalg.norm(c - o) > 0.05 for o in ours if o is not None):
-            centers.append((f"место герба образца {spec['legacy']} ({f['slot']})", c))
+        if c is not None and all(np.linalg.norm(c - o) > 0.05 for o in ours):
+            what = "щита" if f["slot"] == "back" else "герба"
+            centers.append((f"место {what} образца {spec['legacy']} ({f['slot']}{', рамка EA' if f.get('box') else ''})",
+                            c, BACK_VIEWS if f["slot"] == "back" else VIEWS))
     if not centers:
-        return None, "гербов спереди нет ни у нас, ни у образца"
+        return None, "нашивок нет ни у нас, ни у образца"
     states = ([("было", before)] if before and os.path.exists(os.path.join(before, "pant_nm.png")) else []) + [("стало", d)]
     font = ImageFont.truetype(os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts", "segoeui.ttf"), 13)
     rows = []
-    for what, c in centers:
+    for what, c, views in centers:
         for tag, sd in states:
             nmap = np.asarray(Image.open(os.path.join(sd, "pant_nm.png")).convert("RGB")).astype(np.float64)
             ims = []
@@ -57,11 +66,11 @@ def sheet(club, kit, d, before, width):
                 tex = (np.full(cm.shape[:2] + (4,), 170, np.float32) if grey else
                        np.dstack([cm, np.full(cm.shape[:2], 255)]).astype(np.float32))
                 part = dict(pL, tex=tex, twosided=True, nmap=nmap)
-                for ang in VIEWS:
+                for ang in views:
                     cr = S.rot(c[None], math.radians(ang))[0]
                     fr = (cr[0] - HALF[0], cr[0] + HALF[0], cr[1] - HALF[1], cr[1] + HALF[1])
                     ims.append(S.render([part], math.radians(ang), width, frame=fr))
-            rows.append((f"{club} {kit} — {tag}: {what}; цвет и рельеф без цвета, {', '.join(f'{v}°' for v in VIEWS)}",
+            rows.append((f"{club} {kit} — {tag}: {what}; цвет и рельеф без цвета, {', '.join(f'{v}°' for v in views)}",
                          ims))
     w, h = rows[0][1][0].size
     note = PD.relief_check(tpl, d, masks)

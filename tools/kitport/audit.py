@@ -10,13 +10,17 @@
   фамилия — промежуток букв против edge_kit.NAME_FIT_GAP_MIN … NAME_FIT_GAP;
 - гетры: нижние строки своих гетр (flat_sock) против нижних строк перенесённых с источника — у NHL 27 низ бывает
   другого цвета («оранжевая полоска внизу гетр», ANA, COL, NSH);
-- шорты pant = "source": рельеф (pant_nm слота) — только под нашими гербами (fb.pant_decals.relief_check): рельеф герба
-  образца Legacy вне нашего герба не стёрт, наш герб без рельефа («лого на трусах выше и сбоку относительно рельефного
-  места», DET, 23.10);
+- шорты pant = "source": рельеф (pant_nm слота) — только под нашими нашивками (fb.pant_decals.relief_check): рельеф
+  герба или щита образца Legacy вне наших нашивок не стёрт, наша нашивка без рельефа («лого на трусах выше и сбоку
+  относительно рельефного места», DET, 23.10; щит — с 24.10);
+- шорты pant = "source": место нашивок на шортах полевых в игре (fb.pant_decals.place_check, сетка GAME_MESH) — центр
+  герба и щита NHL против правила LEG_SLOTS (угол вокруг ноги, высота над краем штанины), низ над подворотом, изгиб
+  под нашивкой, пропорции против источника («логотипы и щиты на шортах слишком высоко», прежде — «сплюснутый герб у
+  края», 24.10: раскладка шла по сетке шорт вратаря);
 - --helmets: строка шлема NHL 27, из которой взята каска (kitport.profile.eq_pick) — общая (−1, −1) или первая era 2
   вместо своей строки формы (COL дом: чёрный вместо синего); нужна база NHL 27 (FB_GAME=nhl27 не обязателен).
 Принятое пользователем или проверенное глазами — поле профиля `audit_accept` (список проверок с причиной в комментарии:
-sleeve_mix, sleeve_out, letter_mix, letter_out, number, name_gap, sock, pant_relief, helmet) — не замечание
+sleeve_mix, sleeve_out, letter_mix, letter_out, number, name_gap, sock, pant_relief, pant_place, helmet) — не замечание
 (печатается «принято»).
 Итог — таблица замечаний; код выхода 1, если они есть. Порядок работы с новыми формами — docs/kitport.md §12.11.
 """
@@ -107,6 +111,14 @@ def check_kit(club, kit, d, src_d, tid, prof, E, lettering):
         if os.path.exists(os.path.join(tpl, "pant_nm.png")):
             for t in pant_decals.relief_check(tpl, d, os.path.join(src_d, pant_decals.MASKS))[0]:
                 flag("pant_relief", t)
+        info = os.path.join(src_d, "info.json")     # место нашивок на шортах полевых в игре (24.10, «слишком высоко»)
+        rep = None
+        if os.path.exists(info):
+            import json
+            with open(info, encoding="utf-8") as f:
+                rep = json.load(f).get("pant_decals")
+        for t in pant_decals.place_check(os.path.join(src_d, pant_decals.MASKS), rep)[0]:
+            flag("pant_place", t)
     return flags
 
 

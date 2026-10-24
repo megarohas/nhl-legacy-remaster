@@ -2088,7 +2088,8 @@ def use_club(code):
     CHEST_LAPEL_D = _cl if _cl == "ring" else float(_cl)
     from . import pant_decals                            # нашивки шорт (23.10, review-d: WSH — три звезды, WPG — пояс)
     pant_decals.MERGE_PX = int(prof.get("pant_merge_px", 0))
-    pant_decals.Y_MAX = float(prof["pant_decal_ymax"]) if "pant_decal_ymax" in prof else None
+    pant_decals.Y_MAX = (float(prof["pant_decal_ymax"]) if "pant_decal_ymax" in prof
+                         else pant_decals.Y_MAX_DEFAULT)   # 24.10: и без поля — пояс под свитером не нашивка (DAL)
     pant_decals.HEM_H = float(prof["pant_hem"]) if "pant_hem" in prof else None   # низ шорт от края (23.10, NYR)
     from . import pilot                                  # буквы фамилии без перекраски (23.10, агент fix-a, NYR дом)
     _nc = prof.get("name_contrast", True)
