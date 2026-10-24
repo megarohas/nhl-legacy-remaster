@@ -138,55 +138,96 @@ def scale_glyphs(slot_dir, name=1.0, captain_x=1.0, log=None, name_anchor="cente
     return rep
 
 
+# Цифры номера. Как их рисует игра (проверено в игре 24.10.2026, docs/kitport.md §2.5): зона номера карты name_*_cm —
+# холст из двух клеток атласа; клетка (крупные цифры — 80 × 123 px, малые — 48 px шагом) рисуется шириной в половину
+# зоны и во всю её высоту; двузначный номер — клетки вплотную во всю зону, однозначный — клетка в средней половине.
+# Отсюда: промежуток между цифрами к ширине цифры = (клетка − знак) / знак — задаёт только атлас; ширина цифры к высоте
+# = (знак / высота знака) × (ширина зоны / 2 клетки) / (высота зоны / высота клетки) — задаёт зона (edge_kit.digit_spacing).
 DIGIT_ROWS = ((115, 238), (242, 367))   # крупные цифры номера на спине: 0–4 и 5–9
 DIGIT_CELL = 80                    # шаг клеток цифр (центры 40, 120, 200, 280, 360 — замер атласов EA и NHL 27)
+SMALL_ROW = (368, 446)             # малые цифры номера на рукаве: верхняя строка (знаки 375–441). Игра берёт её (24.10, в игре,
+#                                    CHI дом: на номере рукава нет пометок крупных клеток, обводка — как у этой строки); нижняя
+#                                    (452–508) — не трогаем (где она в игре — не разбиралось)
+SMALL_CELL = 48                    # шаг клеток малых цифр: 0–9 в строке, центры 24, 72 … 456 (у «1» — со сдвигом влево)
+DIGIT_EDGE = 128                   # видимый край знака — альфа ≥ 128 (полуспад обводки; так же мерились фото настоящих форм)
+DIGIT_MARGIN = 1                   # знак не ближе стольких px к краю клетки (соседняя клетка — вплотную)
 
 
-DIGIT_SHRINK = 0.75                # промежуток у всех — не больше 3/4 прежнего (22.10, MIN в игре: «номера широко»; «у всех
-#                                    чуть ближе, и у Чикаго тоже — не максимально, не гипертрофированно»)
-DIGIT_GAP_MIN = 0.04               # и не меньше стольких высот цифры (≈ 1,2 см при 30 см) — цифры не слипаются
+def digit_glyphs(alpha, small=False):
+    """Знаки цифр атласа по маске alpha (bool 512²): {цифра: (габарит x0, y0, x1, y1; клетка x0, y0, x1, y1)}."""
+    out = {}
+    if small:
+        y0, y1 = SMALL_ROW
+        cells = [(d, d * SMALL_CELL, y0, (d + 1) * SMALL_CELL, y1) for d in range(10)]
+    else:
+        cells = [(r * 5 + i, i * DIGIT_CELL, y0, (i + 1) * DIGIT_CELL, y1)
+                 for r, (y0, y1) in enumerate(DIGIT_ROWS) for i in range(5)]
+    for d, cx0, cy0, cx1, cy1 in cells:
+        sub = alpha[cy0:cy1, cx0:cx1]
+        cols, rows = np.nonzero(sub.any(0))[0], np.nonzero(sub.any(1))[0]
+        if len(cols):
+            out[d] = ((cx0 + cols[0], cy0 + rows[0], cx0 + cols[-1] + 1, cy0 + rows[-1] + 1), (cx0, cy0, cx1, cy1))
+    return out
 
 
-def fit_digits(slot_dir, gap=0.08, log=None):
-    """Цифры номера ближе друг к другу (пользователь, 22.10: «цифры в номере далеко, особенно на светлых формах со
-    светлой обводкой»): игра берёт цифру клеткой атласа (DIGIT_CELL) — промежуток между цифрами = поля клетки. Цифры
-    шире в своих клетках (высота та же), пока поле не станет ≤ gap высоты цифры (MIN: 64 из 80 px — промежуток 16 px,
-    4 см при номере 30 см). -> [описание]."""
+def digit_metrics(font_png, small=False):
+    """Типичная цифра атласа (медиана по 0, 2–9 — без узкой «1»): dict(w, h — по альфе > 40, как габарит в атласе;
+    w_edge — ширина по видимому краю DIGIT_EDGE; n — сколько знаков). Нет цифр — None."""
+    a = np.asarray(Image.open(font_png).convert("RGBA"))[..., 3]
+    g40, gE = digit_glyphs(a > 40, small), digit_glyphs(a >= DIGIT_EDGE, small)
+    ds = [d for d in g40 if d != 1 and d in gE]
+    if not ds:
+        return None
+    w = float(np.median([g40[d][0][2] - g40[d][0][0] for d in ds]))
+    h = float(np.median([g40[d][0][3] - g40[d][0][1] for d in ds]))
+    we = float(np.median([gE[d][0][2] - gE[d][0][0] for d in ds]))
+    return dict(w=w, h=h, w_edge=we, n=len(g40))
+
+
+def old_digit_widen(font_png):
+    """Растяжка цифр в клетках по правилу 22.10 (прежний fit_digits: промежуток ≤ 0,08 высоты и ≤ 3/4 прежнего, не меньше
+    0,04 высоты; ширина — медиана без двух самых узких) — только чтобы ширина цифр в игре осталась прежней
+    (edge_kit.DIGIT_ASPECT = "keep"). -> множитель ≥ 1."""
+    a = np.asarray(Image.open(font_png).convert("RGBA"))[..., 3] > 40
+    g = digit_glyphs(a)
+    if not g:
+        return 1.0
+    ws = sorted(b[2] - b[0] for b, _ in g.values())
+    w = float(np.median(ws[len(ws) // 5:]))
+    h = float(np.median([b[3] - b[1] for b, _ in g.values()]))
+    g0 = DIGIT_CELL - w
+    g1 = max(min(0.08 * h, 0.75 * g0), min(g0, 0.04 * h))
+    return min(max(1.0, (DIGIT_CELL - g1) / w), (DIGIT_CELL - 2) / w)
+
+
+def widen_digits(slot_dir, k, k_small=1.0):
+    """Знаки цифр атласа слота шире в своих клетках: крупные — в k раз, малые (SMALL_ROW) — в k_small; высота и
+    середина габарита те же, знак — не шире клетки − 2 × DIGIT_MARGIN (широкие, «4», — меньше). font_cm, font_nm,
+    font_sm (заново по альфе). -> {«big»|«small»: (наименьший, наибольший множитель знаков)}."""
     p = lambda f: os.path.join(slot_dir, f + ".png")
     cm = np.asarray(Image.open(p("font_cm")).convert("RGBA")).copy()
     nm = np.asarray(Image.open(p("font_nm")).convert("RGBA")).copy()
-    al = cm[..., 3] > 40
-    boxes = []
-    for y0, y1 in DIGIT_ROWS:
-        for i in range(5):
-            x0 = i * DIGIT_CELL
-            sub = al[y0:y1, x0:x0 + DIGIT_CELL]
-            cols, rows = np.nonzero(sub.any(0))[0], np.nonzero(sub.any(1))[0]
-            if len(cols):
-                boxes.append(((x0 + cols[0], y0 + rows[0], x0 + cols[-1] + 1, y0 + rows[-1] + 1), (x0, y0, x0 + DIGIT_CELL, y1)))
-    if not boxes:
-        return []
-    ws = sorted(b[2] - b[0] for b, _ in boxes)
-    w = float(np.median(ws[len(ws) // 5:]))            # без узкой «1»
-    h = float(np.median([b[3] - b[1] for b, _ in boxes]))
-    g0 = DIGIT_CELL - w                                # промежуток сейчас, px
-    g1 = max(min(gap * h, DIGIT_SHRINK * g0), min(g0, DIGIT_GAP_MIN * h))   # не больше gap высоты и 3/4 прежнего
-    sx = min(max(1.0, (DIGIT_CELL - g1) / w), (DIGIT_CELL - 2) / w)
-    if sx <= 1.0:
-        return [f"цифры номера: {w:.0f}×{h:.0f} px, промежуток {DIGIT_CELL - w:.0f} px — уже плотно"]
     fills = ((0, 0, 0, 0), (128, 128, 255, 255))
-    for box, cell in boxes:
-        _scale_box([cm, nm], box, sx, 1.0, (cell[0] + 1, cell[1], cell[2] - 1, cell[3]), fills)
+    res = {}
+    for name, kk, small in (("big", k, False), ("small", k_small, True)):
+        if abs(kk - 1.0) < 1e-3:
+            continue
+        used = []
+        for d, (box, cell) in digit_glyphs(cm[..., 3] > 40, small).items():
+            w = box[2] - box[0]
+            room = (cell[2] - cell[0]) - 2 * DIGIT_MARGIN
+            s = min(kk, room / max(w, 1))
+            _scale_box([cm, nm], box, s, 1.0, (cell[0] + DIGIT_MARGIN, cell[1], cell[2] - DIGIT_MARGIN, cell[3]), fills)
+            used.append(s)
+        if used:
+            res[name] = (min(used), max(used))
     sm = np.zeros((512, 512, 4), np.uint8)
     sm[..., :3] = 21
     sm[..., 3] = np.where(cm[..., 3] > 128, 255, 0)
     Image.fromarray(cm).save(p("font_cm"))
     Image.fromarray(nm).save(p("font_nm"))
     Image.fromarray(sm).save(p("font_sm"))
-    rep = [f"цифры номера: {w:.0f}×{h:.0f} px, промежуток {DIGIT_CELL - w:.0f} → {DIGIT_CELL - w * sx:.0f} px (шире ×{sx:.2f})"]
-    if log is not None:
-        log.extend(rep)
-    return rep
+    return res
 
 
 def normal_map(path, size):

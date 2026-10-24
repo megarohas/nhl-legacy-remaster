@@ -2200,6 +2200,13 @@ def use_club(code):
     CHEST_ZONE_SCALE = float(prof.get("chest_zone_scale", 1.0))   # номер на груди мельче (23.10, BUF)
     global NUMBER_H
     NUMBER_H = float(prof["number_h_cm"]) / 100.0 if "number_h_cm" in prof else None   # номер на спине (23.10)
+    global DIGIT_GAPS, DIGIT_ASPECTS                     # цифры номера: промежуток и ширина (24.10, по фото настоящих форм)
+    _dg, _da = prof.get("digit_gap"), prof.get("digit_aspect")
+    DIGIT_GAPS = dict(_dg) if isinstance(_dg, dict) else ({"*": float(_dg)} if _dg is not None else {})
+    DIGIT_ASPECTS = dict(_da) if isinstance(_da, dict) else ({"*": _da} if _da is not None else {})
+    for _k, _v in DIGIT_ASPECTS.items():
+        if _v != "keep" and not isinstance(_v, (int, float)):
+            sys.exit(f"[{code}] digit_aspect {_k} = {_v!r} — \"keep\" или число")
     global SLEEVE_ZONE_AT, SLEEVE_ZONE_Z
     SLEEVE_ZONE_AT = tuple(map(float, prof["sleeve_zone_at"])) if "sleeve_zone_at" in prof else None
     SLEEVE_ZONE_Z = float(prof.get("sleeve_zone_z_cm", 0.0)) / 100.0
@@ -6407,7 +6414,16 @@ LETTERING = "standard"
 LETTERING_NAME_H = 0.072           # м: высота букв фамилии (новые клубы 22.10 — 7,05–7,2 см, MIN 7,1)
 LETTERING_NAME_W_MAX = 0.040       # м: буква фамилии не шире — у широкого шрифта фамилия ниже (22.10, DET: «шрифт огромный»
 #                                    при 7,5 × 4,4 см; так — 6,8 × 4,0, как одобренный до стандарта)
-LETTERING_NUM_GAP = 0.08           # промежуток между цифрами номера — не больше стольких высот цифры (≈ 2,4 см при 30 см)
+DIGIT_GAP = 0.052                  # промежуток между цифрами номера (видимый край к краю) к высоте цифры — у клубов без своего
+#                                    digit_gap: медиана замеров фото настоящих форм (24.10, 17 клубов: 0–0,086, docs/kitport.md
+#                                    §12.1; пользователь: «расстояние между цифрами можно ближе у всех — сравни с фото», у CHI
+#                                    98 Бедарда в игре было 0,105, на фото 0,042). Было (22.10–24.10): ≤ 0,08 растяжкой знаков
+DIGIT_ASPECT = "keep"              # ширина цифры в игре: "keep" — как была до 24.10 (одобрено пользователем): знак шире по
+#                                    правилу 22.10 (fonts.old_digit_widen) в зоне стандарта (клетка шире атласа ×1,13); число —
+#                                    к пропорции шрифта источника (фото анфас против атласа NHL 27: ×1,03–1,07). Профиль digit_aspect
+DIGIT_FIT_ITER = 3                 # растяжек знаков цифр от исходного атласа, пока видимая ширина не выйдет не уже цели
+DIGIT_GAPS = {}                    # профиль digit_gap: форма → промежуток к высоте цифры (или одно число на обе)
+DIGIT_ASPECTS = {}                 # профиль digit_aspect: форма → "keep" | множитель к пропорции источника
 LETTERING_NUM_H = 0.30             # м: высота номера (MIN 25,7–27,5, DET 29,8, SEA 30,5 — «номера относительно большие»)
 NUMBER_H = None                    # профиль number_h_cm (23.10, пользователь после игры: «номер на спине поменьше» — ANA BUF
 #                                    CGY; «совсем немного / чуть меньше» — EDM NYI SJS): высота номера клуба, см; нет — LETTERING_NUM_H
@@ -6512,6 +6528,142 @@ def standard_lettering(slot_dir):
     return (f"фамилия {name_h * 100:.1f} см (зона {h0 * 100:.1f}, ширина буквы {name_h * aspect * 100:.1f}), верх {top:.3f} м"
             + (f" (кокетка сзади до {yb:.3f} м)" if yb is not None else "")
             + f", номер {num_h * 100:.1f} см (зона {h1 * 100:.1f}), верх {n_top:.3f} м, низ {n_top - h1:.3f} м")
+
+
+_UV_RASTER = {}
+
+
+def zone_size_cm(png, zone):
+    """Ширина и высота зоны карты номеров на свитере слота (полевой, размер 0, lod 2), м: хордами через середину зоны
+    вдоль «вправо» и «вверх» касательной плоскости — как jersey_mesh.stamp (kitport backs). Нет зоны — None."""
+    from PIL import Image
+    a = np.asarray(Image.open(png).convert("RGBA"))
+    m = (a[..., 0] > 128) & (a[..., 1] > 128) & (a[..., 2] == zone)
+    if not m.any():
+        return None
+    ys, xs = np.nonzero(m)
+    x0, y0, x1, y1 = xs.min(), ys.min(), xs.max(), ys.max()
+    S = a.shape[0]
+    M = mesh_for(0, 1, 2)
+    if S not in _UV_RASTER:
+        _UV_RASTER[S] = kit3d.raster_uv(M, S)
+    tid, bar = _UV_RASTER[S]
+    c = np.array([(x0 + x1 + 1) / 2.0, (y0 + y1 + 1) / 2.0])
+    t = tid[int(c[1]), int(c[0])]
+    if t < 0:
+        return None
+    Jm = J.uv_jacobian(M, t, S)
+    n = kit3d._unit(np.cross(Jm[:, 0], Jm[:, 1]))
+    nv = kit3d._unit((bar[int(c[1]), int(c[0])][:, None] * M["nrm"][M["tri"][t]]).sum(0))
+    if (n * nv).sum() < 0:
+        n = -n
+    up = np.array([0.0, 1.0, 0.0]) - n * n[1]
+    up = up / np.linalg.norm(up)
+    right = np.cross(up, n)
+    pinv = np.linalg.pinv(Jm)
+    half = np.array([(x1 + 1 - x0) / 2.0, (y1 + 1 - y0) / 2.0])
+
+    def chord(d3):
+        dpx = pinv @ d3
+        tt = min(half[i] / abs(dpx[i]) for i in range(2) if abs(dpx[i]) > 1e-12)
+        return 2 * tt * np.linalg.norm(Jm @ dpx)
+    return float(chord(right)), float(chord(up))
+
+
+def scale_zones_x(png, zones, k):
+    """Зоны карты номеров уже (k < 1) или шире по ширине вокруг середины, высота и строки те же; у всех зон — одна новая
+    ширина от одной прежней (зоны 2 и 3 — одинаковые). -> {зона: «ширина было → стало»}."""
+    from PIL import Image
+    a = np.asarray(Image.open(png).convert("RGBA")).copy()
+    res = {}
+    for z in zones:
+        m = (a[..., 0] > 128) & (a[..., 1] > 128) & (a[..., 2] == z)
+        if not m.any():
+            continue
+        color = a[m][0].copy()
+        ys, xs = np.nonzero(m)
+        w = int(xs.max() - xs.min() + 1)
+        nw = max(1, int(round(w * k)))
+        cx = (xs.min() + xs.max() + 1) / 2.0
+        x0 = int(round(cx - nw / 2.0))
+        rows = np.unique(ys)
+        a[m] = (255, 255, 255, 255)
+        other = (a[..., 0] > 128) & (a[..., 1] > 128) & (a[..., 2] < 16)
+        box = np.zeros(m.shape, bool)
+        box[rows[:, None], np.arange(max(0, x0), min(a.shape[1], x0 + nw))[None, :]] = True
+        if (box & other).any():
+            sys.exit(f"{png}: зона {z} шириной {nw} наезжает на другую зону")
+        a[box] = color
+        res[z] = f"{w} → {nw}"
+    Image.fromarray(a, "RGBA").save(png)
+    return res
+
+
+def digit_spacing(slot_dir, kit):
+    """Промежуток между цифрами номера — как у настоящих форм (пользователь, 24.10: «расстояние между цифрами можно
+    ближе у всех команд; сравни с фото настоящих — у Бедарда 98 между 9 и 8 в жизни меньше, чем в игре»). Игра рисует
+    клетку цифры шириной в половину зоны номера (fb.fonts, «Цифры номера»): промежуток к ширине цифры задаёт атлас,
+    ширину цифры к высоте — зона. Знаки цифр шире в клетках, пока промежуток к высоте цифры в игре не станет
+    digit_gap формы (профиль; нет — DIGIT_GAP), а зона номера на спине (1) уже в той же мере — ширина цифры в игре
+    прежняя (DIGIT_ASPECT "keep") или пропорция шрифта источника × число (digit_aspect). Малые цифры (номер на рукаве) —
+    тот же промежуток к ширине цифры, ширина цифры в игре прежняя: множитель ширины зон рукава (2, 3) возвращается —
+    их сужает cmd_slot после всех правок зон рукава. Вызывать после standard_lettering. -> (описание, множитель зон рукава)."""
+    from . import fonts
+    font = os.path.join(slot_dir, "font_cm.png")
+    png = os.path.join(slot_dir, "name_cm.png")
+    big = fonts.digit_metrics(font)
+    zs = zone_size_cm(png, 1)
+    if big is None or zs is None:
+        return "нет цифр в атласе или зоны номера — без изменений", 1.0
+    zw, zh = zs
+    row_h = fonts.DIGIT_ROWS[0][1] - fonts.DIGIT_ROWS[0][0]           # 123 px — строка цифр во всю высоту зоны
+    s0 = (zw / (2 * fonts.DIGIT_CELL)) / (zh / row_h)                 # клетка в игре шире атласа в столько раз
+    gap_h = float(DIGIT_GAPS.get(kit, DIGIT_GAPS.get("*", DIGIT_GAP)))
+    asp = DIGIT_ASPECTS.get(kit, DIGIT_ASPECTS.get("*", DIGIT_ASPECT))
+    k_old = fonts.old_digit_widen(font)
+    if asp == "keep":
+        a_game = big["w"] * k_old / big["h"] * s0                   # ширина цифры к высоте в игре — как до 24.10
+    else:
+        a_game = big["w"] / big["h"] * float(asp)
+    g_w = gap_h / a_game                                              # промежуток к ширине цифры
+
+    # знак — целым числом px (промежуток в 5–8 px множителем без округления уходил на ±1 px): габарит (альфа > 40) =
+    # видимая ширина под промежуток + кайма сглаживания, не шире клетки − 2 поля; растяжка сглаживает край (кайма
+    # 1 → 2 px) — видимую ширину мерить по готовому атласу и, если вышла уже цели, — на 1 px шире (до DIGIT_FIT_ITER раз)
+    files = {f: open(os.path.join(slot_dir, f + ".png"), "rb").read() for f in ("font_cm", "font_nm", "font_sm")}
+    small = fonts.digit_metrics(font, small=True)
+    cell_max = fonts.DIGIT_CELL - 2 * fonts.DIGIT_MARGIN
+    want_e = fonts.DIGIT_CELL / (1.0 + g_w)                           # видимая ширина знака под промежуток, px
+    w40 = min(round(want_e + big["w"] - big["w_edge"]), cell_max)
+    k_s = 1.0
+    if small is not None:
+        k_s = min(round(fonts.SMALL_CELL / (1.0 + g_w) + small["w"] - small["w_edge"]),
+                  fonts.SMALL_CELL - 2 * fonts.DIGIT_MARGIN) / small["w"]
+    for it in range(DIGIT_FIT_ITER):
+        if it:
+            for f, b in files.items():
+                open(os.path.join(slot_dir, f + ".png"), "wb").write(b)
+        k = w40 / big["w"]
+        used = fonts.widen_digits(slot_dir, k, k_s)
+        after = fonts.digit_metrics(font)                             # готовый атлас: ширина знака — как вышла
+        if after is None or after["w_edge"] >= round(want_e) or w40 >= cell_max:
+            break
+        w40 += 1
+    w1, we1 = (after["w"], after["w_edge"]) if after else (big["w"] * k, want_e)
+    s1 = a_game * big["h"] / w1                                       # растяжка клетки, при которой ширина цифры — a_game
+    zone = scale_zones_x(png, (1,), s1 / s0)
+    zs1 = zone_size_cm(png, 1)                                        # зона — целым числом столбцов: растяжка как вышла
+    if zs1:
+        s1 = (zs1[0] / (2 * fonts.DIGIT_CELL)) / (zs1[1] / row_h)
+    gap0 = (fonts.DIGIT_CELL - big["w_edge"] * k_old) / big["h"] * s0
+    gap1 = (fonts.DIGIT_CELL - we1) / big["h"] * s1
+    rep = (f"знак {big['w']:.0f} px → {w1:.0f} (×{k:.3f}; было ×{k_old:.3f}), промежуток к высоте цифры "
+           f"{gap0:.3f} → {gap1:.3f} (цель {gap_h:g}), ширина цифры {w1 / big['h'] * s1:.3f} высоты "
+           f"({'как была' if asp == 'keep' else f'шрифт ×{float(asp):g}'}), зона номера ×{s1 / s0:.3f} "
+           f"({zone.get(1, '—')} столбцов); малые ×{k_s:.3f}")
+    if "big" in used and used["big"][0] < k - 1e-3:
+        rep += f"; широкие знаки («4») — ×{used['big'][0]:.3f}: упор в клетку"
+    return rep, 1.0 / k_s
 
 
 def name_zone_rows(png, zone=0):
@@ -7351,11 +7503,12 @@ def cmd_slot(a):
             if not std:                                 # в стандарте высоту зоны задаёт standard_lettering
                 print(f"  фамилия {kit}: зона ×{k_} по высоте (было, стало):",
                       scale_name_zone(os.path.join(d, "name_cm.png"), k_))
-        if std:                                         # цифры номера ближе (22.10: «цифры далеко друг от друга»)
-            from .fonts import fit_digits
-            print(f"  шрифт {kit}:", "; ".join(fit_digits(d, LETTERING_NUM_GAP)))
         if std:                                         # стандарт спины (22.10): размеры и место фамилии и номера
             print(f"  спина {kit}: стандарт —", standard_lettering(d))
+        sleeve_k = 1.0
+        if std:                                         # промежуток цифр — как у настоящих форм (24.10; было 22.10 — fit_digits)
+            rep_, sleeve_k = digit_spacing(d, kit)
+            print(f"  цифры номера {kit}:", rep_)
         if NAME_ZONE_SCALE != 1.0 and not std:          # зона фамилии ниже (профиль name_zone_scale; LAK, DET 22.10)
             print(f"  фамилия {kit}: зона ×{NAME_ZONE_SCALE} по высоте (было, стало):",
                   scale_name_zone(os.path.join(d, "name_cm.png"), NAME_ZONE_SCALE))
@@ -7383,7 +7536,10 @@ def cmd_slot(a):
         if SLEEVE_ZONE_Z:                                # номер на рукаве к груди / к спине (профиль sleeve_zone_z_cm)
             print(f"  номера на рукавах {kit}: зоны {SLEEVE_ZONES} к груди на {SLEEVE_ZONE_Z * 100:+.1f} см:",
                   zones_move_z(os.path.join(d, "name_cm.png"), SLEEVE_ZONES, SLEEVE_ZONE_Z))
-        if CHEST_ZONE_SCALE == 0.0:                      # номера на груди нет (BUF, пользователь 23.10: «убери» — у NHL 27
+        if abs(sleeve_k - 1.0) > 1e-3:                   # номер на рукаве: малые цифры шире в клетках, зоны уже — ширина
+            print(f"  номера на рукавах {kit}: зоны {SLEEVE_ZONES} уже ×{sleeve_k:.3f} (цифры ближе, ширина прежняя):",
+                  scale_zones_x(os.path.join(d, "name_cm.png"), SLEEVE_ZONES, sleeve_k))   # цифры прежняя (24.10)
+        if CHEST_ZONE_SCALE == 0.0:                    # номера на груди нет (BUF, пользователь 23.10: «убери» — у NHL 27
             from PIL import Image                        # его нет): зона 6 карты номеров — снята
             a_ = np.asarray(Image.open(os.path.join(d, "name_cm.png")).convert("RGBA")).copy()
             m_ = (a_[..., 0] > 128) & (a_[..., 1] > 128) & (a_[..., 2] == CHEST_ZONE)
