@@ -10,6 +10,7 @@
     python stadium.py sheet [ARENA…] [--after] [--view overview] [--out PNG]   # лист: арены как у EA / «было | стало»
     python stadium.py nhl27 [--dir DIR] [--json OUT]    # цвет кресел NHL 27 по выгрузке fb.extract (справка)
     python stadium.py check [N…]                        # разбор всех моделей и .cwd, сборка .cwd байт в байт
+    python stadium.py clone SRC --to N[,N…] [--out DIR] [--check]   # своя модель: копия модели SRC под номером N
 
 N — номер модели арены (`exhibitionarena.arenaartid`: 0…29 — арены клубов НХЛ, 145/155 — АХЛ, 255 — «EA SPORTS
 Arena», полный список — `map`). FILE — свой файл (.rx2 / .cwd). У всех команд — `--game {nhl13,legacy}`
@@ -50,6 +51,13 @@ Arena», полный список — `map`). FILE — свой файл (.rx2 
 
 Рецепты (`tools/arena_seats.toml`): цвета кресел каждой арены на сезон 2026/27 — правила, источник, статус
 (`proposed` — предложение, `approved` — одобрено пользователем; `recipe --approved` берёт только одобренные).
+
+Своя модель (24.10.2026): у клубов на общей модели (255 — UTA, SEA, VGK, «EA SPORTS Arena») цвет кресел общий. Отдельный
+цвет — копия модели под свободным номером: `clone 255 --to 222` пишет stadium_222, crowd_222, jumbotron/texlib_222,
+enviro/helmet_222, particle/stadium_222.rvi и fx_222_*.lnb (номер в именах растров и эффектов переписан, остальное — байт
+в байт), `--check` — только проверка номера (особые номера игры, файлы игры, записи AttribDB). Рецепт [arena.222] с
+`clone_of = 255` и `arenas = [22]` (exhibitionarena.index) — цвет кресел копии и строки базы; все команды по номеру
+копии берут файлы исходной. В сборку: tools/legacy_data/arenas.py (этап legacy-data arenas: файлы в out, arenaartid).
 
 Зависимости: numpy, Pillow (venv game/work/nhl24/venv), библиотеки проекта rw4mesh, teamart, playerhead, tdb.
 """
@@ -143,7 +151,7 @@ def resolve(arg, rel_tmpl):
         return open(arg, 'rb').read(), arg             # при выводе в файл он «файл», open(2) читал и закрывал stderr (24.10)
     if not re.fullmatch(r'\d+', str(arg)):
         raise SystemExit(f'{arg}: ни номер арены, ни файл')
-    rel = rel_tmpl.format(n=int(arg))
+    rel = rel_tmpl.format(n=clone_source(int(arg)))     # своя модель (clone_of в рецепте) — файлы её исходной
     return game_file(rel), rel
 
 
@@ -852,8 +860,218 @@ def load_recipes(path=None):
                 parse_rule(rule)
             except ValueError as e:
                 raise SystemExit(f'{path}: [arena.{key}] {e}')
+        if 'clone_of' in r and (not isinstance(r['clone_of'], int) or not isinstance(r.get('arenas', []), list)
+                                or not all(isinstance(x, int) for x in r.get('arenas', []))):
+            raise SystemExit(f'{path}: [arena.{key}] clone_of — номер модели игры, arenas — список exhibitionarena.index')
         out[int(key)] = r
     return out
+
+
+# ================================================================ своя модель арены: копия под новым номером (24.10.2026)
+#
+# Как игра берёт модель арены (разбор образа default.bin и кода порта 24.10.2026, docs/arenas.md §9):
+# exhibitionarena.arenaartid (10 бит, 0…1023) → структура арены матча +96 (int16) → sub_836110E8 (в режимах 15…17 —
+# всегда 254). Списка допустимых номеров нет: пути собираются sprintf-ом из номера — stadium_%d_Container_0.rx2
+# (sub_8369CF80), crowddata/crowd_%u.cwd (sub_836A0958), jumbotron/texlib_%d.rx2 (sub_8369B3B8), particle/stadium_%i.rvi
+# (sub_8369BE98), enviro/helmet_%i.rx2 (sub_83611460), crowd/walker_%i_cm.rx2 (его нет и у 255 — игра обходится).
+# Номер внутри файлов: растры экранов куба игра ищет по имени jumbotron_screen_<0|1>_%d_<0|1>_cm.Raster (sub_836B2940),
+# .rvi называет эффекты FX_<N>_… (по имени — файл fx_<N>_….lnb, в нём то же имя), у helmet_<N> растр helmet_<N>.Raster.
+# Поэтому копия переписывает номер в этих именах — той же длины (номер с тем же числом цифр), остальное — байт в байт.
+ARENA_SPECIAL = {254: 'тренировка: в режимах 15…17 игра берёт 254 всегда (sub_836110E8)',
+                 **{n: 'Швейцария: свои проверки номера (sub_836112E8)' for n in (321, 325, 326, 329, 331)},
+                 514: 'своя проверка номера (sub_836111F0)',
+                 **{n: 'Winter Classic: свои проверки номера (sub_83611130 и др.)' for n in range(700, 704)}}
+# Записи AttribDB (boot attribdb/renddb.vlt) по ключам stadium_<N> и crowd_<N> — хеш Jenkins lookup8 (Attrib-ключ EA,
+# sub_824A7D58; сверено: «default» → D7EDBD362D7D2152, его игра берёт, когда записи нет). Записи есть: stadium_ — у 28,
+# 254, 700…703; crowd_ — у 0…29, 321/325/326/329/331, 514, 700…703. У 255 нет ни одной: копия 255 под номером без
+# записей ведёт себя как 255.
+ATTRIB_REL = 'attribdb/renddb.vlt'
+ATTRIB_KEYS = ('stadium_{n}', 'crowd_{n}')
+JUMBO_REL = 'rendering/jumbotron/texlib_{n}.rx2'
+ENVIRO_REL = 'rendering/enviro/helmet_{n}.rx2'
+RVI_REL = 'rendering/particle/stadium_{n}.rvi'
+LNB_REL = 'rendering/particle/{name}.lnb'
+MODEL_RELS = (STADIUM_REL, CROWD_REL, JUMBO_REL, ENVIRO_REL, RVI_REL)   # + .lnb эффектов, которые называет .rvi
+DB_MAX_ART = 1023                                                       # exhibitionarena.arenaartid — 10 бит
+
+_CLONES = None
+
+
+def clones():
+    """{номер своей модели: номер исходной} — рецепты arena_seats.toml с clone_of (любой status)."""
+    global _CLONES
+    if _CLONES is None:
+        try:
+            _CLONES = {k: int(r['clone_of']) for k, r in load_recipes().items() if 'clone_of' in r}
+        except (OSError, SystemExit):
+            _CLONES = {}
+    return _CLONES
+
+
+def clone_source(n):
+    """Номер модели игры, копия которой — модель n (рецепт с clone_of), иначе сам n."""
+    return clones().get(n, n)
+
+
+def _lookup8(k, level=0xABCDEF0011223344):
+    """Хеш Боба Дженкинса lookup8 (64 бит) — ключ Attrib EA (sub_824A86B0 → sub_824A7D58)."""
+    M = (1 << 64) - 1
+
+    def mix(a, b, c):
+        for sa, sb, sc in ((43, 9, 8), (38, 23, 5), (35, 49, 11), (12, 18, 22)):
+            a = (a - b - c) & M
+            a ^= c >> sa
+            b = (b - c - a) & M
+            b ^= (a << sb) & M
+            c = (c - a - b) & M
+            c ^= b >> sc
+        return a, b, c
+    a = b = level
+    c = 0x9E3779B97F4A7C13
+    i = 0
+    while len(k) - i >= 24:
+        a = (a + int.from_bytes(k[i:i + 8], 'little')) & M
+        b = (b + int.from_bytes(k[i + 8:i + 16], 'little')) & M
+        c = (c + int.from_bytes(k[i + 16:i + 24], 'little')) & M
+        a, b, c = mix(a, b, c)
+        i += 24
+    r = k[i:]
+    c = (c + len(k)) & M
+    c = (c + (int.from_bytes(r[16:], 'little') << 8)) & M        # байты 16…22 хвоста — в c со сдвигом на байт
+    b = (b + int.from_bytes(r[8:16], 'little')) & M
+    a = (a + int.from_bytes(r[:8], 'little')) & M
+    return mix(a, b, c)[2]
+
+
+def attrib_keys(n):
+    """Ключи AttribDB модели n, у которых в renddb.vlt есть запись (['stadium_28', …]); [] — всё по умолчанию."""
+    p = PROFILE.extracted(ATTRIB_REL)
+    if not p:
+        return []
+    vlt = open(p, 'rb').read()
+    out = []
+    for t in ATTRIB_KEYS:
+        h = _lookup8(t.format(n=n).encode())
+        if h.to_bytes(8, 'big') in vlt or h.to_bytes(8, 'little') in vlt:
+            out.append(t.format(n=n))
+    return out
+
+
+def rvi_effects(data):
+    """Имена эффектов частиц в .rvi (XML: <particleEffect name="FX_255_glare_light_medium" …>)."""
+    return [x.decode() for x in re.findall(rb'<particleEffect\s+name="([A-Za-z0-9_]+)"', data)]
+
+
+def model_files(n, to=None):
+    """Файлы модели арены n в раскладке cache: — [(путь у n, путь у копии to)]: 5 по номеру и .lnb эффектов FX_<n>_…
+    из её .rvi (эффекты с другими именами копия берёт у игры как есть)."""
+    to = n if to is None else to
+    pairs = [(t.format(n=n), t.format(n=to)) for t in MODEL_RELS]
+    p = PROFILE.extracted(RVI_REL.format(n=n))
+    if p:
+        for name in rvi_effects(open(p, 'rb').read()):
+            nm = name.lower()
+            if nm.startswith(f'fx_{n}_'):
+                pairs.append((LNB_REL.format(name=nm), LNB_REL.format(name=f'fx_{to}_' + nm[len(f'fx_{n}_'):])))
+    return pairs
+
+
+def _name_spans_rw4(data):
+    """Строки таблиц имён (0x00EC0010) контейнера RW4: [(начало, конец)]."""
+    import rw4mesh as rm
+    f = rm.Rw4File(data)
+    spans = []
+    for s in f.find(T_NAMES):
+        o = f.abs_off(s)
+        k = struct.unpack_from('>H', f.raw, o + 2)[0]         # +2 — число имён (у арен +0 — флаг 1, у текстур — 0)
+        for j in range(k):
+            ptr = struct.unpack_from('>I', f.raw, o + 8 + 12 * j)[0]
+            spans.append((ptr, f.raw.index(b'\0', ptr)))
+    return spans
+
+
+def renumber(data, src, dst, rel):
+    """Номер src → dst в именах внутри файла модели арены (растры, эффекты): → (байты, число замен).
+    Только в именах: у .rx2 — строки таблицы имён, у .rvi/.lnb — FX_<N>_; длина номера та же (иначе SystemExit)."""
+    if rel.endswith('.rx2'):
+        spans, pat = _name_spans_rw4(data), re.compile(rb'(?<=_)%d(?=[_.])' % src)
+    else:
+        spans, pat = [(0, len(data))], re.compile(rb'(?<=FX_)%d(?=_)' % src)
+    out = bytearray(data)
+    k = 0
+    for a, b in spans:
+        for m in pat.finditer(data, a, b):
+            if len(str(dst)) != len(str(src)):
+                raise SystemExit(f'{rel}: номер {src} есть в именах внутри файла — у копии нужен номер из '
+                                 f'{len(str(src))} цифр (имена переписываются той же длины), а не {dst}')
+            out[m.start():m.end()] = b'%d' % dst
+            k += 1
+    return bytes(out), k
+
+
+def check_clone_number(src, dst):
+    """Ошибки номера своей модели (пустой список — номер годится)."""
+    bad = []
+    if not 0 <= dst <= DB_MAX_ART:
+        bad.append(f'{dst}: arenaartid — 10 бит, 0…{DB_MAX_ART}')
+    if dst == src:
+        bad.append(f'{dst}: совпадает с исходной моделью')
+    if dst in ARENA_SPECIAL:
+        bad.append(f'{dst}: особый номер — {ARENA_SPECIAL[dst]}')
+    if dst < 30:
+        bad.append(f'{dst}: 0…29 — арены клубов НХЛ (свои icesurface_<N>_bm, кольца, записи crowd_<N>)')
+    taken = [r for r in MODEL_RELS if PROFILE.extracted(r.format(n=dst))]
+    if taken:
+        bad.append(f'{dst}: у игры уже есть {", ".join(r.format(n=dst) for r in taken)}')
+    keys = attrib_keys(dst)
+    if keys:
+        bad.append(f'{dst}: в AttribDB есть записи {keys} — копия возьмёт чужие настройки')
+    return bad
+
+
+def clone_files(src, dst):
+    """Своя модель dst — копия модели игры src: [(путь cache:, байты, число замен номера в именах)]."""
+    if clone_source(src) != src:
+        raise SystemExit(f'{src}: это своя модель (clone_of {clone_source(src)}) — копировать модель игры')
+    bad = check_clone_number(src, dst)
+    if bad:
+        raise SystemExit('номер не годится:\n  ' + '\n  '.join(bad))
+    keys = attrib_keys(src)
+    if keys:
+        raise SystemExit(f'{src}: у модели есть записи AttribDB {keys} — у копии их не будет (не проверялось)')
+    out = []
+    for rel, rel_dst in model_files(src, dst):
+        if not PROFILE.extracted(rel):
+            continue                           # jumbotron/texlib_<N> есть не у всех моделей
+        data = game_file(rel)
+        new, k = renumber(data, src, dst, rel)
+        if len(new) != len(data):
+            raise SystemExit(f'{rel}: размер изменился')
+        if rel.endswith('.lnb') and k < 1:
+            raise SystemExit(f'{rel}: имени FX_{src}_… внутри нет — разбор .lnb не тот')
+        out.append((rel_dst, new, k))
+    have = {r for r, _, _ in out}
+    for rel, data, k in out:
+        if rel.endswith('.rvi'):                # эффект копии FX_<dst>_… — свой .lnb, остальные — у игры
+            for nm in (x.lower() for x in rvi_effects(data)):
+                q = LNB_REL.format(name=nm)
+                if q not in have and not PROFILE.extracted(q):
+                    raise SystemExit(f'{rel}: эффект {nm} — нет ни копии, ни файла игры {q}')
+    return out
+
+
+def write_clone(src, dst, outdir):
+    """Файлы своей модели в outdir (раскладка cache:) → [(путь, записан ли заново)]; crowd — как у src (цвет — рецептом)."""
+    res = []
+    for rel, data, k in clone_files(src, dst):
+        p = os.path.join(outdir, *rel.split('/'))
+        same = os.path.isfile(p) and open(p, 'rb').read() == data
+        if not same:
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            open(p + '.part', 'wb').write(data)
+            os.replace(p + '.part', p)
+        res.append((rel, not same, k))
+    return res
 
 
 # ================================================================ команды
@@ -991,7 +1209,7 @@ def write_out(n, crowd, outdir):
     p = os.path.join(outdir, *CROWD_REL.format(n=n).split('/'))
     os.makedirs(os.path.dirname(p), exist_ok=True)
     data = crowd.bytes()
-    orig = game_file(CROWD_REL.format(n=n))
+    orig = game_file(CROWD_REL.format(n=clone_source(n)))      # у своей модели — crowd её исходной модели
     if len(data) != len(orig):
         raise SystemExit('размер .cwd изменился — так быть не должно')
     diff = np.frombuffer(data, np.uint8) != np.frombuffer(orig, np.uint8)
@@ -1055,9 +1273,33 @@ def cmd_recipe(a):
     print(f'готово арен: {done}')
 
 
+def cmd_clone(a):
+    src = int(a.source)
+    try:
+        targets = [int(x) for x in re.split(r'[,\s]+', a.to.strip()) if x]
+    except ValueError:
+        raise SystemExit(f'--to {a.to!r}: номера через запятую, например 222,230,231')
+    outdir = a.out or work('out')
+    bad = 0
+    for dst in targets:
+        if a.check:
+            b = check_clone_number(src, dst)
+            print(f'{dst}: ' + ('годится' if not b else '; '.join(b)))
+            bad += bool(b)
+            continue
+        print(f'[{dst}] копия модели {src} → {outdir}')
+        for rel, new, k in write_clone(src, dst, outdir):
+            print(f'  {rel}  (номер в именах: {k}){"" if new else " — уже такой"}')
+    if not a.check:
+        print('кресла копии — как у исходной; цвет — рецептом [arena.N] с clone_of (recipe N), база — '
+              'tools/legacy_data/arenas.py (docs/arenas.md §9)')
+    return 1 if bad else 0
+
+
 def pack(man, cache):
     """Кресла одобренных рецептов (status = approved) в пакет (fb.edge_kit pack): crowd_<N>.cwd — копия EA с новым цветом
-    кресел, запись type crowd в манифесте. -> число арен."""
+    кресел, запись type crowd в манифесте; у своей модели (clone_of) — копия crowd исходной. -> число арен.
+    Сами файлы своих моделей и arenaartid в базе ставит этап legacy-data arenas (tools/legacy_data/arenas.py)."""
     import hashlib
     rec = load_recipes()
     n = 0
@@ -1169,7 +1411,7 @@ def cmd_check(a):
             print(f'stadium_{n}: ОШИБКА {e}')
     for n in cnums:
         try:
-            data = game_file(CROWD_REL.format(n=n))
+            data = game_file(CROWD_REL.format(n=clone_source(n)))   # своя модель — crowd исходной
             cr = Crowd(data, f'crowd_{n}.cwd')
             same = cr.bytes() == data
             print(f'crowd_{n}: кресел {cr.n}, цветов {len(cr.color_groups())}, сборка байт в байт: {"да" if same else "НЕТ"}')
@@ -1240,6 +1482,12 @@ def main():
     p.add_argument('--dir')
     p.add_argument('--json')
     p.set_defaults(fn=cmd_nhl27)
+    p = sub.add_parser('clone', help='своя модель арены: копия модели игры под новым номером')
+    p.add_argument('source', help='номер модели игры (например 255)')
+    p.add_argument('--to', required=True, help='номера копий через запятую (например 222,230,231)')
+    p.add_argument('--out', help='куда (раскладка cache:), по умолчанию game/work/legacy-data/arenas/out')
+    p.add_argument('--check', action='store_true', help='только проверить номера')
+    p.set_defaults(fn=cmd_clone)
     p = sub.add_parser('check', help='разбор всех файлов, сборка .cwd байт в байт')
     p.add_argument('targets', nargs='*')
     p.set_defaults(fn=cmd_check)
