@@ -1171,6 +1171,20 @@ def sleeve_stripes_fit(png, mesh):
     return rep
 
 
+SLEEVE_ALONG = None                # профиль sleeve_along (26.10): окна [u0, v0, u1, v1] (развёртка как у левого рукава) или
+#                                    { форма = окно | [окна] } — края лент и панелей ВДОЛЬ руки (панель с кантом WSH, клин
+#                                    WPG выезда) — ломаными по столбцам u (sleeve_along_lines); нет — как было
+SLEEVE_ALONG_KITS = None
+SLEEVE_ALONG_LINES = None          # ломаные краёв вдоль руки текущей формы (рельеф: швы по ним), как SLEEVE_LINES
+SLV_ALONG_RAMP = 12                # столбцов у концов ломаной (манжета, шов проймы) — переход к своему краю, без ступеньки
+SLV_ALONG_FRAC = 0.01              # доля цвета в окне — от неё цвет палитры (тонкий кант WSH — ~2 % окна)
+SLV_ALONG_PEN = 30.0               # штраф за узел ломаной вдоль руки (× столбцов): у NHL 27 края лент и панелей — прямые с редким
+#                                    изломом (COL у локтя); при 12, как у "lines", узлы вставали на волну переноса у манжеты
+SLV_ALONG_OWN = 6.0                # тексели: у концов — к своему краю, только если он ближе к ломаной (иначе свой край — смесь у
+#                                    начала панели: тёмная черта поперёк панели WSH у манжеты)
+SLV_ALONG_FOREIGN = 4              # текселей чужого цвета палитры в столбце — столбец поперечной полосы, как есть (серебряный
+#                                    край полос WPG — по цвету и смесь синего с белым: столбец края полосы перекрашивался)
+SLV_ALONG_EDGE = 3                 # столбцов у манжеты (край острова рукава, тексели наполовину вне сетки) — как есть
 SLEEVE_LINES = None                # sleeve_stripes = "lines" — ломаные краёв полос текущей формы (sleeve_stripes_lines: {0 —
 #                                    левый рукав, 1 — правый: [(f, r0, r1), …], "S": размер развёртки}): по ним в rebuild_relief
 #                                    гасятся швы источника у краёв, свои швы — по ним
@@ -1230,10 +1244,11 @@ def _pl_segments(x, y, kmax, pen):
     return sorted(ends)
 
 
-def _pl_fit(x, y):
+def _pl_fit(x, y, pen_k=None):
     """Непрерывная ломаная y(x) с отсевом: узлы — ДП (_pl_segments) по лучшим SLV_LINES_TRIM точкам, потом МНК по базе
-    (x − узел)+; выбросы — дальше SLV_LINES_TOL и 3 MAD. -> (f, inliers, узлы)."""
-    pen = SLV_LINES_PEN * len(x)
+    (x − узел)+; выбросы — дальше SLV_LINES_TOL и 3 MAD. pen_k — штраф за узел (× строк; по умолчанию SLV_LINES_PEN).
+    -> (f, inliers, узлы)."""
+    pen = (SLV_LINES_PEN if pen_k is None else pen_k) * len(x)
     keep = np.ones(len(x), bool)
     knots, c = [], None
     for it in range(6):
@@ -1258,14 +1273,17 @@ def _pl_fit(x, y):
     return f, keep, list(knots)
 
 
-def _slv_lines_side(a, reg):
+def _slv_lines_side(a, reg, strict=False, ramp=0, frac=None, pen=None):
     """Один рукав (развёртка — как у левого): края полос — ломаные по строкам (sleeve_stripes = "lines"). Рисунок — как у
     _slv_fit_side (отрезки основных цветов в строке, самый частый порядок), но каждый край — своя ломаная с отсевом
     (_pl_fit): «клин» — острые изломы, не дуга многочлена. Перекраска — у ломаных (SLV_FIT_NEAR) и только «своих» цветов,
-    потом — островки одного цвета до SLV_LINES_SPECK, не по рисунку ломаных. -> (новый цвет, отчёт, ломаные)."""
+    потом — островки одного цвета до SLV_LINES_SPECK, не по рисунку ломаных. strict (ленты вдоль руки, sleeve_along) —
+    перекрашиваются только строки, где все тексели свои и только цветов рисунка (поперечные полосы, нашивки — как есть);
+    ramp — у концов ломаной переход к своему краю строки; frac — порог палитры (_slv_palette).
+    -> (новый цвет, отчёт, ломаные)."""
     from scipy import ndimage as ndi
     S = a.shape[0]
-    pal = _slv_palette(a, reg)
+    pal = _slv_palette(a, reg) if frac is None else _slv_palette(a, reg, frac)
     if len(pal) < 2:
         return a, "один цвет — без изменений", []
     dist = np.stack([np.abs(a - p).max(-1) for p in pal], -1)
@@ -1301,13 +1319,28 @@ def _slv_lines_side(a, reg):
             continue
         v = np.array(sorted(obs[k]), float)
         b = np.array([obs[k][int(r)] for r in v], float)
-        f, keep, knots = _pl_fit(v, b)
+        f, keep, knots = _pl_fit(v, b, pen)
         if keep.mean() < 0.6:
             rep.append(f"край {k}: не ломаная ({int(keep.sum())} из {len(v)} строк)")
             continue
-        fits[k] = (f, v.min() - 3, v.max() + 3)
-        rep.append(f"край {k}: {len(knots) + 1} отр. (узлы v {[round(float(t) / S, 3) for t in knots]}), выбросов "
+        mg = 0 if strict else 3                          # ленты вдоль руки — не дальше своих столбцов (начало у манжеты)
+        fits[k] = (f, v.min() - mg, v.max() + mg)
+        rep.append(f"край {k}: {len(knots) + 1} отр. (узлы {[round(float(t) / S, 3) for t in knots]}), выбросов "
                    f"{int((~keep).sum())} из {len(v)}, до {np.abs(b - f(v)).max():.0f} px")
+    if strict:                                           # свои — только цвета рисунка и их смеси (серая смесь синего с белым
+        pp = [pal[i] for i in sorted(set(pat))]          # ближе к серебру полос WPG — это всё равно смесь рисунка)
+        dpat = np.min([np.abs(a - p).max(-1) for p in pp], 0)
+        for i in range(len(pp)):
+            for j in range(i + 1, len(pp)):
+                e = pp[j] - pp[i]
+                t = np.clip(((a - pp[i]) * e).sum(-1) / max((e * e).sum(), 1e-6), 0, 1)
+                dpat = np.minimum(dpat, np.abs(a - (pp[i] + t[..., None] * e)).max(-1))
+        pat_ok = reg & (dpat < SLV_FIT_MIX)
+        other = [pal[i] for i in range(len(pal)) if i not in set(pat)]   # чужой цвет палитры (серебро полос WPG — тоже
+        far = (np.min([np.abs(a - p).max(-1) for p in other], 0) < SLV_FIT_MIX / 2) if other else np.zeros(reg.shape, bool)
+        far &= reg                                       # смесь синего с белым: в столбце полосы его много, на краю ленты — 1–2)
+        fr = np.array([far[r].sum() >= SLV_ALONG_FOREIGN for r in range(far.shape[0])])
+        fr = fr | np.roll(fr, 1) | np.roll(fr, -1)       # и соседние столбцы (сглаженный край полосы)
     out, n = a.copy(), 0
     want = np.full(a.shape[:2], -1)                      # метка цвета по ломаным (строки, где края без пропусков)
     dedge = np.full(a.shape[:2], np.inf)                 # тексели до ближайшего края по строке
@@ -1319,6 +1352,17 @@ def _slv_lines_side(a, reg):
         if ks != list(range(ks[0], ks[-1] + 1)) or any(bs[i][1] >= bs[i + 1][1] for i in range(len(bs) - 1)):
             continue                                     # пропуск края или края перепутались — строку не трогать
         cols = np.nonzero(reg[r])[0]
+        if strict and (not pat_ok[r, cols].all() or fr[r]):
+            continue                                     # поперечная полоса, нашивка — как есть (ленты вдоль руки)
+        if ramp:                                         # у концов ломаной — к своему краю строки
+            bs2 = []
+            for k, bv in bs:
+                own = obs.get(k, {}).get(r)
+                if own is not None and abs(own - bv) < SLV_ALONG_OWN:   # свой край — только правдоподобный
+                    w = float(np.clip(min(r - fits[k][1], fits[k][2] - r) / ramp, 0, 1))
+                    bv = w * bv + (1 - w) * own
+                bs2.append((k, bv))
+            bs = bs2
         x = cols + 0.5
         seg = np.full(len(cols), ks[0])
         for k, bv in bs:
@@ -1327,13 +1371,13 @@ def _slv_lines_side(a, reg):
         dedge[r, cols] = np.min([np.abs(x - bv) for _, bv in bs], 0)
         sel = ok[r, cols] & (dedge[r, cols] < SLV_FIT_NEAR)
         for i in np.nonzero(sel)[0]:
-            sg, frac = ks[0], None
+            sg, frac_ = ks[0], None
             for k, bv in bs:
                 if x[i] - 0.5 >= bv:
                     sg = k + 1
                 elif x[i] + 0.5 > bv:
-                    frac = (k, bv - (x[i] - 0.5))        # доля текселя до края — смесь цветов
-            col = pal[pat[sg]] if frac is None else frac[1] * pal[pat[frac[0]]] + (1 - frac[1]) * pal[pat[frac[0] + 1]]
+                    frac_ = (k, bv - (x[i] - 0.5))       # доля текселя до края — смесь цветов
+            col = pal[pat[sg]] if frac_ is None else frac_[1] * pal[pat[frac_[0]]] + (1 - frac_[1]) * pal[pat[frac_[0] + 1]]
             if np.abs(col - a[r, cols[i]]).max() > 3:
                 out[r, cols[i]] = col
                 n += 1
@@ -1408,6 +1452,73 @@ def sleeve_lines_dist(u, v, x, lines):
             b = f(rr[k])
             db = f(rr[k] + 0.5) - f(rr[k] - 0.5)
             d[k] = np.minimum(d[k], np.abs(uu[k] - b) / np.sqrt(1.0 + db * db))
+    return d
+
+
+def sleeve_along_lines(png, mesh, boxes):
+    """Профиль sleeve_along (26.10; пользователь: «если ты обнаружил, что там какие-то косяки есть относительно
+    оригинальных форм, да, конечно, исправляй это»): края лент, панелей и кантов ВДОЛЬ руки — ломаными по столбцам u. У
+    NHL 27 их края прямые (WSH — панель с синим кантом, WPG выезд — тёмно-синий клин от манжеты к плечу), а перенос (карта
+    рукава по углу вокруг руки, поле полосы yoke_sleeve = "band") давал им волну и пятна. COL (лента с кантом) — без окна:
+    края ленты и так по замеру (yoke_sleeve = "band"), ломаные по развёртке у манжеты (там она плотнее) давали клин канта
+    (проба 26.10; «рожки» у манжеты — band_cuff_clamp). В окне
+    boxes (развёртка как у левого рукава, правый — зеркально; до шва проймы) — рукав повёрнут: столбец u становится
+    строкой, дальше — как sleeve_stripes = "lines" (_slv_lines_side, strict: столбцы с поперечными полосами и нашивками —
+    как есть; у концов — переход к своему краю, SLV_ALONG_RAMP). Ломаные — в SLEEVE_ALONG_LINES (рельеф: швы по ним).
+    -> отчёт по рукавам."""
+    from PIL import Image
+    global SLEEVE_ALONG_LINES
+    a = np.asarray(Image.open(png).convert("RGB")).astype(np.float64)
+    S = a.shape[0]
+    tid, bar = kit3d.raster_uv(mesh, S)
+    occ = tid >= 0
+    ys, xs = np.nonzero(occ)
+    X = np.zeros((S, S))
+    X[ys, xs] = (bar[ys, xs] * mesh["pos"][mesh["tri"][tid[ys, xs]]][:, :, 0]).sum(1)
+    vv = (np.arange(S) + 0.5) / S
+    inner = vv[None, :] < armhole_u(vv)[:, None] + 0.5 / S
+    out, rep, lines = a.copy(), [], {"S": S}
+    for side in (0, 1):
+        A = out if side == 0 else out[:, ::-1]
+        side_m = (occ & (X < 0)) if side == 0 else (occ & (X > 0))[:, ::-1]
+        lines[side] = []
+        for bi, (u0, v0, u1, v1) in enumerate(boxes):
+            win = ((vv[:, None] >= max(v0, SLV_V[0])) & (vv[:, None] <= min(v1, SLV_V[1])) & (vv[None, :] >= u0)
+                   & (vv[None, :] <= u1))
+            reg = win & inner & side_m
+            cs_ = np.nonzero(reg.any(0))[0]
+            if len(cs_):                                 # край острова у манжеты — как есть
+                reg[:, :cs_.min() + SLV_ALONG_EDGE] = False
+            res, r_, fl = _slv_lines_side(A.transpose(1, 0, 2), reg.T, strict=True, ramp=SLV_ALONG_RAMP,
+                                          frac=SLV_ALONG_FRAC, pen=SLV_ALONG_PEN)
+            res = res.transpose(1, 0, 2)
+            A[reg] = res[reg]
+            lines[side] += fl
+            rep.append(("левый" if side == 0 else "правый") + f" окно {bi + 1}: " + r_)
+    Image.fromarray(np.clip(np.round(out), 0, 255).astype(np.uint8)).save(png)
+    SLEEVE_ALONG_LINES = lines
+    return rep
+
+
+def sleeve_along_dist(u, v, x, lines):
+    """Расстояние (тексели развёртки lines["S"]) от точек (u, v; x — сторона тела) до ломаных краёв вдоль руки
+    (SLEEVE_ALONG_LINES: v края по столбцу u, как у левого рукава; у правого — зеркально), по нормали. Вне — inf."""
+    u, v, x = (np.asarray(q, float) for q in (u, v, x))
+    d = np.full(u.shape, np.inf)
+    S = lines["S"]
+    rr = v * S
+    for side, fits in lines.items():
+        if side == "S":
+            continue
+        cc = (u * S if side == 0 else S - u * S) - 0.5    # столбец (центр текселя c — u = (c + 0,5) / S)
+        sel = ((x < 0) if side == 0 else (x > 0)) & (v >= SLV_V[0]) & (v <= SLV_V[1])
+        for f, c0, c1 in fits:
+            k = sel & (cc >= c0) & (cc <= c1)
+            if not k.any():
+                continue
+            b = f(cc[k])
+            db = f(cc[k] + 0.5) - f(cc[k] - 0.5)
+            d[k] = np.minimum(d[k], np.abs(rr[k] - b) / np.sqrt(1.0 + db * db))
     return d
 
 
@@ -2309,6 +2420,13 @@ def use_club(code):
     for _v in [SLEEVE_STRIPES] + list((SLEEVE_STRIPES_KITS or {}).values()):
         if _v not in (None, "fit", "lines"):
             sys.exit(f"[{code}] sleeve_stripes = {_v!r} — только \"fit\" или \"lines\" (или {{ форма = \"fit\" }})")
+    global SLEEVE_ALONG, SLEEVE_ALONG_KITS
+    _sa = prof.get("sleeve_along")                       # ленты и панели вдоль руки — ломаными (26.10: WSH, WPG выезд)
+    SLEEVE_ALONG_KITS = dict(_sa) if isinstance(_sa, dict) else None
+    SLEEVE_ALONG = None if (_sa is None or SLEEVE_ALONG_KITS is not None) else piping_boxes(_sa)
+    for _b in (SLEEVE_ALONG or []) + [b for v in (SLEEVE_ALONG_KITS or {}).values() for b in piping_boxes(v)]:
+        if len(_b) != 4:
+            sys.exit(f"[{code}] sleeve_along = {_sa!r} — [u0, v0, u1, v1], список окон или {{ форма = [u0, v0, u1, v1] }}")
     global PIPING_FIT, PIPING_FIT_KITS, ARMHOLE_AA, YOKE_MIX_KEEP, BRAND_Y, PIPING_MIX
     _pf = prof.get("piping_fit")                         # кант вдоль руки у шва проймы — гладко (23.10, review-d: CBJ, WSH)
     PIPING_FIT_KITS = dict(_pf) if isinstance(_pf, dict) else None
@@ -2605,6 +2723,9 @@ def use_kit(kit):
         SLEEVE_MIRROR = SLEEVE_MIRROR_KITS.get(kit)
     if ARMHOLE_SPLIT_KITS is not None:                  # armhole_split по формам (CAR): вне таблицы — zones
         ARMHOLE_SPLIT_ZONES = ARMHOLE_SPLIT_FULL if ARMHOLE_SPLIT_KITS.get(kit, "zones") == "full" else ARMHOLE_ZONES
+    global SLEEVE_ALONG
+    if SLEEVE_ALONG_KITS is not None:                    # sleeve_along по формам: вне таблицы — нет
+        SLEEVE_ALONG = piping_boxes(SLEEVE_ALONG_KITS[kit]) if kit in SLEEVE_ALONG_KITS else None
     global PIPING_FIT
     if PIPING_FIT_KITS is not None:                      # piping_fit по формам: вне таблицы — нет
         PIPING_FIT = piping_boxes(PIPING_FIT_KITS[kit]) if kit in PIPING_FIT_KITS else None
@@ -4680,6 +4801,9 @@ def design_seams(mesh, painters, S=2048, out_S=1024):
     sl = painters.get("sleeve_lines")                   # ломаные краёв полос рукава (sleeve_stripes = "lines", ANA)
     if sl:
         d_s = np.minimum(d_s, np.where(m, sleeve_lines_dist(U0[..., 0], U0[..., 1], x, sl) / sl["S"] * G["MPU"], inf))
+    sa = painters.get("sleeve_along")                   # ломаные краёв лент вдоль руки (sleeve_along: WSH, WPG)
+    if sa:
+        d_s = np.minimum(d_s, np.where(m, sleeve_along_dist(U0[..., 0], U0[..., 1], x, sa) / sa["S"] * G["MPU"], inf))
     d_a = np.where(m & ~B, armhole_dist(G), inf)          # шов проймы Edge (низ, где делится цвет)
     d = np.minimum(np.minimum(np.minimum(np.minimum(np.minimum(np.minimum(np.minimum(d_i, d_t), d_y), d_p), d_r), d_s), d_a),
                    d_tz)
@@ -4940,6 +5064,10 @@ def rebuild_relief(nm_path, code, kit, mesh, cmap, n_jt, painters=None):
         dl = sleeve_lines_dist(G0["U0"][m][:, 0], G0["U0"][m][:, 1], Pm[:, 0], SLEEVE_LINES)   # (у ANA до 11 px от
         keep24 = keep24 * np.where(np.isfinite(dl), Hy.smooth((dl - SLV_LINES_CLEAR) / 3.0), 1.0)   # ломаной) — на нет,
         painters["sleeve_lines"] = SLEEVE_LINES          # свой шов — по ломаной (design_seams)
+    if SLEEVE_ALONG_LINES:                               # sleeve_along: так же — у краёв лент вдоль руки
+        dl = sleeve_along_dist(G0["U0"][m][:, 0], G0["U0"][m][:, 1], Pm[:, 0], SLEEVE_ALONG_LINES)
+        keep24 = keep24 * np.where(np.isfinite(dl), Hy.smooth((dl - SLV_LINES_CLEAR) / 3.0), 1.0)
+        painters["sleeve_along"] = SLEEVE_ALONG_LINES
     new_xy = xy.copy()
     ys, xs = np.nonzero(m)
     wv = weave[ys, xs].copy()
@@ -6235,6 +6363,10 @@ def cmd_kit(a):
         for box_ in PIPING_FIT or []:                     # кант вдоль руки — гладкий (CBJ, WSH 23.10; окна по очереди)
             for r_ in piping_fit(os.path.join(od, "jersey_cm.png"), E2, box_):
                 print(f"  кант (piping_fit {box_}):", r_)
+        globals()["SLEEVE_ALONG_LINES"] = None
+        if SLEEVE_ALONG:                                  # ленты и панели вдоль руки — ломаными (WSH, WPG; 26.10)
+            for r_ in sleeve_along_lines(os.path.join(od, "jersey_cm.png"), E2, SLEEVE_ALONG):
+                print("  вдоль руки (sleeve_along):", r_)
         if CHEST_BANDS:                                   # полосы через грудь у ворота — прямые, по источнику (NYR; 23.10)
             for r_ in chest_bands_fit(os.path.join(od, "jersey_cm.png"), E2, CHEST_BANDS, a.club, cur_kit["kit"]):
                 print("  полосы через грудь (chest_bands):", r_)
