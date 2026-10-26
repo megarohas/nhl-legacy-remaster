@@ -1069,7 +1069,7 @@ def _slv_robust(v, b, deg):
 def _slv_fit_side(a, reg):
     """Один рукав (развёртка — как у левого: u вдоль руки, кольцо — строка v). -> (новый цвет, отчёт)."""
     S = a.shape[0]
-    pal = _slv_palette(a, reg)
+    pal = _slv_palette(a, reg, SLV_FIT_FRAC)           # порог палитры — профиль sleeve_stripes_frac (NSH: тонкие нитки)
     if len(pal) < 2:
         return a, "один цвет — без изменений"
     dist = np.stack([np.abs(a - p).max(-1) for p in pal], -1)
@@ -1185,6 +1185,8 @@ SLV_ALONG_OWN = 6.0                # тексели: у концов — к св
 SLV_ALONG_FOREIGN = 4              # текселей чужого цвета палитры в столбце — столбец поперечной полосы, как есть (серебряный
 #                                    край полос WPG — по цвету и смесь синего с белым: столбец края полосы перекрашивался)
 SLV_ALONG_EDGE = 3                 # столбцов у манжеты (край острова рукава, тексели наполовину вне сетки) — как есть
+SLV_FIT_FRAC = 0.04                # профиль sleeve_stripes_frac (26.10, NSH): палитра "fit" / "lines" — цвет от такой доли рукава
+#                                    (тонкая нитка NSH — ~2 %: не в палитре — строки с ней не в замер, «крючок» у шва оставался)
 SLEEVE_LINES = None                # sleeve_stripes = "lines" — ломаные краёв полос текущей формы (sleeve_stripes_lines: {0 —
 #                                    левый рукав, 1 — правый: [(f, r0, r1), …], "S": размер развёртки}): по ним в rebuild_relief
 #                                    гасятся швы источника у краёв, свои швы — по ним
@@ -1283,7 +1285,7 @@ def _slv_lines_side(a, reg, strict=False, ramp=0, frac=None, pen=None):
     -> (новый цвет, отчёт, ломаные)."""
     from scipy import ndimage as ndi
     S = a.shape[0]
-    pal = _slv_palette(a, reg) if frac is None else _slv_palette(a, reg, frac)
+    pal = _slv_palette(a, reg, SLV_FIT_FRAC if frac is None else frac)
     if len(pal) < 2:
         return a, "один цвет — без изменений", []
     dist = np.stack([np.abs(a - p).max(-1) for p in pal], -1)
@@ -2420,13 +2422,14 @@ def use_club(code):
     for _v in [SLEEVE_STRIPES] + list((SLEEVE_STRIPES_KITS or {}).values()):
         if _v not in (None, "fit", "lines"):
             sys.exit(f"[{code}] sleeve_stripes = {_v!r} — только \"fit\" или \"lines\" (или {{ форма = \"fit\" }})")
-    global SLEEVE_ALONG, SLEEVE_ALONG_KITS
+    global SLEEVE_ALONG, SLEEVE_ALONG_KITS, SLV_FIT_FRAC
     _sa = prof.get("sleeve_along")                       # ленты и панели вдоль руки — ломаными (26.10: WSH, WPG выезд)
     SLEEVE_ALONG_KITS = dict(_sa) if isinstance(_sa, dict) else None
     SLEEVE_ALONG = None if (_sa is None or SLEEVE_ALONG_KITS is not None) else piping_boxes(_sa)
     for _b in (SLEEVE_ALONG or []) + [b for v in (SLEEVE_ALONG_KITS or {}).values() for b in piping_boxes(v)]:
         if len(_b) != 4:
             sys.exit(f"[{code}] sleeve_along = {_sa!r} — [u0, v0, u1, v1], список окон или {{ форма = [u0, v0, u1, v1] }}")
+    SLV_FIT_FRAC = float(prof.get("sleeve_stripes_frac", 0.04))   # порог палитры fit / lines (26.10, NSH: тонкие нитки)
     global PIPING_FIT, PIPING_FIT_KITS, ARMHOLE_AA, YOKE_MIX_KEEP, BRAND_Y, PIPING_MIX
     _pf = prof.get("piping_fit")                         # кант вдоль руки у шва проймы — гладко (23.10, review-d: CBJ, WSH)
     PIPING_FIT_KITS = dict(_pf) if isinstance(_pf, dict) else None
