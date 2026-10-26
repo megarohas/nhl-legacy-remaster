@@ -1413,8 +1413,18 @@ def sleeve_lines_dist(u, v, x, lines):
 
 PIPING_FIT_KITS = None             # piping_fit таблицей по форме (use_kit)
 PIPING_FIT = None                  # профиль piping_fit (23.10, агент review-d, CBJ, WSH): [u0, v0, u1, v1] — окно развёртки
-#                                    (как у левого рукава; правый — зеркально) или { форма = [...] }: кант вдоль руки у шва
-#                                    проймы — гладкими кривыми (piping_fit). Нет — как было
+#                                    (как у левого рукава; правый — зеркально), список окон (26.10, CBJ: и верхний кант ленты
+#                                    со звездой — волной, вне окна 23.10) или { форма = [...] }: кант вдоль руки — гладкими
+#                                    кривыми (piping_fit, окна — по очереди). Здесь — список окон; нет — как было
+
+
+def piping_boxes(v):
+    """piping_fit профиля: окно [u0, v0, u1, v1] или список окон -> [[u0, v0, u1, v1], …]."""
+    if v is None:
+        return None
+    if len(v) and isinstance(v[0], (list, tuple)):
+        return [[float(x) for x in b] for b in v]
+    return [[float(x) for x in v]]
 PIPING_NEAR = 12                   # текселей от гладкого края: перекраска только рядом с ним
 PIPING_RAMP = 12                   # текселей у концов окна по u: край — от своего (как перенёсся) к гладкому, без ступеньки
 PIPING_MIN_ROWS = 20               # столбцов с рисунком меньше — окно не трогается
@@ -2302,10 +2312,10 @@ def use_club(code):
     global PIPING_FIT, PIPING_FIT_KITS, ARMHOLE_AA, YOKE_MIX_KEEP, BRAND_Y, PIPING_MIX
     _pf = prof.get("piping_fit")                         # кант вдоль руки у шва проймы — гладко (23.10, review-d: CBJ, WSH)
     PIPING_FIT_KITS = dict(_pf) if isinstance(_pf, dict) else None
-    PIPING_FIT = None if (_pf is None or PIPING_FIT_KITS is not None) else [float(x) for x in _pf]
-    for _b in ([PIPING_FIT] if PIPING_FIT else []) + list((PIPING_FIT_KITS or {}).values()):
+    PIPING_FIT = None if (_pf is None or PIPING_FIT_KITS is not None) else piping_boxes(_pf)
+    for _b in (PIPING_FIT or []) + [b for v in (PIPING_FIT_KITS or {}).values() for b in piping_boxes(v)]:
         if len(_b) != 4:
-            sys.exit(f"[{code}] piping_fit = {_pf!r} — [u0, v0, u1, v1] или {{ форма = [u0, v0, u1, v1] }}")
+            sys.exit(f"[{code}] piping_fit = {_pf!r} — [u0, v0, u1, v1], список окон или {{ форма = [u0, v0, u1, v1] }}")
     ARMHOLE_AA = bool(prof.get("armhole_aa", False))     # шов проймы — со сглаживанием (23.10, review-d: WSH)
     PIPING_MIX = bool(prof.get("piping_mix", False))     # смесь у края канта — не «чужое» (23.10, review-e: WSH)
     global TORSO_SHIFT, TORSO_SHIFT_KITS
@@ -2597,7 +2607,7 @@ def use_kit(kit):
         ARMHOLE_SPLIT_ZONES = ARMHOLE_SPLIT_FULL if ARMHOLE_SPLIT_KITS.get(kit, "zones") == "full" else ARMHOLE_ZONES
     global PIPING_FIT
     if PIPING_FIT_KITS is not None:                      # piping_fit по формам: вне таблицы — нет
-        PIPING_FIT = [float(x) for x in PIPING_FIT_KITS[kit]] if kit in PIPING_FIT_KITS else None
+        PIPING_FIT = piping_boxes(PIPING_FIT_KITS[kit]) if kit in PIPING_FIT_KITS else None
     global ISLAND_PAD_CM
     if ISLAND_PAD_CM_KITS is not None:                   # island_pad_cm по формам: вне таблицы — нет
         ISLAND_PAD_CM = kit in ISLAND_PAD_CM_KITS
@@ -6109,9 +6119,9 @@ def cmd_kit(a):
         elif SLEEVE_STRIPES == "lines":                   # края полос рукава — ломаные («клин», ANA 26.10)
             for r_ in sleeve_stripes_lines(os.path.join(od, "jersey_cm.png"), E2):
                 print("  полосы рукава (sleeve_stripes = lines):", r_)
-        if PIPING_FIT:                                    # кант вдоль руки у шва проймы — гладкий (CBJ, WSH; 23.10)
-            for r_ in piping_fit(os.path.join(od, "jersey_cm.png"), E2, PIPING_FIT):
-                print("  кант у проймы (piping_fit):", r_)
+        for box_ in PIPING_FIT or []:                     # кант вдоль руки — гладкий (CBJ, WSH 23.10; окна по очереди)
+            for r_ in piping_fit(os.path.join(od, "jersey_cm.png"), E2, box_):
+                print(f"  кант (piping_fit {box_}):", r_)
         if CHEST_BANDS:                                   # полосы через грудь у ворота — прямые, по источнику (NYR; 23.10)
             for r_ in chest_bands_fit(os.path.join(od, "jersey_cm.png"), E2, CHEST_BANDS, a.club, cur_kit["kit"]):
                 print("  полосы через грудь (chest_bands):", r_)
