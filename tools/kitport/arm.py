@@ -4,6 +4,7 @@
     python -m kitport arm --clubs STL --kits away            # источник и наш: 6 видов через 60° (0° — сверху, 90° — спереди)
     python -m kitport arm --clubs CGY,ANA --before compare/kitport/20261026-0913-sleeves-before   # «было | стало»
     python -m kitport arm --clubs ANA --kits home --views 300,330,0,30,60,90 --along -0.17,0.06 --h 0.09   # локоть крупно
+    python -m kitport arm --clubs OTT --armpit --before 20261026-1129-sleeves2-before   # подмышка снизу: полосы у плеча
 
 Зачем (23.10, STL выезд: «полоски на предплечьях с белыми выемками»; 26.10, CGY выезд и ANA: «кривые предплечья»): выемки
 бывают только на нижней стороне руки у шва рукава или на верху локтя — ни перед, ни бок, ни спина `kitport present` их не
@@ -13,6 +14,12 @@
 составляющей по оси: 0° — камера сверху, 90° — спереди, 180° — снизу, 270° — сзади. Рисуются только треугольники рукава
 (по развёртке: u рукава ≤ 0,36, v 0,27–0,75 — без бока туловища и второй руки). Кадр вдоль оси — вся рука (или --along),
 поперёк — ±--h м. Лист — compare/kitport/arm-<КЛУБ>_<форма>-<дата>.png (по листу на форму).
+
+--armpit (26.10, OTT: полосы у плеча под мышкой) — подмышка снизу: вся сетка (с туловищем), центр кадра — точка шва
+проймы Edge (edge_kit.armhole_u) правого рукава у подмышки спереди (v 0,32) и сзади (v 0,64), ±0,08 м, виды — поворот
+вокруг вертикали / наклон снизу (ARMPIT_VIEWS). У NHL 27 рукав втачной — полосы у плеча идут кольцом и под мышкой; у
+Edge рукав — реглан, там туловище (профиль sleeve_armpit). Ряды — те же; сетки разные, кадр — по точке шва Edge.
+Лист — compare/kitport/armpit-<КЛУБ>_<форма>-<дата>.png.
 """
 import datetime
 import os
@@ -25,6 +32,10 @@ from . import core
 VIEWS = (0, 60, 120, 180, 240, 300)      # град вокруг оси руки: 0 — сверху, 90 — спереди, 180 — снизу, 270 — сзади
 NAMES = {0: "сверху", 90: "спереди", 180: "снизу", 270: "сзади"}
 ARM_UV = (0.36, 0.27, 0.75)              # треугольники рукава: u рукава (как у левого) ≤, v от, до (обе развёртки)
+ARMPIT_V = (0.32, 0.64)                  # --armpit: строки шва проймы Edge у подмышки (спереди, сзади) — центры кадров
+ARMPIT_VIEWS = {0.32: ((120, -30), (140, -30), (160, -30), (140, -60)),   # (поворот вокруг вертикали, наклон), град
+                0.64: ((180, -30), (210, -30), (240, -30), (210, -60))}
+ARMPIT_R = 0.08                          # м: кадр ±R
 
 
 def basis(p, x0, x1):
@@ -86,6 +97,49 @@ def views(M, tex, nm, a, font, title):
     return o
 
 
+def armpit_center(ME, v):
+    """Точка шва проймы Edge (edge_kit.armhole_u) правого рукава в строке развёртки v (растр 1024)."""
+    from fb import edge_kit as E, kit3d
+    S = 1024
+    tid, bar = kit3d.raster_uv(ME, S)
+    r = int(v * S)
+    c0 = int((1.0 - float(E.armhole_u(v))) * S)
+    cands = [(abs(c - c0), c) for c in range(c0 - 6, c0 + 7) if tid[r, c] >= 0]
+    if not cands:
+        return None
+    c = min(cands)[1]
+    return (bar[r, c][:, None] * ME["pos"][ME["tri"][tid[r, c]]]).sum(0)
+
+
+def armpit_views(M, tex, nm, cen, angs, width, font, title):
+    """Подмышка снизу: вся сетка (двусторонне), центр cen; виды (поворот вокруг вертикали, наклон) — картинка с подписью."""
+    os.environ.setdefault("PHOTOS_SOURCE", "nhl24")
+    sys.path.insert(0, core.TOOLS)
+    import scans24 as S
+    from PIL import Image, ImageDraw
+    ims = []
+    for yaw, pitch in angs:
+        p = M["pos"] - cen
+        ca, sa = np.cos(np.radians(yaw)), np.sin(np.radians(yaw))
+        x, z = p[:, 0] * ca + p[:, 2] * sa, -p[:, 0] * sa + p[:, 2] * ca
+        cb, sb = np.cos(np.radians(pitch)), np.sin(np.radians(pitch))
+        y, z = p[:, 1] * cb - z * sb, p[:, 1] * sb + z * cb
+        pos = np.stack([x, y, z], 1)
+        part = {"pos": pos, "nrm": S.weld_normals(pos, M["tri"], S.weld_ids(pos)), "uv": M["uv"], "tri": M["tri"],
+                "tex": tex, "twosided": True}
+        if nm is not None:
+            part["nmap"] = nm
+        im = S.render([part], 0.0, width, frame=(-ARMPIT_R, ARMPIT_R, -ARMPIT_R, ARMPIT_R)).convert("RGB")
+        ImageDraw.Draw(im).text((4, 3), f"{yaw:.0f}°/{pitch:.0f}°", fill=(255, 220, 140), font=font)
+        ims.append(im)
+    w, h = ims[0].size
+    o = Image.new("RGB", (len(ims) * (w + 4), h + 20), (14, 14, 18))
+    ImageDraw.Draw(o).text((4, 3), title, fill=(230, 230, 230), font=font)
+    for i, im in enumerate(ims):
+        o.paste(im, (i * (w + 4), 20))
+    return o
+
+
 def load_maps(d):
     from PIL import Image
     t = np.asarray(Image.open(os.path.join(d, "jersey_cm.png")).convert("RGBA"))
@@ -124,27 +178,35 @@ def cmd_arm(a):
                 print(f"{code} {kit}: слот не собран ({d})")
                 continue
             rows = []
+            if getattr(a, "armpit", False):                  # подмышка снизу: по строке на сторону и ряд
+                cens = {v: armpit_center(ME, v) for v in ARMPIT_V}
+
+                def row(M, tex, nm, title):
+                    return [armpit_views(M, tex, nm, cens[v], ARMPIT_VIEWS[v], a.width, font,
+                                         title + (" — спереди" if v < 0.5 else " — сзади")) for v in ARMPIT_V]
+            else:
+                def row(M, tex, nm, title):
+                    return [views(M, tex, nm, a, font, title)]
             if n24 is not None:
                 src = J.n24_tex(CLUB_NAME[code], kit, "color")
                 if os.path.exists(src):
                     t24 = np.asarray(Image.open(src).convert("RGBA").resize((2048, 2048), Image.LANCZOS))
-                    rows.append(views(n24, t24, None, a, font, f"{code} {kit}: источник {os.path.basename(src)} "
-                                                              "(сетка NHL 24, цвет)"))
+                    rows += row(n24, t24, None, f"{code} {kit}: источник {os.path.basename(src)} (сетка NHL 24, цвет)")
             if before:
                 bd = os.path.join(before, f"{code}_{kit}")
                 if os.path.exists(os.path.join(bd, "jersey_cm.png")):
-                    rows.append(views(ME, *load_maps(bd), a, font, f"{code} {kit}: было — {os.path.basename(before)}"))
+                    rows += row(ME, *load_maps(bd), f"{code} {kit}: было — {os.path.basename(before)}")
                 else:
                     print(f"{code} {kit}: в снимке {before} формы нет")
-            rows.append(views(ME, *load_maps(d), a, font, f"{code} {kit}: " + ("стало" if before else "наш")
-                              + " (слот, сетка Edge)"))
+            rows += row(ME, *load_maps(d), f"{code} {kit}: " + ("стало" if before else "наш") + " (слот, сетка Edge)")
             W = max(r.size[0] for r in rows)
             sheet = Image.new("RGB", (W, sum(r.size[1] + 4 for r in rows)), (6, 6, 8))
             y = 0
             for r in rows:
                 sheet.paste(r, (0, y))
                 y += r.size[1] + 4
-            out = os.path.join(a.out or core.COMPARE, f"arm-{code}_{kit}-{datetime.datetime.now():%Y%m%d-%H%M}.png")
+            pre = "armpit" if getattr(a, "armpit", False) else "arm"
+            out = os.path.join(a.out or core.COMPARE, f"{pre}-{code}_{kit}-{datetime.datetime.now():%Y%m%d-%H%M}.png")
             os.makedirs(os.path.dirname(out), exist_ok=True)
             sheet.save(out)
             print(f"{code}_{kit}: лист →", out)

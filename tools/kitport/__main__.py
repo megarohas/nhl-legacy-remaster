@@ -339,6 +339,8 @@ def main():
     s.add_argument("--along", default="", help="кадр вдоль оси a0,a1, м от середины руки (по умолчанию — вся рука)")
     s.add_argument("--h", type=float, default=0.11, help="м: кадр поперёк оси ±h")
     s.add_argument("--width", type=int, default=360, help="ширина вида, px")
+    s.add_argument("--armpit", action="store_true", help="подмышка снизу (полосы у плеча под мышкой, шов проймы Edge): "
+                                                         "вся сетка, центр — шов спереди и сзади (26.10, OTT)")
     s.add_argument("--out", default=None, help="папка листов (по умолчанию — compare/kitport/)")
     s = sub.add_parser("pants", help="нашивки шорт крупно: цвет и рельеф без цвета у нашего герба и у места герба образца")
     s.add_argument("--clubs", required=True, help="коды клубов через запятую (DET,BOS)")
