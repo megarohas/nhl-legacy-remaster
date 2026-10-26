@@ -197,6 +197,37 @@ enabled = false
 uv = [0.8469, 0.5]
 enabled = false
 
+# BUF ten, DAL ten / eleven (26.10, проверка рукавов всех клубов после «кривых предплечий» CGY и ANA) — то же: у BUF
+# дома бурая черта вдоль белой нитки у золотой полосы на верху руки (v 0,41–0,57), у DAL — тонкая серо-белая дуга на
+# плече выше сжатых полос (u 0,196 / 0,804) и зелёная нитка в белой полосе дома (u 0,157)
+[club.BUF.home.stripe_edge_l]
+uv = [0.1375, 0.499]
+enabled = false
+
+[club.BUF.home.stripe_edge_r]
+uv = [0.8625, 0.5]
+enabled = false
+
+[club.DAL.home.stripe_edge_l]
+uv = [0.1958, 0.499]
+enabled = false
+
+[club.DAL.home.stripe_edge_r]
+uv = [0.8042, 0.4998]
+enabled = false
+
+[club.DAL.home.stripe_edge_3]
+uv = [0.1567, 0.4994]
+enabled = false
+
+[club.DAL.away.stripe_edge_l]
+uv = [0.1958, 0.4978]
+enabled = false
+
+[club.DAL.away.stripe_edge_r]
+uv = [0.8042, 0.499]
+enabled = false
+
 # Решение пользователя (10.10, 09:00): в слот «третья» — обычная альтернативная форма клуба, а не форма разового
 # матча (Winter Classic, Stadium Series) и не копия домашней. Папка комплекта NHL 24 (adidas/<папка>) для третьей;
 # у остальных клубов — adidas/three.
