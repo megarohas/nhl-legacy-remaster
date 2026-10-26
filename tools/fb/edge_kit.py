@@ -3427,11 +3427,53 @@ def band_d(tt, dm):
                     np.where(tt > dE[-1], tt + (d24[-1] - dE[-1]), np.interp(tt, dE, d24)))
 
 
+YOKE_BAND_FOLD = 0.03              # yoke_sleeve = "band" (26.10): s Edge от конца развёртки рукава — тут ищется край рукава
+#                                    (минимум d по оси руки): у сетки Edge первые ~0,013 развёртки — подгиб, изнанка манжеты
+#                                    уходит внутрь рукава на ~7 см (d там растёт обратно)
+YOKE_BAND_RIM = 0.012              # s Edge за краем рукава к локтю: до сюда рукав у манжеты загибается — поле полосы на загибе
+#                                    и подгибе берётся со столбца края + YOKE_BAND_RIM (band_cuff_clamp)
+
+
+def band_rim(P, m, U, axes):
+    """Край рукава Edge у манжеты: s столбца растра с наименьшим d по оси руки (медиана столбца в строках рукава SLV_V,
+    s < YOKE_BAND_FOLD). -> {сторона: s края}."""
+    H, W = m.shape
+    out = {}
+    for sg, (c0, ax, *_r, t_end) in axes.items():
+        sE = U[..., 0] if sg < 0 else 1.0 - U[..., 0]
+        sel = m & (P[..., 0] * sg > 0.30) & (U[..., 1] > SLV_V[0]) & (U[..., 1] < SLV_V[1]) & (sE < YOKE_BAND_FOLD)
+        cols = np.unique(np.nonzero(sel)[1])
+        if len(cols) < 4:
+            continue
+        dmed = np.array([np.median(t_end - (P[sel[:, c], c] - c0) @ ax) for c in cols])
+        s_c = (cols + 0.5) / W if sg < 0 else 1.0 - (cols + 0.5) / W
+        out[sg] = float(s_c[int(np.argmin(dmed))])
+    return out
+
+
+def band_cuff_clamp(F, P, m, U, axes, fit):
+    """Поле полосы у манжеты (26.10, COL): от столбца края рукава + YOKE_BAND_RIM до конца развёртки — как у этого
+    столбца, по строкам v (полоса и кант идут к краю рукава прямо). На загибе и подгибе ось руки не по центру рукава:
+    кант COL сзади в последних 2–3 см выходил 2,9 см вместо 1,7 (у NHL 27 — 1,8), край полосы и кант загибались вдоль
+    края манжеты — «рожки». -> F (на месте)."""
+    H, W = m.shape
+    for sg, s_rim in band_rim(P, m, U, axes).items():
+        if sg not in fit:
+            continue
+        s_c = s_rim + YOKE_BAND_RIM
+        cc = int(np.clip(np.round((s_c if sg < 0 else 1.0 - s_c) * W - 0.5), 0, W - 1))
+        ok = m[:, cc] & (P[:, cc, 0] * sg > 0.30)
+        for c in (np.arange(0, cc) if sg < 0 else np.arange(cc + 1, W)):
+            k = m[:, c] & ok & (P[:, c, 0] * sg > 0.30)
+            F[k, c] = F[k, cc]
+    return F
+
+
 def sleeve_band_field(P, m, U, axes, fit, dmap=None):
     """Поле полосы по верху рукава (м, + внутри): дуга до ближайшего края полосы; на туловище — не дальше
     YOKE_BAND_SEAM_IN за швом проймы (мягкое пересечение: прямой срез по шву давал угол «<» у подмышки). dmap
-    (band_dmap, 26.10) — d Edge → d источника, как у переноса рукава (без него — d Edge, как было).
-    -> (поле, расстояние до шва со знаком: + рукав)."""
+    (band_dmap, 26.10) — d Edge → d источника, как у переноса рукава (без него — d Edge, как было). У манжеты — по
+    столбцу за загибом (band_cuff_clamp, 26.10). -> (поле, расстояние до шва со знаком: + рукав)."""
     s_dist, _, _ = armhole_side_dist(P, m, U)
     t, ph, rho = arm_coords(P, axes)
     F = np.full(P.shape[:2], -1.0)
@@ -3442,6 +3484,7 @@ def sleeve_band_field(P, m, U, axes, fit, dmap=None):
             tt = band_d(tt, dmap[sg])
         ps = np.angle(np.exp(1j * (ph[sel] - ph0))) + ph0   # угол — около середины полосы (без скачка у ±180° под ней)
         F[sel] = rho[sel] * np.minimum(ps - np.interp(tt, db, lo), np.interp(tt, db, hi) - ps)
+    F = band_cuff_clamp(F, P, m, U, axes, fit)
     return -smooth_max(-F, -(s_dist + YOKE_BAND_SEAM_IN), YOKE_BAND_R), s_dist
 
 
