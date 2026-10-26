@@ -3309,17 +3309,33 @@ def armhole_side_dist(P, m, U):
     return np.where(sleeve, d, -d), sleeve, P[edge]
 
 
+YOKE_BAND_FOREIGN = 0.3            # yoke_sleeve = "band" (26.10): в кольце руки источника доля чужого цвета (не кокетки и не ткани)
+#                                    больше — строка не в замер (манжета другого цвета, полосы рукава). Было «кокетки нет» —
+#                                    пустое кольцо, и сглаживание (медиана, гаусс) сужало полосу к манжете на 3–5 см: у WPG выезда
+#                                    лента кончалась у манжеты скруглённо, у PHI снизу до чёрной манжеты шёл белый клин
+YOKE_BAND_PART = 0.5               # yoke_sleeve = "band" (26.10): кольцо с числом точек меньше этой доли медианы — неполное (край
+#                                    рукава у манжеты: у COL крайняя строка давала полосу вдвое уже — «рожки» канта), не в замер
+
+
 def sleeve_band_fit(P, c, kind, pos24):
     """Край полосы по верху рукава — по источнику (P, c — точки наружной оболочки сетки NHL 24 и цвет, pos24 — её
-    вершины для оси руки): углы φ кокетки по длине руки (шаг 1 см) от конца рукава d = t_end − t (у Edge и NHL 24 рукав
-    почти одной длины и так же согнут: манжета — общий отсчёт); углы — от середины полосы (у PHI белое у манжеты —
-    кольцом, низ полосы — через ±180°), 1-й / 99-й процентиль; кольцо целиком — ±180°, без кокетки (манжета) — пусто;
-    сглажено по длине (медиана 5 см). Замер по переносу на Edge (сборка 1 PHI) у проймы путался: плечо выходило
-    оранжевым. -> {сторона: (d, φ_back(d), φ_front(d), φ0)} или None."""
+    вершины для оси руки): углы φ кокетки по длине руки (шаг 1 см) от конца рукава d = t_end − t; углы — от середины
+    полосы (у PHI белое у манжеты — кольцом, низ полосы — через ±180°), 1-й / 99-й процентиль; кольцо целиком (ткани в
+    кольце нет) — ±180°, без кокетки — пусто. Не в замер (26.10): строки с чужим цветом больше YOKE_BAND_FOREIGN (манжета
+    другого цвета, полосы) и неполные кольца у края рукава (YOKE_BAND_PART) — полоса там по соседним строкам (за краями
+    замера — крайние значения). Ткань — самый частый цвет туловища не цвета кокетки. Сглажено по длине (медиана 5 см).
+    Замер по переносу на Edge (сборка 1 PHI) у проймы путался: плечо выходило оранжевым. На Edge d берётся по карте
+    рукава (band_dmap). -> {сторона: (d, φ_back(d), φ_front(d), φ0)} или None."""
     from scipy.ndimage import median_filter
     axes = arm_axes(pos24)
     t, ph, _ = arm_coords(P, axes)
     yk = yoke_mask(c, 80, kind)
+    torso = (np.abs(P[:, 0]) < 0.15) & (P[:, 1] > 1.10) & (P[:, 1] < 1.45) & ~yk
+    q = (c[torso] // 16).astype(int)
+    key = q[:, 0] * 256 + q[:, 1] * 16 + q[:, 2]
+    ks, cnt = np.unique(key, return_counts=True)
+    cloth = np.median(c[torso][key == ks[cnt.argmax()]], 0)
+    isc = np.abs(c - cloth).max(-1) < 60
     out = {}
     for sg, (c0, ax, *_r, t_end) in axes.items():
         arm = P[:, 0] * sg > 0.30
@@ -3330,19 +3346,28 @@ def sleeve_band_fit(P, c, kind, pos24):
             return None
         ph0 = float(np.angle(np.exp(1j * ph[rng]).mean()))
         ps = np.angle(np.exp(1j * (ph - ph0)))
-        db, lo, hi = [], [], []
-        for d0 in np.arange(0.0, d_max - YOKE_BAND_SEAM, 0.01):
+        bins = np.arange(0.0, d_max - YOKE_BAND_SEAM, 0.01)
+        ns = [int((arm & (np.abs(d - d0 - 0.005) < 0.005)).sum()) for d0 in bins]
+        n_ok = [n for n in ns if n >= 30]
+        n_med = float(np.median(n_ok)) if n_ok else 0.0
+        db, lo, hi, skipped = [], [], [], 0
+        for d0, n in zip(bins, ns):
             if YOKE_BAND_SKIP and YOKE_BAND_SKIP[0] <= d0 + 0.005 <= YOKE_BAND_SKIP[1]:
                 continue                                 # зона полос рукава (yoke_band_skip, WPG) — без замера
-            sel = arm & (np.abs(d - d0 - 0.005) < 0.005)
-            if sel.sum() < 30:
+            if n < 30 or n < YOKE_BAND_PART * n_med:     # неполное кольцо у края рукава (COL: «рожки» у манжеты)
+                skipped += 1
                 continue
+            sel = arm & (np.abs(d - d0 - 0.005) < 0.005)
             yy = sel & yk
+            ny, nc = int(yy.sum()), int((sel & isc & ~yk).sum())
+            if 1.0 - (ny + nc) / n > YOKE_BAND_FOREIGN:  # манжета другого цвета, полосы — не полоса и не ткань
+                skipped += 1
+                continue
             db.append(d0 + 0.005)
-            if yy.sum() >= 0.97 * sel.sum():             # кольцо целиком
+            if ny >= 0.97 * (ny + nc):                   # кольцо целиком: ткани нет
                 lo.append(-np.pi - 0.5)
                 hi.append(np.pi + 0.5)
-            elif yy.sum() < 30:                          # кокетки нет (манжета)
+            elif ny < 30:                                # кокетки нет
                 lo.append(0.5)
                 hi.append(-0.5)
             else:
@@ -3356,20 +3381,65 @@ def sleeve_band_fit(P, c, kind, pos24):
         out[sg] = (np.array(db), lo, hi, ph0)
         k = np.linspace(0, len(db) - 1, 6).astype(int)
         print(f"  полоса рукава ({'левый' if sg < 0 else 'правый'}, источник): от манжеты, м / край сзади…спереди, ° — "
-              + ", ".join(f"{db[i]:.2f}: {np.degrees(lo[i]):.0f}…{np.degrees(hi[i]):.0f}" for i in k))
+              + ", ".join(f"{db[i]:.2f}: {np.degrees(lo[i]):.0f}…{np.degrees(hi[i]):.0f}" for i in k)
+              + (f"; не в замер (манжета другого цвета, полосы, край рукава) — {skipped} строк" if skipped else "")
+              + f"; ткань {np.round(cloth).astype(int).tolist()}")
     return out
 
 
-def sleeve_band_field(P, m, U, axes, fit):
+_BAND_SM = {}
+_BAND_DMAP = {}
+
+
+def band_dmap(mesh):
+    """yoke_sleeve = "band" (26.10): d Edge (м от конца рукава по оси руки, arm_coords) → d источника так же, как переносит
+    рукав карта рукава (SleeveMap: столбец Edge → s NHL 24, со сжатием полос к кисти SLV_COMPRESS). Без неё полоса по верху
+    рукава ложилась по d Edge, а манжета и полосы — по карте: рукав Edge у манжеты на 2–4 см длиннее, манжета и полосы
+    сжаты к кисти (PHI: k 0,85) — у PHI оранжевое кольцо над чёрной манжетой выходило вдвое короче NHL 27, излом края
+    COL — на 3 см ближе к кисти. -> {сторона: (d Edge по столбцам карты, d источника)}; за концами — сдвиг на разницу."""
+    key = (mesh["pos"].shape, round(float(mesh["pos"].sum()), 4), mesh["tri"].shape, SLV_COMPRESS)
+    if key in _BAND_DMAP:
+        return _BAND_DMAP[key]
+    if key[:3] not in _BAND_SM:
+        n24 = kit3d.load_nhl24()
+        src = dict(n24, pos=n24["pos"] + np.array([0.0035, 0.0, 0.0]))   # середина горловины — на оси (CoordMap.x_fix)
+        _BAND_SM[key[:3]] = (SleeveMap(src, {k: mesh[k] for k in ("pos", "uv", "nrm", "tri")}), arm_axes(n24["pos"]))
+    sm, ax24 = _BAND_SM[key[:3]]
+    axE = arm_axes(mesh["pos"])
+    out = {}
+    for sg, dd in sm.sides.items():
+        e, n = dd["e"], dd["n"]
+        c0, ax, *_r, t_end = axE[sg]
+        dE = t_end - (e["C"] - c0) @ ax                  # столбцы Edge (от манжеты к плечу) → d по оси руки Edge
+        dE = np.minimum.accumulate(dE[::-1])[::-1]       # монотонно (у самой манжеты кольца загибаются)
+        c0n, axn, *_rn, t_endn = ax24[sg]
+        d24n = t_endn - (n["C"] - c0n) @ axn              # столбцы NHL 24 → d по оси руки источника
+        s24 = sm.s24_of(sm.src_s(e["s"]), e, dd["s24"])   # столбец Edge → s NHL 24, как у переноса (со сжатием)
+        out[sg] = (dE, np.interp(s24, n["s"], d24n))
+    _BAND_DMAP[key] = out
+    return out
+
+
+def band_d(tt, dm):
+    """d Edge → d источника по таблице band_dmap (за краями — сдвиг на разницу у края)."""
+    dE, d24 = dm
+    return np.where(tt < dE[0], tt + (d24[0] - dE[0]),
+                    np.where(tt > dE[-1], tt + (d24[-1] - dE[-1]), np.interp(tt, dE, d24)))
+
+
+def sleeve_band_field(P, m, U, axes, fit, dmap=None):
     """Поле полосы по верху рукава (м, + внутри): дуга до ближайшего края полосы; на туловище — не дальше
-    YOKE_BAND_SEAM_IN за швом проймы (мягкое пересечение: прямой срез по шву давал угол «<» у подмышки). -> (поле,
-    расстояние до шва со знаком: + рукав)."""
+    YOKE_BAND_SEAM_IN за швом проймы (мягкое пересечение: прямой срез по шву давал угол «<» у подмышки). dmap
+    (band_dmap, 26.10) — d Edge → d источника, как у переноса рукава (без него — d Edge, как было).
+    -> (поле, расстояние до шва со знаком: + рукав)."""
     s_dist, _, _ = armhole_side_dist(P, m, U)
     t, ph, rho = arm_coords(P, axes)
     F = np.full(P.shape[:2], -1.0)
     for sg, (db, lo, hi, ph0) in fit.items():
         sel = m & (P[..., 0] * sg > 0)
         tt = axes[sg][4] - t[sel]                        # от конца рукава Edge (за краями замера — крайние значения)
+        if dmap is not None:
+            tt = band_d(tt, dmap[sg])
         ps = np.angle(np.exp(1j * (ph[sel] - ph0))) + ph0   # угол — около середины полосы (без скачка у ±180° под ней)
         F[sel] = rho[sel] * np.minimum(ps - np.interp(tt, db, lo), np.interp(tt, db, hi) - ps)
     return -smooth_max(-F, -(s_dist + YOKE_BAND_SEAM_IN), YOKE_BAND_R), s_dist
@@ -3511,7 +3581,7 @@ class YokePaint:
             self.band_fit = self.h.get("band_fit")      # замер по источнику (yoke_heights)
             self.axes = arm_axes(self.mesh["pos"])
             if self.band_fit is not None:
-                Fs, s_arm = sleeve_band_field(P, m, U0, self.axes, self.band_fit)
+                Fs, s_arm = sleeve_band_field(P, m, U0, self.axes, self.band_fit, band_dmap(self.mesh))
                 Fu = smooth_max(P[..., 1] - h, Fs, YOKE_BAND_R)
                 dh = Fu / px_size(Fu, m)
         dmin = np.minimum(dside, dh)
@@ -4417,8 +4487,8 @@ def yoke_field(G, yk):
     h = yoke_edge_h(P, yk.h)
     dh = (y - h) / np.maximum(np.sqrt(np.clip(1 - N[..., 1] ** 2, 0, 1)), 0.3)
     if yk.h.get("band_fit") is not None:                 # полоса по верху рукава (yoke_sleeve = "band", COL, PHI)
-        dh = smooth_max(dh, sleeve_band_field(P, G["m"], U0, arm_axes(yk.mesh["pos"]), yk.h["band_fit"])[0],
-                        YOKE_BAND_R)
+        dh = smooth_max(dh, sleeve_band_field(P, G["m"], U0, arm_axes(yk.mesh["pos"]), yk.h["band_fit"],
+                                              band_dmap(yk.mesh))[0], YOKE_BAND_R)
     return np.minimum(dside, dh)
 
 
@@ -4436,7 +4506,7 @@ def yoke_stripe_field(G, yk):
     F = np.minimum(dside, (P[..., 1] - hlo) / k)
     if yk.h.get("band_fit") is not None:                 # кант и вдоль полосы рукава (COL)
         F = np.minimum(dside, smooth_max((P[..., 1] - hfl) / k, sleeve_band_field(P, G["m"], U0, arm_axes(yk.mesh["pos"]),
-                                                                                   yk.h["band_fit"])[0],
+                                                                                   yk.h["band_fit"], band_dmap(yk.mesh))[0],
                                          YOKE_BAND_R) + yk.h["stripe"]["width"])
     if vline is not None:
         F = np.where(P[..., 2] > 0, np.minimum(F, (vline - P[..., 1]) / k), F)
