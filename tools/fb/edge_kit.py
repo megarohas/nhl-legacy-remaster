@@ -997,6 +997,112 @@ def armhole_clean(png, mesh, du=ARMHOLE_CLEAN):
     return int(ok.sum())
 
 
+SLEEVE_ARMPIT = False              # профиль sleeve_armpit = true | { форма = true } (26.10, OTT): полосы рукава у плеча —
+#                                    кольцом и под мышкой, за швом проймы Edge (armpit_stripes); нет — как было
+SLEEVE_ARMPIT_KITS = None
+ARMPIT_DU = 0.06                   # u развёртки за швом проймы Edge (строки подмышки ARMHOLE_ZONES): туловище под мышкой
+ARMPIT_IN = 0.012                  # u до шва со стороны рукава: переход от переноса к замеру — стык полосы без ступеньки
+ARMPIT_DT = 0.0015                 # м: шаг сетки источника по оси руки
+ARMPIT_DPH = 0.75                  # °: шаг сетки по углу вокруг оси (у плеча ρ ≈ 7 см — ~0,9 мм)
+ARMPIT_TOL = 50.0                  # цвет источника ближе к ткани туловища — не полоса (туловище — как перенеслось)
+ARMPIT_FULL = 100.0                # дальше от ткани — полоса целиком; между — доля (край — смесью, без лесенки)
+_ARMPIT_SRC = {}
+
+
+def armpit_source(code, kit):
+    """Тексели рукавов источника для armpit_stripes: наружная оболочка NHL 24 (Hy.outer_shell, x_fix), развёртка рукава
+    (SEAM_U, SLEEVE_V); цвет — Hy.clean_color. -> (точки, цвет)."""
+    key = (code, kit)
+    if key not in _ARMPIT_SRC:
+        n24 = Hy.outer_shell(kit3d.load_nhl24())
+        src = Hy.clean_color(code, kit)
+        S2 = src.shape[0]
+        tid, bar = kit3d.raster_uv(n24, S2)
+        ys, xs = np.nonzero(tid >= 0)
+        u, v = (xs + 0.5) / S2, (ys + 0.5) / S2
+        k = ((u < SEAM_U[0]) | (u > SEAM_U[1])) & (v > SLEEVE_V[0]) & (v < SLEEVE_V[1])
+        ys, xs = ys[k], xs[k]
+        P = (bar[ys, xs][:, :, None] * n24["pos"][n24["tri"][tid[ys, xs]]]).sum(1)
+        P[:, 0] += 0.0035                                # середина горловины NHL 24 — на оси (CoordMap.x_fix)
+        _ARMPIT_SRC[key] = (P, src[ys, xs, :3].astype(np.float64))
+    return _ARMPIT_SRC[key]
+
+
+def armpit_stripes(png, mesh, code, kit):
+    """Полосы рукава под мышкой (профиль sleeve_armpit, 26.10, OTT): у NHL 27 полосы у плеча — кольца вокруг руки и
+    под мышкой (рукав NHL 24 втачной). У Edge рукав — реглан: в строках подмышки (ARMHOLE_ZONES) за швом проймы —
+    туловище, и кольцо обрывалось у шва клином (OTT выезд: под мышкой белое с серыми пятнами вместо красно-чёрного
+    блока, дома — красная полоса срезана). Тексели туловища до ARMPIT_DU за швом (и ARMPIT_IN до шва — переход от
+    переноса) берут цвет рукава NHL 24 с теми же координатами руки (t вдоль оси, φ — угол; оси Edge, arm_axes): сетка
+    ARMPIT_DT × ARMPIT_DPH по текселям рукава источника (armpit_source), билинейно по сумме и числу (пустые ячейки не
+    тянут к нулю). Ближайшая точка (проба 26.10) у подмышки прыгала между передом и спиной рукава — обрывки. Красится
+    только цвет полос: доля — по удалению цвета источника от ткани туловища у подмышки (самый частый цвет переноса за
+    швом), ARMPIT_TOL…ARMPIT_FULL. -> отчёт по сторонам."""
+    from PIL import Image
+    a = np.asarray(Image.open(png).convert("RGB")).astype(np.float64)
+    S = a.shape[0]
+    tid, bar = kit3d.raster_uv(mesh, S)
+    m = tid >= 0
+    ys, xs = np.nonzero(m)
+    P = (bar[ys, xs][:, :, None] * mesh["pos"][mesh["tri"][tid[ys, xs]]]).sum(1)
+    tu, tv = (xs + 0.5) / S, (ys + 0.5) / S
+    sE = np.where(P[:, 0] < 0, tu, 1.0 - tu)
+    au = armhole_u(tv)
+    zone = np.zeros(len(tu), bool)
+    for v0, v1 in ARMHOLE_ZONES:
+        zone |= (tv >= v0) & (tv <= v1)
+    tgt = zone & (np.abs(P[:, 0]) > ARMHOLE_X) & (sE >= au - ARMPIT_IN) & (sE < au + ARMPIT_DU)
+    w_in = np.clip((sE - (au - ARMPIT_IN)) / ARMPIT_IN, 0, 1)    # со стороны рукава — переход к переносу
+    axes = arm_axes(mesh["pos"])
+    t, ph, _ = arm_coords(P, axes)
+    P2, c2 = armpit_source(code, kit)
+    t2, ph2, _ = arm_coords(P2, axes)
+    out = a.copy()
+    nph = int(round(360.0 / ARMPIT_DPH))
+    rep = []
+    for sg in (-1.0, 1.0):
+        tt = tgt & (P[:, 0] * sg > 0)
+        if tt.sum() == 0:
+            continue
+        t0, t1 = float(t[tt].min()) - 0.02, float(t[tt].max()) + 0.02
+        s2 = (P2[:, 0] * sg > 0.15) & (t2 > t0) & (t2 < t1)
+        nt = int((t1 - t0) / ARMPIT_DT) + 2
+        i0 = np.clip(np.floor((t2[s2] - t0) / ARMPIT_DT).astype(int), 0, nt)
+        j0 = np.floor((np.degrees(ph2[s2]) + 180.0) / ARMPIT_DPH).astype(int) % nph
+        acc = np.zeros((nt + 1, nph, 3))
+        cnt = np.zeros((nt + 1, nph))
+        np.add.at(acc, (i0, j0), c2[s2])
+        np.add.at(cnt, (i0, j0), 1.0)
+        qt = (t[tt] - t0) / ARMPIT_DT - 0.5
+        qp = (np.degrees(ph[tt]) + 180.0) / ARMPIT_DPH - 0.5
+        a0, b0 = np.floor(qt).astype(int), np.floor(qp).astype(int)
+        ft, fp = qt - a0, qp - b0
+        sc = np.zeros((int(tt.sum()), 3))
+        sn = np.zeros(int(tt.sum()))
+        for di, wi in ((0, 1 - ft), (1, ft)):
+            for dj, wj in ((0, 1 - fp), (1, fp)):
+                ii, jj, w = np.clip(a0 + di, 0, nt), (b0 + dj) % nph, wi * wj
+                sc += w[:, None] * acc[ii, jj]
+                sn += w * cnt[ii, jj]
+        col = sc / np.maximum(sn, 1e-9)[:, None]
+        cur = a[ys[tt], xs[tt]]
+        far = sE[tt] > au[tt] + 0.01                     # ткань у подмышки — самый частый цвет переноса за швом
+        q = (cur[far] // 16).astype(int)
+        key = q[:, 0] * 256 + q[:, 1] * 16 + q[:, 2]
+        ks, kc = np.unique(key, return_counts=True)
+        cloth = np.median(cur[far][key == ks[kc.argmax()]], 0)
+        alpha = np.clip((np.linalg.norm(col - cloth, axis=1) - ARMPIT_TOL) / (ARMPIT_FULL - ARMPIT_TOL), 0, 1)
+        alpha *= (sn > 0.25) * w_in[tt]
+        idx = np.nonzero(tt)[0]
+        ch = alpha > 0.02
+        new = cur * (1 - alpha[:, None]) + col * alpha[:, None]
+        out[ys[idx[ch]], xs[idx[ch]]] = new[ch]
+        rep.append(f"{'левый' if sg < 0 else 'правый'}: ткань {np.round(cloth).astype(int).tolist()}, перекрашено "
+                   f"{int(ch.sum())} из {int(tt.sum())}")
+    Image.fromarray(np.clip(np.round(out), 0, 255).astype(np.uint8)).save(png)
+    return "; ".join(rep)
+
+
 SLEEVE_STRIPES_KITS = None         # sleeve_stripes по формам: { away = "fit" } (STL выезд, 23.10: белые выемки полос у
 #                                    манжеты на шве снизу рукава — лента NHL 27 со скошенными концами не доходит до шва Edge)
 SLEEVE_STRIPES = None              # профиль sleeve_stripes = "fit" | "lines" ("lines" — ломаными, 26.10, ANA: sleeve_stripes_lines)
@@ -2430,6 +2536,13 @@ def use_club(code):
         if len(_b) != 4:
             sys.exit(f"[{code}] sleeve_along = {_sa!r} — [u0, v0, u1, v1], список окон или {{ форма = [u0, v0, u1, v1] }}")
     SLV_FIT_FRAC = float(prof.get("sleeve_stripes_frac", 0.04))   # порог палитры fit / lines (26.10, NSH: тонкие нитки)
+    global SLEEVE_ARMPIT, SLEEVE_ARMPIT_KITS
+    _sp = prof.get("sleeve_armpit", False)               # полосы рукава и под мышкой, за швом проймы (26.10, OTT)
+    SLEEVE_ARMPIT_KITS = dict(_sp) if isinstance(_sp, dict) else None
+    SLEEVE_ARMPIT = False if SLEEVE_ARMPIT_KITS is not None else _sp
+    for _v in [SLEEVE_ARMPIT] + list((SLEEVE_ARMPIT_KITS or {}).values()):
+        if not isinstance(_v, bool):
+            sys.exit(f"[{code}] sleeve_armpit = {_sp!r} — true / false или {{ форма = true }}")
     global PIPING_FIT, PIPING_FIT_KITS, ARMHOLE_AA, YOKE_MIX_KEEP, BRAND_Y, PIPING_MIX
     _pf = prof.get("piping_fit")                         # кант вдоль руки у шва проймы — гладко (23.10, review-d: CBJ, WSH)
     PIPING_FIT_KITS = dict(_pf) if isinstance(_pf, dict) else None
@@ -2726,6 +2839,9 @@ def use_kit(kit):
         SLEEVE_MIRROR = SLEEVE_MIRROR_KITS.get(kit)
     if ARMHOLE_SPLIT_KITS is not None:                  # armhole_split по формам (CAR): вне таблицы — zones
         ARMHOLE_SPLIT_ZONES = ARMHOLE_SPLIT_FULL if ARMHOLE_SPLIT_KITS.get(kit, "zones") == "full" else ARMHOLE_ZONES
+    global SLEEVE_ARMPIT
+    if SLEEVE_ARMPIT_KITS is not None:                   # sleeve_armpit по формам: вне таблицы — нет
+        SLEEVE_ARMPIT = bool(SLEEVE_ARMPIT_KITS.get(kit, False))
     global SLEEVE_ALONG
     if SLEEVE_ALONG_KITS is not None:                    # sleeve_along по формам: вне таблицы — нет
         SLEEVE_ALONG = piping_boxes(SLEEVE_ALONG_KITS[kit]) if kit in SLEEVE_ALONG_KITS else None
@@ -6363,6 +6479,9 @@ def cmd_kit(a):
         elif SLEEVE_STRIPES == "lines":                   # края полос рукава — ломаные («клин», ANA 26.10)
             for r_ in sleeve_stripes_lines(os.path.join(od, "jersey_cm.png"), E2):
                 print("  полосы рукава (sleeve_stripes = lines):", r_)
+        if SLEEVE_ARMPIT:                                 # полосы рукава и под мышкой, за швом проймы (OTT, 26.10)
+            print("  полосы рукава под мышкой (sleeve_armpit):",
+                  armpit_stripes(os.path.join(od, "jersey_cm.png"), E2, a.club, cur_kit["kit"]))
         for box_ in PIPING_FIT or []:                     # кант вдоль руки — гладкий (CBJ, WSH 23.10; окна по очереди)
             for r_ in piping_fit(os.path.join(od, "jersey_cm.png"), E2, box_):
                 print(f"  кант (piping_fit {box_}):", r_)
