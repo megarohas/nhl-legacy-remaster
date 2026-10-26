@@ -6,13 +6,16 @@ fb/skate_slots.toml; в игру — edge_kit pack (pack()) и kitport install, 
 - Legacy: одна модель на всех — renderboot/rendering/skate/playerskate_2.rx2 (оба конька, 1938 вершин; _0 — дальняя),
   бренд — только текстура cacherender/rendering/skate/texlib_<N>.rx2: skate_<N>_cm 1024×512 (верхняя половина — левый и
   правый конёк зеркально, нижняя пустая), _nm 512×256, _rm 256×128, _sm 512×256; N = exhibitionskaterequipment.skatebrand;
+  язык и задник поверх гетры — отдельная сетка skatetongue_<skatesocktuck>_<L> с той же текстурой, на своих островах
+  (её рисунок — с языка и задника NHL 27 fulltuck: tongue_pairs, 26.10);
 - NHL 27: модель у пяти коньков своя (OWN_MESH), у прочих — общая модель бренда (bauer|ccm|true/common), вариант
   notuck (MESH_VAR); текстура player_skate_<модель>_color (верх — один конёк, низ — другой).
   Обе модели — в одной системе (подошва на 0, носок к +z), конёк NHL 27 шире (|x| до 0,237 против 0,177) и выше
   (0,267 против 0,242): перед переносом каждый конёк NHL 27 вписывается в рамку своего конька Legacy по осям.
 
   python -m fb.skates build [МОДЕЛЬ…] [--out DIR]   # PNG 1024×512 в развёртке Legacy (без моделей — все слоты плана)
-  python -m fb.skates sheet [--out FILE]          # лист: было | NHL 27 (своя модель) | в игре (модель Legacy), 4 вида
+  python -m fb.skates sheet [--out FILE]          # лист: было | NHL 27 (своя модель, fulltuck) | в игре (модель Legacy с
+                                                   # языком и задником над ботинком), 4 вида
   python -m fb.skates fe-sheet                     # превью в редакторе: EA → новое
   python -m fb.skates fe-fit                       # ракурсы превью по рамкам силуэта EA (FE_POSES)
 Первый запуск — с FB_GAME=nhl27 (сетки NHL 27 кэшируются в WORK/mesh27_*.pkl; edge_kit pack потом работает без неё).
@@ -47,6 +50,7 @@ MESH_VAR = "notuck"                 # вариант модели NHL 27 (24.10,
 OWN_MESH = {"bauer_supreme_fuse": "bauer/supreme/fuse", "bauer_supreme_shadow": "bauer/supreme/shadow",
             "bauer_vapor_flylite": "bauer/vapor/flylite", "ccm_tacks_xf652": "ccm/tacks/xf652",
             "true_catalyst_9x4": "true/catalyst/9x4"}
+TONGUE_REL = "renderboot/rendering/skate/skatetongue_{t}_2.rx2"   # Legacy: деталь над ботинком (язык, задник) — mesh_tongue
 _M = {}
 
 
@@ -326,12 +330,16 @@ def lace_mask(n):
 
 def convert(model, n=None, var=None):
     """Текстура конька NHL 27 → RGBA 1024×512 в развёртке Legacy (вне развёртки — ближайший тексель, для мипов);
-    с n — шнуровка (lace_mask) — нарисованная Legacy (слота LACE_REF)."""
+    с n — шнуровка (lace_mask) — нарисованная Legacy (слота LACE_REF). Деталь над ботинком (язык и задник поверх гетры)
+    — с языка и задника NHL 27 fulltuck (tongue_pairs, 26.10)."""
     from scipy import ndimage as ndi
     tex = kit3d.load_tex(src_png(model))
     img, m = None, None
-    for part in (BOOT, HOLDER):                          # ботинок — с ботинка, стакан — со стакана (каждый в своей рамке)
-        src, dst = part_pair(mesh_of(model, var), part)
+    # ботинок — с ботинка, стакан — со стакана, язык — с языка, задник — с задника (каждая часть — в своей рамке); деталь
+    # над ботинком пишет только на свои тексели: остров задника касается верха ботинка (строки 82–93), тот не трогаем
+    pairs = [(part_pair(mesh_of(model, var), part), None) for part in (BOOT, HOLDER)]
+    pairs += [(pair, tongue_texels(SIZE)) for pair in tongue_pairs(model)]
+    for (src, dst), only in pairs:
         if not len(dst["tri"]):
             continue
         im_p, mk, _d, _i = kit3d.transfer(tex, src, dst, SIZE, 2)
@@ -341,6 +349,8 @@ def convert(model, n=None, var=None):
             mk = np.asarray(Image.fromarray(mk.astype(np.uint8) * 255).resize(im_p.shape[1::-1], Image.NEAREST)) > 0
         if img is None:
             img, m = np.zeros_like(im_p), np.zeros(mk.shape, bool)
+        if only is not None:
+            mk = mk & only
         m |= mk
         img[mk] = im_p[mk]
     _, (iy, ix) = ndi.distance_transform_edt(~m, return_indices=True)
@@ -349,7 +359,7 @@ def convert(model, n=None, var=None):
     im = Image.fromarray(rgba, "RGBA")
     im = im if im.size == SIZE else im.resize(SIZE, Image.BOX)
     if n is not None:
-        lm = lace_mask(LACE_REF)
+        lm = lace_mask(LACE_REF) & ~tongue_texels(SIZE)  # рамка шнуровки задевала верх языка детали над ботинком (26.10)
         out = np.asarray(im).copy()
         out[lm] = np.asarray(Image.open(legacy_png(LACE_REF)).convert("RGBA").resize(SIZE))[lm]
         inner = part_texels(INNER, SIZE)                  # изнанка (стелька, подкладка задника) — тёмная, как у EA (слот
@@ -367,6 +377,168 @@ def part_texels(part, size):
         lab = parts_legacy()
         k = (tid >= 0) & (lab[np.maximum(tid, 0)] == part)
         _M[key] = ndi.binary_dilation(k, iterations=2) & ~((tid >= 0) & (lab[np.maximum(tid, 0)] != part))
+    return _M[key]
+
+
+# Деталь конька над ботинком — язык спереди и задник сзади поверх гетры (26.10.2026, пользователь после игры: «коньки —
+# почти у всех белые язычки сверху (что-то вроде полоски в пару сантиметров из-за криво наложившейся текстуры)»).
+# У Legacy это отдельная сетка skatetongue_<T>_<L> (T = skatesocktuck: 0 — язык и задник, 2 — язык, 3 — задник, 1 — её
+# нет; в базе 2012 деталь у 4424 игроков из 4875) с той же текстурой skate_<N>_cm, но на своих островах развёртки (язык —
+# строки 330–422 и 48–132 из 512, задник — 25–128), вне островов ботинка playerskate_2. Перенос их не красил: туда
+# растекался ближайший тексель (белый верх стакана), а верх языка попадал в рамку шнуровки LACE_REF (белый кант языка
+# EA 48, обрезанный по прямой) — белая полоса по верху языка. Теперь деталь берёт рисунок с языка и задника варианта NHL 27
+# fulltuck: у notuck их нет, у общих моделей бренда это отдельные острова той же сетки, что у Legacy (у языка 92 и 42
+# треугольника), у своих моделей Supreme — продолжение островов notuck вверх.
+TONGUE_T = 0                        # деталь Legacy для переноса — кольцо (язык и задник); у 2 и 3 — те же острова развёртки
+TONGUE_VAR = "fulltuck"             # вариант NHL 27 с языком и задником над ботинком (как T = 0 у Legacy: гетра в ботинке)
+TONGUE_Y = 0.25                     # м: язык и задник fulltuck — его треугольники выше (по середине; верх notuck 0,26–0,27)…
+TONGUE_SHARED = 0.95                # …на островах развёртки, которых у notuck нет или которые у него короче (доля текселей
+#                                    острова, занятых и у notuck, меньше этой), без шнурков (LACE)
+TONGUE_Z = -0.02                    # м, середина треугольника по z: впереди — язык, позади — задник (у обеих моделей)
+FRONT, BACK = 4, 5                  # части детали: язык | задник
+
+
+def mesh_tongue(t=TONGUE_T):
+    """Деталь конька Legacy над ботинком skatetongue_<t>_2 (оба конька) {'pos', 'uv', 'tri', 'nrm'}."""
+    key = ("tongue", t)
+    if key not in _M:
+        sys.path.insert(0, os.path.join(REPO, "tools"))
+        import rw4mesh as rm
+        p = os.path.join(LEGACY_BIG, *TONGUE_REL.format(t=t).split("/"))
+        L = rm.Mesh(open(p, "rb").read(), p)
+        m = {"pos": np.asarray(L.pos, np.float64)[:, :3], "uv": np.asarray(L.uv, np.float64)[:, :2],
+             "tri": np.asarray(L.tris, np.int64)}
+        m["nrm"] = np.asarray(L.nrm, np.float64)[:, :3] if len(L.nrm) else _normals(m["pos"], m["tri"])
+        _M[key] = m
+    return _M[key]
+
+
+def mesh_legacy_full(t=TONGUE_T):
+    """Конёк Legacy в сборе для рисунков: ботинок playerskate_2 и деталь над ботинком skatetongue_<t>_2 одной сеткой."""
+    key = ("full", t)
+    if key not in _M:
+        a, b = mesh_legacy(), mesh_tongue(t)
+        _M[key] = {"pos": np.r_[a["pos"], b["pos"]], "uv": np.r_[a["uv"], b["uv"]], "nrm": np.r_[a["nrm"], b["nrm"]],
+                   "tri": np.r_[a["tri"], b["tri"] + len(a["pos"])]}
+    return _M[key]
+
+
+def tongue_legacy():
+    """Части детали Legacy над ботинком по треугольникам: FRONT (язык) | BACK (задник)."""
+    m = mesh_tongue()
+    return np.where(m["pos"][m["tri"]][:, :, 2].mean(1) > TONGUE_Z, FRONT, BACK)
+
+
+def tongue27(model):
+    """Язык и задник NHL 27 над ботинком по треугольникам варианта TONGUE_VAR модели model: FRONT | BACK | −1 —
+    треугольники выше TONGUE_Y на островах развёртки, которых у notuck нет или они у него короче, без шнурков."""
+    path = mesh_of(model, TONGUE_VAR)
+    key = ("tongue27", path)
+    if key in _M:
+        return _M[key]
+    m = mesh27(path)
+    used = kit3d.raster_uv(mesh27(mesh_of(model, "notuck")), 512)[0] >= 0
+    tid = kit3d.raster_uv(m, 512)[0]
+    isl = _components(m, True)
+    k = tid >= 0
+    tot = np.bincount(isl[tid[k]], minlength=isl.max() + 1)
+    shared = np.bincount(isl[tid[k & used]], minlength=isl.max() + 1)
+    new = (tot > 0) & (shared < TONGUE_SHARED * tot)
+    c = m["pos"][m["tri"]].mean(1)
+    sel = (c[:, 1] > TONGUE_Y) & new[isl] & (parts27(path) != LACE)
+    lab = np.where(sel, np.where(c[:, 2] > TONGUE_Z, FRONT, BACK), -1)
+    for part, what in ((FRONT, "языка"), (BACK, "задника")):
+        for sgn in (1.0, -1.0):
+            if not ((lab == part) & (c[:, 0] * sgn > 0)).any():
+                raise SystemExit(f"{path}: не нашлось {what} над ботинком (x {'>' if sgn > 0 else '<'} 0) — "
+                                 f"fb.skates.tongue27, TONGUE_Y / TONGUE_SHARED")
+    _M[key] = lab
+    _M[("isl27", path)] = isl
+    return lab
+
+
+def _facing_out(pos, tri, isl, axis_x):
+    """Острова (isl — номер у треугольника), обращённые наружу от оси голени (x = axis_x[знак x], z = TONGUE_Z): сумма
+    по острову радиальной составляющей нормалей граней, взвешенных площадью, > 0. -> bool по треугольникам."""
+    fn = np.cross(pos[tri[:, 1]] - pos[tri[:, 0]], pos[tri[:, 2]] - pos[tri[:, 0]])
+    c = pos[tri].mean(1)
+    rad = np.c_[c[:, 0] - np.where(c[:, 0] > 0, axis_x[1.0], axis_x[-1.0]), np.zeros(len(c)), c[:, 2] - TONGUE_Z]
+    rad /= np.maximum(np.linalg.norm(rad, axis=1, keepdims=True), 1e-9)
+    _, inv = np.unique(isl, return_inverse=True)
+    return (np.bincount(inv, weights=(fn * rad).sum(1)) > 0)[inv]
+
+
+def tongue_pairs(model):
+    """Пары переноса детали над ботинком [(часть NHL 27, часть детали Legacy)]: язык и задник NHL 27, каждый вписан по
+    сторонам в рамку той же части детали Legacy. Наружная сторона Legacy берёт со всей части, внутренняя — только с
+    внутренних островов NHL 27: у задника Supreme наружная сторона — частая сетка с рельефом, и все ближайшие к изнанке
+    Legacy треугольники оказывались наружными (на изнанку ложилась наружная эмблема)."""
+    key = ("tpairs", model)
+    if key in _M:
+        return _M[key]
+    path = mesh_of(model, TONGUE_VAR)
+    src, dst = mesh27(path), mesh_tongue()
+    ls, ld = tongue27(model), tongue_legacy()
+    isl_s, isl_d = _M[("isl27", path)], _components(dst, True)
+    out = []
+    for part in (FRONT, BACK):
+        ks, kd = ls == part, ld == part
+        p, axis_x = src["pos"].copy(), {}
+        for sgn in (1.0, -1.0):
+            vs = np.unique(src["tri"][ks].ravel())
+            vs = vs[src["pos"][vs, 0] * sgn > 0]
+            vd = np.unique(dst["tri"][kd].ravel())
+            vd = vd[dst["pos"][vd, 0] * sgn > 0]
+            s0, s1 = src["pos"][vs].min(0), src["pos"][vs].max(0)
+            d0, d1 = dst["pos"][vd].min(0), dst["pos"][vd].max(0)
+            p[vs] = d0 + (src["pos"][vs] - s0) * (d1 - d0) / np.maximum(s1 - s0, 1e-9)
+            axis_x[sgn] = dst["pos"][vd, 0].mean()
+        s_out = _facing_out(p, src["tri"], isl_s, axis_x)
+        d_out = _facing_out(dst["pos"], dst["tri"], isl_d, axis_x)
+        s_all, s_in = src["tri"][ks], src["tri"][ks & ~s_out]
+        whole = {"pos": p, "uv": src["uv"], "tri": s_all, "nrm": _normals(p, s_all)}
+        inner = {"pos": p, "uv": src["uv"], "tri": s_in, "nrm": _normals(p, s_in)} if len(s_in) else whole
+        out += [(whole, _sub(dst, kd & d_out)), (inner, _sub(dst, kd & ~d_out))]
+    _M[key] = out
+    return out
+
+
+def _relief(nt, src, dst, size):
+    """Рельеф NHL 27 на детали над ботинком: kit3d.transfer_normals без наклона основы — наклон поверхности NHL 27 к
+    поверхности Legacy в точке соответствия (перенос плоской карты) снимается поворотом. Язык и задник двух игр разной
+    формы, и наклон давал ложные тени (у задника Supreme — в среднем 76°, у ботинка — 16°). -> RGB size."""
+    flat = np.zeros((4, 4, 3))
+    flat[...] = (127.5, 127.5, 255.0)
+    b = kit3d._unit(np.asarray(kit3d.transfer_normals(flat, src, dst, size, 2)) / 127.5 - 1.0)
+    d = kit3d._unit(np.asarray(kit3d.transfer_normals(nt, src, dst, size, 2)) / 127.5 - 1.0)
+    ax = np.stack([b[..., 1], -b[..., 0], np.zeros(b.shape[:2])], -1)    # b × z: поворот b → z (Родриг)
+    s = np.linalg.norm(ax, axis=-1, keepdims=True)
+    c = b[..., 2:3]
+    k = ax / np.maximum(s, 1e-9)
+    r = d * c + np.cross(k, d) * s + k * (k * d).sum(-1, keepdims=True) * (1 - c)
+    r = np.where(s > 1e-6, r, d)
+    return np.clip(r * 127.5 + 127.5, 0, 255)
+
+
+def tongue_texels(size):
+    """Тексели развёртки (size) на детали над ботинком, с запасом 2 текселя за край (мипы), кроме текселей ботинка."""
+    from scipy import ndimage as ndi
+    key = ("ttex", tuple(size))
+    if key not in _M:
+        k = kit3d.raster_uv(mesh_tongue(), size)[0] >= 0
+        boot = kit3d.raster_uv(mesh_legacy(), size)[0] >= 0
+        _M[key] = ndi.binary_dilation(k, iterations=2) & ~boot
+    return _M[key]
+
+
+def tongue_islands(size):
+    """Острова развёртки детали над ботинком на растре size: номер острова у текселя (−1 — нет)."""
+    key = ("tisl", tuple(size))
+    if key not in _M:
+        m = mesh_tongue()
+        lab = _components(m, True)
+        tid = kit3d.raster_uv(m, size)[0]
+        _M[key] = np.where(tid >= 0, lab[np.maximum(tid, 0)], -1)
     return _M[key]
 
 
@@ -418,7 +590,8 @@ def maps(model, n, var=None):
     """Рельеф и блик слота n по модели NHL 27: nm — перенос normal NHL 27 (kit3d.transfer_normals), sm — канал G
     coeff NHL 27 (гладкость деталей), подогнанный по каждому острову к среднему и разбросу блика Legacy слота n (уровни
     материалов игры — как были, рисунок — новый). -> (nm RGBA 512×256, sm RGBA 512×256). Карты Legacy нарисованы под
-    прежний дизайн (окна стакана Tuuk, «X» Supreme 1S) — под новым рисунком они проступали бы."""
+    прежний дизайн (окна стакана Tuuk, «X» Supreme 1S) — под новым рисунком они проступали бы. Деталь над ботинком —
+    так же, с языка и задника NHL 27 fulltuck (tongue_pairs, _relief)."""
     nsz = (SIZE[0] // 2, SIZE[1] // 2)
     nt = kit3d.load_tex(src27(model, "normal"))
     co = np.repeat(np.asarray(kit3d.load_tex(src27(model, "coeff")))[..., 1:2], 3, -1)
@@ -447,6 +620,7 @@ def maps(model, n, var=None):
     # шнуровка — рельеф и блик Legacy (как и её цвет, LACE_REF); стакан — гладкий: у NHL 27 там пряди шнурков и прорези
     # стакана другой формы — переносом рельеф шёл цветной кашей (лист _maps43, 23.10)
     lm = np.asarray(Image.fromarray(lace_mask(LACE_REF).astype(np.uint8) * 255).resize(nsz, Image.NEAREST)) > 0
+    lm &= ~tongue_texels(nsz)                            # кроме детали над ботинком (как в convert)
     ref_nm, ref_sm = legacy_map(LACE_REF, "nm"), legacy_map(LACE_REF, "sm")
     if ref_nm.shape[:2] != lm.shape:
         ref_nm = np.asarray(Image.fromarray(ref_nm.astype(np.uint8)).resize(nsz, Image.BILINEAR)).astype(np.float64)
@@ -466,6 +640,22 @@ def maps(model, n, var=None):
         k = isl == i
         if vv[np.nonzero(k)[0]].mean() > HOLDER_V:
             nm[k] = (127.5, 127.5, 255.0)
+    # деталь над ботинком (язык, задник; 26.10) — рельеф (без наклона основы, _relief) и блик с языка и задника fulltuck,
+    # блик подогнан по её островам, как выше
+    gt, tk = np.zeros_like(g), np.zeros(g.shape, bool)
+    for src, dst in tongue_pairs(model):
+        if not len(dst["tri"]):
+            continue
+        k = (kit3d.raster_uv(dst, nsz)[0] >= 0) & tongue_texels(nsz)   # тексели ботинка не трогаем (как в convert)
+        nm[k] = _relief(nt, src, dst, nsz)[k]
+        gt[k] = np.asarray(kit3d.transfer(co, src, dst, nsz, 2)[0], np.float64)[..., 0][k]
+        tk |= k
+    ti = tongue_islands(nsz)
+    for i in np.unique(ti[tk & (ti >= 0)]):
+        k = tk & (ti == i)
+        sg, so = gt[k].std(), old[..., 0][k].std()
+        sm[k] = old[..., 0][k].mean() + (gt[k] - gt[k].mean()) * (so / sg if sg > 1e-6 else 0.0)
+    sm = np.clip(sm, 0, 255)
     nm_img = np.dstack([np.clip(np.round(nm), 0, 255).astype(np.uint8), np.full(nm.shape[:2], 255, np.uint8)])
     sm_img = np.dstack([np.repeat(np.round(sm).astype(np.uint8)[..., None], 3, -1), np.full(sm.shape, 255, np.uint8)])
     return Image.fromarray(nm_img, "RGBA"), Image.fromarray(sm_img, "RGBA")
@@ -684,7 +874,7 @@ def pack(man, cache):
     return k
 
 
-def render_skate(tex_img, mesh, width=420, angles=(90, 0, -90, 180), side=1.0):
+def render_skate(tex_img, mesh, width=420, angles=(90, 0, -90, 180), side=1.0, frame=(-0.17, 0.17, -0.13, 0.15)):
     """Конёк (сторона side по знаку x) с текстурой: виды вокруг вертикали (90 — снаружи сбоку, 0 — спереди,
     180 — сзади). -> RGB."""
     sys.path.insert(0, os.path.join(REPO, "tools"))
@@ -700,7 +890,7 @@ def render_skate(tex_img, mesh, width=420, angles=(90, 0, -90, 180), side=1.0):
         pos = (mesh["pos"] - c) @ R.T
         part = {"pos": pos, "nrm": mesh["nrm"] @ R.T, "uv": mesh["uv"], "tri": mesh["tri"][keep], "tex": tex,
                 "twosided": True}
-        rows.append(S.render([part], 0.0, width, frame=(-0.17, 0.17, -0.13, 0.15)))
+        rows.append(S.render([part], 0.0, width, frame=frame))
     out = Image.new("RGB", (sum(r.size[0] + 4 for r in rows), rows[0].size[1]), (30, 30, 34))
     x = 0
     for r in rows:
@@ -750,18 +940,22 @@ def cmd_fe_sheet(a):
     print(out, sh.size)
 
 
+SHEET_FRAME = (-0.17, 0.17, -0.13, 0.24)   # кадр листа: с деталью над ботинком (у Legacy верх 0,305, у fulltuck 0,33 м)
+
+
 def cmd_sheet(a):
     font = _font(15)
     tiles = []
     for lab, n, src, key, name in slots():
         model = src.partition(":")[2]
-        left = render_skate(Image.open(src_png(model)), mesh27(mesh_of(model)), 260)
-        right = render_skate(slot_image(src, n), mesh_legacy(), 260)
-        old = render_skate(Image.open(legacy_png(n)), mesh_legacy(), 260)
+        # NHL 27 — fulltuck (ботинок как у notuck, плюс язык и задник — источник детали над ботинком); Legacy — в сборе
+        left = render_skate(Image.open(src_png(model)), mesh27(mesh_of(model, TONGUE_VAR)), 260, frame=SHEET_FRAME)
+        right = render_skate(slot_image(src, n), mesh_legacy_full(), 260, frame=SHEET_FRAME)
+        old = render_skate(Image.open(legacy_png(n)), mesh_legacy_full(), 260, frame=SHEET_FRAME)
         t = Image.new("RGB", (left.size[0], left.size[1] * 3 + 60), (18, 18, 22))
         d = ImageDraw.Draw(t)
-        d.text((6, 2), f"{lab} · {n} · {name or key}: было (Legacy) | NHL 27 {model} | в игре", fill=(255, 220, 140),
-               font=font)
+        d.text((6, 2), f"{lab} · {n} · {name or key}: было (Legacy) | NHL 27 {model} ({TONGUE_VAR}) | в игре",
+               fill=(255, 220, 140), font=font)
         for i, im in enumerate((old, left, right)):
             t.paste(im, (0, 20 + i * (im.size[1] + 20)))
         tiles.append(t)
