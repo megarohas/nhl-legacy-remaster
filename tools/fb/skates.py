@@ -331,13 +331,15 @@ def lace_mask(n):
 def convert(model, n=None, var=None):
     """Текстура конька NHL 27 → RGBA 1024×512 в развёртке Legacy (вне развёртки — ближайший тексель, для мипов);
     с n — шнуровка (lace_mask) — нарисованная Legacy (слота LACE_REF). Деталь над ботинком (язык и задник поверх гетры)
-    — с языка и задника NHL 27 fulltuck (tongue_pairs, 26.10)."""
+    — с языка и задника NHL 27 fulltuck (tongue_pairs), подошва — с подошвы NHL 27 (sole_pair; обе правки 26.10)."""
     from scipy import ndimage as ndi
     tex = kit3d.load_tex(src_png(model))
     img, m = None, None
-    # ботинок — с ботинка, стакан — со стакана, язык — с языка, задник — с задника (каждая часть — в своей рамке); деталь
-    # над ботинком пишет только на свои тексели: остров задника касается верха ботинка (строки 82–93), тот не трогаем
+    # ботинок — с ботинка, стакан — со стакана, подошва — с подошвы, язык — с языка, задник — с задника (каждая часть — в
+    # своей рамке); подошва и деталь над ботинком пишут только на свои тексели: остров задника касается верха ботинка
+    # (строки 82–93), тот не трогаем
     pairs = [(part_pair(mesh_of(model, var), part), None) for part in (BOOT, HOLDER)]
+    pairs += [(sole_pair(mesh_of(model, var)), sole_texels(SIZE))]
     pairs += [(pair, tongue_texels(SIZE)) for pair in tongue_pairs(model)]
     for (src, dst), only in pairs:
         if not len(dst["tri"]):
@@ -359,7 +361,8 @@ def convert(model, n=None, var=None):
     im = Image.fromarray(rgba, "RGBA")
     im = im if im.size == SIZE else im.resize(SIZE, Image.BOX)
     if n is not None:
-        lm = lace_mask(LACE_REF) & ~tongue_texels(SIZE)  # рамка шнуровки задевала верх языка детали над ботинком (26.10)
+        lm = lace_mask(LACE_REF) & ~tongue_texels(SIZE) & ~sole_texels(SIZE)   # рамка шнуровки задевала верх языка детали
+        #                                                над ботинком и накрывала подошву (26.10)
         out = np.asarray(im).copy()
         out[lm] = np.asarray(Image.open(legacy_png(LACE_REF)).convert("RGBA").resize(SIZE))[lm]
         inner = part_texels(INNER, SIZE)                  # изнанка (стелька, подкладка задника) — тёмная, как у EA (слот
@@ -457,6 +460,90 @@ def tongue27(model):
     return lab
 
 
+def _fit_sides(src, s_tri, dst, d_tri):
+    """Вершины треугольников s_tri сетки src, вписанные по сторонам (знак x) в рамку треугольников d_tri сетки dst по
+    осям. -> (позиции src, {знак x: середина рамки dst по x})."""
+    p, axis_x = src["pos"].copy(), {}
+    for sgn in (1.0, -1.0):
+        vs = np.unique(s_tri.ravel())
+        vs = vs[src["pos"][vs, 0] * sgn > 0]
+        vd = np.unique(d_tri.ravel())
+        vd = vd[dst["pos"][vd, 0] * sgn > 0]
+        s0, s1 = src["pos"][vs].min(0), src["pos"][vs].max(0)
+        d0, d1 = dst["pos"][vd].min(0), dst["pos"][vd].max(0)
+        p[vs] = d0 + (src["pos"][vs] - s0) * (d1 - d0) / np.maximum(s1 - s0, 1e-9)
+        axis_x[sgn] = dst["pos"][vd, 0].mean()
+    return p, axis_x
+
+
+# Подошва (26.10.2026, после правки языка; координатор: «подошва должна быть своя у каждого конька: из NHL 27 … только
+# не со слота 48»). Остров подошвы Legacy (низ ботинка, строки 237–324 из 512) лежит внутри рамки шнуровки lace_mask
+# (LACE_REF): рамка — по светлым текселям полосы 235–342, а там у EA 48 и белые полосы подошвы, так что она накрыла всю
+# полосу, и у всех слотов подошва была оранжевая BAUER со слота 48 (видна снизу и сбоку между креплениями стакана).
+# Теперь подошва — с подошвы NHL 27: у всех шести сеток это один остров на конёк, почти целиком гранями вниз, от носка
+# до пятки (у общих моделей — карбон с эмблемой под сводом стопы, у Supreme — рама с заклёпками).
+SOLE_DOWN = 0.8                     # остров подошвы: доля площади граней, смотрящих вниз (нормаль y < −0,5), больше этой…
+SOLE_SPAN = 0.7                     # …длиной по z больше этой доли длины конька…
+SOLE_Y = (0.05, 0.11)               # …и целиком на этой высоте, м (Legacy 0,061–0,087, NHL 27 0,07–0,10); стакан ниже,
+#                                    стелька смотрит вверх, полоски у креплений стакана короче
+
+
+def _soles(m):
+    """Острова подошвы сетки m по треугольникам (bool): SOLE_DOWN, SOLE_SPAN, SOLE_Y."""
+    T, P = m["tri"], m["pos"]
+    fn = np.cross(P[T[:, 1]] - P[T[:, 0]], P[T[:, 2]] - P[T[:, 0]])
+    a = np.linalg.norm(fn, axis=1)
+    isl = _components(m, True)
+    n = isl.max() + 1
+    share = (np.bincount(isl, weights=a * (fn[:, 1] < -0.5 * a), minlength=n)
+             / np.maximum(np.bincount(isl, weights=a, minlength=n), 1e-12))
+    z0, z1, y0, y1 = np.full(n, 9.0), np.full(n, -9.0), np.full(n, 9.0), np.full(n, -9.0)
+    np.minimum.at(z0, isl, P[T][:, :, 2].min(1))
+    np.maximum.at(z1, isl, P[T][:, :, 2].max(1))
+    np.minimum.at(y0, isl, P[T][:, :, 1].min(1))
+    np.maximum.at(y1, isl, P[T][:, :, 1].max(1))
+    ok = (share > SOLE_DOWN) & (z1 - z0 > SOLE_SPAN * np.ptp(P[:, 2])) & (y0 > SOLE_Y[0]) & (y1 < SOLE_Y[1])
+    return ok[isl]
+
+
+def sole_legacy():
+    """Подошва Legacy по треугольникам playerskate_2 (острова 3 и 11 — по одному на конёк)."""
+    if "sole_leg" not in _M:
+        _M["sole_leg"] = _soles(mesh_legacy()) & (parts_legacy() == BOOT)
+    return _M["sole_leg"]
+
+
+def sole_pair(path):
+    """(подошва модели NHL 27 path, вписанная по сторонам в рамку подошвы Legacy; подошва Legacy)."""
+    key = ("spair", path)
+    if key in _M:
+        return _M[key]
+    src, dst = mesh27(path), mesh_legacy()
+    ks, kd = _soles(src), sole_legacy()
+    c = src["pos"][src["tri"]].mean(1)
+    for sgn in (1.0, -1.0):
+        if not (ks & (c[:, 0] * sgn > 0)).any():
+            raise SystemExit(f"{path}: не нашлось подошвы (x {'>' if sgn > 0 else '<'} 0) — fb.skates._soles, SOLE_*")
+    s_tri = src["tri"][ks]
+    p, _ = _fit_sides(src, s_tri, dst, dst["tri"][kd])
+    _M[key] = ({"pos": p, "uv": src["uv"], "tri": s_tri, "nrm": _normals(p, s_tri)}, _sub(dst, kd))
+    return _M[key]
+
+
+def sole_texels(size):
+    """Тексели развёртки (size) на подошве Legacy, с запасом 2 текселя за край, кроме текселей других островов и детали
+    над ботинком."""
+    from scipy import ndimage as ndi
+    key = ("stex", tuple(size))
+    if key not in _M:
+        tid = kit3d.raster_uv(mesh_legacy(), size)[0]
+        s = sole_legacy()[np.maximum(tid, 0)]
+        k, other = (tid >= 0) & s, (tid >= 0) & ~s
+        tongue = kit3d.raster_uv(mesh_tongue(), size)[0] >= 0
+        _M[key] = ndi.binary_dilation(k, iterations=2) & ~other & ~tongue & ~tongue_texels(size)
+    return _M[key]
+
+
 def _facing_out(pos, tri, isl, axis_x):
     """Острова (isl — номер у треугольника), обращённые наружу от оси голени (x = axis_x[знак x], z = TONGUE_Z): сумма
     по острову радиальной составляющей нормалей граней, взвешенных площадью, > 0. -> bool по треугольникам."""
@@ -483,16 +570,7 @@ def tongue_pairs(model):
     out = []
     for part in (FRONT, BACK):
         ks, kd = ls == part, ld == part
-        p, axis_x = src["pos"].copy(), {}
-        for sgn in (1.0, -1.0):
-            vs = np.unique(src["tri"][ks].ravel())
-            vs = vs[src["pos"][vs, 0] * sgn > 0]
-            vd = np.unique(dst["tri"][kd].ravel())
-            vd = vd[dst["pos"][vd, 0] * sgn > 0]
-            s0, s1 = src["pos"][vs].min(0), src["pos"][vs].max(0)
-            d0, d1 = dst["pos"][vd].min(0), dst["pos"][vd].max(0)
-            p[vs] = d0 + (src["pos"][vs] - s0) * (d1 - d0) / np.maximum(s1 - s0, 1e-9)
-            axis_x[sgn] = dst["pos"][vd, 0].mean()
+        p, axis_x = _fit_sides(src, src["tri"][ks], dst, dst["tri"][kd])
         s_out = _facing_out(p, src["tri"], isl_s, axis_x)
         d_out = _facing_out(dst["pos"], dst["tri"], isl_d, axis_x)
         s_all, s_in = src["tri"][ks], src["tri"][ks & ~s_out]
@@ -620,7 +698,7 @@ def maps(model, n, var=None):
     # шнуровка — рельеф и блик Legacy (как и её цвет, LACE_REF); стакан — гладкий: у NHL 27 там пряди шнурков и прорези
     # стакана другой формы — переносом рельеф шёл цветной кашей (лист _maps43, 23.10)
     lm = np.asarray(Image.fromarray(lace_mask(LACE_REF).astype(np.uint8) * 255).resize(nsz, Image.NEAREST)) > 0
-    lm &= ~tongue_texels(nsz)                            # кроме детали над ботинком (как в convert)
+    lm &= ~tongue_texels(nsz) & ~sole_texels(nsz)        # кроме детали над ботинком и подошвы (как в convert)
     ref_nm, ref_sm = legacy_map(LACE_REF, "nm"), legacy_map(LACE_REF, "sm")
     if ref_nm.shape[:2] != lm.shape:
         ref_nm = np.asarray(Image.fromarray(ref_nm.astype(np.uint8)).resize(nsz, Image.BILINEAR)).astype(np.float64)
@@ -640,21 +718,22 @@ def maps(model, n, var=None):
         k = isl == i
         if vv[np.nonzero(k)[0]].mean() > HOLDER_V:
             nm[k] = (127.5, 127.5, 255.0)
-    # деталь над ботинком (язык, задник; 26.10) — рельеф (без наклона основы, _relief) и блик с языка и задника fulltuck,
-    # блик подогнан по её островам, как выше
-    gt, tk = np.zeros_like(g), np.zeros(g.shape, bool)
-    for src, dst in tongue_pairs(model):
-        if not len(dst["tri"]):
-            continue
-        k = (kit3d.raster_uv(dst, nsz)[0] >= 0) & tongue_texels(nsz)   # тексели ботинка не трогаем (как в convert)
-        nm[k] = _relief(nt, src, dst, nsz)[k]
-        gt[k] = np.asarray(kit3d.transfer(co, src, dst, nsz, 2)[0], np.float64)[..., 0][k]
-        tk |= k
-    ti = tongue_islands(nsz)
-    for i in np.unique(ti[tk & (ti >= 0)]):
-        k = tk & (ti == i)
-        sg, so = gt[k].std(), old[..., 0][k].std()
-        sm[k] = old[..., 0][k].mean() + (gt[k] - gt[k].mean()) * (so / sg if sg > 1e-6 else 0.0)
+    # подошва и деталь над ботинком (язык, задник; 26.10) — рельеф (без наклона основы, _relief) и блик с подошвы NHL 27 и
+    # с языка и задника fulltuck, блик подогнан по их островам, как выше; тексели ботинка не трогаем (как в convert)
+    for pairs, only, ids in (([sole_pair(mesh_of(model, var))], sole_texels(nsz), isl),
+                             (tongue_pairs(model), tongue_texels(nsz), tongue_islands(nsz))):
+        gt, done = np.zeros_like(g), np.zeros(g.shape, bool)
+        for src, dst in pairs:
+            if not len(dst["tri"]):
+                continue
+            k = (kit3d.raster_uv(dst, nsz)[0] >= 0) & only
+            nm[k] = _relief(nt, src, dst, nsz)[k]
+            gt[k] = np.asarray(kit3d.transfer(co, src, dst, nsz, 2)[0], np.float64)[..., 0][k]
+            done |= k
+        for i in np.unique(ids[done & (ids >= 0)]):
+            k = done & (ids == i)
+            sg, so = gt[k].std(), old[..., 0][k].std()
+            sm[k] = old[..., 0][k].mean() + (gt[k] - gt[k].mean()) * (so / sg if sg > 1e-6 else 0.0)
     sm = np.clip(sm, 0, 255)
     nm_img = np.dstack([np.clip(np.round(nm), 0, 255).astype(np.uint8), np.full(nm.shape[:2], 255, np.uint8)])
     sm_img = np.dstack([np.repeat(np.round(sm).astype(np.uint8)[..., None], 3, -1), np.full(sm.shape, 255, np.uint8)])
