@@ -2254,6 +2254,9 @@ def use_club(code):
     LETTER_SHIFT_CM = tuple(map(float, prof["letter_zone_shift_cm"])) if "letter_zone_shift_cm" in prof else None
     global LETTER7_SHIFT_CM                             # второе место буквы — отдельно (23.10, NYR)
     LETTER7_SHIFT_CM = tuple(map(float, prof["letter_zone7_shift_cm"])) if "letter_zone7_shift_cm" in prof else None
+    global LETTER_ZONE_SCALE, HELMET_LOGO_X             # буква капитана мельче (DET), наклейка шлема у́же (ANA) — 26.10
+    LETTER_ZONE_SCALE = float(prof.get("letter_zone_scale", 1.0))
+    HELMET_LOGO_X = float(prof.get("helmet_logo_x", 1.0))
     split = prof.get("armhole_split", "zones")
     # по форме — таблица { away = "full" } (22.10, агент plain, CAR: в гостях красные рукава на белом — по шву Edge, дома
     # тёмная кокетка с красной полосой заходит с плеч на руку — шов по всей пройме резал её вертикальной красной чертой);
@@ -5866,7 +5869,7 @@ def cmd_kit(a):
         """Герб не на букву — по тем местам буквы, что будут в слоте: зоны формы NAME_ZONES_FROM и сдвиг LETTER_SHIFT_CM
         (стадия slot делает с картой то же)."""
         import shutil
-        if not (NAME_ZONES_FROM or LETTER_SHIFT_CM):
+        if not (NAME_ZONES_FROM or LETTER_SHIFT_CM or LETTER_ZONE_SCALE != 1.0):
             return orig_crest_fit(name_png, path)
         tmp = os.path.join(WORK, "cur_kits", f"_crest_fit_{a.club}.png")
         os.makedirs(os.path.dirname(tmp), exist_ok=True)
@@ -5878,6 +5881,8 @@ def cmd_kit(a):
             copy_zones(tmp, os.path.join(ref, "name_cm.png"), LETTER_ZONES)
         if LETTER_SHIFT_CM:
             shift_zones(tmp, *LETTER_SHIFT_CM)
+        if LETTER_ZONE_SCALE != 1.0:                    # места буквы мельче (letter_zone_scale) — как в стадии slot
+            scale_zones(tmp, LETTER_ZONE_SCALE, solid_zones(tmp, LETTER_ZONES))
         return orig_crest_fit(tmp, path)
     kit_fix.crest_fit = crest_fit
     pilot.set_roots(KITS_OUT, os.path.join(WORK, "pack"))
@@ -6793,6 +6798,15 @@ LETTER7_SHIFT_CM = None            # профиль letter_zone7_shift_cm (23.10
 #                                    второе место буквы (зона 7), после letter_zone_shift_cm. У NYR оно лежало на «R» надписи
 #                                    RANGERS (kitport audit: 16 % синего под зоной у выезда); место C (зона 5) и герб — как
 #                                    были ([crest_fit] бережёт только зону 5). None — как было
+LETTER_ZONE_SCALE = 1.0            # профиль letter_zone_scale (26.10, DET, пользователь после игры: «литеры поменьше, главное
+#                                    лого побольше»): места буквы капитана (зоны 5, 7) — в k раз у их середины (scale_zones;
+#                                    игра вписывает букву в зону — буква мельче); [crest_fit] на стадии kit — по уменьшенным
+#                                    местам, герб растёт до них (crest_size_cm). 1 — как было
+HELMET_LOGO_X = 1.0                # профиль helmet_logo_x (26.10, ANA; пользователь: «возможно, лого на шлеме растянут в
+#                                    ширину»): наклейка шлема из источника — ×k по ширине у середины её рамки (helmet_squeeze).
+#                                    У ANA helmetlogo NHL 27 шире той же эмблемы на свитере в 1,228 раза (маска 310×238 против
+#                                    210×198, вся 532×385 против 360×320), а шлем Legacy наклейку не искажает (у EA лапа ANA на
+#                                    шлеме 1,82, на свитере 1,87; круг BOS у NHL 27 — 82×83). 1 — как было
 
 
 def zone_shift_px(png, zone, out_cm, up_cm):
@@ -6839,6 +6853,22 @@ def shift_zones(png, out_cm, up_cm, zones=None):
         a[ny, nx] = color
     Image.fromarray(a, "RGBA").save(png)
     return res
+
+
+def solid_zones(png, zones, fill=0.5):
+    """Зоны карты номеров, заполненные прямоугольником (доля текселей зоны в её рамке ≥ fill). У EA бывают «зоны» из
+    разрозненных текселей (DET 1_10_0: зона 7 — 241 тексель на рамке 80 × 87, мусор шаблона) — scale_zones залил бы
+    рамку сплошной зоной (26.10: литера DET на 22 % вне развёртки, kitport audit)."""
+    from PIL import Image
+    a = np.asarray(Image.open(png).convert("RGBA"))
+    out = []
+    for z in zones:
+        m = (a[..., 0] > 128) & (a[..., 1] > 128) & (a[..., 2] == z)
+        if m.any():
+            ys, xs = np.nonzero(m)
+            if m.sum() >= fill * (ys.max() - ys.min() + 1) * (xs.max() - xs.min() + 1):
+                out.append(z)
+    return tuple(out)
 
 
 def scale_zones(png, k, zones, anchor="center"):
@@ -7492,6 +7522,10 @@ def cmd_slot(a):
         if LETTER7_SHIFT_CM:                            # второе место буквы — с надписи-герба (letter_zone7_shift_cm; NYR)
             print(f"  буква капитана {kit}: зона 7 сдвинута на {LETTER7_SHIFT_CM} см (наружу, вверх):",
                   shift_zones(os.path.join(d, "name_cm.png"), *LETTER7_SHIFT_CM, zones=(7,)))
+        if LETTER_ZONE_SCALE != 1.0:                    # буква капитана мельче (профиль letter_zone_scale; DET 26.10)
+            zs = solid_zones(os.path.join(d, "name_cm.png"), LETTER_ZONES)   # разрозненные «зоны» EA — как есть
+            print(f"  буква капитана {kit}: зоны {zs} ×{LETTER_ZONE_SCALE} (было, стало):",
+                  scale_zones(os.path.join(d, "name_cm.png"), LETTER_ZONE_SCALE, zs))
         std = LETTERING == "standard"
         if FONT_PLATE:                                  # фамилия на подложке (PHI): буквы атласа — как у источника
             print(f"  фамилия {kit}: на подложке (font_plate) — атлас букв как у источника, без растяжки")
@@ -7609,6 +7643,28 @@ def slot_container(n):
 HELMET_CONTAINERS = ("0_1_0", "10_1_0", "127_1_0")   # наклейки EA по длине «A_1_V» (5, 6, 7 знаков, docs/kitport.md §2.3)
 
 
+def helmet_squeeze(img, k):
+    """RGBA наклейки: рамка по альфе — в k раз по ширине у её середины, высота та же (helmet_logo_x). Уменьшение — как у
+    helmet_from_source: с премультипликацией, альфа отдельно (кайма без тёмного ореола)."""
+    from PIL import Image
+    bb = img.getbbox()
+    if not bb or k == 1.0:
+        return img
+    part = img.crop(bb)
+    nw = max(1, int(round(part.width * k)))
+    a = np.asarray(part).astype(np.float64)
+    a[..., :3] *= a[..., 3:4] / 255.0
+    pm = np.asarray(Image.fromarray(np.clip(a, 0, 255).astype(np.uint8)).resize((nw, part.height), Image.LANCZOS))
+    pm = pm.astype(np.float64)
+    al = np.asarray(part.getchannel("A").resize((nw, part.height), Image.LANCZOS)).astype(np.float64)
+    pm[..., :3] = np.where(al[..., None] > 0, pm[..., :3] * 255.0 / np.maximum(al[..., None], 1), 0)
+    pm[..., 3] = al
+    out = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    out.paste(Image.fromarray(np.clip(np.round(pm), 0, 255).astype(np.uint8), "RGBA"),
+              (int(round((bb[0] + bb[2]) / 2 - nw / 2)), bb[1]))
+    return out
+
+
 def helmet_from_source(code, kit, leg_art, leg_v, art, v, dst_root):
     """Наклейка на шлем формы стиля SLOT_STYLE — helmetlogo источника (у NHL 27 — реклама на шлеме, 1024×512) в
     контейнере наклейки EA той же длины имени (образец формы или HELMET_CONTAINERS), 256×128 DXT5. -> путь или None."""
@@ -7638,7 +7694,9 @@ def helmet_from_source(code, kit, leg_art, leg_v, art, v, dst_root):
     rwf = ta.Rw4.load(path)
     t = next(t for t in rwf.textures if t.name.endswith("_0.Raster") or t.name.endswith("_0"))
     w, h, _ = kp.tex_decode(rwf, t)
-    img = Image.open(png).convert("RGBA")
+    img = helmet_squeeze(Image.open(png).convert("RGBA"), HELMET_LOGO_X)   # у́же — профиль helmet_logo_x (ANA, 26.10)
+    if HELMET_LOGO_X != 1.0:
+        print(f"  наклейка {kit}: по ширине ×{HELMET_LOGO_X} (helmet_logo_x)")
     a = np.asarray(img).astype(np.float64)
     a[..., :3] *= a[..., 3:4] / 255.0                    # уменьшение с премультипликацией (кайма без тёмного ореола)
     small = np.asarray(Image.fromarray(np.clip(a, 0, 255).astype(np.uint8)).resize((w, h), Image.LANCZOS)).astype(np.float64)
