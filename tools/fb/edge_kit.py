@@ -2389,6 +2389,10 @@ BRAND_Y = None                     # профиль brand_y (м, 23.10, аген
 #                                    у CBJ на 1,663 м (REEBOK_BACK_UV) — белая полоса под кокеткой (1,649–1,669), надпись
 #                                    на ней; у NHL 27 логотип выше полос, в кокетке (~1,682). Нет — REEBOK_BACK_UV
 # высота середины спины Edge → v развёртки (замер по сетке слота, x = 0, 23.10)
+BRAND_CLEAR = {}                   # профиль brand_clear: форма → [u0, v0, u1, v1] — закрасить цветом ткани перед надписью
+#                                    (30.10, CAR выезд): в base_color NHL 27 у логотипа сзади три тонкие тёмные чёрточки, они
+#                                    переносились на v ~0,408 и шли под надписью; с надписью выше остались бы одни
+BRAND_CLEAR_CUR = None             # то же для собираемой формы (use_kit)
 BRAND_Y_V = ((1.6169, 0.3911), (1.6381, 0.4028), (1.6571, 0.4146), (1.6632, 0.4185), (1.6754, 0.4263),
              (1.6808, 0.4302), (1.6845, 0.4341), (1.6882, 0.4380), (1.6955, 0.4438), (1.7001, 0.4478))
 
@@ -2589,6 +2593,9 @@ def use_club(code):
         sys.exit(f"[{code}] name_contrast = {_nc!r} — true | false | {{ форма = false }}")
     YOKE_MIX_KEEP = bool(prof.get("yoke_mix_keep", False))   # смесь у полос рукава — как перенеслась (23.10, WPG выезд)
     BRAND_Y = float(prof["brand_y"]) if "brand_y" in prof else None   # надпись сзади на этой высоте (23.10, CBJ)
+    global BRAND_CLEAR, YOKE_SEAM_OFF
+    BRAND_CLEAR = dict(prof.get("brand_clear", {}))     # что закрасить под надписью, по форме (30.10, CAR выезд)
+    YOKE_SEAM_OFF = tuple(prof.get("yoke_seam_off", ()))   # формы без шва чужой кокетки (30.10, CAR выезд)
     SLEEVE_FILL = prof.get("sleeve_fill")                # "below": ткань над полосами рукава — цвет под ними (MTL дом)
     if SLEEVE_FILL not in (None, "below"):
         sys.exit(f"[{code}] sleeve_fill = {SLEEVE_FILL!r} — только \"below\"")
@@ -2825,7 +2832,8 @@ def crest_drop(placed, kit):
 def use_kit(kit):
     """Поля профиля, заданные по форме (yoke_color, yoke_shape_color, collar_trim таблицей { home = …, away = … }), — на время
     сборки формы kit (cmd_kit, kitport yoke). У профиля без таблиц ничего не меняет."""
-    global YOKE_KIND, YOKE_EA_KIND, ARMHOLE_SPLIT_ZONES, COLLAR_TRIM
+    global YOKE_KIND, YOKE_EA_KIND, ARMHOLE_SPLIT_ZONES, COLLAR_TRIM, BRAND_CLEAR_CUR
+    BRAND_CLEAR_CUR = BRAND_CLEAR.get(kit)
     if COLLAR_TRIM_KITS:                                 # collar_trim по формам (STL): вне таблицы — auto
         COLLAR_TRIM = COLLAR_TRIM_KITS.get(kit, "auto")
     global SLEEVE_TOP24
@@ -6261,6 +6269,11 @@ def _yoke_shape_path(code):
     return os.path.join(WORK, f"yoke_shape_{code}.json")
 
 
+YOKE_SEAM_OFF = ()                 # профиль yoke_seam_off: формы, которым шов кокетки другой формы клуба не нужен (30.10, CAR
+#                                    выезд; пользователь: «швы отличаются от того, как они выглядят у других команд»): кокетка
+#                                    только дома, а на белой гостевой её шов шёл через грудь и спину и бледным контуром у рукава
+
+
 def save_yoke_shape(code, poly, heights):
     """Форма кокетки (бока — кривые EA в uv0, низ — высоты) — для форм клуба без цветной кокетки."""
     import json
@@ -6334,6 +6347,8 @@ def cmd_kit(a):
             t["brand"]["back"] = dict(t["brand"]["back"], center=brand_uv())
             if BRAND_WIN is not None:                    # окно замера цвета логотипа источника (профиль brand_win)
                 t["brand"]["back"]["nhl24_win"] = BRAND_WIN
+            if BRAND_CLEAR_CUR:                          # что закрасить под надписью (профиль brand_clear)
+                t["brand"]["back"]["clear"] = list(BRAND_CLEAR_CUR)
         return t
     kit_fix._rules = fix_rules
     orig_brand_relief = kit_fix.BrandSwap.relief
@@ -6593,7 +6608,7 @@ def cmd_kit(a):
                 print("  полосы рукава к кисти: k, верх рисунка", SLV_COMPRESS)
             pilot.cmd_build(SimpleNamespace(club=a.club, kits=kit, reuse=False))
             painters = dict(yoke_rule)
-            if "cur" not in painters:                    # кокетка без цвета (дом MIN): шов и сетчатая ткань — как у
+            if "cur" not in painters and kit not in YOKE_SEAM_OFF:   # кокетка без цвета (дом MIN): шов и сетчатая ткань — как у
                 sh = load_yoke_shape(a.club)             # выезда (у NHL 24 крой один)
                 if sh is not None:
                     painters["yoke_shape"] = YokePaint(sh[0], keep, {k: E2[k] for k in ("pos", "uv", "nrm", "tri", "uv0")},
