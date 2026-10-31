@@ -21,6 +21,8 @@ gpu_allow_invalid_fetch_constants = true
 # Ввод через XInput: DualSense/DualShock — через DS4Windows (виртуальный Xbox 360). Клавиатура как
 # геймпад — --mnk_mode=true (Start — Return, A — Space, B — Backspace, стик — WASD).
 input_backend = "xinput"
+# Курсор над окном игры скрыт; вне окна и пока открыто окно SDK (F3, F4, консоль, сообщение) он виден.
+# nhl_hide_cursor = false
 
 # Файлы игры: содержимое диска NHL Legacy (default.xex и *.big). Пусто — папка game рядом с exe.
 game_data_root = "S:/Claude/megarohas_nhl13/game/other/legacy/disc"

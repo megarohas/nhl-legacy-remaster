@@ -16,6 +16,8 @@
 #include <rex/ui/overlay/achievement_notification.h>
 
 void NhlLegacyInstallCrashReporter();  // nhllegacy_crash.cpp
+void NhlLegacyStartCursorHide(rex::ui::Window* window, rex::ui::ImGuiDrawer* drawer);  // nhllegacy_cursor.cpp
+void NhlLegacyStopCursorHide();
 
 class NhlLegacyApp : public rex::ReXApp {
  public:
@@ -75,6 +77,13 @@ class NhlLegacyApp : public rex::ReXApp {
       REXLOG_ERROR("[nhllegacy] failed to mount cache: at {}", cache_dir.string());
     }
   }
+
+  // Окно и ImGui уже есть, поток — UI: курсор над окном игры (nhllegacy_cursor.cpp).
+  void OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) override {
+    NhlLegacyStartCursorHide(window(), drawer);
+  }
+
+  void OnShutdown() override { NhlLegacyStopCursorHide(); }
 
   // Без окна уведомлений о достижениях: пока у презентера есть хоть одно окно интерфейса, кадр
   // игры выводится из потока UI по обновлению монитора — лишняя задержка и рывки (разбор:
