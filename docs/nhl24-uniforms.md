@@ -939,3 +939,7 @@ adidas, сейв ROSTER дописывается в конец). Шорты и �
   надпись «mgrhs» выше у CAR, CGY (1,684 м) и NYR (1,667 м); FLA — планка под один шнурок и гладко под гербом и номерами
   (`placket_lift_cm`, `lace_zone`, `relief_flat_under`, как MTL). 12 файлов форм; копия —
   `backup-cache/user-20261030-car-fla-brand`; база и сейвы — без изменений.
+- 31.10 17:16 — чистка форм ([kit-prune.md](kit-prune.md)): из базы и сейва ROSTER убрано 178 форм, у клубов осталось 214.
+  После просмотра превью (пользователь): OTT без `sleeve_armpit` («подмышки почему-то стали красными»), NJD с `collar_panel`
+  («кромка должна прерываться», щит крупнее, образец — зона ворота CGY). 9 файлов; копия — `backup-cache/user-20261031-prune`,
+  старая база — `roster-merge/old-cache-nhlng-1716.db`; сейв — `nhl24.py save`, копия в `backup-saves/`.

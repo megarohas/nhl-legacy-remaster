@@ -173,6 +173,7 @@
 - `year_hooks.py` — врезки сдвига года (→ `*_year_hooks.toml`)
 - `team_hooks.py` — врезки «30 → 32» по спискам мест (→ `*_team_sites.toml` и `.cpp`)
 - `stackpeek.py` — стек потока запущенного порта без остановки игры (`--process`)
+- `padshot.ps1` — шаги проверки в игре виртуальным геймпадом и снимки, без фокуса окна ([legacy-port.md](../docs/legacy-port.md))
 - `gameshot.ps1` — проверка без геймпада: запуск сборки, снимок окна, нажатия клавиатурой (`-Game legacy`)
 - `perfwatch.ps1` — пассивный замер GPU/CPU по потокам во время игры (`-ProcessName`)
 - `backup_data.ps1` — резервная копия данных вне git на D: ([docs/backup.md](../docs/backup.md))

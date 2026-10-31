@@ -6,6 +6,7 @@
     python tools/kitpicker/prune.py build          # game/work/kit-prune: страница, data.js, img/<клуб>/<форма>.png
     python tools/kitpicker/prune.py serve [--port 8765]   # http://127.0.0.1:8765
     python tools/kitpicker/prune.py show           # что отмечено на удаление, по клубам
+    python tools/kitpicker/prune.py apply          # выбор → tools/legacy_data/kit_removed.json (им правит nhl24.py)
 
 Python — game/work/nhl24/venv (нужны numpy и Pillow на этапе build). Без сервера страница тоже откроется (index.html):
 выбор тогда живёт в браузере и выгружается кнопкой «Сохранить файл». Описание — docs/kit-prune.md.
@@ -28,6 +29,7 @@ PAGE = os.path.join(HERE, 'prune_page')
 OUT = os.path.join(ROOT, 'game', 'work', 'kit-prune')
 DATA = os.path.join(OUT, 'data.json')
 CHOICE = os.path.join(OUT, 'selection.json')
+REMOVED = os.path.join(ROOT, 'tools', 'legacy_data', 'kit_removed.json')
 PORT = 8765
 
 # группы на странице, порядок — как в карточках клуба. Формы edge_* стоят по умолчанию: без них клуб останется без
@@ -186,10 +188,41 @@ def cmd_show(args):
                 print(f"   {k['id']:10} {k['label']:20} {titles[k['group']]}")
 
 
+def kit_key(kid):
+    return tuple(int(x) for x in kid.split('_'))
+
+
+def cmd_apply(args):
+    """Выбор страницы дописывается в kit_removed.json. Сами строки убирает nhl24.py: build — из базы накладки, save — из
+    сейва ROSTER. Применённый выбор уходит в selection-<время>.json: следующая чистка начинается с пустого."""
+    _, data = known_ids()
+    if not os.path.isfile(CHOICE):
+        sys.exit('выбора ещё нет: ни одной формы не снято')
+    remove = set(json.load(open(CHOICE, encoding='utf-8'))['remove'])
+    clubs = json.load(open(REMOVED, encoding='utf-8'))['clubs'] if os.path.isfile(REMOVED) else {}
+    n = 0
+    for t in data['teams']:
+        ids = [k['id'] for k in t['kits'] if k['id'] in remove]
+        if ids:
+            clubs[t['code']] = sorted(set(clubs.get(t['code'], [])) | set(ids), key=kit_key)
+            n += len(ids)
+    if n != len(remove):
+        sys.exit(f'в выборе {len(remove)} форм, на странице найдено {n}: страница собрана по другой базе, повторите build')
+    text = ('{\n "note": "Формы, убранные из игры: клуб и стиль_арт_вариант. Дописывает tools/kitpicker/prune.py apply, '
+            'применяет tools/legacy_data/nhl24.py; docs/kit-prune.md.",\n "clubs": {\n'
+            + ',\n'.join(f'  {json.dumps(c)}: {json.dumps(ids)}' for c, ids in sorted(clubs.items())) + '\n }\n}\n')
+    part = REMOVED + '.part'
+    with open(part, 'w', encoding='utf-8', newline='\n') as f:
+        f.write(text)
+    os.replace(part, REMOVED)
+    os.replace(CHOICE, os.path.join(OUT, f'selection-{time.strftime("%Y%m%d-%H%M%S")}.json'))
+    print(f'{REMOVED}: +{n} форм, всего {sum(len(v) for v in clubs.values())}')
+
+
 def main():
     sys.stdout.reconfigure(encoding='utf-8')
     sys.stderr.reconfigure(encoding='utf-8')
-    cmds = {'build': cmd_build, 'serve': cmd_serve, 'show': cmd_show}
+    cmds = {'build': cmd_build, 'serve': cmd_serve, 'show': cmd_show, 'apply': cmd_apply}
     if len(sys.argv) < 2 or sys.argv[1] not in cmds:
         sys.exit(__doc__)
     cmds[sys.argv[1]](sys.argv[2:])

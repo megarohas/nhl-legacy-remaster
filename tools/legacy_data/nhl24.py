@@ -39,6 +39,7 @@ import json
 import os
 import re
 import shutil
+import struct
 import sys
 import time
 
@@ -51,6 +52,7 @@ from tdb import Tdb  # noqa: E402
 from tdb_read import load_meta  # noqa: E402
 
 REGISTRY = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'nhl24_kits.json')
+REMOVED = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'kit_removed.json')   # убранные формы, docs/kit-prune.md
 PACK = os.environ.get('NHL24_PACK') or os.path.join(GAME, 'work', 'nhl24', 'out', 'pack')
 REF = os.path.join(GAME, 'other', 'legacy', 'big')
 OUT, OUT_AHL32 = os.path.join(W, 'out'), os.path.join(W, 'out-ahl32')
@@ -139,6 +141,73 @@ def load_registry():
         return {'about': 'Новые формы NHL 24 в NHL Legacy (строки stockteamjerseys): номера закреплены, список только '
                          'дописывается (tools/legacy_data/nhl24.py alloc).', 'kits': []}
     return json.load(open(REGISTRY, encoding='utf-8'))
+
+
+def load_removed():
+    """Формы, убранные из игры (tools/kitpicker/prune.py apply): {клуб: [«стиль_арт_вариант», …]}. Файла нет — ничего."""
+    if not os.path.exists(REMOVED):
+        return {}
+    return json.load(open(REMOVED, encoding='utf-8'))['clubs']
+
+
+def drop_kits(db, removed, strict=True):
+    """Убрать формы из stockteamjerseys (docs/kit-prune.md, «Как убираются формы»). Форма — клуб и стиль_арт_вариант, а
+    не один номер: у команд Winter Classic 216–219 свои строки с артом и вариантом клубов (1_21_4 — и у PHI, и у команды
+    217), они остаются. Остальные строки сдвигаются вверх: на номера строк ничто не ссылается. jerseyindex клуба снова
+    подряд 0…N−1 в прежнем порядке: игра берёт его и как позицию в списке форм клуба (82F72000: номер формы по умолчанию
+    → 82AEAD80, чтение по позиции), с дырой форма была бы чужая. Форму по умолчанию убирать нельзя. strict=False — для
+    сейва: формы, которой в нём уже нет, просто нет. → [описание строк]."""
+    fields = ('teamid', 'style', 'teamartid', 'variant', 'jerseyindex', 'isdefault')
+    rows = [dict({f: db.get(T, f, r) for f in fields}, row=r) for r in db.live_rows(T)]
+    if [r['row'] for r in rows] != list(range(len(rows))):
+        sys.exit(f'{T}: удалённые записи в таблице — убирать формы из такой базы не берусь')
+    gone = {}
+    for code, ids in sorted(removed.items()):
+        team = CLUBS[code][0]
+        mine = {f"{r['style']}_{r['teamartid']}_{r['variant']}": r for r in rows if r['teamid'] == team}
+        for kid in ids:
+            r = mine.get(kid)
+            if r is None:
+                if strict:
+                    sys.exit(f'{code} {kid}: формы нет в базе — поправьте {REMOVED}')
+                continue
+            if r['isdefault']:
+                sys.exit(f'{code} {kid}: форма по умолчанию, убирать нельзя (клуб останется без формы)')
+            gone[r['row']] = f'{code} {kid} ji{r["jerseyindex"]} (строка {r["row"]})'
+    if not gone:
+        return []
+    keep = [r for r in rows if r['row'] not in gone]
+    recs = [bytes(db.record(T, r['row'])) for r in keep]
+    for i, rec in enumerate(recs):
+        db.put_record(T, i, rec)
+    db.resize(T, len(recs))
+    teams = {r['teamid'] for r in rows if r['row'] in gone}
+    for team in teams:
+        mine = sorted((i for i, r in enumerate(keep) if r['teamid'] == team), key=lambda i: keep[i]['jerseyindex'])
+        for ji, i in enumerate(mine):
+            db.set(T, 'jerseyindex', i, ji)
+    return [gone[r] for r in sorted(gone)]
+
+
+# место таблицы форм в сейве ROSTER (max) игра сверяет со своим: не совпало — «ROSTER damaged» и возврат на заставку
+# (31.10, пробы на копии при 665 строках в базе: max 665, 725, 903 — отказ, 749 — принят; при 843 строках — 903). Своё
+# место игра считает как строки + maxinsert (60), но не меньше 749: столько пишет она сама на чищеной базе
+KIT_INSERT = 60
+KIT_MAX_MIN = 749
+
+
+def kit_room(sv):
+    """Место таблицы форм в сейве — как у игры: max по правилу выше, [current, max) — 0xDB. → True, если меняли."""
+    maxr, cur = sv.counts(T)[:2]
+    want = max(KIT_MAX_MIN, cur + KIT_INSERT)
+    if maxr == want:
+        return False
+    sv.resize(T, want)
+    t = sv.by_name[T]
+    sv.d[t['block'] + 0x14:t['block'] + 0x18] = struct.pack(sv.E + 'HH', want, cur)
+    sv.d[t['records'] + t['reclen'] * cur:t['records'] + t['reclen'] * want] = b'\xDB' * (t['reclen'] * (want - cur))
+    sv.__init__(bytes(sv.d), sv.meta)
+    return True
 
 
 def open_db(base):
@@ -399,6 +468,7 @@ def build_db(base, man, reg, files):
     helmets += add_gloves(db, new)
     helmets += team_colors(db)
     defaults, old_labels = set_defaults(db, rows, new, n_before)
+    dropped = drop_kits(db, load_removed())           # последним шагом: номера реестра и порядок сборки не меняются
     import draft_roster                               # накладка не должна менять таблицы draft_roster.db (он — из out)
     base_db = open_db(base)[1]
     for name in draft_roster.KEEP:
@@ -409,7 +479,8 @@ def build_db(base, man, reg, files):
         sys.exit(f'{db_path}: CRC не сошлись после правки')
     out = bytes(db.d)
     rep = {'base': db_path, 'base_md5': md5(db_path), 'md5': hashlib.md5(out).hexdigest(),
-           'hastie_zeroed': len(tie), 'rows_added': added, 'helmets': helmets, 'defaults': defaults}
+           'hastie_zeroed': len(tie), 'rows_added': added, 'rows_removed': dropped, 'helmets': helmets,
+           'defaults': defaults}
     loc, labels = build_loc(base, new, {**(old_labels or {}), **man.get('loc', {})})   # loc манифеста — клюшки (fb.sticks)
     if loc is not None:
         rep.update(loc_base_md5=md5(os.path.join(base, *LOC.split('/'))), loc_md5=hashlib.md5(loc).hexdigest(),
@@ -880,7 +951,8 @@ def cmd_build(args):
         json.dump(report, f, ensure_ascii=False, indent=1)
     t = ', '.join(f'{k} {v}' for k, v in report['types'].items() if v)
     print(f'out-nhl24: {len(files)} файлов пакета ({t}); база: hastie 0 у {report["out"]["hastie_zeroed"]} строк, '
-          f'новых строк {len(report["out"]["rows_added"])}' + (', и out-nhl24-ahl32' if 'out-ahl32' in report else ''))
+          f'новых строк {len(report["out"]["rows_added"])}, убрано {len(report["out"]["rows_removed"])}'
+          + (', и out-nhl24-ahl32' if 'out-ahl32' in report else ''))
     for line in report['out']['rows_added']:
         print('   +', line)
     for key, text in report['out'].get('labels', {}).items():
@@ -932,9 +1004,10 @@ def cmd_verify(args):
 
 def cmd_save(args):
     """save СЕЙВ [--write] — новые строки форм и шлемов поставленной накладки (stockteamjerseys и stockteamequipmenttable
-    базы cache: db/nhlng.db) в сейв ROSTER: у сейва эти таблицы свои, игра берёт формы из него (ТЕСТ DAL25). Прежние
-    живые записи сейва должны совпадать с базой запись в запись (иначе — стоп: сейв правили иначе); новые дописываются
-    в конец (таблица расширяется). Копия до правки — game/work/legacy-data/backup-saves/<сейв>-<время>/."""
+    базы cache: db/nhlng.db) в сейв ROSTER: у сейва эти таблицы свои, игра берёт формы из него (ТЕСТ DAL25). Сначала из
+    сейва убираются формы kit_removed.json (drop_kits). Прежние живые записи сейва должны совпадать с базой запись в
+    запись (иначе — стоп: сейв правили иначе); новые дописываются в конец (таблица расширяется). Копия до правки —
+    game/work/legacy-data/backup-saves/<сейв>-<время>/."""
     write = '--write' in args
     args = [a for a in args if a != '--write']
     if not args:
@@ -953,6 +1026,10 @@ def cmd_save(args):
         if t not in sv.by_name:
             print(f'{t}: в сейве нет — пропуск')
             continue
+        if t == T:
+            dropped = drop_kits(sv, load_removed(), strict=False)
+            total += len(dropped)
+            print(f'{t}: убрать из сейва {len(dropped)} форм (kit_removed.json)')
         src = [bytes(db.record(t, r)) for r in db.live_rows(t)]
         live = sv.live_rows(t)
         dst = [bytes(sv.record(t, r)) for r in live]
@@ -968,6 +1045,9 @@ def cmd_save(args):
             for i, rec in enumerate(extra):
                 sv.put_record(t, len(dst) + i, rec)
             total += len(extra)
+        if t == T and kit_room(sv):
+            total += 1
+            print(f'{t}: место в сейве {sv.counts(t)[:2]} (max, строк), как у игры')
     if not write or not total:
         print('без --write ничего не записано' if total else 'сейв уже совпадает с базой')
         return
@@ -987,7 +1067,7 @@ def cmd_save(args):
                 [bytes(db.record(t, r)) for r in db.live_rows(t)]:
             open(save, 'wb').write(raw)
             sys.exit(f'{t}: после записи сейв не как база — сейв возвращён')
-    print(f'записано: +{total} строк; CRC и обёртка — OK; копия до правки — {bak}')
+    print(f'записано: изменено строк {total}; CRC и обёртка — OK; копия до правки — {bak}')
 
 
 def main():

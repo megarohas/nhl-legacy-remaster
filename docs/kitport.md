@@ -203,7 +203,8 @@ $P -m kitport rollback user-20261020-edge12   # если не понравило
   `nhl24.py alloc`, затем `order`.
 - **Сейв ROSTER хранит формы сам.** После установки — `nhl24.py save "<ROSTER>" --write` (копия — в
   `backup-saves/`). В DYNASTY таблицы форм нет. Таблица экипировки в сейве ограничена: 6045 записей, при 6050 —
-  «ROSTER damaged».
+  «ROSTER damaged». Место таблицы форм (`max`) игра сверяет со своим: `max(749, строк + 60)`, `nhl24.py kit_room`
+  ([kit-prune.md](kit-prune.md)).
 
 ## 3. Источник NHL 24 (PS4): что брали
 
