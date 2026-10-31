@@ -154,10 +154,6 @@ struct State {
   bool mnk = false;
   bool vibration = true;
   int season = 2015;
-  bool nhl32 = false, menu32 = false, ahl32 = false, aigm32 = false, fa32 = false, fd32 = true;
-  bool draft_age = false;
-  bool menu_exit = false, sim_guard = true, sim_guard_live = true;
-  bool settings_profile = true;  // nhl_settings_from_profile: настройки главного меню — в новую карьеру
   long long cap = 0, floor = 0, min_salary = 0;  // $
 };
 
@@ -212,17 +208,6 @@ State FromCvars(const Cvars& c) {
   s.mnk = GetBool(c, "mnk_mode", false);
   s.vibration = GetBool(c, "vibration", true);
   s.season = static_cast<int>(std::clamp<long long>(GetInt(c, "season_year", 2015), 1990, 2050));
-  s.nhl32 = GetInt(c, "nhl_teams", 30) == 32;
-  s.ahl32 = GetInt(c, "nhl_ahl_teams", 30) == 32;
-  s.menu32 = GetBool(c, "nhl_menu32", false);
-  s.aigm32 = GetBool(c, "nhl_aigm32", false);
-  s.fa32 = GetBool(c, "nhl_fa32", false);
-  s.fd32 = GetBool(c, "nhl_fd32", true);
-  s.draft_age = GetBool(c, "nhl_draftclass_age", false);
-  s.menu_exit = GetBool(c, "nhl_menu_exit", false);
-  s.sim_guard = GetBool(c, "nhl_sim_guard", true);
-  s.sim_guard_live = GetBool(c, "nhl_sim_guard_live", true);
-  s.settings_profile = GetBool(c, "nhl_settings_from_profile", true);
   s.cap = GetInt(c, "nhl_salary_cap", 0);
   s.floor = GetInt(c, "nhl_salary_floor", 0);
   s.min_salary = GetInt(c, "nhl_salary_min", 0);
@@ -235,12 +220,31 @@ std::string Fmt2(double v) {
   return buf;
 }
 
+// Всегда включено (пользователь, 31.10.2026: «никто без этих фиксов играть не будет»): в окне этих настроек нет,
+// лаунчер передаёт такие значения при каждом запуске, что бы ни стояло в nhllegacy.toml и в прежнем файле лаунчера.
+const struct {
+  const char* key;
+  const char* value;
+} kAlwaysOn[] = {
+    {"nhl_teams", "32"},
+    {"nhl_menu32", "true"},
+    {"nhl_ahl_teams", "32"},
+    {"nhl_aigm32", "true"},
+    {"nhl_fa32", "true"},
+    {"nhl_fd32", "true"},
+    {"nhl_draftclass_age", "true"},
+    {"nhl_menu_exit", "true"},
+    {"nhl_sim_guard", "true"},
+    {"nhl_sim_guard_live", "true"},
+    {"nhl_settings_from_profile", "true"},
+};
+
 std::vector<Kv> ToCvars(const State& s) {
   const char* kGfx = T8("Graphics", "Графика");
   const char* kScreen = T8("Display", "Экран");
   const char* kInput = T8("Controls", "Управление");
-  const char* kLeague = T8("Season and league", "Сезон и лига");
-  const char* kFix = T8("Fixes", "Исправления");
+  const char* kLeague = T8("Season and finances", "Сезон и финансы");
+  const char* kAlways = T8("Always on", "Всегда включено");
   auto b = [](bool v) { return std::string(v ? "true" : "false"); };
   std::vector<Kv> kv;
   kv.push_back({"gpu_backend", s.render == 2 ? "vulkan" : "d3d12", true, kGfx});
@@ -267,20 +271,10 @@ std::vector<Kv> ToCvars(const State& s) {
   kv.push_back({"mnk_mode", b(s.mnk), false, kInput});
   kv.push_back({"vibration", b(s.vibration), false, kInput});
   kv.push_back({"season_year", std::to_string(s.season), false, kLeague});
-  kv.push_back({"nhl_teams", s.nhl32 ? "32" : "30", false, kLeague});
-  kv.push_back({"nhl_menu32", b(s.menu32), false, kLeague});
-  kv.push_back({"nhl_ahl_teams", s.ahl32 ? "32" : "30", false, kLeague});
-  kv.push_back({"nhl_aigm32", b(s.aigm32), false, kLeague});
-  kv.push_back({"nhl_fa32", b(s.fa32), false, kLeague});
-  kv.push_back({"nhl_fd32", b(s.fd32), false, kLeague});
-  kv.push_back({"nhl_draftclass_age", b(s.draft_age), false, kLeague});
   kv.push_back({"nhl_salary_cap", std::to_string(s.cap), false, kLeague});
   kv.push_back({"nhl_salary_floor", std::to_string(s.floor), false, kLeague});
   kv.push_back({"nhl_salary_min", std::to_string(s.min_salary), false, kLeague});
-  kv.push_back({"nhl_menu_exit", b(s.menu_exit), false, kFix});
-  kv.push_back({"nhl_sim_guard", b(s.sim_guard), false, kFix});
-  kv.push_back({"nhl_sim_guard_live", b(s.sim_guard_live), false, kFix});
-  kv.push_back({"nhl_settings_from_profile", b(s.settings_profile), false, kFix});
+  for (const auto& e : kAlwaysOn) kv.push_back({e.key, e.value, false, kAlways});
   return kv;
 }
 
@@ -346,18 +340,7 @@ enum HintId {
   kHintMnk,
   kHintVibration,
   kHintSeason,
-  kHintNhl32,
-  kHintMenu32,
-  kHintAhl32,
-  kHintAigm32,
-  kHintFa32,
-  kHintFd32,
-  kHintDraftAge,
   kHintMoney,
-  kHintMenuExit,
-  kHintSimGuard,
-  kHintSimGuardLive,
-  kHintSettingsProfile,
   kHintReset,
   kHintPlay,
   kHintLanguage,
@@ -397,37 +380,10 @@ const Hint kHintsEn[kHintCount] = {
     {L"Season",
      L"Year of the current season: dates, player ages, franchise. 2015/16 — as on the disc. Load a franchise "
      L"with the same season it was created with."},
-    {L"NHL with 32 teams",
-     L"Seattle and Vegas as NHL clubs in franchise mode (needs the 32-team database from the mod pack). Load a "
-     L"franchise with the same number of teams it was created with."},
-    {L"Seattle and Vegas in team select", L"Seattle and Vegas in the team list of a new Be a GM franchise."},
-    {L"AHL with 32 teams",
-     L"Farm clubs of Seattle and Vegas (Coachella Valley, Henderson), AHL divisions 8/8/8/8. Needs the "
-     L"“AHL 32” database. New franchises only: load one created with 30 AHL clubs without this box."},
-    {L"AI managers for Seattle and Vegas",
-     L"Computer-run Seattle and Vegas handle the off-season like everyone else: extensions, trades, free "
-     L"agents."},
-    {L"Free agents with 32 teams",
-     L"Free agent records with 32 teams without corruption (otherwise interest in Anaheim and Winnipeg and the "
-     L"list sorting go wrong)."},
-    {L"Fantasy draft with 32 teams",
-     L"Fantasy draft for 32 teams: correct pick order, no crash on the draft board."},
-    {L"Draft class without overage players",
-     L"In the first draft of a new franchise — only players aged 18–20; the game generates the rest itself."},
     {L"New franchise finances",
      L"Salary cap, floor and minimum salary of the first season, $ millions. 0 — as on the disc "
      L"(2015/16: 71.4 / 52.8 / 0.575). After that they grow by the game's rules. Doesn't affect an existing "
      L"franchise."},
-    {L"EXIT in the main menu",
-     L"The EXIT item of the main menu closes the game. Required with the menu mod: without it the item hangs."},
-    {L"Match sim guard",
-     L"If a team is short of players on the ice in a simulated match, the port adds them from the game roster — "
-     L"no hangs or crashes. Best left on."},
-    {L"Sim guard in Be a Pro",
-     L"Simming to the next shift in Be a Pro without a crash after a penalty. Best left on."},
-    {L"My settings for new careers",
-     L"A new franchise and Be a Pro start with the rules, sliders, audio and video from the main menu instead of "
-     L"the factory defaults. Careers already started keep their own settings — this doesn't change them."},
     {L"Reset", L"Restore all settings as in nhllegacy.toml (as without the launcher)."},
     {L"Play",
      L"Save the settings to nhllegacy_launcher.toml and start the game. nhllegacy.toml is not changed."},
@@ -467,36 +423,9 @@ const Hint kHintsRu[kHintCount] = {
     {L"Сезон",
      L"Год текущего сезона: даты, возраст игроков, франшиза. 2015/16 — как на диске. Франшизу загружайте "
      L"с тем же сезоном, с которым она создана."},
-    {L"НХЛ на 32 команды",
-     L"Сиэтл и Вегас — клубы НХЛ во франшизе (нужна база на 32 команды из набора модов). Франшизу "
-     L"загружайте с тем же числом команд, с которым она создана."},
-    {L"Сиэтл и Вегас в выборе команды", L"Сиэтл и Вегас в списке команд новой франшизы «Стань GM»."},
-    {L"АХЛ на 32",
-     L"Фарм-клубы Сиэтла и Вегаса (Коачелла-Вэлли, Хендерсон), дивизионы АХЛ 8/8/8/8. Нужна база «АХЛ на "
-     L"32». Только для новой франшизы: созданную на 30 клубов АХЛ загружайте без этой галочки."},
-    {L"ИИ-менеджеры Сиэтла и Вегаса",
-     L"Сиэтл и Вегас под управлением компьютера ведут межсезонье, как все: продления, обмены, свободные "
-     L"агенты."},
-    {L"Свободные агенты на 32",
-     L"Записи свободных агентов при 32 командах без порчи (иначе сбивается интерес к Анахайму и "
-     L"Виннипегу и сортировка списка)."},
-    {L"Фэнтези-драфт на 32",
-     L"Фэнтези-драфт на 32 команды: правильный порядок выбора, без падения на доске драфта."},
-    {L"Класс драфта без переростков",
-     L"В первом драфте новой франшизы — только игроки 18–20 лет; остальных игра сгенерирует сама."},
     {L"Финансы новой франшизы",
      L"Потолок зарплат, нижний порог и минимальная зарплата первого сезона, млн $. 0 — как на диске "
      L"(2015/16: 71,4 / 52,8 / 0,575). Дальше растут по правилам игры. На созданную франшизу не влияет."},
-    {L"Пункт EXIT в главном меню",
-     L"Пункт EXIT главного меню закрывает игру. С модом меню обязателен: без него пункт зависает."},
-    {L"Страховка сима матча",
-     L"Если в симе матча у команды не хватает игроков на льду, порт добавляет их из состава матча — без "
-     L"зависаний и падений. Лучше не выключать."},
-    {L"Страховка сима в «Стань профи»",
-     L"Сим до следующей смены в «Стань профи» без падения после удаления. Лучше не выключать."},
-    {L"Мои настройки — в новую карьеру",
-     L"Новая франшиза и «Стань профи» начинаются с правил, слайдеров, звука и видео из главного меню, а не с "
-     L"заводских. Уже начатые карьеры хранят свои настройки — их это не меняет."},
     {L"Сбросить", L"Вернуть все настройки как в nhllegacy.toml (как без лаунчера)."},
     {L"Играть",
      L"Сохранить настройки в nhllegacy_launcher.toml и запустить игру. nhllegacy.toml не меняется."},
@@ -527,20 +456,9 @@ enum ControlId {
   kIdMnk,
   kIdVibration,
   kIdSeason,
-  kIdNhl32,
-  kIdMenu32,
-  kIdAhl32,
-  kIdAigm32,
-  kIdFa32,
-  kIdFd32,
-  kIdDraftAge,
   kIdCap,
   kIdFloor,
   kIdMin,
-  kIdMenuExit,
-  kIdSimGuard,
-  kIdSimGuardLive,
-  kIdSettingsProfile,
   kIdReset,
   kIdPlay,
   kIdNote,
@@ -564,9 +482,9 @@ struct Zone {
 };
 
 constexpr int kClientW = 880;
-constexpr int kClientH = 652;
+constexpr int kClientH = 618;
 constexpr int kHeaderH = 64;
-constexpr RECT kHintRect = {16, 524, 864, 588};
+constexpr RECT kHintRect = {16, 490, 864, 554};
 
 const COLORREF kColBg = RGB(255, 255, 255);
 const COLORREF kColHeader = RGB(14, 27, 46);
@@ -724,14 +642,14 @@ void CreateControls() {
            {T(L"1280×720 — default", L"1280×720 — обычное"), L"960×540", L"1920×1080", L"2560×1440", L"3840×2160 (4K)"},
            kHintWindow);
 
-  Group(T(L"Controls", L"Управление"), lx, 400, lw, 118);
+  Group(T(L"Controls", L"Управление"), lx, 400, lw, 84);
   Check(T(L"Keyboard as gamepad", L"Клавиатура как геймпад"), kIdMnk, ix, 424, lw - 32, kHintMnk);
   Check(T(L"Gamepad vibration", L"Вибрация геймпада"), kIdVibration, ix, 450, lw - 32, kHintVibration);
 
-  // Правая колонка: наши изменения.
-  const int rx = 456, rw = 408, jx = rx + 16, sub = jx + 20, rcw = rw - 32;
-  Group(T(L"Season and league", L"Сезон и лига"), rx, 76, rw, 312);
-  ComboRow(T(L"Season", L"Сезон"), kIdSeason, jx, 100, 64, 190, {}, kHintSeason);
+  // Правая колонка: сезон и финансы. Ряды — как у «Графики», группа кончается вровень с ней.
+  const int rx = 456, rw = 408, jx = rx + 16, rcw = rw - 32;
+  Group(T(L"Season and finances", L"Сезон и финансы"), rx, 76, rw, 194);
+  ComboRow(T(L"Season", L"Сезон"), kIdSeason, jx, 100, lab, rcw - lab, {}, kHintSeason);
   {
     HWND season = Item(kIdSeason);
     for (int y = 2015; y <= 2030; ++y) {
@@ -745,42 +663,21 @@ void CreateControls() {
       SendMessageW(season, CB_SETITEMDATA, i, y);
     }
   }
-  Check(T(L"NHL with 32 teams: Seattle and Vegas", L"НХЛ на 32 команды: Сиэтл и Вегас"), kIdNhl32, jx, 134, rcw,
-        kHintNhl32);
-  Check(T(L"Seattle and Vegas in Be a GM team select", L"Сиэтл и Вегас в выборе команды «Стань GM»"), kIdMenu32, sub,
-        160, rcw - 20, kHintMenu32);
-  Check(T(L"AHL with 32: Coachella Valley and Henderson", L"АХЛ на 32: Коачелла-Вэлли и Хендерсон"), kIdAhl32, sub,
-        186, rcw - 20, kHintAhl32);
-  Check(T(L"AI managers for Seattle and Vegas", L"ИИ-менеджеры Сиэтла и Вегаса"), kIdAigm32, sub, 212, rcw - 20,
-        kHintAigm32);
-  Check(T(L"Free agents with 32 teams", L"Свободные агенты на 32 команды"), kIdFa32, sub, 238, rcw - 20, kHintFa32);
-  Check(T(L"Fantasy draft with 32 teams", L"Фэнтези-драфт на 32 команды"), kIdFd32, sub, 264, rcw - 20, kHintFd32);
-  Check(T(L"Draft class without overage players (ages 18–20)", L"Класс драфта без переростков (18–20 лет)"),
-        kIdDraftAge, jx, 292, rcw, kHintDraftAge);
   Label(T(L"New franchise finances, $ millions (0 — as on the disc):",
           L"Финансы новой франшизы, млн $ (0 — как на диске):"),
-        jx, 322, rcw, 22);
-  MoneyEdit(T(L"Cap", L"Потолок"), kIdCap, jx, 348, 58, 58);
-  MoneyEdit(T(L"Floor", L"Порог"), kIdFloor, jx + 128, 348, 46, 58);
-  MoneyEdit(T(L"Minimum", L"Минимум"), kIdMin, jx + 244, 348, 64, 58);
-  AddZone(jx, 322, rcw, 52, kHintMoney);
-
-  Group(T(L"Fixes", L"Исправления"), rx, 400, rw, 118);
-  Check(T(L"EXIT in the main menu", L"Пункт EXIT в главном меню"), kIdMenuExit, jx, 420, rcw, kHintMenuExit);
-  Check(T(L"Match sim guard (incomplete lineup)", L"Страховка сима матча (неполная пятёрка)"), kIdSimGuard, jx, 442,
-        rcw, kHintSimGuard);
-  Check(T(L"Sim guard in Be a Pro", L"Страховка сима в «Стань профи»"), kIdSimGuardLive, jx, 464, rcw,
-        kHintSimGuardLive);
-  Check(T(L"My settings for new careers", L"Мои настройки — в новую карьеру"), kIdSettingsProfile, jx, 486, rcw,
-        kHintSettingsProfile);
+        jx, 132, rcw, 24);
+  MoneyEdit(T(L"Cap", L"Потолок"), kIdCap, jx, 164, lab, 80);
+  MoneyEdit(T(L"Floor", L"Порог"), kIdFloor, jx, 196, lab, 80);
+  MoneyEdit(T(L"Minimum", L"Минимум"), kIdMin, jx, 228, lab, 80);
+  AddZone(jx, 132, rcw, 120, kHintMoney);
 
   // Кнопки.
-  HWND reset = Add(L"BUTTON", T(L"Reset", L"Сбросить"), BS_PUSHBUTTON | WS_TABSTOP, 16, 602, 120, 34, kIdReset);
+  HWND reset = Add(L"BUTTON", T(L"Reset", L"Сбросить"), BS_PUSHBUTTON | WS_TABSTOP, 16, 568, 120, 34, kIdReset);
   g.hint_of[reset] = kHintReset;
-  AddZone(16, 602, 120, 34, kHintReset);
-  HWND play = Add(L"BUTTON", T(L"Play", L"Играть"), BS_OWNERDRAW | WS_TABSTOP, 704, 602, 160, 34, kIdPlay);
+  AddZone(16, 568, 120, 34, kHintReset);
+  HWND play = Add(L"BUTTON", T(L"Play", L"Играть"), BS_OWNERDRAW | WS_TABSTOP, 704, 568, 160, 34, kIdPlay);
   g.hint_of[play] = kHintPlay;
-  AddZone(704, 602, 160, 34, kHintPlay);
+  AddZone(704, 568, 160, 34, kHintPlay);
   EnableWindow(play, g.exe_found);
 
   // Язык — в шапке справа (названия языков не переводятся).
@@ -839,8 +736,6 @@ void UpdateSharpLabel() {
 }
 
 void UpdateEnabled() {
-  const bool nhl32 = GetCheck(kIdNhl32);
-  for (int id : {kIdMenu32, kIdAhl32, kIdAigm32, kIdFa32, kIdFd32}) EnableWindow(Item(id), nhl32);
   EnableWindow(Item(kIdWindow), !GetCheck(kIdFullscreen));
   const bool sharp = ComboSel(kIdPresent) != 0;
   EnableWindow(Item(kIdSharp), sharp);
@@ -873,20 +768,9 @@ void ToUi(const State& s) {
     SendMessageW(season, CB_SETITEMDATA, sel, s.season);
   }
   SetComboSel(kIdSeason, sel);
-  SetCheck(kIdNhl32, s.nhl32);
-  SetCheck(kIdMenu32, s.menu32);
-  SetCheck(kIdAhl32, s.ahl32);
-  SetCheck(kIdAigm32, s.aigm32);
-  SetCheck(kIdFa32, s.fa32);
-  SetCheck(kIdFd32, s.fd32);
-  SetCheck(kIdDraftAge, s.draft_age);
   SetWindowTextW(Item(kIdCap), MoneyText(s.cap).c_str());
   SetWindowTextW(Item(kIdFloor), MoneyText(s.floor).c_str());
   SetWindowTextW(Item(kIdMin), MoneyText(s.min_salary).c_str());
-  SetCheck(kIdMenuExit, s.menu_exit);
-  SetCheck(kIdSimGuard, s.sim_guard);
-  SetCheck(kIdSimGuardLive, s.sim_guard_live);
-  SetCheck(kIdSettingsProfile, s.settings_profile);
   SetComboSel(kIdLang, g_lang);
   UpdateEnabled();
 }
@@ -909,17 +793,6 @@ bool FromUi() {
   s.vibration = GetCheck(kIdVibration);
   int sel = ComboSel(kIdSeason);
   if (sel >= 0) s.season = static_cast<int>(SendMessageW(Item(kIdSeason), CB_GETITEMDATA, sel, 0));
-  s.nhl32 = GetCheck(kIdNhl32);
-  s.menu32 = GetCheck(kIdMenu32);
-  s.ahl32 = GetCheck(kIdAhl32);
-  s.aigm32 = GetCheck(kIdAigm32);
-  s.fa32 = GetCheck(kIdFa32);
-  s.fd32 = GetCheck(kIdFd32);
-  s.draft_age = GetCheck(kIdDraftAge);
-  s.menu_exit = GetCheck(kIdMenuExit);
-  s.sim_guard = GetCheck(kIdSimGuard);
-  s.sim_guard_live = GetCheck(kIdSimGuardLive);
-  s.settings_profile = GetCheck(kIdSettingsProfile);
   struct {
     int id;
     double max;
@@ -1090,7 +963,7 @@ void Paint(HDC dc) {
   // Строка о файлах между кнопками.
   SelectObject(dc, g.fonts[kFontSmall]);
   SetTextColor(dc, kColGrayText);
-  RECT fr = {S(150), S(602), S(690), S(636)};
+  RECT fr = {S(150), S(568), S(690), S(602)};
   DrawTextW(dc,
             T(L"Saved to nhllegacy_launcher.toml · nhllegacy.toml is not changed",
               L"Сохраняется в nhllegacy_launcher.toml · nhllegacy.toml не меняется"),
@@ -1204,7 +1077,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_COMMAND: {
       const int id = LOWORD(wp);
       const int code = HIWORD(wp);
-      if ((id == kIdNhl32 || id == kIdFullscreen) && code == BN_CLICKED) UpdateEnabled();
+      if (id == kIdFullscreen && code == BN_CLICKED) UpdateEnabled();
       if (id == kIdPresent && code == CBN_SELCHANGE) {
         // У CAS и FSR своя резкость: запомнить ползунок старого режима, показать нового.
         const int sharp = static_cast<int>(SendMessageW(Item(kIdSharp), TBM_GETPOS, 0, 0));

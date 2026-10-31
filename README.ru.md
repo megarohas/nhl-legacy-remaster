@@ -30,8 +30,8 @@
 1. **Папка порта.** В ней `nhllegacy.exe` и DLL. Свои файлы игры кладутся в `game\` рядом с exe
    ([docs/legacy-port.md](docs/legacy-port.md), раздел «Для друзей»).
 2. **Лаунчер.** `nhllegacy_launcher.exe` открывает окно настроек перед запуском. Там выбираются рендер
-   (D3D12 или Vulkan), разрешение, FSR 1 / CAS, сезон, НХЛ и АХЛ на 32 и исправления
-   ([docs/launcher.md](docs/launcher.md)). Без лаунчера `nhllegacy.exe` берёт настройки из `nhllegacy.toml`.
+   (D3D12 или Vulkan), разрешение, FSR 1 / CAS, сезон и финансы франшизы. НХЛ и АХЛ на 32 и исправления включены
+   всегда ([docs/launcher.md](docs/launcher.md)). Без лаунчера `nhllegacy.exe` берёт настройки из `nhllegacy.toml`.
 3. **Моды-данные** (составы, формы, логотипы, шрифт, музыка, меню) — это файлы в `userdata\cache\guest`. Игра
    берёт их раньше архивов, поэтому мод убирается удалением файла. Сборка и установка набора —
    [docs/legacy-data.md](docs/legacy-data.md).

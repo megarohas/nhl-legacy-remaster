@@ -30,8 +30,9 @@ section) or get a ready-made `NHL Legacy` folder from someone in person.
 1. **Port folder.** It holds `nhllegacy.exe` and its DLLs. Put your game files into `game\` next to the exe
    ([docs/legacy-port.md](docs/legacy-port.md), section «Для друзей»).
 2. **Launcher.** `nhllegacy_launcher.exe` opens a settings window before the game starts. You pick the renderer
-   (D3D12 or Vulkan), resolution, FSR 1 / CAS, season, 32-club NHL and AHL, and fixes there
-   ([docs/launcher.md](docs/launcher.md)). Started without the launcher, `nhllegacy.exe` reads `nhllegacy.toml`.
+   (D3D12 or Vulkan), resolution, FSR 1 / CAS, season and franchise finances there. The 32-club NHL and AHL and the
+   fixes are always on ([docs/launcher.md](docs/launcher.md)). Started without the launcher, `nhllegacy.exe` reads
+   `nhllegacy.toml`.
 3. **Data mods** (rosters, uniforms, logos, font, music, menus) are files in `userdata\cache\guest`. The game reads
    them before its own archives, so deleting a file removes that mod. Building and installing the set:
    [docs/legacy-data.md](docs/legacy-data.md).
