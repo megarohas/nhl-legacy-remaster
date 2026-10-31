@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Чистка форм</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="top">
+    <h1>Чистка форм</h1>
+    <div class="total" id="total"></div>
+    <label class="only"><input type="checkbox" id="only"> только те, что уйдут</label>
+    <span class="state" id="state"></span>
+    <button id="save" hidden>Сохранить файл</button>
+  </div>
+  <nav id="nav"></nav>
+</header>
+<main>
+  <p class="help">Галочка — форма остаётся. Сними её с лишних: клик по карточке. Выбор сохраняется сам. Кнопка группы
+    снимает или возвращает всю группу у всех клубов. Формы NHL 27 по умолчанию снять нельзя: они нужны клубу дома и в гостях.</p>
+  <div class="chips" id="chips"></div>
+  <div id="teams"></div>
+</main>
+<dialog id="zoom"><img alt=""><p id="zoomcap"></p></dialog>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

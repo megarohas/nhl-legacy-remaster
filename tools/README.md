@@ -137,6 +137,7 @@
 - `build_ooz.cmd`, `ooz_export.cpp` — сборка декомпрессора Oodle (ooz, GPL-3.0) для `cas.py`; исходников ooz в git нет
 - `../photos24.py`, `../heads24.py`, `../scans24.py` — портреты, типовые головы и сканы голов NHL 24 для Legacy (этапы `build-all.sh`)
 - `../kitpicker/build.py` — локальная страница выбора форм
+- `../kitpicker/prune.py`, `../kitpicker/prune_page/` — страница чистки форм, которые уже в игре ([kit-prune.md](../docs/kit-prune.md))
 
 ## Формы, экипировка, арт клубов
 

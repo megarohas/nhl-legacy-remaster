@@ -233,7 +233,7 @@ $P -m kitport rollback user-20261020-edge12   # если не понравило
 - **Раскладку нашивок и флаг шнуровки** (EBX `stamp_jersey_*`) мы не читали: типы EBX — в exe, в дампе их нет.
   Нашивки находятся как «готовый минус основа».
 - **Выбор форм пользователем:** `tools/kitpicker/build.py` → `game/work/kit-picker/index.html`, галерея —
-  `python -m fb.gallery build`.
+  `python -m fb.gallery build`. Чистка форм, которые уже в игре, — [kit-prune.md](kit-prune.md).
 
 ## 4. Новый источник (NHL 27 PS5 и др.): что перемерить
 
