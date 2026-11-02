@@ -45,6 +45,12 @@ if [ "${1:-}" = "--mods" ]; then
   if [ "${AHL32:-}" = "1" ]; then
     sed -i 's/^nhl_ahl_teams = 30$/nhl_ahl_teams = 32/' "$D/nhllegacy.toml"
   fi
+  # Список шейдеров (shareable): от железа не зависит, игра собирает всё из него при запуске, а не посреди матча.
+  # Сама сборка драйвером своя на каждом ПК (docs/legacy-port.md, «Надпись о сборке шейдеров»).
+  if [ -d "$P/userdata/cache/shaders/shareable" ]; then
+    mkdir -p "$D/userdata/cache/shaders/shareable"
+    cp "$P/userdata/cache/shaders/shareable/"* "$D/userdata/cache/shaders/shareable/"
+  fi
   # Сейвы пользователя по умолчанию (SAVES=0 — без них): последний PROFILE (настройки игры, правила, слайдеры
   # геймплея, звук, видео, управление) и последний ROSTER (составы с правками). Профиль порта один на всех ПК
   # (XUID B13EBABEBABEBABE, имя «User» — SDK, xam/user_profile.cpp), так что игра друга подхватит их как свои.

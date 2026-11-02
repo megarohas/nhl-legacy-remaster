@@ -18,6 +18,9 @@
 void NhlLegacyInstallCrashReporter();  // nhllegacy_crash.cpp
 void NhlLegacyStartCursorHide(rex::ui::Window* window, rex::ui::ImGuiDrawer* drawer);  // nhllegacy_cursor.cpp
 void NhlLegacyStopCursorHide();
+void NhlLegacyShaderStatusBegin(const std::filesystem::path& cache_root);  // nhllegacy_shaderstatus.cpp
+void NhlLegacyShaderStatusEnd();
+void NhlLegacyShaderStatusStop();
 
 class NhlLegacyApp : public rex::ReXApp {
  public:
@@ -83,7 +86,15 @@ class NhlLegacyApp : public rex::ReXApp {
     NhlLegacyStartCursorHide(window(), drawer);
   }
 
-  void OnShutdown() override { NhlLegacyStopCursorHide(); }
+  void OnShutdown() override {
+    NhlLegacyShaderStatusStop();
+    NhlLegacyStopCursorHide();
+  }
+
+  // Между этими вызовами SDK загружает хранилище шейдеров на потоке UI (nhllegacy_shaderstatus.cpp).
+  void OnPreLaunchModule() override { NhlLegacyShaderStatusBegin(cache_root()); }
+
+  void OnPostLaunchModule(rex::system::XThread*) override { NhlLegacyShaderStatusEnd(); }
 
   // Без окна уведомлений о достижениях: пока у презентера есть хоть одно окно интерфейса, кадр
   // игры выводится из потока UI по обновлению монитора — лишняя задержка и рывки (разбор:
