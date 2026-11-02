@@ -387,7 +387,7 @@ ToS сайтов лиг не проверял. Готовые парсеры в�
    - `p_potential` — по возрасту, номеру драфта и `draft/rankings`.
 9. **Звенья.**
    - Основные: CapWages `projectedDepth` (или API `/lineups`) → `l1…l4`, `g1`/`g2`.
-   - Спецбригады и капитаны: DailyFaceoff. На странице `line-combinations` есть JSON Next.js; страница открывается, ToS не проверял [П].
+   - Спецбригады и капитаны: DailyFaceoff. На странице `line-combinations` есть JSON Next.js; страница открывается. Условий использования на сайте не нашлось, `robots.txt` страницы разрешает ([roster-update.md](roster-update.md), 02.11.2026) [П].
 10. **Фото.** Портреты НХЛ, потом leaguestat, Liiga и SHL, в конце — заглушка.
 11. **Запись.** `tools/tdb.py` → `cache:\db\nhlng.db`.
     - Контракт не должен ссылаться на игрока не из этого клуба.

@@ -165,8 +165,8 @@ search.d3: клуб НХЛ, в составе нет, и либо 40+ игр в 
 `washington-capitals`, `utah-mammoth`; `common.TEAM_URL_SLUG`). `robots.txt` разрешает всё,
 кроме `/api/` и `/cms/`: `fetch --only dfo` берёт его первым (тоже через кэш) и проверяет
 `urllib.robotparser` каждую страницу; запросы — через `common.Http` (кэш
-`roster-cache/dailyfaceoff/`, пауза ≥ 1 с, по одному), без входа и ключей. Условия
-использования сайта не проверял. Страница — Next.js, данные — JSON `__NEXT_DATA__` →
+`roster-cache/dailyfaceoff/`, пауза ≥ 1 с, по одному), без входа и ключей. Условий
+использования на сайте не нашлось ([roster-update.md](roster-update.md)). Страница — Next.js, данные — JSON `__NEXT_DATA__` →
 `props.pageProps.combinations` (разбор — `sources.dfo_lines`): `updatedAt`, `sourceName` и
 `source` (кто составил — журналист клуба со ссылкой на пост или «Last Game (дата)», состав
 последнего матча), `players[]` — запись на каждое место:
