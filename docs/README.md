@@ -14,7 +14,7 @@
 ## Порт NHL Legacy
 
 - [legacy-port.md](legacy-port.md) — свой порт NHL Legacy (`nhl-legacy-port/`): что работает, устройство, сборка, запуск, папка для друзей, год, франшиза на 32 клуба и разбор её падений, закрытое (предзаказ, маски, бусты — `nhl_unlock_*`)
-- [launcher.md](launcher.md) — лаунчер `nhllegacy_launcher.exe`: перед запуском настраиваются графика и переключатели `nhl_*`
+- [launcher.md](launcher.md) — лаунчер `nhllegacy_launcher.exe`: перед запуском настраиваются графика, переключатели `nhl_*` и имя игрока, кнопка «Обновить ростеры» переносит ростер с другого ПК
 - [graphics-settings.md](graphics-settings.md) — графика порта: cvar'ы SDK, апскейл, ROV/RTV, задержка ввода, источники настроек и их приоритет
 - [sdk-build.md](sdk-build.md) — своя сборка ReXGlue SDK (Vulkan, FSR 1 / CAS): скрипты `nhl-legacy-port/scripts/sdk_*`, патчи, восстановление с нуля
 - [coins.md](coins.md) — монеты на главном меню (P 2,500, REDEEM COINS): откуда потолок, как считаются, как его снять; `tools/legacy_coins.py`

@@ -31,6 +31,7 @@
 | **Меню и интерфейс** | `fefont.py`, `febg.py`, `feapt.py`/`aptc.py`, `menu12_legacy.py`, `menuitems_legacy.py`, `draft32_legacy.py`, `locdb.py`, `music.py` | [fe-menu-legacy.md](fe-menu-legacy.md), [fe-fonts.md](fe-fonts.md), [music.md](music.md) | И; `menu12_legacy` — П (вход — сборка NHL 13) |
 | **Год и даты** | cvar `season_year` (лаунчер), `year_hooks.py`, `year2026_legacy.py`, `tdb.py setstate` | [legacy-port.md](legacy-port.md), fe-menu-legacy.md §12 | П — «2026» зашит, `--year` нет |
 | **Контракты, потолок, драфт** | этап `contracts` (`contracts.py`), `roster write --payroll-max`, `payroll_report.py`, cvar `nhl_salary_*`, `draft_roster.py`, `draft32_legacy.py`, cvar `nhl_draftclass_age` | legacy-data.md, [draft-pool.md](draft-pool.md) | П — импорт контрактов держится на разборщике вне git |
+| **Ростер на другой ПК** | лаунчер: кнопка «Обновить ростеры», `nhllegacy_launcher.exe --import-roster ФАЙЛ`; образцы — `roster_samples.py` | launcher.md | И |
 | **Настройки лиг** | `legacy_settings.py` (только слайдеры), `nhl32.py` (дивизионы, 84 игры — константами), cvar лаунчера | legacy-port.md | — |
 | **Правила** | `legacy_settings.py` читает правила (ID 9…27), записи нет; cvar `nhl_settings_from_profile` | legacy-port.md | — |
 | **Сейвы** | `tdb.py verify/live/states/setstate/set`, команда `save` у каждого этапа; монеты и доигранные матчи профиля — `legacy_coins.py` | [save-editing.md](save-editing.md), [coins.md](coins.md) | И по отдельности; общего «всё в ROSTER» нет |

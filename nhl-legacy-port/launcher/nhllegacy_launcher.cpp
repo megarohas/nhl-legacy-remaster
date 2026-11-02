@@ -9,6 +9,7 @@
 // Отладка без показа окна пользователю: --shot=файл.png [--shot-hint=N] — окно рисуется за
 // пределами экрана без активации, снимок PrintWindow сохраняется в PNG, процесс выходит.
 // --lang=en|ru — язык поверх сохранённого; --shot-relang=en|ru — снимок после смены языка в окне.
+// Ростеры без окна: --import-roster ФАЙЛ, --check-roster ФАЙЛ (только проверка), код возврата — roster::Code.
 // --print-command — командная строка, с которой «Играть» запустит игру.
 
 #ifndef UNICODE
@@ -21,6 +22,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <commctrl.h>
+#include <commdlg.h>
 #include <shellapi.h>
 #include <tlhelp32.h>
 #include <wincodec.h>
@@ -35,6 +37,8 @@
 #include <string>
 #include <vector>
 
+#include "roster_import.h"
+
 // Версия проекта (файл VERSION) — build.cmd пишет nhl_version.h рядом с объектными файлами.
 #if __has_include("nhl_version.h")
 #include "nhl_version.h"
@@ -46,6 +50,7 @@
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "gdi32.lib")
 #pragma comment(lib, "comctl32.lib")
+#pragma comment(lib, "comdlg32.lib")
 #pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "windowscodecs.lib")
@@ -392,6 +397,7 @@ enum HintId {
   kHintPlay,
   kHintLanguage,
   kHintName,
+  kHintRosters,
   kHintCount
 };
 
@@ -439,6 +445,10 @@ const Hint kHintsEn[kHintCount] = {
     {L"Player name",
      L"Your name in the game instead of “User”: Profile Management, the SAVE/LOAD lists and the bar at the bottom of "
      L"the menus. Up to 15 characters, a Cyrillic letter takes two places. Saves don't depend on it. Empty — User."},
+    {L"Update rosters",
+     L"Add a roster made on another PC: pick the file from ...\\454109EC\\00000001\\ROSTER <date>. The launcher "
+     L"checks it against this game's data and adds it, the game loads it on the next start. Your earlier rosters and "
+     L"profile stay. Close the game first."},
 };
 
 const Hint kHintsRu[kHintCount] = {
@@ -484,6 +494,10 @@ const Hint kHintsRu[kHintCount] = {
     {L"Имя игрока",
      L"Ваше имя в игре вместо «User»: Profile Management, списки SAVE/LOAD и нижняя строка меню. До 15 символов, "
      L"русская буква занимает два места, то есть до 7 букв. Сейвы от имени не зависят. Пусто — User."},
+    {L"Обновить ростеры",
+     L"Добавить ростер, сделанный на другом ПК: выберите файл из ...\\454109EC\\00000001\\ROSTER <дата>. Лаунчер "
+     L"сверит его с данными этой игры и добавит, игра загрузит его при следующем запуске. Прежние ростеры и профиль "
+     L"остаются. Сначала закройте игру."},
 };
 
 const Hint& HintAt(int i) { return (g_lang == 1 ? kHintsRu : kHintsEn)[i]; }
@@ -518,6 +532,7 @@ enum ControlId {
   kIdNote,
   kIdLang,
   kIdName,
+  kIdRosters,
 };
 
 // Смена языка: элементы пересоздаются после возврата из уведомления списка (не внутри него).
@@ -726,14 +741,18 @@ void CreateControls() {
   MoneyEdit(T(L"Minimum", L"Минимум"), kIdMin, jx, 228, lab, 80);
   AddZone(jx, 132, rcw, 120, kHintMoney);
 
-  // Игрок: группа вровень с «Экраном».
-  Group(T(L"Player", L"Игрок"), rx, 282, rw, 106);
+  // Игрок и ростеры: группа вровень с «Экраном».
+  Group(T(L"Player and rosters", L"Игрок и ростеры"), rx, 282, rw, 106);
   Label(T(L"Player name", L"Имя игрока"), jx, 304, lab);
   HWND name = Add(L"EDIT", L"", ES_AUTOHSCROLL | WS_TABSTOP, jx + lab, 304, rcw - lab, 24, kIdName, kFontNormal,
                   WS_EX_CLIENTEDGE);
   SendMessageW(name, EM_SETLIMITTEXT, kNameMax, 0);
   g.hint_of[name] = kHintName;
   AddZone(jx, 304, rcw, 26, kHintName);
+  HWND rosters = Add(L"BUTTON", T(L"Update rosters…", L"Обновить ростеры…"), BS_PUSHBUTTON | WS_TABSTOP, jx, 342, rcw,
+                     32, kIdRosters);
+  g.hint_of[rosters] = kHintRosters;
+  AddZone(jx, 342, rcw, 32, kHintRosters);
 
   // Кнопки.
   HWND reset = Add(L"BUTTON", T(L"Reset", L"Сбросить"), BS_PUSHBUTTON | WS_TABSTOP, 16, 568, 120, 34, kIdReset);
@@ -1000,6 +1019,80 @@ void Play() {
   DestroyWindow(g.wnd);
 }
 
+// ─── Ростеры ──────────────────────────────────────────────────────────────────────────────
+
+// Папка данных игры: как у порта (nhllegacy_app.h), user_data_root из настроек, пусто — userdata рядом с exe.
+std::wstring UserDataDir() {
+  Cvars c;
+  ParseToml(g.toml, c);
+  ParseToml(g.launcher_toml, c);
+  std::wstring dir = Widen(Get(c, "user_data_root", ""));
+  if (dir.empty()) return g.dir + L"\\userdata";
+  std::replace(dir.begin(), dir.end(), L'/', L'\\');
+  const bool absolute = dir.rfind(L"\\\\", 0) == 0 || (dir.size() > 1 && dir[1] == L':');
+  while (dir.size() > 3 && dir.back() == L'\\') dir.pop_back();
+  return absolute ? dir : g.dir + L"\\" + dir;
+}
+
+// Проверить файл и, если нужно, добавить его в игру. name — имя новой папки сейва.
+roster::Result ImportRoster(const std::wstring& path, bool write, std::wstring* name) {
+  using namespace roster;
+  std::vector<uint8_t> file;
+  bool too_big = false;
+  if (!ReadFileAll(path, kMaxFile, file, &too_big)) {
+    if (too_big) {
+      return Fail(kNotASave, L"This is not an NHL Legacy save file: it is too big.",
+                  L"Это не файл сейва NHL Legacy: он слишком большой.");
+    }
+    return Fail(kCannotRead, L"Could not read the file " + path, L"Не удалось прочитать файл " + path);
+  }
+  const std::wstring userdata = UserDataDir();
+  Result r = roster::Check(file, userdata +L"\\cache\\guest\\db", nullptr);
+  if (r.code != kOk || !write) return r;
+  if (GameRunning()) {
+    return Fail(kGameRunning, L"The game is running. Close it and try again: it would save its own roster over this one.",
+                L"Игра запущена. Закройте её и повторите: она запишет свой ростер поверх этого.");
+  }
+  return AddRoster(file, userdata, name);
+}
+
+void UpdateRosters() {
+  if (GameRunning()) {
+    ShowError(T(L"The game is running. Close it and press the button again.",
+                L"Игра запущена. Закройте её и нажмите кнопку ещё раз."));
+    return;
+  }
+  wchar_t path[4096] = {};
+  std::wstring filter = T(L"Rosters", L"Ростеры");
+  filter.push_back(L'\0');
+  filter += L"ROSTER*";
+  filter.push_back(L'\0');
+  filter += T(L"All files", L"Все файлы");
+  filter.push_back(L'\0');
+  filter += L"*.*";
+  filter.push_back(L'\0');
+  const std::wstring title = T(L"Pick a roster file", L"Выберите файл ростера");
+  OPENFILENAMEW ofn{};
+  ofn.lStructSize = sizeof(ofn);
+  ofn.hwndOwner = g.wnd;
+  ofn.lpstrFilter = filter.c_str();
+  ofn.lpstrFile = path;
+  ofn.nMaxFile = static_cast<DWORD>(std::size(path));
+  ofn.lpstrTitle = title.c_str();
+  ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
+  if (!GetOpenFileNameW(&ofn)) return;
+  std::wstring name;
+  const roster::Result r = ImportRoster(path, true, &name);
+  if (r.code != roster::kOk) {
+    ShowError(r.Text(g_lang).c_str());
+    return;
+  }
+  const std::wstring text = std::wstring(T(L"Roster added: ", L"Ростер добавлен: ")) + name + L".\n" +
+                            T(L"The game will load it on the next start. Earlier rosters are kept.",
+                              L"Игра загрузит его при следующем запуске. Прежние ростеры остались.");
+  MessageBoxW(g.wnd, text.c_str(), L"NHL Legacy", MB_OK | MB_ICONINFORMATION);
+}
+
 // Запуск без окна: вывод — в stdout вызывающего, если он его передал, иначе в его консоль.
 void Say(const std::wstring& text) {
   HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -1013,6 +1106,19 @@ void Say(const std::wstring& text) {
   WideCharToMultiByte(CP_UTF8, 0, line.data(), static_cast<int>(line.size()), utf8.data(), n, nullptr, nullptr);
   DWORD put = 0;
   WriteFile(out, utf8.data(), static_cast<DWORD>(utf8.size()), &put, nullptr);
+}
+
+int RosterCommand(const std::wstring& path, bool write) {
+  std::wstring name;
+  const roster::Result r = ImportRoster(path, write, &name);
+  if (r.code != roster::kOk) {
+    Say(L"ERROR " + std::to_wstring(r.code) + L": " + r.Text(g_lang));
+  } else if (write) {
+    Say(L"OK: " + name);
+  } else {
+    Say(L"OK");
+  }
+  return r.code;
 }
 
 // ─── Рисование ────────────────────────────────────────────────────────────────────────────
@@ -1189,6 +1295,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
       const int code = HIWORD(wp);
       if (id == kIdFullscreen && code == BN_CLICKED) UpdateEnabled();
       if (id == kIdName && code == EN_CHANGE) FilterName();
+      if (id == kIdRosters && code == BN_CLICKED) UpdateRosters();
       if (id == kIdPresent && code == CBN_SELCHANGE) {
         // У CAS и FSR своя резкость: запомнить ползунок старого режима, показать нового.
         const int sharp = static_cast<int>(SendMessageW(Item(kIdSharp), TBM_GETPOS, 0, 0));
@@ -1315,9 +1422,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
   InitCommonControlsEx(&icc);
   g.inst = inst;
 
-  std::wstring shot_path, lang_arg, relang_arg;
+  std::wstring shot_path, lang_arg, relang_arg, roster_path;
   int shot_hint = kHintNone;
-  bool print_command = false;
+  bool roster_command = false, roster_write = false, print_command = false;
   int argc = 0;
   LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
   for (int i = 1; argv && i < argc; ++i) {
@@ -1327,6 +1434,14 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
     if (a.rfind(L"--lang=", 0) == 0) lang_arg = a.substr(7);  // en / ru поверх сохранённого
     if (a.rfind(L"--shot-relang=", 0) == 0) relang_arg = a.substr(14);  // снимок после смены языка в окне
     if (a == L"--print-command") print_command = true;  // что запустит «Играть», для проверок без окна
+    for (const wchar_t* key : {L"--import-roster", L"--check-roster"}) {
+      const std::wstring k = key;
+      if (a == k || a.rfind(k + L"=", 0) == 0) {
+        roster_command = true;
+        roster_write = k == L"--import-roster";
+        roster_path = a == k ? (i + 1 < argc ? argv[++i] : L"") : a.substr(k.size() + 1);
+      }
+    }
   }
   if (argv) LocalFree(argv);
   g.shot = !shot_path.empty();
@@ -1350,6 +1465,14 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
   if (print_command) {
     Say(GameCommand());
     return 0;
+  }
+  if (roster_command) {
+    if (roster_path.empty()) {
+      Say(T(L"Usage: nhllegacy_launcher.exe --import-roster FILE | --check-roster FILE",
+            L"Запуск: nhllegacy_launcher.exe --import-roster ФАЙЛ | --check-roster ФАЙЛ"));
+      return roster::kBadArgs;
+    }
+    return RosterCommand(roster_path, roster_write);
   }
   UpdateTexts();
 
