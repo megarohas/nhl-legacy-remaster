@@ -6,7 +6,7 @@
 #        входы, которые этапом не пересобираются (например, составы без сети), — положить туда заранее
 #        этапы: base roster photos equip collect retire fixdb utah ahl europe chl stats27 nhlattrs useredits tape players
 #        equip27 contracts awards goaliegear photos24 heads scans24 fonts
-#        music models art logos menu arenas nhl24
+#        music models art logos menu arenas schedule nhl24
 #        (без этапов — все по порядку;
 #        --ahl32 — ещё вариант «АХЛ на 32», накладка game/work/legacy-data/out-ahl32; nhl24 — накладка out-nhl24
 #        из пакета NHL 24, если он готов: game/work/nhl24/out/pack или NHL24_PACK=папка)
@@ -29,7 +29,7 @@ AHL32=0
 stages=()
 for a in "$@"; do [ "$a" = "--ahl32" ] && AHL32=1 || stages+=("$a"); done
 [ ${#stages[@]} -gt 0 ] || stages=(base roster photos equip collect retire fixdb utah ahl europe chl stats27 nhlattrs useredits tape players equip27 contracts awards goaliegear photos24
-                                  heads scans24 fonts music models art logos menu arenas nhl24)
+                                  heads scans24 fonts music models art logos menu arenas schedule nhl24)
 want() { for s in "${stages[@]}"; do [ "$s" = "$1" ] && return 0; done; return 1; }
 say() { echo "== $(date +%H:%M:%S) $*"; }
 
@@ -412,6 +412,19 @@ if want arenas; then
   say "свои модели арен (arenas.py)"
   "$PYA" $T/arenas.py --write --work "$WA"
 fi
+if want schedule; then
+  # настоящий календарь сезона (tools/legacy_data/schedule.py, docs/schedule.md): nhlschedule и favoriteteamschedule в
+  # out/db и out-ahl32/db из базы NHL 27 или кэша API НХЛ. nhlfutureschedule (со второго сезона), составы и draft_roster.db
+  # не меняются. Сети нет: нет ни базы, ни кэша — этап пропущен. После всех этапов, которые пересобирают базу (collect,
+  # retire…), до nhl24 (накладка из out/db). Повтор ничего не меняет. Сейв ROSTER — отдельно:
+  # python tools/legacy_data/schedule.py save СЕЙВ --write
+  if python $T/schedule.py show >/dev/null 2>&1; then
+    say "настоящий календарь сезона (schedule.py)"
+    python $T/schedule.py db out out-ahl32 --write
+  else
+    say "календарь: нет базы NHL 27 и кэша API (schedule.py fetch) — этап пропущен"
+  fi
+fi
 if want nhl24; then
   # после collect (берёт out/db и out-ahl32/db): пакет агента nhl24 — формы, шрифты номеров, центры и реклама льда,
   # наклейки на шлемах, шорты и гетры, клюшки, шайба — сверка по manifest.json → накладка out-nhl24 (+ out-nhl24-ahl32):
@@ -425,6 +438,8 @@ if want nhl24; then
     # сошлётся; останется прежнее состояние арен)
     PYA=${ARENAS_PYTHON:-game/work/nhl24/venv/Scripts/python.exe}; [ -x "$PYA" ] || PYA=python
     want arenas || "$PYA" $T/arenas.py --write --work "$WA" || say "свои модели арен: ошибка — накладка без правки арен"
+    # календарь — по той же причине: без него пересборка out/db молча вернула бы старый
+    want schedule || python $T/schedule.py db out out-ahl32 --write || say "календарь: ошибка — накладка с прежним календарём"
     say "пакет NHL 24 → накладка out-nhl24"
     python $T/nhl24.py build "$P"
   else

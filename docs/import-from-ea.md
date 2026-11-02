@@ -39,6 +39,7 @@ python tools/legacy_data/roster_merge.py "<ROSTER>" --old game/work/legacy-data/
 | составы лиг | `legacy_data/league27.py chl\|europe` | [legacy-data.md](legacy-data.md), «Лиги из NHL 27» | составы, био, атрибуты, звенья, названия клубов в `out` |
 | статистика | `legacy_data/stats27.py` | legacy-data.md, «Статистика из NHL 27» | `stockcareer*` в `out` |
 | награды | `legacy_data/awards27.py` (+ `awards_fix.json`) | [awards.md](awards.md) | `stockawardstable` в `out` (и схема) |
+| календарь | `legacy_data/schedule.py` | [schedule.md](schedule.md) | `nhlschedule`, `favoriteteamschedule` в `out`; `save` — в сейве ROSTER |
 | экипировка | `legacy_data/equipment27.py` | [equipment27.md](equipment27.md) | экипировка игроков в `out`; `save` — в сейвах ROSTER и DYNASTY |
 | портреты | `photos24.py --source <игра>` | [player-photos-nhl24.md](player-photos-nhl24.md) | `out/fe/…/p<artid>.big`, `hasportrait` |
 | головы | `scans24.py --source <игра>`, `fb/heads.py` | [heads-nhl24.md](heads-nhl24.md) | `out/rendering/player`, `headid`, `stockplayerheads` |
