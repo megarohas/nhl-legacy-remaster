@@ -11,7 +11,7 @@
   0 / 1 → папка комплекта, как kitport survey);
 - образцы legacy — EA-формы клуба в базе Legacy (stockteamjerseys стиль 1, locstring 0 / 1; у одобренных клубов в
   накладке они уже locstring 6 с подписью «(EA)» — база out, до накладки, это не меняет);
-- номера форм edge_home / edge_away в реестре — как nhl24.py alloc (--style 0), jerseyindex подряд: формы базы →
+- номера форм edge_home / edge_away в реестре — как nhl24.py alloc (--style 2), jerseyindex подряд: формы базы →
   поставленные формы реестра (файл свитера есть в cache: игры) → edge_home, edge_away → прочие не поставленные (так
   правили руками NJD и TBL, §5.3 п. 1, §12.5); поставленные формы номер не меняют никогда;
 - collar (lace | plain), кокетка (yoke, yoke_color, yoke_shape_color), body_color — по текстуре основы источника на
@@ -505,12 +505,12 @@ def registry_plan(L, code):
     for kit in EDGE_KIT.values():
         if any(k["club"] == code and k["kit"] == kit for k in reg["kits"]):
             continue
-        v = next((v for v in range(32) if L.variant_free(art, v, rows, reg, 0, helm)), None)
+        v = next((v for v in range(32) if L.variant_free(art, v, rows, reg, L.STYLE_EDGE, helm)), None)
         if v is None:
-            sys.exit(f"{code} {kit}: нет свободного варианта стиля 0")
-        reg["kits"].append(dict(club=code, kit=kit, teamid=team, style=0, art=art, variant=v, fevariant=v,
+            sys.exit(f"{code} {kit}: нет свободного варианта стиля {L.STYLE_EDGE}")
+        reg["kits"].append(dict(club=code, kit=kit, teamid=team, style=L.STYLE_EDGE, art=art, variant=v, fevariant=v,
                                 jerseyindex=99, locstring=6))
-        notes.append(f"{kit}: новый номер 0_{art}_{v} (как nhl24.py alloc --style 0)")
+        notes.append(f"{kit}: новый номер {L.STYLE_EDGE}_{art}_{v} (как nhl24.py alloc --style {L.STYLE_EDGE})")
         changed = True
     mine = sorted((k for k in reg["kits"] if k["club"] == code), key=lambda k: k["jerseyindex"])
     inst = [k for k in mine if installed(k)]

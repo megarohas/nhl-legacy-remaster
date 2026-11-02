@@ -1327,12 +1327,12 @@ def fe_preview(d, mesh, size=256):
     out.save(os.path.join(d, "fe.png"))
 
 
-def helmet_copy(src_tag_art, src_v, art, v, dst_root):
-    """Наклейка на шлем формы стиля 0 — копия наклейки формы-образца (logo/texlib_<арт>_1_<вариант>, из cache: или
+def helmet_copy(src_tag_art, src_v, art, v, dst_root, style=0):
+    """Наклейка на шлем формы стиля style — копия наклейки формы-образца (logo/texlib_<арт>_1_<вариант>, из cache: или
     архивов), растры переименованы (имена той же длины; другой длины — без наклейки). -> путь в cache: или None."""
     src = f"rendering/logo/texlib_{src_tag_art}_1_{src_v}.rx2"
-    dst = f"rendering/logo/texlib_{art}_0_{v}.rx2"
-    a, b = f"logo_{src_tag_art}_1_{src_v}_", f"logo_{art}_0_{v}_"
+    dst = f"rendering/logo/texlib_{art}_{style}_{v}.rx2"
+    a, b = f"logo_{src_tag_art}_1_{src_v}_", f"logo_{art}_{style}_{v}_"
     if len(a) != len(b):
         return None
     for root in (CACHE, os.path.join(REPO, "game", "other", "legacy", "big", "cacherender")):

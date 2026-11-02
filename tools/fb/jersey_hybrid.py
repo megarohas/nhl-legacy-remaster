@@ -1264,7 +1264,8 @@ def main():
     p.add_argument("out")
     p = sub.add_parser("build")
     p.add_argument("--out", default=OUT)
-    p.add_argument("--style", type=int, default=0, help="в какой слот стиля писать имена файлов (0 — слот adidas)")
+    p.add_argument("--style", type=int, default=2, help="в какой слот стиля писать имена файлов (слот стиля 0 — оригиналы EA, "
+                   "docs/kitport.md §1.1)")
     for name in ("kit", "render", "pack"):
         p = sub.add_parser(name)
         p.add_argument("--club", default="MIN")

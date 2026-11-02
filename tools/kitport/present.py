@@ -141,7 +141,7 @@ def _decode_logo(data):
     return np.frombuffer(bytes(rgba), np.uint8).reshape(h, w, 4)
 
 
-def decal_rgba(art, variant, slot_style=0):
+def decal_rgba(art, variant, slot_style):
     """Наклейка на шлем из слота (edgekit/slot/cache/rendering/logo/texlib_A_S_V.rx2) → RGBA или None."""
     p = os.path.join(core.EDGE_WORK, "slot", "cache", "rendering", "logo", f"texlib_{art}_{slot_style}_{variant}.rx2")
     return _decode_logo(open(p, "rb").read()) if os.path.exists(p) else None

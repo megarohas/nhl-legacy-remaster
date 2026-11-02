@@ -11,7 +11,7 @@
    Ровная у NHL 24 линия остаётся ровной.
 3. Эмблемы (герб, нашивки, щит NHL) — наклейками (fb.kit_hybrid), как у форм NHL 24 на Edge.
 
-  python -m fb.edge_kit build [--out DIR] [--style 0]   # сетки jersey_* → DIR/rendering/jersey/
+  python -m fb.edge_kit build [--out DIR]                # сетки jersey_* стиля 2 → DIR/rendering/jersey/
   python -m fb.edge_kit preview OUT.png                  # ворот: Edge | изогнутая копия | NHL 24 (шашки)
   python -m fb.edge_kit kit --club NJD                    # текстуры формы клуба (профиль fb/edge_clubs.toml) → WORK/out
 """
@@ -6808,12 +6808,15 @@ def cmd_preview(a):
     print(a.out)
 
 
-# ---------------------------------------------------------------- сетки и затенение в игру (слот стиля 0)
+# ---------------------------------------------------------------- сетки и затенение в игру (слот стиля 2)
 
 # Сетка свитера у игры одна на стиль (jersey_{g}_{s}_{h}_{t}_{p}_{lod}), а у этой формы она своя (поднятый ворот и
-# остров развёртки). Поле style в базе — 1 бит, поэтому формы ставятся в слот стиля 0 (ретро; сейчас там сетки adidas
-# — пользователь 19.10: «можешь поставить поверх ретро-комплектов, ничего страшного, что другие поплывут»).
-SLOT_STYLE = 0
+# остров развёртки). С 02.11.2026 (вариант A, пользователь; docs/kitport.md §1.1) — свой слот: стиль 2. Слот стиля 0 у
+# ретро-форм, сборных и европейских клубов, его не трогаем: 15–19.10 формы стояли там, и 188 форм EA ехали на чужой сетке.
+# Шире 1 бита поле style только в заголовке таблицы: tools/legacy_data/nhl24.py style2_apply, kitport slot3.
+SLOT_STYLE = 2
+REGISTRY = os.environ.get("NHL24_REGISTRY") or os.path.join(REPO, "tools", "legacy_data", "nhl24_kits.json")
+ARCHIVE_STYLE = 0          # контейнеры из архивов EA для файлов слота: сетки и комплекты стиля 0 (своих у стиля 2 нет)
 GOALIE_H = (0, 1)
 
 
@@ -6845,7 +6848,7 @@ def write_mesh(M, dst_rel, out_root):
     """Сетка M (поз., нормали, UV, кости, веса) → файл слота dst_rel (секции и шейдер — из файла слота в архиве, как у
     fb.jersey_mesh.build_one); касательная — вдоль +u своей развёртки (у острова — своя)."""
     import rw4mesh as rw
-    base = rw.Mesh.game(dst_rel)
+    base = rw.Mesh.game(dst_rel.replace(f"_{SLOT_STYLE}_", f"_{ARCHIVE_STYLE}_", 1))   # в архивах стиля слота нет
     tv, _ = kit3d.vertex_tangents(M)
     P, N, UV, T = M["pos"], kit3d._unit(M["nrm"]), np.clip(M["uv"], 0.0, 1.0), M["tri"]
     bones = [list(map(int, b)) for b in M["bones"]]
@@ -6894,6 +6897,27 @@ def ao_for_slot(out_root):
     rel = f"rendering/jersey/texlib_{SLOT_STYLE}_999.rx2"
     J.write(out_root, rel, bytes(rwf.raw))
     return rel, [d[1] for d in done]
+
+
+# Общие файлы слота кроме сеток и AO свитера: игра строит их имена из стиля (83682E08, 8368AA18). Карты гетр — от Edge, как
+# с 15.10 (пользователь: «трусы и гетры — от современных форм»), затенение шорт — как у стиля 0: его формы NHL 27 брали всегда.
+SHARED_FROM = {f"rendering/sock/sock_{SLOT_STYLE}_{m}.rx2": (f"rendering/sock/sock_1_{m}.rx2", f"sock_1_{m}", f"sock_{SLOT_STYLE}_{m}")
+               for m in ("nm", "rm", "sm")}
+SHARED_FROM[f"rendering/pant/texlib_{SLOT_STYLE}_999.rx2"] = ("rendering/pant/texlib_0_999.rx2", "pant_0_", f"pant_{SLOT_STYLE}_")
+
+
+def shared_for_slot(out_root):
+    """Карты гетр и затенение шорт слота (SHARED_FROM): файл диска EA, имена растров — стиля слота. -> [файлы]."""
+    import kitpaint as kp
+    made = []
+    for rel, (src, a, b) in SHARED_FROM.items():
+        data = kp.source(src, "legacy")
+        head = data[:0x1000]
+        if a.encode() not in head:
+            sys.exit(f"{src}: в именах растров нет {a}")
+        J.write(out_root, rel, head.replace(a.encode(), b.encode()) + data[0x1000:])
+        made.append(rel)
+    return made
 
 
 # Комплекты в игру (пользователь, 19.10): шорты и шлемы — от нынешних основных форм клуба (дом — NHL 24 1_14_4, выезд —
@@ -8129,14 +8153,15 @@ def cmd_slot(a):
     from PIL import Image
     from . import pilot
     use_club(a.club)
-    reg = json.load(open(os.path.join(REPO, "tools", "legacy_data", "nhl24_kits.json"), encoding="utf-8"))
+    reg = json.load(open(REGISTRY, encoding="utf-8"))
     regmap = {(k["club"], k["kit"]): k for k in reg["kits"]}
     cur = os.path.join(WORK, "cur_kits")
     flat_kit = next((k for k, sp in SLOT_KITS.items() if sp["sock"] == "flat"), None)
     for kit, spec in SLOT_KITS.items():
         r = regmap.get((a.club, spec["kit"]))
         if r is None or r.get("style", 1) != SLOT_STYLE:
-            sys.exit(f"{a.club} {spec['kit']}: нет в реестре со стилем {SLOT_STYLE} (nhl24.py alloc … --style 0)")
+            sys.exit(f"{a.club} {spec['kit']}: нет в реестре со стилем {SLOT_STYLE} (nhl24.py alloc … --style {SLOT_STYLE}, "
+                     "перевод старых форм — kitport slot3)")
         new = f"{SLOT_STYLE}_{r['art']}_{r['variant']}"
         src = os.path.join(KITS_OUT, f"{a.club}_{kit}")
         leg = os.path.join(cur, spec["legacy"])
@@ -8271,7 +8296,7 @@ def cmd_slot(a):
             J.unpack_kit(tpl, tdir)
         shutil.copy2(os.path.join(tdir, "kit.json"), os.path.join(d, "kit.json"))
         cmd = [sys.executable, os.path.join(REPO, "tools", "kitpaint.py"), "--game", "legacy", "pack", d, new, a.out]
-        if len(tpl) != len(new):                         # номер другой длины (0_17_10): контейнер — форма стиля 0 из архива
+        if len(tpl) != len(new):                         # номер другой длины (2_17_10): контейнер — форма стиля 0 из архива
             cont = slot_container(len(new))             # с номером той же длины (имена растров переписываются на месте)
             if cont:
                 cmd += ["--container", cont]
@@ -8283,15 +8308,15 @@ def cmd_slot(a):
         if spec.get("helmet_logo", "legacy") == "source":
             h = helmet_from_source(a.club, kit, ls[1], ls[2], r["art"], r["variant"], a.out)
         else:
-            h = J.helmet_copy(ls[1], ls[2], r["art"], r["variant"], a.out)
+            h = J.helmet_copy(ls[1], ls[2], r["art"], r["variant"], a.out, style=SLOT_STYLE)
         print(f"{a.club} {spec['kit']} → {new}: шаблон {tpl}, превью (перед ворота на uv0: {n} текселей), "
               f"наклейка на шлем {h}")
 
 
 def slot_container(n):
-    """Форма стиля SLOT_STYLE из архива Legacy с номером длины n («0_108_0» под «0_17_10») — контейнер kitpaint."""
+    """Форма стиля ARCHIVE_STYLE из архива Legacy с номером длины n («0_108_0» под «2_17_10») — контейнер kitpaint."""
     d = os.path.join(REPO, "game", "other", "legacy", "big", "nocacherender", "rendering", "jersey")
-    tags = sorted(f[7:-4] for f in os.listdir(d) if f.startswith(f"texlib_{SLOT_STYLE}_") and f.endswith(".rx2"))
+    tags = sorted(f[7:-4] for f in os.listdir(d) if f.startswith(f"texlib_{ARCHIVE_STYLE}_") and f.endswith(".rx2"))
     return next((t for t in tags if len(t) == n), None)
 
 
@@ -8334,13 +8359,13 @@ def helmet_from_source(code, kit, leg_art, leg_v, art, v, dst_root):
                        f"helmetlogo_adidas_{club}_{src}_0_color.png")
     if not os.path.exists(png):
         print(f"  наклейка {kit}: нет {png} — как у образца")
-        return J.helmet_copy(leg_art, leg_v, art, v, dst_root)
+        return J.helmet_copy(leg_art, leg_v, art, v, dst_root, style=SLOT_STYLE)
     want = len(f"{art}_{SLOT_STYLE}_{v}")
     rel = None
     for tag in (f"{leg_art}_1_{leg_v}",) + HELMET_CONTAINERS:
         if len(tag) == want:
             ta_, _, tv = tag.split("_")
-            rel = J.helmet_copy(ta_, tv, art, v, dst_root)
+            rel = J.helmet_copy(ta_, tv, art, v, dst_root, style=SLOT_STYLE)
             if rel:
                 break
     if rel is None:
@@ -8367,13 +8392,15 @@ PACK_BASE = os.path.join(REPO, "game", "work", "nhl24", "out", "pack-adidas")   
 
 
 def cmd_pack(a):
-    """Пакет NHL 24 (tools/legacy_data/nhl24.py build) = установленный пакет + сетки свитера слота стиля 0 и его
-    затенение (вместо сеток adidas) + формы клуба SLOT_KITS (файлы из a.src, раскладка cache:)."""
+    """Пакет NHL 24 (tools/legacy_data/nhl24.py build) = установленный пакет + общие файлы слота стиля SLOT_STYLE (сетки,
+    затенение, карты гетр) + формы клубов SLOT_KITS (файлы из a.src, раскладка cache:). Общие файлы стиля 0 из пакета
+    adidas (сетки, затенение, карты гетр) в пакет не идут: слот стиля 0 — оригиналы EA, ретро-формы и сборные. Шорты
+    pant_0_0_*, затенение гетр playersock_*_0_am и рубашка shirt_0_0_* — остаются: их выбирает не стиль, а поле игрока."""
     import hashlib
     import json
     import re
     import shutil
-    reg = json.load(open(os.path.join(REPO, "tools", "legacy_data", "nhl24_kits.json"), encoding="utf-8"))
+    reg = json.load(open(REGISTRY, encoding="utf-8"))
     regmap = {(k["club"], k["kit"]): k for k in reg["kits"]}
     if os.path.exists(a.out):
         sys.exit(f"{a.out} уже есть — уберите или укажите --out")
@@ -8387,21 +8414,26 @@ def cmd_pack(a):
         shutil.copy2(os.path.join(a.src, *rel.split("/")), q)
         return hashlib.md5(open(q, "rb").read()).hexdigest(), os.path.getsize(q)
 
-    mesh_re = re.compile(rf"rendering/jersey/jersey_[01]_{SLOT_STYLE}_\d_\d_\d_\d\.rx2")
-    note_mesh = ("сетка свитера Edge с поднятым передом ворота и своей развёрткой переда (fb.edge_kit meshes) — "
-                 "слот стиля 0 вместо сеток adidas (пользователь 19.10)")
-    n_mesh = 0
-    for e in man["files"]:
-        if e["type"] == "other" and mesh_re.fullmatch(e["file"]):
-            e["md5"], e["size"] = put(e["file"])
-            e["note"] = note_mesh
-            n_mesh += 1
+    # пакет adidas ставил в слот стиля 0 свои сетки и карты: их нет в пакете (и в cache:), игра берёт диск EA и legacy-data/out
+    slot0 = re.compile(r"rendering/(jersey/jersey_[01]_0_\d_\d_\d_\d|jersey/texlib_0_999|sock/sock_0_(nm|rm|sm))\.rx2")
+    for rel in [e["file"] for e in man["files"] if slot0.fullmatch(e["file"])]:
+        q = os.path.join(cache, *rel.split("/"))
+        if os.path.exists(q):
+            os.remove(q)
+    man["files"] = [e for e in man["files"] if not slot0.fullmatch(e["file"])]
     have = {e["file"] for e in man["files"]}
-    extra = [f"rendering/jersey/texlib_{SLOT_STYLE}_999.rx2"]
+    extra = sorted(os.path.relpath(os.path.join(dp, f), a.src).replace(os.sep, "/")
+                   for dp, _, fn in os.walk(os.path.join(a.src, "rendering", "jersey")) for f in fn
+                   if re.fullmatch(rf"jersey_[01]_{SLOT_STYLE}_\d_\d_\d_\d\.rx2", f))
+    n_mesh = len(extra)
+    extra += [f"rendering/jersey/texlib_{SLOT_STYLE}_999.rx2"] + sorted(SHARED_FROM)
+    notes = {"jersey/jersey_": "сетка свитера Edge с поднятым передом ворота и своей развёрткой переда (fb.edge_kit meshes)",
+             "jersey/texlib": "затенение свитера — Edge, перед ворота с прежнего места (fb.edge_kit meshes)",
+             "sock/": "карта гетр — как у Edge, имя растра стиля слота", "pant/": "затенение шорт — как у стиля 0"}
     for rel in extra:
         md, sz = put(rel)
         e = {"file": rel, "type": "other", "md5": md, "size": sz, "action": "add",
-             "note": "затенение свитера слота стиля 0 — Edge, перед ворота с прежнего места (fb.edge_kit meshes)"}
+             "note": next(v for k, v in notes.items() if rel.startswith("rendering/" + k)) + f" (слот стиля {SLOT_STYLE})"}
         if rel in have:
             man["files"] = [x for x in man["files"] if x["file"] != rel]
         man["files"].append(e)
@@ -8499,8 +8531,7 @@ def pack_club(a, code, regmap, man, have, put, phase=2):
                             #                  поставленных не сдвигаются (21.10, BOS встал бы раньше MIN)
                             "default": bool(spec.get("default"))})   # одобрена — форма по умолчанию (дом / выезд)
     man["note"] = (man.get("note", "") + f" {code}: формы «{SLOT_KITS['home']['label']}» / «{SLOT_KITS['away']['label']}» "
-                   f"({SOURCE_NAME()}) на своей сетке Edge с передом ворота NHL 24 в слоте стиля 0 (сетки adidas сняты, "
-                   "пользователь 19.10).")
+                   f"({SOURCE_NAME()}) на своей сетке Edge с передом ворота NHL 24 в слоте стиля {SLOT_STYLE}.")
 
 
 def SOURCE_NAME():
@@ -8553,7 +8584,7 @@ def cmd_shield(a):
 
 
 def cmd_meshes(a):
-    """Сетки свитера (24 полевых, 6 вратарских) и затенение — в слот стиля SLOT_STYLE, раскладка cache: в a.out."""
+    """Сетки свитера (24 полевых, 6 вратарских), затенение и карты гетр — в слот стиля SLOT_STYLE, раскладка cache: в a.out."""
     out = a.out
     n = 0
     for t, pp in SKATERS:
@@ -8572,6 +8603,7 @@ def cmd_meshes(a):
             print(f"{rel}: {info}, остров {int(M.get('island', np.zeros(1)).sum())} вершин, ворот {dinfo}", flush=True)
     rel, names = ao_for_slot(out)
     print(f"{rel}: {names}")
+    print("карты гетр и затенение шорт:", shared_for_slot(out))
     print(f"{n} сеток → {out}")
 
 
