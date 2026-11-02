@@ -33,6 +33,7 @@ set(NHLLEGACY_SOURCES
     src/nhllegacy_menu.cpp
     src/nhllegacy_cursor.cpp
     src/nhllegacy_shaderstatus.cpp
+    src/nhllegacy_coins.cpp
     src/nhllegacy_draftclass.cpp
     src/nhllegacy_drafttrace.cpp
     src/nhllegacy_printf.cpp
