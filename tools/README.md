@@ -129,9 +129,9 @@
 - `extract.py`, `texture.py`, `meshset.py`, `lfs.py` — текстуры в PNG, сетки, legacy-файлы движка (базы, xml)
 - `heads.py` — головы-сканы NHL 24
 - `kit3d.py`, `kit_hybrid.py`, `kit_fix.py`, `kit_batch.py`, `kit_models.py`, `sleeve.py`, `relief.py`, `kit_rules.toml` — перенос свитеров на развёртку Legacy и правила нашивок
-- `jersey_mesh.py`, `edge_kit.py` — сетка adidas в слоте стиля 0 и свитер Edge с передом ворота NHL 24 (MIN)
+- `jersey_mesh.py`, `edge_kit.py` — сетка adidas (история, формы убраны) и свитер Edge с передом ворота NHL 24, слот стиля 2 ([docs/kitport.md](../docs/kitport.md) §1.1)
 - `eaimport.py` — **импорт из новой EA NHL** (status, prepare, leagues, stats, portraits, heads, overlay, all), руководство — [docs/import-from-ea.md](../docs/import-from-ea.md)
-- `../kitport/` — **точка входа переноса форм**: `python -m kitport doctor | status | snapshot | build | diff | install | rollback | sheet | uvmap | params` (из `tools/`), руководство — [docs/kitport.md](../docs/kitport.md)
+- `../kitport/` — **точка входа переноса форм**: `python -m kitport doctor | status | snapshot | build | diff | install | rollback | sheet | uvmap | params | slot3` (из `tools/`; `slot3` — перевод форм NHL 27 на стиль 2, сверка и откат, §1.1), руководство — [docs/kitport.md](../docs/kitport.md)
 - `fonts.py`, `helmet.py`, `ice.py`, `stick_map.toml` — шрифты номеров, наклейки на шлем, центр льда, клюшки
 - `sticks.py`, `stick_slots.toml` — клюшки NHL 27 в слоты каталога Legacy и их имена (build, sheet, пакет — из `edge_kit pack`), руководство — [docs/sticks.md](../docs/sticks.md)
 - `skates.py`, `skate_slots.toml` — коньки NHL 27 в слоты каталога Legacy: перенос по 3D, рельеф, блик, превью и имена (build, sheet, fe-sheet, пакет — из `edge_kit pack`), руководство — [docs/skates.md](../docs/skates.md)
