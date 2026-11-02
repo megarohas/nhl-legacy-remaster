@@ -1,7 +1,8 @@
 #!/bin/bash
 # Релиз для другого устройства: полная свежая папка, которую остаётся только скинуть (docs/device-release.md).
 #   bash tools/device_release.sh            # nhl-legacy-port/dist/device/NHL Legacy Remaster vX.Y.Z
-#   bash tools/device_release.sh --check    # и запустить копию папки до главного меню (снимок рядом с папкой)
+#   bash tools/device_release.sh --check    # и запустить копию папки до главного меню (снимок и журнал рядом с папкой)
+#   bash tools/device_release.sh --check-only   # только запуск готовой папки
 # Берёт то, что установлено у пользователя: exe, лаунчер, моды, список шейдеров, последние PROFILE и ROSTER
 # (scripts/make_dist.sh --mods), и добавляет файлы игры в game\. Игра должна быть закрыта.
 set -euo pipefail
@@ -10,6 +11,7 @@ CHECK=0
 for arg in "$@"; do
   case "$arg" in
     --check) CHECK=1 ;;
+    --check-only) CHECK=2 ;;
     *) echo "что? $arg (см. начало файла)"; exit 2 ;;
   esac
 done
@@ -26,6 +28,54 @@ NAME="NHL Legacy Remaster v$V"
 D="$OUT/$NAME"
 
 tasklist | grep -qi nhllegacy && { echo "игра запущена: релиз берёт сейвы, сначала закрыть её"; exit 1; }
+
+check() {
+  [ -d "$D" ] || { echo "нет папки $D"; exit 1; }
+  [ ! -e "$LOCK" ] || { echo "замок занят: $(cat "$LOCK"); проверка пропущена"; exit 1; }
+  echo "device-release $(date +%H:%M)" > "$LOCK"
+  C="$R/game/work/device-check"
+  mkdir -p "$C"
+  cp -r "$D" "$C/NHL"
+  echo 'nhl_virtual_pad = true' >> "$C/NHL/nhllegacy.toml"
+  local exe started pid stale waited
+  exe=$(cygpath -w "$C/NHL/nhllegacy.exe")
+  started=$(powershell -NoProfile -ExecutionPolicy Bypass -File "$R/tools/gameshot.ps1" -Game legacy -Do start -Exe "$exe" -Log "$(cygpath -w "$C/gs.log")")
+  pid=$(echo "$started" | sed -n 's/^STARTED pid \([0-9]*\).*/\1/p')
+  [ -n "$pid" ] || { echo "не запустилась: $started"; rm -f "$LOCK"; exit 1; }
+  # Новый путь к exe — пустой кэш драйвера: сборка из списка шейдеров идёт десятки секунд, окно чёрное, нажатия теряются.
+  for waited in $(seq 1 120); do
+    grep -a -q "graphics pipelines" "$C/gs.log" 2>/dev/null && break
+    sleep 5
+  done
+  grep -a "graphics pipelines" "$C/gs.log" | sed 's/.*Created/Created/' | cut -c1-120
+  # Экраны идут с разной скоростью (язык, заставка, автосохранение), поэтому жмём, пока журнал не покажет главное меню:
+  # при входе в него игра запрашивает nhlstorecfg.xml. Окно «ROSTER damaged» до него не пустит.
+  local dir shots reached=0
+  dir=$(cygpath -w "$C/NHL")
+  shots=$(cygpath -w "$C")
+  for waited in $(seq 1 30); do
+    powershell -NoProfile -ExecutionPolicy Bypass -File "$R/tools/padshot.ps1" -Dir "$dir" -Shots "$shots" \
+      -Steps 'pad:A;wait:5;pad:START;wait:5' > /dev/null
+    grep -a -q "nhlstorecfg.xml" "$C/gs.log" && { reached=1; break; }
+  done
+  powershell -NoProfile -ExecutionPolicy Bypass -File "$R/tools/padshot.ps1" -Dir "$dir" -Shots "$shots" \
+    -Steps 'wait:12;shot:menu.png' | tail -1
+  taskkill //PID "$pid" //F > /dev/null
+  rm -f "$LOCK"
+  cp "$C/menu.png" "$OUT/check-v$V.png"
+  cp "$C/gs.log" "$OUT/check-v$V.log"
+  stale=$(grep -a -c -E "nhl-legacy-port|game/other|legacy/disc" "$C/gs.log" || true)
+  cmd //c rmdir //s //q "$(cygpath -w "$C")"
+  echo "проверка: снимок $OUT/check-v$V.png, ссылок на старые пути в журнале: $stale"
+  [ "$reached" = 1 ] || { echo "до главного меню не дошла, см. снимок и журнал"; exit 1; }
+  [ "$stale" = 0 ] || exit 1
+}
+
+if [ "$CHECK" = 2 ]; then
+  check
+  exit 0
+fi
+
 [ -f "$DISC/default.xex" ] || { echo "нет файлов игры в $DISC"; exit 1; }
 if [ -f "$TREE_EXE" ] && [ "$TREE_EXE" -nt "$B/nhllegacy.exe" ]; then
   echo "в дереве сборки exe новее установленного: сначала поставить его (docs/legacy-port.md, «Сборка»)"
@@ -75,28 +125,7 @@ if [ ${#old[@]} -gt 0 ]; then
   python "$R/tools/recycle.py" drop "${paths[@]}"
 fi
 
-if [ "$CHECK" = 1 ]; then
-  [ ! -e "$LOCK" ] || { echo "замок занят: $(cat "$LOCK"); проверка пропущена"; exit 1; }
-  echo "device-release $(date +%H:%M)" > "$LOCK"
-  C="$R/game/work/device-check"
-  mkdir -p "$C"
-  cp -r "$D" "$C/NHL"
-  echo 'nhl_virtual_pad = true' >> "$C/NHL/nhllegacy.toml"
-  exe=$(cygpath -w "$C/NHL/nhllegacy.exe")
-  started=$(powershell -NoProfile -ExecutionPolicy Bypass -File "$R/tools/gameshot.ps1" -Game legacy -Do start \
-    -Exe "$exe" -Log "$(cygpath -w "$C/gs.log")")
-  pid=$(echo "$started" | sed -n 's/^STARTED pid \([0-9]*\).*/\1/p')
-  [ -n "$pid" ] || { echo "не запустилась: $started"; rm -f "$LOCK"; exit 1; }
-  powershell -NoProfile -ExecutionPolicy Bypass -File "$R/tools/padshot.ps1" -Dir "$(cygpath -w "$C/NHL")" \
-    -Shots "$(cygpath -w "$C")" -Steps 'wait:27;pad:A;wait:30;pad:START;wait:11;pad:A;wait:18;shot:menu.png' | tail -1
-  taskkill //PID "$pid" //F > /dev/null
-  rm -f "$LOCK"
-  cp "$C/menu.png" "$OUT/check-v$V.png"
-  stale=$(grep -a -c -E "nhl-legacy-port|game/other|legacy/disc" "$C/gs.log" || true)
-  cmd //c rmdir //s //q "$(cygpath -w "$C")"
-  echo "проверка: снимок $OUT/check-v$V.png, ссылок на старые пути в журнале: $stale"
-  [ "$stale" = 0 ] || exit 1
-fi
+[ "$CHECK" = 1 ] && check
 
 du -sh "$D"
 echo "готово: $D"
