@@ -6,6 +6,8 @@
 # [farm] — сразу в фарм-клуб нового клуба, [nhl] — в клуб НХЛ, без метки уровень прежний.
 # Пик: pick ГОД RРАУНД. Пики в отчёт попадают, в составы нет: docs/roster-update.md.
 # Новая сделка — новая строка, старые можно не убирать: повтор ничего не меняет.
+# Перевод без сделки — одна сторона; столбец «источник:» попадает в отчёт.
 02.11.2026 | NSH: Shane Wright | SEA: Matthew Wood
 16.10.2026 | TOR: Aatu Raty [farm] | VAN: Brandon Buhr, Jacob Quillan
 10.10.2026 | NSH: Jayden Struble | MTL: pick 2027 R2
+29.10.2026 | CBJ: Carson Soucy [farm] | источник: nhl.com/bluejackets/news/cbj-loan-soucy-to-cleveland

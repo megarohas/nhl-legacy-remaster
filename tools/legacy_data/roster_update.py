@@ -20,7 +20,8 @@
 - new-players.json — спека add_players.py для игроков, которых не было в базе (можно поправить руками: файл читается
   при следующем запуске).
 
-Порядок: новые игроки → трейды → вызовы по звеньям → звенья → буквы → номера → контракты → экипировка вратарей →
+Порядок: новые игроки → трейды → вызовы по звеньям → сверка со списками НХЛ (кто в списке — в клуб; кто в клубе, но нет
+ни в списке, ни на странице, — куда скажет карточка игрока) → звенья → буквы → номера → контракты → экипировка вратарей →
 проверки → запись. --dry-run считает всё то же, пишет только отчёт. Повторный запуск на готовой базе ничего не меняет.
 Подробности и правила — docs/roster-update.md.
 """
@@ -34,6 +35,8 @@ import shutil
 import statistics
 import subprocess
 import sys
+import unicodedata
+import urllib.parse
 from collections import Counter, defaultdict
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -97,7 +100,8 @@ def parse_date(s, what):
 def parse_trades(path):
     """Строка файла: `ДАТА | КЛУБ: что получает, что получает | КЛУБ: что получает`. Игрок — имя и фамилия, тёзок
     различает #номер; [farm] — в фарм-клуб нового клуба, [nhl] — в клуб НХЛ, без метки уровень прежний. Пик — `pick 2027
-    R2`. Сторон может быть больше двух. # — комментарий."""
+    R2`. Сторон может быть больше двух или одна: так записывается перевод без сделки (`28.10.2026 | CBJ: Carson Soucy
+    [farm]`). Столбец `источник: …` попадает в отчёт. # — комментарий."""
     if not os.path.isfile(path):
         raise SpecError(f'нет спеки трейдов {path}: образец — roster_update.py example')
     out = []
@@ -108,10 +112,13 @@ def parse_trades(path):
             continue
         where = f'{os.path.basename(path)}, строка {no}'
         cols = [c.strip() for c in line.split('|')]
-        if len(cols) < 3:
+        if len(cols) < 2:
             raise SpecError(f'{where}: нужно «дата | клуб: кто | клуб: кто», а не «{line}»')
-        tr = {'date': parse_date(cols[0], where), 'line': no, 'sides': []}
+        tr = {'date': parse_date(cols[0], where), 'line': no, 'sides': [], 'source': None}
         for col in cols[1:]:
+            if col.lower().startswith(('источник:', 'source:')):
+                tr['source'] = col.split(':', 1)[1].strip()
+                continue
             if ':' not in col:
                 raise SpecError(f'{where}: сторона без клуба: «{col}»')
             club, items = col.split(':', 1)
@@ -195,6 +202,7 @@ class Update:
         self.was = {r: e['team'] for r, e in self.by_row.items()}
         self.notes = []
         self._p = {}
+        self._clubs = {}
 
     # чтение ------------------------------------------------------------------------------------------------------------
     def row(self, e):
@@ -321,7 +329,7 @@ class Update:
                 to = side['club']
                 others = [c for c in clubs if c != to]
                 for it in side['items']:
-                    st = {'date': fmt(tr['date']), 'to': self.abbr(to), 'item': it['text']}
+                    st = {'date': fmt(tr['date']), 'to': self.abbr(to), 'item': it['text'], 'source': tr['source']}
                     out.append(st)
                     if 'pick' in it:
                         st['status'] = 'пик: в составах не хранится'
@@ -349,9 +357,13 @@ class Update:
         if rights == to:
             st['status'] = 'уже в новом клубе в базе'
             if 'farm' in it['tags'] and club == to and farm is not None:
-                self.transfer(r, farm, why=f"трейд {st['date']}: в фарм")
+                self.transfer(r, farm, why=f"спека {st['date']}: в фарм" + (f" ({st['source']})" if st['source'] else ''))
+                st['status'] = f'в фарм-клуб {self.abbr(farm)}'
+            elif 'nhl' in it['tags'] and club == farm:
+                self.transfer(r, to, why=f"спека {st['date']}: в клуб НХЛ" + (f" ({st['source']})" if st['source'] else ''))
+                st['status'] = 'в клуб НХЛ'
             return
-        st['status'] = 'проведён' if rights in others else (
+        st['status'] = 'проведён' if rights in others or not others else (
             f"проведён, но в базе права {self.abbr(rights) if rights is not None else 'нет'}, а ждали "
             f"{'/'.join(self.abbr(c) for c in others)}")
         pos_club = club in NHL if club is not None else False
@@ -505,9 +517,15 @@ class Update:
             if t in NHL:
                 continue
             team_lp = self.lp(t)
-            keys, dressed = LN.build(team_lp)
+            try:
+                keys, dressed = LN.build(team_lp)
+            except LN.NotEnoughPlayers as e:
+                raise SpecError(f'{self.abbr(t)}: звенья не собрать, мало игроков ({e})')
             self.put_lines(team_lp, keys, dressed)
             done.append(self.abbr(t))
+            n = Counter('D' if p['pos'] == 'D' else 'G' if p['pos'] == 'G' else 'F' for p in team_lp)
+            if n['F'] < 12 or n['D'] < 6:
+                self.notes.append(('short', t, n['F'], n['D']))
         return done
 
     def letters(self):
@@ -556,26 +574,137 @@ class Update:
                     self.touched.add(slot)
         return out
 
+    # сверка со списками НХЛ -------------------------------------------------------------------------------------------
+    def page_ids(self, abbr, page):
+        """game_id игроков клуба на его странице: заявка, спецбригады, седьмой защитник, травмированные."""
+        tp = self.team_list(TEAM_SLOT[abbr])
+        tl = lines_real.team_lines(page, tp, tp)
+        ids = {k for rows in (tl['f'], tl['d'], tl['pp'], tl['pk']) for row in rows for k in row}
+        ids |= set(tl['g']) | set(tl['extra_d']) | {i['nhl_id'] for i in tl['injured']}
+        return ids - {None}
+
+    def list_ids(self, abbr, api):
+        tp = self.team_list(TEAM_SLOT[abbr])
+        return {lines_real.find(tp, {'name': n, 'num': x}, g, tp)[0] for n, x, g in api} - {None}
+
+    def sync_lists(self, rosters):
+        """Игрок списка НХЛ, которого нет в клубе, — в клуб: страница показывает заявку и травмированных, а запасные (их
+        в базе ещё числит фарм) есть только в списке. Игрока спеки список назад не тянет."""
+        absent = []
+        for abbr, api in rosters.items():
+            slot = TEAM_SLOT[abbr]
+            tp = self.team_list(slot)
+            for name, num, group in api:
+                if lines_real.find(tp, {'name': name, 'num': num}, group, tp)[0] is not None:
+                    continue
+                rows = self.find(name, goalie=group == 'g', club=slot, num=num)
+                if not rows:
+                    absent.append({'club': abbr, 'name': name, 'num': num, 'group': group})
+                    continue
+                r = rows[0]
+                if self.locked.get(r, slot) != slot:
+                    self.notes.append(('stale', abbr, name, self.abbr(self.locked[r])))
+                    continue
+                if self.club_of(r) != slot:
+                    self.transfer(r, slot, rights=slot, why=f'список НХЛ {abbr}', num=num)
+                    self.locked[r] = slot
+        return absent
+
+    def club_named(self, name):
+        """Клуб вне НХЛ по названию (exhibitionteams.fullname) или None."""
+        if not self._clubs:
+            for t in range(self.db.by_name[T]['rows']):
+                if t not in NHL and t not in SPECIAL:
+                    self._clubs[norm(self.db.get_string(T, 'fullname', t))] = t
+        return self._clubs.get(norm(name))
+
+    def card(self, r, http):
+        """Свежая карточка НХЛ игрока: поиск по имени, сверка по дате рождения. → (карточка, ссылка) или (None, None).
+        Кэш — nhl/landing-now/: карточки конвейера в nhl/landing/ не трогаем, по ним считаны рейтинги."""
+        v = self.v
+        first, last = v.s('firstname', r), v.s('lastname', r)
+        y, m, d = v.birth(r)
+        born = f'{y:04d}-{m:02d}-{d:02d}'
+        plain = lambda t: ''.join(c for c in unicodedata.normalize('NFKD', t) if not unicodedata.combining(c))
+        for q, rel in ((f'{first} {last}', norm(first + last)), (last, norm(last))):
+            found = http.json(f"{SEARCH}?culture=en-us&limit=100&q={urllib.parse.quote(plain(q))}",
+                              f'nhl/search/name-{rel}.json') or []
+            for x in [x for x in found if norm(x.get('name', '')).endswith(norm(last))][:12]:
+                pid = int(x['playerId'])
+                land = http.json(f'{NHL_API}/player/{pid}/landing', f'nhl/landing-now/{pid}.json')
+                if land and land.get('birthDate') == born:
+                    return land, f'NHL API player/{pid}/landing'
+        return None, None
+
+    def by_card(self, r, abbr, slot, http):
+        """Игрок клуба, которого нет ни в списке, ни на странице. Карточка показывает сезон 2026/27 по лигам:
+        - были игры в АХЛ — он в АХЛ: клуб по названию, иначе фарм его клуба НХЛ. Игры в НХЛ при этом ничего не решают:
+          sequence у seasonTotals идёт по лигам, а не по времени, а из списка он уже выпал;
+        - игры в другой лиге, чей клуб есть в базе (Европа, юниоры), — туда; клуба нет (КХЛ, NCAA) — остаётся, в отчёт;
+        - только ECHL — в фарм: лиг ниже АХЛ в базе нет;
+        - сменил клуб НХЛ — в новый клуб, запасным;
+        - только НХЛ или игр нет — ответа нет: остаётся, в отчёт. Вчера отправленного в АХЛ так не отличить от
+          травмированного, поэтому по новости его пишут в спеку строкой `дата | КЛУБ: Имя [farm]`.
+        → запись отчёта."""
+        rec = {'club': abbr, 'name': self.name(r), 'ovr': self.ovr(r), 'to': None}
+        land, url = self.card(r, http)
+        if land is None:
+            return dict(rec, why='нет карточки НХЛ (поиск по имени и дате рождения)', season='', source='NHL API')
+        rows = sorted((x for x in land.get('seasonTotals') or [] if x.get('season') == SEASON and x.get('gameTypeId') == 2),
+                      key=lambda x: x.get('sequence') or 0)
+        team = lambda x: (x.get('teamName') or {}).get('default') or ''
+        season = '; '.join(f"{x.get('leagueAbbrev')} {team(x)} {x.get('gamesPlayed') or 0}" for x in rows) or 'игр нет'
+        rec.update(season=season, source=url)
+        org = team_slot(land.get('currentTeamAbbrev'))
+        home = org if org is not None else slot
+        rights = org if org is not None and org != self.rights(r) else None
+        lg = lambda *names: [x for x in rows if x.get('leagueAbbrev') in names]
+        other = [x for x in rows if x.get('leagueAbbrev') not in ('NHL', 'AHL', 'ECHL')]
+        known = [x for x in other if self.club_named(team(x)) is not None]
+        dest, why = None, None
+        if lg('AHL'):
+            x = lg('AHL')[-1]
+            dest, why = self.club_named(team(x)) or self.farm(home), f'АХЛ, {team(x)}'
+        elif known:
+            dest, why = self.club_named(team(known[-1])), f"{known[-1].get('leagueAbbrev')}, {team(known[-1])}"
+        elif other:
+            return dict(rec, why=f"играет в {other[-1].get('leagueAbbrev')}, {team(other[-1])}: клуба в базе нет")
+        elif lg('ECHL'):
+            dest, why = self.farm(home), 'ECHL: лиги в базе нет, в фарм'
+        elif org is not None and org != slot:
+            dest, why = org, f'теперь в {land.get("currentTeamAbbrev")}, не в списке: запасным'
+        if dest is None:
+            return dict(rec, why=f"{'только НХЛ' if rows else 'игр в сезоне нет'}: ни в списке, ни на странице, ответа нет")
+        self.transfer(r, dest, rights=rights, why=f'карточка НХЛ: {why}')
+        return dict(rec, to=self.abbr(dest), why=why)
+
+    def sync_extra(self, rosters, src, http):
+        """Игроки клубов НХЛ вне списка и страницы: по карточке (by_card). Переведённых в этом запуске не трогает."""
+        out = []
+        for abbr, slot in TEAM_SLOT.items():
+            if not rosters.get(abbr) or abbr not in src:          # нет данных клуба — составы не двигаем
+                continue
+            known = self.page_ids(abbr, src[abbr]) | self.list_ids(abbr, rosters[abbr])
+            for e in self.team(slot):
+                r = self.row(e)
+                if self.v.gid[r] not in known and r not in self.locked:
+                    out.append(self.by_card(r, abbr, slot, http))
+        return out
+
     def check_api(self, rosters, src):
-        """Сверка со списками НХЛ для отчёта: кто в списке, но в базе не в клубе; кто в клубе, но нет ни в списке, ни на
-        странице звеньев. Ничего не меняет: списки не показывают травмированных, а запасных страницы звеньев не знают."""
+        """Что осталось после сверки: в списке, но не в клубе; в клубе, но нет ни в списке, ни на странице."""
         away, extra = [], []
         for abbr, api in rosters.items():
             slot = TEAM_SLOT[abbr]
             tp = self.team_list(slot)
-            hit = set()
             for name, num, group in api:
-                pid = lines_real.find(tp, {'name': name, 'num': num}, group, tp)[0]
-                if pid is not None:
-                    hit.add(pid)
-                    continue
-                rows = self.find(name, goalie=group == 'g', club=slot, num=num)
-                where = self.abbr(self.club_of(rows[0])) if rows and rows[0] in self.by_row else 'нет в базе'
-                away.append(f'{abbr}: {name} (в базе: {where})')
-            page = {norm(q['name']) for qs in src.get(abbr, {}).get('groups', {}).values() for q in qs}
-            for p in tp:
-                if p['nhl_id'] not in hit and norm(p['first'] + p['last']) not in page:
-                    extra.append(f"{abbr}: {p['first']} {p['last']}")
+                if lines_real.find(tp, {'name': name, 'num': num}, group, tp)[0] is None:
+                    rows = self.find(name, goalie=group == 'g', club=slot, num=num)
+                    where = self.abbr(self.club_of(rows[0])) if rows and rows[0] in self.by_row else 'нет в базе'
+                    away.append(f'{abbr}: {name} (в базе: {where})')
+            if abbr in src:
+                known = self.page_ids(abbr, src[abbr]) | self.list_ids(abbr, api)
+                extra += [f"{abbr}: {p['first']} {p['last']}" for p in tp if p['nhl_id'] not in known]
         return away, extra
 
     # запись ---------------------------------------------------------------------------------------------------------
@@ -870,7 +999,8 @@ def write_report(path, rep):
          f"База: `{rep['db']}`", f"Сейв: `{rep['save']}`", f"Звенья: DailyFaceoff, страницы {rep['lines_from']} … {rep['lines_to']}", '',
          '## Трейды', '', '| Дата | Клуб получает | Игрок | Было | Итог |', '|---|---|---|---|---|']
     for t in rep['trades']:
-        L.append(f"| {t['date']} | {t['to']} | {t.get('player') or t['item']} | {t.get('was', '')} | {t['status']} |")
+        L.append(f"| {t['date']} | {t['to']} | {t.get('player') or t['item']} | {t.get('was', '')} | {t['status']}"
+                 + (f" ({t['source']})" if t.get('source') else '') + ' |')
     L += ['', '## Новые игроки', '']
     for p in rep['new_players']:
         L.append(f"- **{p['name']}** {p['team']} № {p.get('jersey')}, OVR {p.get('ovr')}: {p['rating']}; контракт: {p['contract']}; {p['sources']}")
@@ -886,9 +1016,14 @@ def write_report(path, rep):
     L += ['', '## Ведомости сверх потолка 104 млн', '']
     L += [f"- {c}: {x / 1e6:.2f} млн (было {rep['payroll_before'].get(c, 0) / 1e6:.2f})"
           for c, x in sorted(rep['payroll'].items(), key=lambda kv: -kv[1]) if x > 104_000_000] or ['- нет']
-    L += ['', '## Сверка со списками НХЛ (ничего не меняет)', '',
-          f"В списке клуба, но в базе в другом месте, {len(rep['api_away'])}: " + '; '.join(rep['api_away']), '',
-          f"В клубе в базе, но нет ни в списке, ни на странице звеньев, {len(rep['api_extra'])}: " + '; '.join(rep['api_extra'])]
+    L += ['', '## Вне списка НХЛ и страницы звеньев: куда по карточке', '', '| Игрок | OVR | Клуб | Куда | Сезон 2026/27 | Источник |',
+          '|---|---:|---|---|---|---|']
+    L += [f"| {x['name']} | {x['ovr']} | {x['club']} | {x['to']} | {x['season']} | {x['source']} |" for x in rep['by_card']]
+    L += ['', '## Остались в клубе без ответа', '']
+    L += [f"- {x['club']}: {x['name']}, {x['why']}; сезон: {x.get('season') or '—'}; {x.get('source')}" for x in rep['stayed']] or ['- нет']
+    L += ['', '## После сверки', '',
+          f"В списке клуба, но в базе в другом месте, {len(rep['api_away'])}: " + ('; '.join(rep['api_away']) or 'нет'), '',
+          f"В клубе в базе, но нет ни в списке, ни на странице звеньев, {len(rep['api_extra'])}: " + ('; '.join(rep['api_extra']) or 'нет')]
     L += ['', '## Клубы', '']
     for abbr, c in rep['clubs'].items():
         i = c['info']
@@ -972,7 +1107,9 @@ def run(a):
     log(f'база {db_path}\nсейв {save}\nданные на {fmt(date)}; сделок {len(trades)}; страниц звеньев {len(src)}, '
         f'{updated[0][:10]} … {updated[-1][:10]}')
 
-    # 1. кого нет в базе: игроки сделок и звеньев
+    rosters = api_rosters(a.fetch_lines, log)
+
+    # 1. кого нет в базе: игроки сделок, звеньев и списков НХЛ
     u0 = Update(db)
     pages = CT.load_pages() if glob.glob(os.path.join(glob.escape(CT.SCREENS), '*.json')) else []
     wanted = []
@@ -992,12 +1129,18 @@ def run(a):
             if not u0.find(name) and norm(name) not in known:
                 known.add(norm(name))
                 wanted.append({'name': name, 'club': abbr, 'num': num, 'level': 'nhl', 'why': f'звенья {abbr}'})
+    for abbr, api in rosters.items():
+        for name, num, group in api:
+            if (lines_real.find(tp[abbr], {'name': name, 'num': num}, group, tp[abbr])[0] is None
+                    and not u0.find(name, goalie=group == 'g') and norm(name) not in known):
+                known.add(norm(name))
+                wanted.append({'name': name, 'club': abbr, 'num': num, 'level': 'nhl', 'why': f'список НХЛ {abbr}'})
     spec_file = os.path.join(a.work, 'new-players.json')
     specs = read_json(spec_file) if os.path.exists(spec_file) else []
     have = {norm(s['first'] + ' ' + s['last']) for s in specs}
     no_data = []
+    h = Http(CACHE, pause=1.5, refresh=a.fetch_lines, log=log)
     if wanted and not a.no_new:
-        h = Http(CACHE, pause=1.5, log=log)
         db27, idx = nhl27_index()
         for w in wanted:
             if norm(w['name']) in have:
@@ -1017,7 +1160,8 @@ def run(a):
     # 2–7. трейды, звенья, буквы, номера
     u = Update(db)
     st = u.trades(trades, set(new_out))
-    absent = u.actualize(src)
+    absent = u.actualize(src) + u.sync_lists(rosters)
+    extra = u.sync_extra(rosters, src, h)
     for x in absent:
         if norm(x['name']) not in {norm(y['name']) for y in no_data}:
             no_data.append(dict(x, why='нет в базе, спеки нет'))
@@ -1025,7 +1169,6 @@ def run(a):
     info = u.lines_nhl(src)
     other = u.lines_other()
     letters = u.letters()
-    rosters = api_rosters(a.fetch_lines, log)
     numbers = u.numbers(rosters)
 
     # контракты тех, кто подписан из пула СА или пришёл без контракта
@@ -1066,9 +1209,13 @@ def run(a):
            'trades': st, 'moves': u.moves, 'no_data': no_data, 'letters': letters, 'numbers': numbers,
            'contracts': contracts_rep, 'other_clubs': other,
            'notes': [f'{n[1]}: страница числит {n[2]}, но он в {n[3]} (страница старше)' for n in u.notes if n[0] == 'stale']
+           + [f'{u.abbr(n[1])}: нападающих {n[2]}, защитников {n[3]}: в звеньях недостающего играет другое амплуа'
+              for n in u.notes if n[0] == 'short']
            + [f"Экипировка вратарей: изменено у {gear_rep[0]}"] + [f'Взят запасной вратарь: {u.name(r)}' for r in u.loans],
            'payroll': payroll(db, v1), 'payroll_before': payroll(v0.db, v0), 'clubs': {}, 'new_players': []}
     rep['api_away'], rep['api_extra'] = u.check_api(rosters, src)
+    rep['by_card'] = [x for x in extra if x['to']]
+    rep['stayed'] = [x for x in extra if not x['to']]
     spec_by = {(norm(s['first'] + ' ' + s['last'])): s for s in specs}
     for r, o in new_out.items():
         s = spec_by.get(norm(o['name']), {})
@@ -1134,7 +1281,8 @@ def main(argv=None):
     r.add_argument('--db', help='база, на которой сделан сейв (по умолчанию установленная); схема — рядом')
     r.add_argument('--save', help='файл ROSTER (по умолчанию новейший у пользователя)')
     r.add_argument('--date', type=lambda s: parse_date(s, '--date'), help='дата данных ДД.ММ.ГГГГ (по умолчанию сама)')
-    r.add_argument('--fetch-lines', action='store_true', help='скачать страницы звеньев заново (33 запроса)')
+    r.add_argument('--fetch-lines', action='store_true',
+                   help='скачать заново страницы звеньев (33 запроса), списки клубов (32) и карточки спорных игроков')
     r.add_argument('--no-new', action='store_true', help='не добавлять игроков, которых нет в базе')
     r.add_argument('--launcher', help='лаунчер для --check-roster (по умолчанию свежая сборка)')
     r.add_argument('--dry-run', action='store_true', help='всё посчитать, записать только отчёт')
