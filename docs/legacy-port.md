@@ -40,6 +40,7 @@ ReXGlue SDK 0.10.0.24 (ночной и своя сборка `ref/rexglue-sdk-cu
 | Новая карьера (франшиза, Be a Pro, сезон…) с настройками профиля, а не заводскими (`nhl_settings_from_profile`) | сделано 12.10, в коде выкл.; сборка `nhl-legacy-port-clean` (exe 01584ec5), в игре не проверено (раздел «Настройки по умолчанию для новых карьер») |
 | Закрытое открыто с начала: клюшки, перчатки и коньки предзаказа BAUER / CCM / EASTON / WARRIOR, 37 масок вратаря, бусты Pro Shop, формы под кодом (`nhl_unlock_equipment`, `nhl_unlock_boosts`, `nhl_unlock_jerseys`, по умолчанию вкл.) | сделано 23.10 (`src/nhllegacy_unlock.cpp`); сборка `nhl-legacy-port-unlock` (exe 84d018bc), проверено в Edit Player на копии: 27 клюшек, 11 коньков, 20 перчаток, маски; бусты в игре не проверены; пользователю не поставлено (раздел «Закрытое: предзаказ, маски, бусты, коды формы») |
 | Курсор над окном игры скрыт (`nhl_hide_cursor`, по умолчанию вкл.) | у пользователя с 31.10 (`src/nhllegacy_cursor.cpp`, exe fb664535), проверено на копии и пользователем (раздел «Курсор над окном игры») |
+| Своё имя игрока вместо `User` (`nhl_user_name`, по умолчанию пусто), поле в лаунчере | сделано 02.11 (`src/nhllegacy_user.cpp`), проверено на копии, пользователю не поставлено (раздел «Имя пользователя») |
 
 ## Устройство
 
@@ -58,6 +59,7 @@ ReXGlue SDK 0.10.0.24 (ночной и своя сборка `ref/rexglue-sdk-cu
 | `src/nhllegacy_input_lock.cpp` | обход гонки InputSystem SDK (XamInput* под мьютексом) |
 | `src/nhllegacy_imports.cpp` | заглушки XUsbcam |
 | `src/nhllegacy_cursor.cpp` | курсор над окном игры скрыт, в окнах SDK виден (`nhl_hide_cursor`) |
+| `src/nhllegacy_user.cpp` | имя игрока (`nhl_user_name`) и журнал сейвов (`nhl_save_trace`) |
 | `src/nhllegacy_fencewait.cpp` | ожидание забора D3D 827E2BC8 (в NHL 13 — 82663148) без холостого спина |
 | `src/nhllegacy_composite.cpp` | resolve композиции экипировки 836214A8 / опрос забора 8361F3E0 (832B22A8 / 832B0250) — на время композиции `readback_resolve = full` |
 | `src/nhllegacy_dbtrace.cpp` | трассировка обращений к таблицам базы (флаг `nhllegacy_dbtrace.on` рядом с exe): 827B6FA8 / 827B4818 |
@@ -1468,3 +1470,31 @@ toque…) — наследство NHL 13: в каталогах Legacy их н�
 - заголовок окна: мышь двигалась, чистого замера нет, вывод выше взят из кода SDL;
 - появление курсора в окнах F4 и сообщений: F4 нужна клавиша, а окно стенда без фокуса;
 - полный экран: стенд работал в окне.
+
+## Имя пользователя (02.11.2026)
+
+Игра звала игрока `User`: `UserProfile::UserProfile` в SDK ставит `name_ = "User"`, cvar и сеттера у SDK нет. Теперь имя задаёт
+cvar `nhl_user_name`, поле — в лаунчере ([launcher.md](launcher.md), «Имя игрока»). По умолчанию пусто, поведение прежнее.
+
+SDK не пересобирается. Код игры берёт имя только через два импорта, `XamUserGetName` и `XamUserGetSigninInfo`, поэтому
+`src/nhllegacy_user.cpp` подменяет их тем же способом, что и `nhllegacy_input_lock.cpp`: зовёт оригинал из `rexruntime.dll` и кладёт
+своё имя поверх его ответа.
+
+- `XamUserGetGamerTag` игра не импортирует. `XamUserReadProfileSettings` она читает только для настроек голоса (`0x1004000C…E`) и в
+  онлайн-коде, имени там нет.
+- `name_` в профиле SDK остаётся `User`. Значит, не меняется и `ResolveGameUserContentPath`, а сейвы лежат по XUID, он от имени не
+  зависит.
+- Кто читает имя: профиль игрока в библиотеке сейвов (8324EF40, 8325ADB8, поле +276, 16 байт; отсюда `GetLeadProfile().name`
+  интерфейса) и онлайн-код, который в порте не работает. Сценарий `saveloadmain.big` передаёт имя в нижнюю строку
+  (`gESPNTicker.setUserName`).
+- Текст игра читает как UTF-8. Обрезка до 15 байт в `nhllegacy_user.cpp` не рвёт букву посреди.
+
+`nhl_save_trace` (по умолчанию выкл.) пишет в лог каждый сейв, который игра открывает или создаёт:
+`[nhllegacy] save: root saveload flags 83 file ROSTER 20261102074941`. Сейвы игра открывает не импортом `XamContentCreateEx`, а через
+836FB370: та сама находит `XamContentCreateInternal` по номеру экспорта. Поэтому подмена стоит на 836FB370.
+
+Проверено на копии userdata, сборка `nhl-legacy-port-unlock`:
+
+- имена `Test`, `Test Player 15X`, `Иван Ёж` и `a-b_c.d'e!?+&@#` видны в Profile Management и нижней строке, ширина подстраивается;
+- имя с пробелом и кириллицей доходит через командную строку, как у лаунчера: SDK переводит аргументы в UTF-8;
+- с новым именем PROFILE и ROSTER грузятся при запуске, франшиза `min` (DYNASTY) — из LOAD, хаб открылся.
