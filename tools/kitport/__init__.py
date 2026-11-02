@@ -13,6 +13,8 @@
     python -m kitport diff                    # сборка (legacy-data/out*) против cache: игры
     python -m kitport install --tag T [--yes] # копия заменяемого → backup-cache/user-<дата>-T, установка, сверка
     python -m kitport rollback DIR [--yes]    # вернуть файлы из backup-cache/DIR (игра закрыта)
+    python -m kitport slot3 status            # формы NHL 27 на стиле 2, слот стиля 0 — оригиналы EA: что где стоит
+    python -m kitport slot3 install --yes     # перевод поставленной игры и новейшего ROSTER (подробно: slot3 --help)
     python -m kitport sheet [--before DIR]    # листы «было | стало» по последнему снимку
     python -m kitport uvmap [--kit MIN_away]  # схема развёртки свитера Legacy: части тела и зоны номеров
     python -m kitport params                  # каталог параметров формы: значение сейчас, единицы, причина

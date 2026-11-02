@@ -92,10 +92,10 @@ def cmd_status(a):
     by = {}
     for kind, rel, _ in d:
         top = "/".join(rel.split("/")[:2])
-        by.setdefault(top, [0, 0])[0 if kind == "CHANGED" else 1] += 1
+        by.setdefault(top, {"CHANGED": 0, "NEW": 0, "GONE": 0})[kind] += 1
     say(f"сборка против игры: {len(d)} файлов отличаются" + ("" if d else " (стоит то же, что собрано)"))
-    for top, (c, n) in sorted(by.items()):
-        say(f"  {top}: изменено {c}, новых {n}")
+    for top, c in sorted(by.items()):
+        say(f"  {top}: изменено {c['CHANGED']}, новых {c['NEW']}" + (f", убрать {c['GONE']}" if c["GONE"] else ""))
     pe = os.path.join(core.PACKS, "pack-edge")
     if os.path.isdir(pe):
         say("пак формы Edge:", pe, datetime.datetime.fromtimestamp(os.path.getmtime(pe)).strftime("%d.%m %H:%M"))
@@ -145,7 +145,7 @@ def cmd_compare(a):
 def cmd_diff(a):
     d = core.diff(prefix=a.prefix)
     for kind, rel, p in d:
-        say(f"{kind:8} {rel}   ← {os.path.relpath(p, core.LEGACY_DATA)}")
+        say(f"{kind:8} {rel}" + (f"   ← {os.path.relpath(p, core.LEGACY_DATA)}" if p else ""))
     say(f"{len(d)} файлов отличаются от cache: игры" + (f" (с префиксом {a.prefix})" if a.prefix else ""))
     return 0
 
@@ -241,7 +241,7 @@ def cmd_install(a):
         say("отменено")
         return 1
     bdir, man = core.backup(d, a.tag)
-    say(f"копия заменяемого: {len(man['changed'])} файлов, новых {len(man['new'])} → {bdir}")
+    say(f"копия заменяемого и убираемого: {len(man['changed'])} файлов, новых {len(man['new'])} → {bdir}")
     rc = core.run_installer(flags)
     if rc:
         say(f"установщик: ошибка {rc}; откат — python -m kitport rollback {os.path.basename(bdir)}")
@@ -299,6 +299,8 @@ def main():
     s = sub.add_parser("rollback", help="вернуть файлы из backup-cache")
     s.add_argument("dir", help="папка в backup-cache (user-20261021-edge11) или полный путь")
     s.add_argument("--yes", action="store_true")
+    from . import slot3
+    slot3.add_parser(sub)
     s = sub.add_parser("sheet", help="листы «было | стало»")
     s.add_argument("--before", default=None, help="папка снимка (по умолчанию — последний)")
     s.add_argument("--out", default=None)
@@ -385,6 +387,8 @@ def main():
                    help="не сверять прочие разделы с git HEAD (параллельная работа: у других клубов правки не закоммичены);"
                         "сверка с файлом до записи остаётся")
     a = p.parse_args()
+    if a.cmd == "slot3":
+        return a.slot3_func(a)
     if a.cmd == "audit":
         from . import audit
         return audit.cmd_audit(a)

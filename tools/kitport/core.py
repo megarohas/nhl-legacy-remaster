@@ -14,7 +14,8 @@ NHL24_WORK = os.path.join(GAME, "work", "nhl24")
 EDGE_WORK = os.path.join(NHL24_WORK, "edgekit")              # fb.edge_kit: out/<КЛУБ>_<форма>, slot/, логи
 PACKS = os.path.join(NHL24_WORK, "out")                     # pack-adidas, pack-edge, pack-edge-vN
 LEGACY_DATA = os.path.join(GAME, "work", "legacy-data")     # out*, installed.txt, install-flags.txt
-BACKUP_CACHE = os.path.join(LEGACY_DATA, "backup-cache")    # копии заменённого в cache: перед установкой
+# копии заменённого в cache: перед установкой; LEGACY_DATA_STATE — своя папка (проверка на копии userdata)
+BACKUP_CACHE = os.path.join(os.environ.get("LEGACY_DATA_STATE") or LEGACY_DATA, "backup-cache")
 COMPARE = os.path.join(NHL24_WORK, "compare", "kitport")    # снимки «было» и листы
 VENV_PY = os.path.join(NHL24_WORK, "venv", "Scripts", "python.exe")
 INSTALLER = os.path.join(TOOLS, "legacy_data", "install_legacy_data.py")
@@ -36,23 +37,25 @@ def cache_dir():
 
 def install_flags():
     """Флаги последней полной установки (install-flags.txt): установка с другими сняла бы накладки."""
-    p = os.path.join(LEGACY_DATA, "install-flags.txt")
+    p = installer().FLAGS
     if not os.path.exists(p):
         return []
     return [ln.strip() for ln in open(p, encoding="utf-8") if ln.strip().startswith("--")]
 
 
 def diff(flags=None, prefix=""):
-    """Файлы сборки, которые отличаются от cache: игры: [(«CHANGED»/«NEW», путь, файл сборки)] — расчёт установщика
-    (install_legacy_data.plan: out и накладки в порядке наложения, флаги — последней полной установки)."""
+    """Файлы сборки, которые отличаются от cache: игры: [(«CHANGED»/«NEW»/«GONE», путь, файл сборки)] — расчёт установщика
+    (install_legacy_data.plan: out и накладки в порядке наложения, флаги — последней полной установки). GONE — файл
+    прошлой установки, которого в сборке больше нет: полная установка его уберёт."""
     m = installer()
     cache = m.cache_dir()
     fl = install_flags() if flags is None else flags
     ahl, n24 = "--ahl32" in fl, "--nhl24" in fl
     parts = [prefix.strip("/")] if prefix else []
     srcs = m.sources(ahl, n24, parts)
-    todo, _ = m.plan(cache, ahl, n24, parts)
-    return [("CHANGED" if k == "изменён" else "NEW", rel, srcs[rel]) for k, rel in todo]
+    todo, gone = m.plan(cache, ahl, n24, parts)
+    return [("CHANGED" if k == "изменён" else "NEW", rel, srcs[rel]) for k, rel in todo] + \
+        [("GONE", rel, None) for rel in gone if os.path.exists(os.path.join(cache, *rel.split("/")))]
 
 
 def game_blocks_cache():
@@ -79,14 +82,21 @@ def backup_dir(tag):
 
 
 def backup(changes, tag):
-    """Копия заменяемых файлов cache: (CHANGED) и список новых (NEW) — в backup-cache; манифест для отката."""
+    """Копия заменяемых и убираемых файлов cache: (CHANGED, GONE), список новых (NEW) и списки установщика (installed.txt,
+    install-flags.txt) — в backup-cache; манифест для отката."""
     cache = cache_dir()
     d = backup_dir(tag)
     os.makedirs(d)
     man = {"date": datetime.datetime.now().isoformat(timespec="seconds"), "tag": tag, "flags": install_flags(),
-           "cache": cache, "changed": [], "new": []}
+           "cache": cache, "changed": [], "new": [], "state": {}}
+    m = installer()
+    for p in (m.LIST, m.FLAGS):
+        if os.path.exists(p):
+            os.makedirs(os.path.join(d, "_state"), exist_ok=True)
+            shutil.copy2(p, os.path.join(d, "_state", os.path.basename(p)))
+            man["state"][os.path.basename(p)] = p
     for kind, rel, _ in changes:
-        if kind == "CHANGED":
+        if kind in ("CHANGED", "GONE"):
             dst = os.path.join(d, rel)
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             shutil.copy2(os.path.join(cache, rel), dst)
@@ -104,12 +114,12 @@ def run_installer(flags):
 
 
 def restore(d):
-    """Откат из backup-cache/<d>: файлы — обратно в cache:; новые (по манифесту) — убрать. -> (вернул, убрал)."""
+    """Откат из backup-cache/<d>: файлы и списки установщика — обратно; новые (по манифесту) — убрать. -> (вернул, убрал)."""
     cache = cache_dir()
     man_p = os.path.join(d, "manifest.json")
     man = json.load(open(man_p, encoding="utf-8")) if os.path.exists(man_p) else None
     files = man["changed"] if man else [os.path.relpath(os.path.join(dp, f), d).replace(os.sep, "/")
-                                        for dp, _, fn in os.walk(d) for f in fn]
+                                        for dp, _, fn in os.walk(d) for f in fn if "_state" not in dp]
     back = 0
     for rel in files:
         src = os.path.join(d, rel)
@@ -124,6 +134,8 @@ def restore(d):
         if os.path.exists(p):
             os.remove(p)
             gone += 1
+    for name, path in (man or {}).get("state", {}).items():
+        shutil.copy2(os.path.join(d, "_state", name), path)
     return back, gone
 
 
