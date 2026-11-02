@@ -21,6 +21,7 @@ game/work/legacy-data/backup-saves/roster_merge-<время>/, запись, п�
   = N, как у nhl24.py save: так проверено в игре на stockteamjerseys и stockteamequipmenttable); у сложных таблиц
   (с индексами) — останов: сейв с записями сверх max игра считает «damaged» (docs/legacy-data.md, «ROSTER 1
   damaged»). Запас [current, max) заполняется 0xDB, как у игры.
+Поля, которые в новой базе шире (stockteamjerseys.style, стиль 2, docs/kitport.md §1.1), расширяются в сейве и старой базе.
 Повтор ничего не меняет. Документация — docs/legacy-data.md, «Перенос в сейв ROSTER».
 """
 import json
@@ -143,6 +144,28 @@ def write_table(U, t, records):
     U.d[b + 0x16:b + 0x1C] = struct.pack(U.E + 'HHH', len(records), 0, 0xFFFF)
 
 
+def align_fields(N, *dbs):
+    """Поля, которые в новой базе шире (02.11.2026: stockteamjerseys.style, 2 бита, kitport slot3), — такой же ширины и в
+    старой базе и сейве (в памяти, tdb.widen): записи сравниваются байт в байт, и раскладка сейва должна стать как у новой
+    базы. Сейв после этого запишется в новой раскладке. Другая разница в полях — стоп."""
+    for db in dbs:
+        for t in [tb['name'] for tb in db.tables if tb['name'] in N.by_name]:
+            have, want = db.by_name[t]['fields'], N.by_name[t]['fields']
+            for f in sorted((f for f in want if f in have and want[f][1] > have[f][1]), key=lambda f: want[f][0]):
+                rows = range(db.by_name[t]['rows'])
+                vals = [db.get(t, f, r) for r in rows]
+                for r in rows:                      # прежний бит — ноль, как в новой базе (nhl24.style_widen)
+                    db.set(t, f, r, 0)
+                try:
+                    db.widen(t, [f], want[f][1])
+                    for r, v in zip(rows, vals):
+                        db.set(t, f, r, v)
+                except ValueError as e:
+                    raise SystemExit(f'{t}.{f}: поле в новой базе шире, расширить в сейве нельзя: {e}')
+            if db.by_name[t]['fields'] != want:
+                raise SystemExit(f'{t}: поля в сейве (или старой базе) и новой базе разные — такой сейв не сливаю')
+
+
 def run(save, old, new, write, report=None):
     cands = [os.path.join(os.path.dirname(x), 'nhlng-meta.xml') for x in (new, old)]
     cands.append(os.path.join(REPO, 'game', 'work', 'legacy-data', 'out', 'db', 'nhlng-meta.xml'))
@@ -152,6 +175,7 @@ def run(save, old, new, write, report=None):
     U = sf.db
     O = Tdb(open(old, 'rb').read(), meta)
     N = Tdb(open(new, 'rb').read(), meta)
+    align_fields(N, O, U)
     who_o, who_n = who_by_gid(O), who_by_gid(N)
     rep = {'save': save, 'old': old, 'new': new, 'tables': {}}
     plan = []

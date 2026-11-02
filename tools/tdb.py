@@ -307,6 +307,20 @@ class Tdb:
             for r, v in enumerate(values[f]):
                 self.set(table, f, r, v)
 
+    def place_field(self, table, field, bit, width):
+        """Описание поля таблицы: начальный бит и ширина. Записи не меняются (обратное к widen: значения — потом set)."""
+        t = self.by_name[table]
+        blk = t['block']
+        for j in range(self.d[blk + 0x1C]):
+            fd = blk + 0x28 + 16 * j
+            fid = bytes(self.d[fd + 8:fd + 12]).decode('latin1')
+            if self.meta.get(t['id'], (t['id'], {}))[1].get(fid, (fid,))[0] == field:
+                self.put32(fd + 4, bit)
+                self.put32(fd + 12, width)
+                self.__init__(bytes(self.d), self.meta)
+                return
+        raise ValueError(f'{table}: нет поля {field}')
+
     def _layout(self):
         order = sorted(self.tables, key=lambda t: t['block'])
         ends = [t['block'] for t in order[1:]] + [len(self.d) - 4]

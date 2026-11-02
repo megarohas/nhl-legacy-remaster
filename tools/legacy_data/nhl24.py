@@ -7,7 +7,8 @@
     python tools/legacy_data/nhl24.py build [ПАКЕТ]                  # этап build-all nhl24 → out-nhl24 (+ out-nhl24-ahl32)
     python tools/legacy_data/nhl24.py verify CACHE                   # cache: после установки — как в манифесте и out-nhl24
     python tools/legacy_data/nhl24.py show                           # что в реестре новых форм
-    python tools/legacy_data/nhl24.py save СЕЙВ [--write]            # новые строки форм и шлемов — в сейв ROSTER
+    python tools/legacy_data/nhl24.py save СЕЙВ [--write]            # новые строки форм и шлемов — в сейв ROSTER;
+                                                                     # поле style сейва — как в базе (миграция на стиль 2)
 
 Пакет готовит агент nhl24 (tools/fb/pack.py): ПАКЕТ/manifest.json и ПАКЕТ/cache/<путь в cache:>, по умолчанию
 game/work/nhl24/out/pack (или переменная NHL24_PACK). Формат манифеста — docs/legacy-data.md, «Пакет NHL 24».
@@ -44,14 +45,15 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from install_legacy_data import GAME, W  # noqa: E402
+from install_legacy_data import GAME, STATE, W  # noqa: E402
 
 TOOLS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, TOOLS)
 from tdb import Tdb  # noqa: E402
 from tdb_read import load_meta  # noqa: E402
 
-REGISTRY = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'nhl24_kits.json')
+# NHL24_REGISTRY — другой реестр (проба сборки на копии, kitport slot3)
+REGISTRY = os.environ.get('NHL24_REGISTRY') or os.path.join(os.path.dirname(os.path.abspath(__file__)), 'nhl24_kits.json')
 REMOVED = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'kit_removed.json')   # убранные формы, docs/kit-prune.md
 PACK = os.environ.get('NHL24_PACK') or os.path.join(GAME, 'work', 'nhl24', 'out', 'pack')
 REF = os.path.join(GAME, 'other', 'legacy', 'big')
@@ -72,8 +74,8 @@ CLUBS.update(SEA=(30, 100), VGK=(31, 101))
 # docs/utah.md); формы NHL 27 Юты — под кодом UTA (fb.kit_batch.NEW_CLUBS). ARI (22, 22) — прежний код формы NHL 24
 CLUBS.update(UTA=(22, 104))
 
-# файлы комплекта стиля s (у формы NHL 24 «А» — 1; свитера adidas на сетке NHL 24 — 0, слот ретро-сеток,
-# docs/nhl24-uniforms.md §14): обязательные у новой формы и наклейка на шлем (по ней helmetlogo = 1)
+# файлы комплекта стиля s (у формы NHL 24 «А» — 1; свитера adidas — 0, убраны из игры 31.10; формы NHL 27 на своей
+# сетке Edge — 2, docs/kitport.md §1.1): обязательные у новой формы и наклейка на шлем (по ней helmetlogo = 1)
 KIT_FILES = {'jersey': 'rendering/jersey/texlib_{s}_{a}_{v}.rx2', 'name': 'rendering/jersey/name_{s}_{a}_{v}_cm.rx2',
              'pant': 'rendering/pant/texlib_{s}_{a}_{v}.rx2', 'sock': 'rendering/sock/sock_{s}_{a}_{v}_cm.rx2',
              'fe': 'fe/ion/artassets/jerseys/jersey_{s}_{a}_{f}.big'}
@@ -82,12 +84,12 @@ ARCHIVE = {'rendering/jersey/': 'nocacherender', 'rendering/': 'cacherender', 'f
 
 # типы файлов пакета: путь в cache: (полное совпадение)
 TYPES = {
-    'jersey': r'rendering/jersey/texlib_[01]_\d+_\d+\.rx2',       # свитер и шрифт номеров
-    'name': r'rendering/jersey/name_[01]_\d+_\d+_cm\.rx2',         # карта номера и фамилии
-    'pant': r'rendering/pant/texlib_[01]_\d+_\d+\.rx2',           # шорты
-    'sock': r'rendering/sock/sock_[01]_\d+_\d+_cm\.rx2',           # гетры
-    'fe': r'fe/ion/artassets/jerseys/jersey_[01]_\d+_\d+\.big',    # превью формы в меню
-    'helmet': r'rendering/logo/texlib_\d+_[01]_\d+\.rx2',         # наклейка на шлем (логотип или спонсор)
+    'jersey': r'rendering/jersey/texlib_[012]_\d+_\d+\.rx2',      # свитер и шрифт номеров
+    'name': r'rendering/jersey/name_[012]_\d+_\d+_cm\.rx2',        # карта номера и фамилии
+    'pant': r'rendering/pant/texlib_[012]_\d+_\d+\.rx2',          # шорты
+    'sock': r'rendering/sock/sock_[012]_\d+_\d+_cm\.rx2',          # гетры
+    'fe': r'fe/ion/artassets/jerseys/jersey_[012]_\d+_\d+\.big',   # превью формы в меню
+    'helmet': r'rendering/logo/texlib_\d+_[012]_\d+\.rx2',        # наклейка на шлем (логотип или спонсор)
     'center': r'rendering/icesurface/centerlogo_\d+_cm\.rx2',      # центр льда
     'ice': r'rendering/icesurface/[a-z0-9_]+\.rx2',               # логотипы и реклама на льду
     'puck': r'rendering/puck/[a-z0-9_]+\.rx2',                    # шайба
@@ -241,9 +243,11 @@ def variant_free(art, v, rows, reg, style=1, helm=()):
     такой номер новой форме не годится (add_helmets: «у варианта уже есть строка шлема»)."""
     if (style - 1 if style == 1 else 0, v) in helm or (style == 1 and (1, v) in helm):
         return False
-    if any(r['style'] == style and r['teamartid'] == art and v in (r['variant'], r['fevariant']) for r in rows):
+    # стиль 2 до конца сборки идёт как стиль 0 (build_db), а ключ перевода без стиля (edge_keys): номера стилей 0 и 2 не пересекаются
+    styles = (0, STYLE_EDGE) if style in (0, STYLE_EDGE) else (style,)
+    if any(r['style'] in styles and r['teamartid'] == art and v in (r['variant'], r['fevariant']) for r in rows):
         return False
-    if any(k.get('style', 1) == style and k['art'] == art and v in (k['variant'], k['fevariant']) for k in reg['kits']):
+    if any(k.get('style', 1) in styles and k['art'] == art and v in (k['variant'], k['fevariant']) for k in reg['kits']):
         return False
     names = [p.format(s=style, a=art, v=v, f=v) for p in KIT_FILES.values()] + [HELMET.format(s=style, a=art, v=v)]
     return not any(file_taken(n) for n in names)
@@ -252,7 +256,7 @@ def variant_free(art, v, rows, reg, style=1, helm=()):
 def cmd_alloc(args):
     write = '--write' in args
     style = 1
-    if '--style' in args:                            # --style 0 — свитера adidas на сетке NHL 24 (слот стиля 0)
+    if '--style' in args:                            # --style 2 — формы на своей сетке Edge (NHL 27; docs/kitport.md §1.1)
         i = args.index('--style')
         style = int(args[i + 1])
         args = args[:i] + args[i + 2:]
@@ -438,6 +442,10 @@ def build_db(base, man, reg, files):
                      f'добавьте её в пакет или уберите из пакета формы после неё')
     added = []
     n_before = db.by_name[T]['rows']
+    # формы стиля 2 до конца сборки идут как стиль 0: шлемы, краги и формы по умолчанию считаются прежним кодом и теми же
+    # строками, что до 02.11, а перевод на стиль 2 — последним шагом (style2_apply): база отличается от прежней только им,
+    # тем же преобразованием, что kitport slot3 делает с поставленной базой и сейвом ROSTER
+    edge = {(CLUBS[k['club']][0], k['art'], k['variant']) for k in new if k.get('style', 1) == STYLE_EDGE}
     if new:
         n = db.by_name[T]['rows']
         db.resize(T, n + len(new))
@@ -445,14 +453,15 @@ def build_db(base, man, reg, files):
             team, art = check_club(db, k['club'])
             mine = [r for r in rows if r['teamid'] == team]
             st = k.get('style', 1)
+            st_row = 0 if st == STYLE_EDGE else st
             if any(r['jerseyindex'] == k['jerseyindex'] for r in mine) or \
-                    any(r['style'] == st and r['teamartid'] == art and r['variant'] == k['variant'] for r in rows):
+                    any(r['style'] == st_row and r['teamartid'] == art and r['variant'] == k['variant'] for r in rows):
                 sys.exit(f'{k["club"]} {k["kit"]}: jerseyindex {k["jerseyindex"]} или {st}_{art}_{k["variant"]} '
                          f'уже заняты в {db_path}')
             home = next((r for r in mine if r['style'] == 1 and r['locstring'] == 0), mine[0])
             db.put_record(T, n + i, db.record(T, home['row']))
             helmet = HELMET.format(s=st, a=art, v=k['variant']) in files
-            for f, v in (('teamid', team), ('teamartid', art), ('style', st), ('variant', k['variant']),
+            for f, v in (('teamid', team), ('teamartid', art), ('style', st_row), ('variant', k['variant']),
                          ('fevariant', k['fevariant']), ('jerseyindex', k['jerseyindex']),
                          ('locstring', final_loc(k)), ('isdefault', 0), ('islockable', 0), ('hastie', 0),
                          ('helmetlogo', int(helmet)), ('helmetnumbers', 1), ('islightcolor', k['islightcolor'])):
@@ -460,14 +469,17 @@ def build_db(base, man, reg, files):
             added.append(f"{k['club']} {k['kit']} {st}_{art}_{k['variant']} ji{k['jerseyindex']} "
                          f"loc{final_loc(k)} light{k['islightcolor']} helmetlogo{int(helmet)} (строка {n + i})")
     helmets = []
-    for ph in sorted({phase_of(k) for k in new}):     # шлемы — по очередям: adidas после прежних, дальше — следующие
-        kits = [k for k in new if phase_of(k) == ph]
-        later_keys = {(CLUBS[k['club']][0], k.get('style', 1), k['variant']) for k in new if phase_of(k) >= ph}
+    # экипировка: у формы стиля 2 строки шлема и краг — как у стиля 0 (era 0), копии era 2 добавит style2_apply
+    eq_new = [dict(k, style=0) if k.get('style', 1) == STYLE_EDGE else k for k in new]
+    for ph in sorted({phase_of(k) for k in eq_new}):  # шлемы — по очередям: adidas после прежних, дальше — следующие
+        kits = [k for k in eq_new if phase_of(k) == ph]
+        later_keys = {(CLUBS[k['club']][0], k.get('style', 1), k['variant']) for k in eq_new if phase_of(k) >= ph}
         rows_mid = [r for r in rows_of(db) if (r['teamid'], r['style'], r['variant']) not in later_keys]
         helmets += add_helmets(db, rows_mid, kits)
-    helmets += add_gloves(db, new)
+    helmets += add_gloves(db, eq_new)
     helmets += team_colors(db)
     defaults, old_labels = set_defaults(db, rows, new, n_before)
+    style2 = style2_apply(db, edge) if edge else None
     dropped = drop_kits(db, load_removed())           # последним шагом: номера реестра и порядок сборки не меняются
     import draft_roster                               # накладка не должна менять таблицы draft_roster.db (он — из out)
     base_db = open_db(base)[1]
@@ -481,11 +493,15 @@ def build_db(base, man, reg, files):
     rep = {'base': db_path, 'base_md5': md5(db_path), 'md5': hashlib.md5(out).hexdigest(),
            'hastie_zeroed': len(tie), 'rows_added': added, 'rows_removed': dropped, 'helmets': helmets,
            'defaults': defaults}
+    if style2:
+        rep['style2'] = dict(zip(('kits', 'equipment_rows'), style2))
     loc, labels = build_loc(base, new, {**(old_labels or {}), **man.get('loc', {})})   # loc манифеста — клюшки (fb.sticks)
     if loc is not None:
         rep.update(loc_base_md5=md5(os.path.join(base, *LOC.split('/'))), loc_md5=hashlib.md5(loc).hexdigest(),
                    labels=labels)
-    return (out, loc), rep
+    # схема рядом с базой: при поле style шире 1 бита — своя копия (depth, rangehigh), её читают инструменты и лаунчер
+    meta = style_meta(open(os.path.join(base, 'db', 'nhlng-meta.xml'), encoding='utf-8', newline='').read()) if style2 else None
+    return (out, loc, meta), rep
 
 
 def phase_of(k):
@@ -536,7 +552,7 @@ def set_defaults(db, rows, new, n_before):
         jersey = f"rendering/jersey/texlib_{o['style']}_{o['teamartid']}_{o['variant']}.rx2"
         ea = os.path.exists(os.path.join(REF, 'nocacherender', *jersey.split('/')))   # свитер в архивах EA — форма EA
         labels[key] = (OLD_DEFAULT_LABELS if ea else OLD_OURS_LABELS)[light]
-        out.append(f"{code} {kit}: по умолчанию {db.get(T, 'style', r_new)}_{db.get(T, 'teamartid', r_new)}_"
+        out.append(f"{code} {kit}: по умолчанию {k.get('style', 1)}_{db.get(T, 'teamartid', r_new)}_"
                    f"{db.get(T, 'variant', r_new)} "
                    f"(строка {r_new}, locstring {db.get(T, 'locstring', r_new)}) вместо {o['style']}_{o['teamartid']}_"
                    f"{o['variant']} (строка {o['row']}: isdefault 0, locstring {o['locstring']} → 6, «{labels[key]}»)")
@@ -867,6 +883,145 @@ def build_loc(base, new, extra=None):
     return bytes(loc.db.d), want
 
 
+# ---------------------------------------------------------------- стиль 2: формы NHL 27 на своей сетке (docs/kitport.md §1.1)
+
+# Вариант A (пользователь, 02.11.2026): сетка формы NHL 27 живёт в своём слоте стиля 2, слот стиля 0 — снова оригиналы EA.
+# Поле style в файле базы шириной 1 бит только по заголовку таблицы: игра читает его как число (82AF68E0 → запись +16 →
+# TeamAttributes +26, u16) и подставляет в имена файлов, флагом нигде не считает. Запись остаётся 8 байт: бит 48…62 свободны.
+STYLE_EDGE = 2
+STYLE_BITS = 2
+EDGE_KITS = ('edge_home', 'edge_away')
+
+
+def style_width(db):
+    return db.by_name[T]['fields']['style'][1]
+
+
+def edge_keys(reg=None):
+    """Формы на сетке Edge по реестру: {(teamid, art, variant)}."""
+    return {(k['teamid'], k['art'], k['variant']) for k in (reg or load_registry())['kits'] if k['kit'] in EDGE_KITS}
+
+
+def style2_plan(db, keys):
+    """Строки экипировки для форм keys на стиле 2. Игра ищет экипировку по era = стиль формы (829EF868 → 82AEED60): до
+    перевода формы NHL 27 брали строки era 0, свои и чужие, а на era 2 таких нет. Поэтому каждая строка, которую форма
+    брала, получает копию с era 2 и теми же variant, equipment, brand: прежние строки не меняются, другие формы клуба не
+    сдвигаются, повторный вызов ничего не находит. → ([(строка-образец, variant, equipment, brand)], {equipment: число})."""
+    low = eq_low(db)
+    rows = rows_of(db)
+    adds, stat = [], {}
+    for team in sorted({k[0] for k in keys}):
+        recs = club_equipment(db, low, team)
+        types = sorted({x[2] for x in recs})
+        brands = sorted({x[3] for x in recs if x[3] != -1})
+        BR = brands + [next(b for b in range(64) if b not in brands)]        # и «любой другой» бренд
+        edge = {r['row'] for r in rows if r['teamid'] == team and r['style'] != 1 and
+                (team, r['teamartid'], r['variant']) in keys}
+        mine = sorted({r['variant'] for r in rows if r['row'] in edge})
+        others = sorted({(r['style'], r['variant']) for r in rows if r['teamid'] == team and r['row'] not in edge})
+        extra, seen = [], set()
+        for _ in range(8):
+            post = club_equipment(db, low, team, extra)
+            bad = [eq_lookup(recs, (0, v, eq, b)) for v in mine for eq in types for b in BR
+                   if eq_lookup(recs, (0, v, eq, b))[5] != eq_lookup(post, (STYLE_EDGE, v, eq, b))[5]]
+            if not bad:
+                break
+            for a in bad:
+                if a[4] not in seen:
+                    seen.add(a[4])
+                    extra.append((STYLE_EDGE, a[1], a[2], a[3], None, a[5]))
+                    adds.append((a[4], a[1], a[2], a[3]))
+                    stat[a[2]] = stat.get(a[2], 0) + 1
+        else:
+            sys.exit(f'команда {team}: экипировку форм стиля 2 не удаётся сохранить — модель не сошлась')
+        for e, v in others if extra else ():                                 # прочие формы клуба — как были
+            for eq in types:
+                if any(eq_lookup(recs, (e, v, eq, b))[5] != eq_lookup(post, (e, v, eq, b))[5] for b in BR):
+                    sys.exit(f'команда {team}: новые строки сдвигают экипировку (era {e}, variant {v}, equipment {eq})')
+    return adds, stat
+
+
+def style_widen(db):
+    """Поле style шириной STYLE_BITS (tdb.widen: новое место — в конце занятых бит, запись та же), значения те же. Прежний
+    бит — ноль: полем он больше не описан, а записи базы и сейва сверяются байт в байт (sync_save, roster_merge)."""
+    rows = range(db.by_name[T]['rows'])
+    vals = [db.get(T, 'style', r) for r in rows]
+    for r in rows:
+        db.set(T, 'style', r, 0)
+    db.widen(T, ['style'], STYLE_BITS)
+    for r, v in zip(rows, vals):
+        db.set(T, 'style', r, v)
+
+
+def style2_apply(db, keys):
+    """Перевести формы keys на стиль 2 в базе или сейве: поле style шириной STYLE_BITS (запись та же, tdb.widen), строки
+    форм и копии строк экипировки в конец таблицы. Повтор ничего не меняет. → (форм переведено, строк экипировки)."""
+    adds, _ = style2_plan(db, keys)
+    if style_width(db) < STYLE_BITS:
+        style_widen(db)
+    n = 0
+    for r in db.live_rows(T):
+        if db.get(T, 'style', r) == 0 and (db.get(T, 'teamid', r), db.get(T, 'teamartid', r), db.get(T, 'variant', r)) in keys:
+            db.set(T, 'style', r, STYLE_EDGE)
+            n += 1
+    if adds:
+        low = eq_low(db)
+        start = db.counts(EQ)[1]
+        if start != db.counts(EQ)[0]:
+            sys.exit(f'{EQ}: в таблице есть свободные места {db.counts(EQ)[:2]}, новые строки встали бы не туда')
+        db.resize(EQ, start + len(adds))
+        for i, (src, *_rest) in enumerate(adds):
+            db.put_record(EQ, start + i, db.record(EQ, src))
+            db.set(EQ, 'era', start + i, STYLE_EDGE - low['era'])
+            db.set(EQ, 'index', start + i, start + i)
+    return n, len(adds)
+
+
+def style2_undo(db):
+    """Обратно к стилю 0 (откат, kitport slot3 rollback): формы стиля 2 — на стиль 0, строки era 2 с конца таблицы
+    экипировки — прочь, поле style — на прежнее место (бит, который поле освободило при расширении). → (форм, строк)."""
+    if style_width(db) < STYLE_BITS:
+        return 0, 0
+    fields = db.by_name[T]['fields']
+    off = fields['style'][0]
+    used = {b for o, w in fields.values() for b in range(o, o + w)}
+    gaps = [b for b in range(off) if b not in used]
+    if len(gaps) != 1:
+        sys.exit(f'{T}: прежнее место поля style не определить, свободных бит {gaps}')
+    values = {r: db.get(T, 'style', r) for r in db.live_rows(T)}
+    if max(values.values()) > STYLE_EDGE:
+        sys.exit(f'{T}: стиль выше {STYLE_EDGE}')
+    for r in values:
+        db.set(T, 'style', r, 0)                             # биты поля в записи — снова нули, как до расширения
+    db.place_field(T, 'style', gaps[0], 1)
+    n = 0
+    for r, v in values.items():
+        db.set(T, 'style', r, 0 if v == STYLE_EDGE else v)
+        n += v == STYLE_EDGE
+    low = eq_low(db)
+    rows = list(db.live_rows(EQ))
+    era = [db.get(EQ, 'era', r) + low['era'] for r in rows]
+    tail = next((len(era) - i for i, e in enumerate(reversed(era)) if e != STYLE_EDGE), len(era))
+    if STYLE_EDGE in era[:tail]:
+        sys.exit(f'{EQ}: строки era {STYLE_EDGE} не только в конце таблицы')
+    gone = len(era) - tail
+    if gone:
+        db.resize(EQ, tail)
+    return n, gone
+
+
+def style_meta(text):
+    """nhlng-meta.xml: stockteamjerseys.style — depth STYLE_BITS, rangehigh 3. Уже так — без изменений."""
+    m = re.search(r'<table name="%s".*?</table>' % T, text, re.S)
+    if not m:
+        sys.exit(f'в схеме нет таблицы {T}')
+    block, k = re.subn(r'(<field name="style"[^>]*?)depth="\d+"([^>]*?)rangehigh="\d+"',
+                       lambda f: f'{f.group(1)}depth="{STYLE_BITS}"{f.group(2)}rangehigh="{(1 << STYLE_BITS) - 1}"', m.group(0))
+    if k != 1:
+        sys.exit(f'в схеме у {T} не найдено поле style')
+    return text[:m.start()] + block + text[m.end():]
+
+
 def table_bytes(db, name):
     """Раскладка и записи таблицы (для сравнения двух баз; CRC заголовка не входит)."""
     t = db.by_name[name]
@@ -875,10 +1030,13 @@ def table_bytes(db, name):
 
 
 def write_db(dst, data):
-    db, loc = data
+    db, loc, meta = data
     os.makedirs(os.path.join(dst, 'db'), exist_ok=True)
     with open(os.path.join(dst, 'db', 'nhlng.db'), 'wb') as f:   # draft_roster.db — из out: его 10 таблиц не меняются
         f.write(db)
+    if meta is not None:
+        with open(os.path.join(dst, 'db', 'nhlng-meta.xml'), 'w', encoding='utf-8', newline='') as f:
+            f.write(meta)
     if loc is not None:
         p = os.path.join(dst, *LOC.split('/'))
         os.makedirs(os.path.dirname(p), exist_ok=True)
@@ -1002,26 +1160,55 @@ def cmd_verify(args):
     sys.exit(1 if bad or not key else 0)
 
 
+def style_to_save(sv, db):
+    """Поле style сейва — как в базе: шире, значения форм стиля 2 — по базе (ключ: команда, арт, вариант). Сейв стиля 0
+    запись в запись как база до перевода. Запас [current, max) — снова 0xDB, как у игры. → форм переведено."""
+    width = style_width(db)
+    if style_width(sv) >= width:
+        return 0
+    style_widen(sv)
+    t = sv.by_name[T]
+    maxr, cur = sv.counts(T)[:2]
+    sv.d[t['records'] + t['reclen'] * cur:t['records'] + t['reclen'] * maxr] = b'\xDB' * (t['reclen'] * (maxr - cur))
+    sv.__init__(bytes(sv.d), sv.meta)
+    keys = {(db.get(T, 'teamid', r), db.get(T, 'teamartid', r), db.get(T, 'variant', r)) for r in db.live_rows(T)
+            if db.get(T, 'style', r) == STYLE_EDGE}
+    n = 0
+    for r in sv.live_rows(T):
+        if sv.get(T, 'style', r) == 0 and (sv.get(T, 'teamid', r), sv.get(T, 'teamartid', r), sv.get(T, 'variant', r)) in keys:
+            sv.set(T, 'style', r, STYLE_EDGE)
+            n += 1
+    return n
+
+
 def cmd_save(args):
     """save СЕЙВ [--write] — новые строки форм и шлемов поставленной накладки (stockteamjerseys и stockteamequipmenttable
-    базы cache: db/nhlng.db) в сейв ROSTER: у сейва эти таблицы свои, игра берёт формы из него (ТЕСТ DAL25). Сначала из
-    сейва убираются формы kit_removed.json (drop_kits). Прежние живые записи сейва должны совпадать с базой запись в
-    запись (иначе — стоп: сейв правили иначе); новые дописываются в конец (таблица расширяется). Копия до правки —
-    game/work/legacy-data/backup-saves/<сейв>-<время>/."""
+    базы cache: db/nhlng.db) в сейв ROSTER: у сейва эти таблицы свои, игра берёт формы из него (ТЕСТ DAL25). Сначала
+    поле style сейва приводится к базе (style_to_save) и из сейва убираются формы kit_removed.json (drop_kits). Прежние
+    живые записи сейва должны совпадать с базой запись в запись (иначе — стоп: сейв правили иначе); новые дописываются в
+    конец (таблица расширяется). Копия до правки — game/work/legacy-data/backup-saves/<сейв>-<время>/."""
     write = '--write' in args
     args = [a for a in args if a != '--write']
     if not args:
         sys.exit(__doc__)
     from install_legacy_data import cache_dir
-    from tdb import SaveFile
-    save = os.path.abspath(args[0])
     cache = cache_dir()
     meta = load_meta(os.path.join(cache, 'db', 'nhlng-meta.xml'))
     db = Tdb(open(os.path.join(cache, 'db', 'nhlng.db'), 'rb').read(), meta)
+    sync_save(os.path.abspath(args[0]), db, meta, write)
+
+
+def sync_save(save, db, meta, write):
+    """Таблицы форм и экипировки сейва ROSTER — как в базе db (cmd_save). → папка копии сейва или None (сейв не менялся)."""
+    from tdb import SaveFile
     raw = open(save, 'rb').read()
     sf = SaveFile(raw, meta)
     sv = sf.db
     total = 0
+    n_style = style_to_save(sv, db)
+    if n_style:
+        total += n_style
+        print(f'{T}: поле style как в базе, форм на стиле {STYLE_EDGE}: {n_style}')
     for t in (T, EQ):
         if t not in sv.by_name:
             print(f'{t}: в сейве нет — пропуск')
@@ -1050,9 +1237,9 @@ def cmd_save(args):
             print(f'{t}: место в сейве {sv.counts(t)[:2]} (max, строк), как у игры')
     if not write or not total:
         print('без --write ничего не записано' if total else 'сейв уже совпадает с базой')
-        return
+        return None
     out = sf.bytes(fix=True)
-    bdir = os.path.join(W, 'backup-saves', f'{os.path.basename(save)}-{time.strftime("%Y%m%d-%H%M%S")}')
+    bdir = os.path.join(STATE, 'backup-saves', f'{os.path.basename(save)}-{time.strftime("%Y%m%d-%H%M%S")}')
     os.makedirs(bdir, exist_ok=True)
     bak = os.path.join(bdir, os.path.basename(save) + '.bak')
     open(bak, 'wb').write(raw)
@@ -1068,6 +1255,7 @@ def cmd_save(args):
             open(save, 'wb').write(raw)
             sys.exit(f'{t}: после записи сейв не как база — сейв возвращён')
     print(f'записано: изменено строк {total}; CRC и обёртка — OK; копия до правки — {bak}')
+    return bak
 
 
 def main():
