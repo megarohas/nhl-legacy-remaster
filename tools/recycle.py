@@ -10,6 +10,7 @@
 
     python tools/recycle.py status S:                     # Корзина диска: занято / квота
     python tools/recycle.py prune DIR REGEX [--keep 3]    # в DIR: группы по REGEX (группа 1 — имя, 2 — порядок)
+    python tools/recycle.py drop ПУТЬ…                     # в Корзину, с той же проверкой её квоты
 """
 import argparse
 import os
@@ -97,21 +98,26 @@ def prune(folder, pattern, keep=KEEP, say=print):
             order = m.group(2)
             groups.setdefault(m.group(1), []).append((int(order) if order.isdigit() else order, f))
     old = [os.path.join(folder, f) for items in groups.values() for _, f in sorted(items)[:-keep] if keep > 0]
-    if not old:
+    return drop(old, say)
+
+
+def drop(paths, say=print):
+    """paths → Корзина, если она не переполнится; иначе ничего не трогает. → что ушло."""
+    if not paths:
         return []
-    need = sum(size_of(p) for p in old)
-    used, cap = bin_state(os.path.splitdrive(os.path.abspath(folder))[0])
+    need = sum(size_of(p) for p in paths)
+    used, cap = bin_state(os.path.splitdrive(os.path.abspath(paths[0]))[0])
     if cap == 0:
-        say(f"на диске удаление мимо Корзины (NukeOnDelete): прежние копии ({len(old)}) не удаляю")
+        say(f"на диске удаление мимо Корзины (NukeOnDelete): прежние копии ({len(paths)}) не удаляю")
         return []
     if cap is not None and used + need > BIN_LIMIT * cap:
-        say(f"Корзина {used / 2**30:.1f} ГБ из {cap / 2**30:.0f}: прежние копии ({len(old)}, {need / 2**30:.1f} ГБ) "
+        say(f"Корзина {used / 2**30:.1f} ГБ из {cap / 2**30:.0f}: прежние копии ({len(paths)}, {need / 2**30:.1f} ГБ) "
             f"не удаляю — очистите Корзину")
         return []
-    for p in old:
+    for p in paths:
         to_recycle_bin(p)
-    say(f"прежние копии в Корзину: {len(old)} ({need / 2**30:.1f} ГБ), оставлено по {keep} последних")
-    return old
+    say(f"прежние копии в Корзину: {len(paths)} ({need / 2**30:.1f} ГБ)")
+    return paths
 
 
 def main():
@@ -123,11 +129,16 @@ def main():
     s.add_argument("folder")
     s.add_argument("regex", help=r"полное имя; группа 1 — имя группы, 2 — порядок (pack-edge)-v(\d+))")
     s.add_argument("--keep", type=int, default=KEEP)
+    s = sub.add_parser("drop")
+    s.add_argument("paths", nargs="+", help="папки или файлы: всё в Корзину или ничего, если она переполнится")
     a = ap.parse_args()
     if a.cmd == "status":
         used, cap = bin_state(a.drive)
         print(f"Корзина {a.drive}: {used / 2**30:.2f} ГБ" + (f" из {cap / 2**30:.0f} ГБ квоты" if cap else
                                                              " (квота не найдена или удаление без Корзины)"))
+        return 0
+    if a.cmd == "drop":
+        drop(a.paths)
         return 0
     prune(a.folder, a.regex, a.keep)
     return 0

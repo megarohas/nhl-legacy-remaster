@@ -199,7 +199,7 @@ KIT_MAX_MIN = 749
 def kit_room(sv):
     """Место таблицы форм в сейве — как у игры: max по правилу выше, [current, max) — 0xDB. → True, если меняли."""
     maxr, cur = sv.counts(T)[:2]
-    want = max(KIT_MAX_MIN, cur + KIT_INSERT)
+    want = KIT_MAX_MIN if cur <= KIT_MAX_MIN else cur + KIT_INSERT
     if maxr == want:
         return False
     sv.resize(T, want)

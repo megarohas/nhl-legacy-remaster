@@ -17,6 +17,7 @@
 - [launcher.md](launcher.md) — лаунчер `nhllegacy_launcher.exe`: перед запуском настраиваются графика, переключатели `nhl_*` и имя игрока, кнопка «Обновить ростеры» переносит ростер с другого ПК
 - [graphics-settings.md](graphics-settings.md) — графика порта: cvar'ы SDK, апскейл, ROV/RTV, задержка ввода, источники настроек и их приоритет
 - [sdk-build.md](sdk-build.md) — своя сборка ReXGlue SDK (Vulkan, FSR 1 / CAS): скрипты `nhl-legacy-port/scripts/sdk_*`, патчи, восстановление с нуля
+- [device-release.md](device-release.md) — релиз для другого устройства: полная свежая папка одной командой, `tools/device_release.sh`
 - [coins.md](coins.md) — монеты на главном меню (P 2,500, REDEEM COINS): откуда потолок, как считаются, как его снять; `tools/legacy_coins.py`
 - [port.md](port.md) — тулчейн (VS 2022 Build Tools, LLVM, CMake, Ninja, Vulkan SDK, ReXGlue) и первая генерация кода (на NHL 13)
 - [performance.md](performance.md) — производительность: замеры GPU/CPU, FSI против хостовых RT, холостой спин потока рендера (замеры на NHL 13, выводы о SDK общие)
