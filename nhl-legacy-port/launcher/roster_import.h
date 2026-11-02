@@ -725,6 +725,31 @@ constexpr uint64_t kXuid = 0xB13EBABEBABEBABEull;
 constexpr uint32_t kTitle = 0x454109ECu;
 constexpr wchar_t kDisplayName[] = L"ROSTER1";  // слот 1, как пишет игра (82BBA768): других слотов у ростера нет
 
+// Имя в меню: «ROSTER ДД.ММ.ГГГГ», если дата есть в имени файла (так называет файл tools/legacy_data/roster_update.py: дата
+// данных, а не время сборки), иначе как у игры. В самом файле места для даты нет, поэтому она живёт в имени и заголовке.
+// Год 2000…2099, день и месяц настоящие: цифры подряд из имени папки игры ROSTER 20261024125927 датой не считаются.
+inline std::wstring DisplayNameFor(const std::wstring& path) {
+  const size_t cut = path.find_last_of(L"\\/");
+  const std::wstring file = cut == std::wstring::npos ? path : path.substr(cut + 1);
+  const auto digit = [&file](size_t i) { return i < file.size() && file[i] >= L'0' && file[i] <= L'9'; };
+  const auto num = [&file](size_t i, size_t n) {
+    int v = 0;
+    for (size_t k = 0; k < n; ++k) v = v * 10 + (file[i + k] - L'0');
+    return v;
+  };
+  for (size_t i = 0; i + 10 <= file.size(); ++i) {
+    if (!(digit(i) && digit(i + 1) && file[i + 2] == L'.' && digit(i + 3) && digit(i + 4) && file[i + 5] == L'.' &&
+          digit(i + 6) && digit(i + 7) && digit(i + 8) && digit(i + 9))) {
+      continue;
+    }
+    if ((i > 0 && digit(i - 1)) || digit(i + 10)) continue;
+    const int day = num(i, 2), month = num(i + 3, 2), year = num(i + 6, 4);
+    if (day < 1 || day > 31 || month < 1 || month > 12 || year < 2000 || year > 2099) continue;
+    return L"ROSTER " + file.substr(i, 10);
+  }
+  return kDisplayName;
+}
+
 // Имя папки: как у игры, «ROSTER» и время UTC. Новее всех, что уже есть: выигрывает самый свежий.
 inline std::wstring NewName(const std::wstring& dir) {
   SYSTEMTIME now;
@@ -767,7 +792,7 @@ inline std::wstring NewName(const std::wstring& dir) {
 }
 
 // Заголовок XCONTENT_AGGREGATE_DATA (0x148 байт): устройство, тип, имя в меню UTF-16 BE, имя папки, XUID, игра.
-inline std::vector<uint8_t> MakeHeader(const std::wstring& folder) {
+inline std::vector<uint8_t> MakeHeader(const std::wstring& folder, const std::wstring& display) {
   std::vector<uint8_t> h(0x148, 0);
   const auto put32 = [&h](size_t at, uint32_t v) {
     h[at] = static_cast<uint8_t>(v >> 24);
@@ -778,9 +803,10 @@ inline std::vector<uint8_t> MakeHeader(const std::wstring& folder) {
   put32(0, 1);
   put32(4, 1);
   size_t at = 8;
-  for (const wchar_t* p = kDisplayName; *p; ++p, at += 2) {
-    h[at] = static_cast<uint8_t>(*p >> 8);
-    h[at + 1] = static_cast<uint8_t>(*p);
+  for (const wchar_t c : display) {
+    h[at] = static_cast<uint8_t>(c >> 8);
+    h[at + 1] = static_cast<uint8_t>(c);
+    at += 2;
   }
   at = 0x108;
   for (wchar_t c : folder) h[at++] = static_cast<uint8_t>(c);
@@ -824,7 +850,8 @@ inline void ClearDir(const std::wstring& dir) {
 // Добавить проверенный файл. Порядок такой, что при сбое в любом месте игра прежних ростеров не потеряет и не увидит
 // половины нового: файл и заголовок во временных именах, потом заголовок, последним — папка (SDK перечисляет папки).
 // Временная папка лежит рядом с типом 00000001, а не в нём, иначе брошенную после сбоя игра показала бы как сейв.
-inline Result AddRoster(const std::vector<uint8_t>& file, const std::wstring& userdata, std::wstring* name_out) {
+inline Result AddRoster(const std::vector<uint8_t>& file, const std::wstring& userdata, const std::wstring& display,
+                        std::wstring* name_out) {
   const std::wstring root = SaveRoot(userdata);
   const std::wstring saves = root + L"\\00000001", headers = root + L"\\Headers\\00000001";
   const auto failed = [&saves]() {
@@ -844,7 +871,7 @@ inline Result AddRoster(const std::vector<uint8_t>& file, const std::wstring& us
     DeleteFileW(tmp_header.c_str());
   };
   std::vector<uint8_t> copy;
-  if (!WriteAll(tmp_file, file) || !WriteAll(tmp_header, MakeHeader(name)) ||
+  if (!WriteAll(tmp_file, file) || !WriteAll(tmp_header, MakeHeader(name, display)) ||
       !ReadFileAll(tmp_file, kMaxFile, copy) || copy != file) {
     Result r = failed();
     cleanup();

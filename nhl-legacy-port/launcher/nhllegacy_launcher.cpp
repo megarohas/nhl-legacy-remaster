@@ -1053,7 +1053,7 @@ roster::Result ImportRoster(const std::wstring& path, bool write, std::wstring* 
     return Fail(kGameRunning, L"The game is running. Close it and try again: it would save its own roster over this one.",
                 L"Игра запущена. Закройте её и повторите: она запишет свой ростер поверх этого.");
   }
-  return AddRoster(file, userdata, name);
+  return AddRoster(file, userdata, DisplayNameFor(path), name);
 }
 
 void UpdateRosters() {
@@ -1087,7 +1087,8 @@ void UpdateRosters() {
     ShowError(r.Text(g_lang).c_str());
     return;
   }
-  const std::wstring text = std::wstring(T(L"Roster added: ", L"Ростер добавлен: ")) + name + L".\n" +
+  const std::wstring text = std::wstring(T(L"Roster added: ", L"Ростер добавлен: ")) + roster::DisplayNameFor(path) +
+                            L" (" + name + L").\n" +
                             T(L"The game will load it on the next start. Earlier rosters are kept.",
                               L"Игра загрузит его при следующем запуске. Прежние ростеры остались.");
   MessageBoxW(g.wnd, text.c_str(), L"NHL Legacy", MB_OK | MB_ICONINFORMATION);
