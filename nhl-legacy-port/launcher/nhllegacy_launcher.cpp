@@ -9,6 +9,7 @@
 // Отладка без показа окна пользователю: --shot=файл.png [--shot-hint=N] — окно рисуется за
 // пределами экрана без активации, снимок PrintWindow сохраняется в PNG, процесс выходит.
 // --lang=en|ru — язык поверх сохранённого; --shot-relang=en|ru — снимок после смены языка в окне.
+// --print-command — командная строка, с которой «Играть» запустит игру.
 
 #ifndef UNICODE
 #define UNICODE
@@ -62,6 +63,22 @@ std::string Trim(const std::string& s) {
   while (b < e && (s[b] == ' ' || s[b] == '\t' || s[b] == '\r' || s[b] == '\n')) ++b;
   while (e > b && (s[e - 1] == ' ' || s[e - 1] == '\t' || s[e - 1] == '\r' || s[e - 1] == '\n')) --e;
   return s.substr(b, e - b);
+}
+
+std::wstring Widen(const std::string& s) {
+  if (s.empty()) return {};
+  int n = MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), nullptr, 0);
+  std::wstring w(n, L'\0');
+  MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), w.data(), n);
+  return w;
+}
+
+std::string Narrow(const std::wstring& w) {
+  if (w.empty()) return {};
+  int n = WideCharToMultiByte(CP_UTF8, 0, w.data(), static_cast<int>(w.size()), nullptr, 0, nullptr, nullptr);
+  std::string s(n, '\0');
+  WideCharToMultiByte(CP_UTF8, 0, w.data(), static_cast<int>(w.size()), s.data(), n, nullptr, nullptr);
+  return s;
 }
 
 bool ReadFileBytes(const std::wstring& path, std::string& out) {
@@ -155,6 +172,7 @@ struct State {
   bool vibration = true;
   int season = 2015;
   long long cap = 0, floor = 0, min_salary = 0;  // $
+  std::string user_name;  // nhl_user_name; пусто — как у SDK, User
 };
 
 struct Kv {
@@ -181,6 +199,40 @@ double GetDouble(const Cvars& c, const char* key, double def) {
   auto it = c.find(key);
   if (it == c.end() || it->second.empty()) return def;
   return std::strtod(it->second.c_str(), nullptr);
+}
+
+// Имя игрока. У игры на него 15 байт UTF-8 и нуль, поэтому русская буква занимает два места. Шрифт игры рисует латиницу,
+// кириллицу, цифры и знаки ниже (проверено в игре 02.11.2026, docs/launcher.md, «Имя игрока»), прочее выбрасывается при вводе.
+constexpr size_t kNameMax = 15;
+
+bool NameChar(wchar_t c) {
+  if ((c >= L'A' && c <= L'Z') || (c >= L'a' && c <= L'z') || (c >= L'0' && c <= L'9')) return true;
+  if ((c >= 0x0410 && c <= 0x044F) || c == 0x0401 || c == 0x0451) return true;
+  return c != 0 && std::wcschr(L" -_.'!?+&@#", c) != nullptr;
+}
+
+// Только допустимое и не длиннее kNameMax байт.
+std::wstring NameFilter(const std::wstring& text) {
+  std::wstring out;
+  size_t bytes = 0;
+  for (wchar_t c : text) {
+    if (!NameChar(c)) continue;
+    const size_t size = c < 0x80 ? 1 : 2;
+    if (bytes + size > kNameMax) break;
+    bytes += size;
+    out.push_back(c);
+  }
+  return out;
+}
+
+// Значение для игры: ещё и без пробелов по краям и двойных.
+std::string CleanName(const std::wstring& text) {
+  std::wstring out;
+  for (wchar_t c : NameFilter(text)) {
+    if (c != L' ' || (!out.empty() && out.back() != L' ')) out.push_back(c);
+  }
+  while (!out.empty() && out.back() == L' ') out.pop_back();
+  return Narrow(out);
 }
 
 State FromCvars(const Cvars& c) {
@@ -211,6 +263,7 @@ State FromCvars(const Cvars& c) {
   s.cap = GetInt(c, "nhl_salary_cap", 0);
   s.floor = GetInt(c, "nhl_salary_floor", 0);
   s.min_salary = GetInt(c, "nhl_salary_min", 0);
+  s.user_name = CleanName(Widen(Get(c, "nhl_user_name", "")));
   return s;
 }
 
@@ -244,6 +297,7 @@ std::vector<Kv> ToCvars(const State& s) {
   const char* kScreen = T8("Display", "Экран");
   const char* kInput = T8("Controls", "Управление");
   const char* kLeague = T8("Season and finances", "Сезон и финансы");
+  const char* kPlayer = T8("Player", "Игрок");
   const char* kAlways = T8("Always on", "Всегда включено");
   auto b = [](bool v) { return std::string(v ? "true" : "false"); };
   std::vector<Kv> kv;
@@ -274,6 +328,7 @@ std::vector<Kv> ToCvars(const State& s) {
   kv.push_back({"nhl_salary_cap", std::to_string(s.cap), false, kLeague});
   kv.push_back({"nhl_salary_floor", std::to_string(s.floor), false, kLeague});
   kv.push_back({"nhl_salary_min", std::to_string(s.min_salary), false, kLeague});
+  kv.push_back({"nhl_user_name", s.user_name, true, kPlayer});
   for (const auto& e : kAlwaysOn) kv.push_back({e.key, e.value, false, kAlways});
   return kv;
 }
@@ -312,14 +367,6 @@ bool WriteLauncherToml(const std::wstring& path, const std::vector<Kv>& kv) {
   return MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
 }
 
-std::wstring Widen(const std::string& s) {
-  if (s.empty()) return {};
-  int n = MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), nullptr, 0);
-  std::wstring w(n, L'\0');
-  MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), w.data(), n);
-  return w;
-}
-
 // ─── Подсказки ─────────────────────────────────────────────────────────────────────────────
 
 struct Hint {
@@ -344,6 +391,7 @@ enum HintId {
   kHintReset,
   kHintPlay,
   kHintLanguage,
+  kHintName,
   kHintCount
 };
 
@@ -384,10 +432,13 @@ const Hint kHintsEn[kHintCount] = {
      L"Salary cap, floor and minimum salary of the first season, $ millions. 0 — as on the disc "
      L"(2015/16: 71.4 / 52.8 / 0.575). After that they grow by the game's rules. Doesn't affect an existing "
      L"franchise."},
-    {L"Reset", L"Restore all settings as in nhllegacy.toml (as without the launcher)."},
+    {L"Reset", L"Restore all settings as in nhllegacy.toml (as without the launcher). The player name stays."},
     {L"Play",
      L"Save the settings to nhllegacy_launcher.toml and start the game. nhllegacy.toml is not changed."},
     {L"Language", L"Launcher language: English or Russian. The game itself is not affected."},
+    {L"Player name",
+     L"Your name in the game instead of “User”: Profile Management, the SAVE/LOAD lists and the bar at the bottom of "
+     L"the menus. Up to 15 characters, a Cyrillic letter takes two places. Saves don't depend on it. Empty — User."},
 };
 
 const Hint kHintsRu[kHintCount] = {
@@ -426,10 +477,13 @@ const Hint kHintsRu[kHintCount] = {
     {L"Финансы новой франшизы",
      L"Потолок зарплат, нижний порог и минимальная зарплата первого сезона, млн $. 0 — как на диске "
      L"(2015/16: 71,4 / 52,8 / 0,575). Дальше растут по правилам игры. На созданную франшизу не влияет."},
-    {L"Сбросить", L"Вернуть все настройки как в nhllegacy.toml (как без лаунчера)."},
+    {L"Сбросить", L"Вернуть все настройки как в nhllegacy.toml (как без лаунчера). Имя игрока остаётся."},
     {L"Играть",
      L"Сохранить настройки в nhllegacy_launcher.toml и запустить игру. nhllegacy.toml не меняется."},
     {L"Язык", L"Язык лаунчера: английский или русский. На саму игру не влияет."},
+    {L"Имя игрока",
+     L"Ваше имя в игре вместо «User»: Profile Management, списки SAVE/LOAD и нижняя строка меню. До 15 символов, "
+     L"русская буква занимает два места, то есть до 7 букв. Сейвы от имени не зависят. Пусто — User."},
 };
 
 const Hint& HintAt(int i) { return (g_lang == 1 ? kHintsRu : kHintsEn)[i]; }
@@ -463,6 +517,7 @@ enum ControlId {
   kIdPlay,
   kIdNote,
   kIdLang,
+  kIdName,
 };
 
 // Смена языка: элементы пересоздаются после возврата из уведомления списка (не внутри него).
@@ -671,6 +726,15 @@ void CreateControls() {
   MoneyEdit(T(L"Minimum", L"Минимум"), kIdMin, jx, 228, lab, 80);
   AddZone(jx, 132, rcw, 120, kHintMoney);
 
+  // Игрок: группа вровень с «Экраном».
+  Group(T(L"Player", L"Игрок"), rx, 282, rw, 106);
+  Label(T(L"Player name", L"Имя игрока"), jx, 304, lab);
+  HWND name = Add(L"EDIT", L"", ES_AUTOHSCROLL | WS_TABSTOP, jx + lab, 304, rcw - lab, 24, kIdName, kFontNormal,
+                  WS_EX_CLIENTEDGE);
+  SendMessageW(name, EM_SETLIMITTEXT, kNameMax, 0);
+  g.hint_of[name] = kHintName;
+  AddZone(jx, 304, rcw, 26, kHintName);
+
   // Кнопки.
   HWND reset = Add(L"BUTTON", T(L"Reset", L"Сбросить"), BS_PUSHBUTTON | WS_TABSTOP, 16, 568, 120, 34, kIdReset);
   g.hint_of[reset] = kHintReset;
@@ -728,6 +792,24 @@ bool ParseMoney(int id, double max_millions, long long& out) {
 
 int SharpOf(const State& s) { return s.present == 1 ? s.sharp_cas : s.sharp_fsr; }
 
+std::wstring TextOf(int id) {
+  wchar_t buf[64] = {};
+  GetWindowTextW(Item(id), buf, 64);
+  return buf;
+}
+
+// Поле имени: недопустимое и лишнее убирается сразу, курсор остаётся на месте.
+void FilterName() {
+  HWND edit = Item(kIdName);
+  const std::wstring text = TextOf(kIdName), kept = NameFilter(text);
+  if (kept == text) return;
+  DWORD from = 0;
+  SendMessageW(edit, EM_GETSEL, reinterpret_cast<WPARAM>(&from), 0);
+  const DWORD left = std::min(static_cast<DWORD>(kept.size()), from);
+  SetWindowTextW(edit, kept.c_str());
+  SendMessageW(edit, EM_SETSEL, left, left);
+}
+
 void UpdateSharpLabel() {
   int v = static_cast<int>(SendMessageW(Item(kIdSharp), TBM_GETPOS, 0, 0));
   wchar_t buf[16];
@@ -771,6 +853,7 @@ void ToUi(const State& s) {
   SetWindowTextW(Item(kIdCap), MoneyText(s.cap).c_str());
   SetWindowTextW(Item(kIdFloor), MoneyText(s.floor).c_str());
   SetWindowTextW(Item(kIdMin), MoneyText(s.min_salary).c_str());
+  SetWindowTextW(Item(kIdName), Widen(s.user_name).c_str());
   SetComboSel(kIdLang, g_lang);
   UpdateEnabled();
 }
@@ -793,6 +876,7 @@ bool FromUi() {
   s.vibration = GetCheck(kIdVibration);
   int sel = ComboSel(kIdSeason);
   if (sel >= 0) s.season = static_cast<int>(SendMessageW(Item(kIdSeason), CB_GETITEMDATA, sel, 0));
+  s.user_name = CleanName(TextOf(kIdName));
   struct {
     int id;
     double max;
@@ -881,6 +965,18 @@ bool SaveState() {
   return true;
 }
 
+// Командная строка игры: значение с пробелом — в кавычках (имя игрока). Пустое значение не передаётся: разбор аргументов SDK
+// (CLI11) принял бы за него следующий аргумент, и пропала бы настройка после имени.
+std::wstring GameCommand() {
+  std::wstring cmd = L"\"" + g.exe + L"\"";
+  for (const Kv& e : ToCvars(g.state)) {
+    if (e.value.empty()) continue;
+    const std::wstring arg = L"--" + Widen(e.key) + L"=" + Widen(e.value);
+    cmd += e.value.find(' ') == std::string::npos ? L" " + arg : L" \"" + arg + L"\"";
+  }
+  return cmd;
+}
+
 void Play() {
   if (!g.exe_found) return;
   if (GameRunning()) {
@@ -889,8 +985,7 @@ void Play() {
     return;
   }
   if (!SaveState()) return;
-  std::wstring cmd = L"\"" + g.exe + L"\"";
-  for (const Kv& e : ToCvars(g.state)) cmd += L" --" + Widen(e.key) + L"=" + Widen(e.value);
+  const std::wstring cmd = GameCommand();
   STARTUPINFOW si{};
   si.cb = sizeof(si);
   PROCESS_INFORMATION pi{};
@@ -903,6 +998,21 @@ void Play() {
   CloseHandle(pi.hThread);
   CloseHandle(pi.hProcess);
   DestroyWindow(g.wnd);
+}
+
+// Запуск без окна: вывод — в stdout вызывающего, если он его передал, иначе в его консоль.
+void Say(const std::wstring& text) {
+  HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
+  if ((out == nullptr || out == INVALID_HANDLE_VALUE) && AttachConsole(ATTACH_PARENT_PROCESS)) {
+    out = CreateFileW(L"CONOUT$", GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+  }
+  if (out == nullptr || out == INVALID_HANDLE_VALUE) return;
+  const std::wstring line = text + L"\r\n";
+  const int n = WideCharToMultiByte(CP_UTF8, 0, line.data(), static_cast<int>(line.size()), nullptr, 0, nullptr, nullptr);
+  std::string utf8(static_cast<size_t>(n), '\0');
+  WideCharToMultiByte(CP_UTF8, 0, line.data(), static_cast<int>(line.size()), utf8.data(), n, nullptr, nullptr);
+  DWORD put = 0;
+  WriteFile(out, utf8.data(), static_cast<DWORD>(utf8.size()), &put, nullptr);
 }
 
 // ─── Рисование ────────────────────────────────────────────────────────────────────────────
@@ -1078,6 +1188,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
       const int id = LOWORD(wp);
       const int code = HIWORD(wp);
       if (id == kIdFullscreen && code == BN_CLICKED) UpdateEnabled();
+      if (id == kIdName && code == EN_CHANGE) FilterName();
       if (id == kIdPresent && code == CBN_SELCHANGE) {
         // У CAS и FSR своя резкость: запомнить ползунок старого режима, показать нового.
         const int sharp = static_cast<int>(SendMessageW(Item(kIdSharp), TBM_GETPOS, 0, 0));
@@ -1089,7 +1200,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         UpdateEnabled();
       }
       if (id == kIdReset && code == BN_CLICKED) {
+        const std::string name = CleanName(TextOf(kIdName));  // имя — не настройка запуска, «Сбросить» его не трогает
         g.state = BaseState();
+        g.state.user_name = name;
         ToUi(g.state);
       }
       if (id == kIdLang && code == CBN_SELCHANGE && ComboSel(kIdLang) != g_lang) {
@@ -1204,6 +1317,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
 
   std::wstring shot_path, lang_arg, relang_arg;
   int shot_hint = kHintNone;
+  bool print_command = false;
   int argc = 0;
   LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
   for (int i = 1; argv && i < argc; ++i) {
@@ -1212,6 +1326,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
     if (a.rfind(L"--shot-hint=", 0) == 0) shot_hint = _wtoi(a.c_str() + 12);
     if (a.rfind(L"--lang=", 0) == 0) lang_arg = a.substr(7);  // en / ru поверх сохранённого
     if (a.rfind(L"--shot-relang=", 0) == 0) relang_arg = a.substr(14);  // снимок после смены языка в окне
+    if (a == L"--print-command") print_command = true;  // что запустит «Играть», для проверок без окна
   }
   if (argv) LocalFree(argv);
   g.shot = !shot_path.empty();
@@ -1232,6 +1347,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
   }
   LoadState();
   if (lang_arg == L"en" || lang_arg == L"ru") g_lang = lang_arg == L"ru" ? 1 : 0;
+  if (print_command) {
+    Say(GameCommand());
+    return 0;
+  }
   UpdateTexts();
 
   g.br_bg = CreateSolidBrush(kColBg);
