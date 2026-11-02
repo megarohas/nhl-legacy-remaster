@@ -2,10 +2,12 @@
 
     python menuitems_legacy.py list [FILE.big]          # пункты по массивам: номер, имя, подпись, смещения
     python menuitems_legacy.py build [--exit last|before-featured|none] [--keep-custom-music] [--keep ИМЯ,…]
-                                     [--keep-panel] [--work DIR] [--no-out]
+                                     [--keep-panel] [--keep-redeem] [--work DIR] [--no-out]
         # → WORK (game/work/legacy-data/menu-items/build, раскладка cache:) и game/work/legacy-data/out; список
         #   своих файлов — game/work/legacy-data/menu-items/files.txt:
         #   fe/ion/game/menus/mainmenuitems.big — без онлайн-пунктов (HIDE) и с EXIT;
+        #   fe/ion/game/components/nhlpuckdisplay.big — без подсказки X REDEEM COINS, значок и число монет остаются
+        #       (plan_redeem; --keep-redeem — оставить подсказку, файл уходит из out);
         #   fe/loc/NHL_ENG_US.db — локализация из out (база legacy-data): подпись EXIT — ключ XboxLiveMarketPlace
         #       («Xbox Live Marketplace») → «Exit»; панель описаний главного меню — страницы 0–2 (EASHL, HUT Online,
         #       GM Connected) → Be a GM, Play Now, Battle for the Cup (PANEL; --keep-panel — оставить). locdb put:
@@ -27,6 +29,13 @@ ION_GameSetup.ShowMarketplaceUI(контроллер) (больше её не з
 навсегда; поэтому файлы ставятся только вместе с exe legacy-port. Корень переписывается участком той же длины: копии байт
 операторов (без указателей и переходов), новый пункт, заполнитель PushZero/Pop.
 
+Подсказка X REDEEM COINS (решение пользователя 02.11.2026: монеты тратить некуда, кнопка только открывает экран с
+входом на сервер EA). Ролик cacheboot:fe/ion/game/components/nhlpuckdisplay.big, класс NHLPuckDisplay: меню зовёт
+SetRedeemable(true) при показе и false при уходе, от mRedeemable зависят и подсказка, и IsRedeemable, по которому меню
+решает, открывать ли экран на X. Правка одна: SetRedeemable пишет в mRedeemable 0 вместо параметра (PushRegister 2 →
+PushByte 0, 2 байта той же длины). Подсказка не появляется, X в меню ничего не делает, значок и число остаются там же,
+где они стоят на остальных экранах. Снять: файл — из cache:, в сборке — --keep-redeem. Разбор — docs/coins.md.
+
 Только стандартная библиотека. Байткод — tools/feapt.py, локализация — tools/locdb.py.
 """
 import json, os, shutil, struct, sys
@@ -41,6 +50,7 @@ P = gameprofile.get('legacy')
 WORK = P.work_dir('menu-items', 'build')
 FILES = P.work_dir('menu-items', 'files.txt')
 MENUITEMS = 'fe/ion/game/menus/mainmenuitems.big'
+REDEEM = 'fe/ion/game/components/nhlpuckdisplay.big'              # значок и число монет, подсказка X REDEEM COINS
 LOC = 'fe/loc/NHL_ENG_US.db'
 OUT_AHL32 = os.path.join(os.path.dirname(P.out), 'out-ahl32')     # накладка legacy-data «АХЛ на 32»
 LOC_META = 'fe/loc/nhl_eng_us-meta.xml'
@@ -387,6 +397,26 @@ def plan(src, exit_mode='last', hide=None):
     return edits, hidden
 
 
+def plan_redeem(src):
+    """[(смещение, старые, новые)] для feapt.patch_bytes: SetRedeemable(redeemable) пишет в mRedeemable 0, а не параметр."""
+    mv, consts = feapt.load_movie(src)
+    code = feapt.Code(mv.apt.data, consts)
+    for _, off in feapt.code_blocks(mv):
+        ins = code.parse(off)
+        for name, fn in zip(ins, ins[1:]):
+            if fn.name != 'DefineFunction2' or name.args != ('SetRedeemable',):
+                continue
+            body = [(i.name, i.args) for i in fn.body[:4]]
+            if body != [('PushRegister', (1,)), ('PushConstant', ('mRedeemable',)), ('PushRegister', (2,)), ('SetMember', ())]:
+                raise SystemExit(f'{src}: SetRedeemable не та, что ждали: {body}')
+            reg = fn.body[2]
+            old = bytes(mv.apt.data[reg.off:reg.end])
+            if old != bytes.fromhex('b902'):
+                raise SystemExit(f'{src}: @{reg.off:#x} {old.hex()} вместо PushRegister 2')
+            return [(reg.off, old, bytes.fromhex('b500'))]              # PushByte 0
+    raise SystemExit(f'{src}: нет функции SetRedeemable — другой файл?')
+
+
 def loc_edits(src_db, dst_db, meta, edits):
     """Локализация: {ключ: текст} — своя строка в конец пула (locdb put: чужие ключи с тем же текстом не
     меняются); уже такой текст — без правки. → [(ключ, было, стало)]."""
@@ -464,6 +494,12 @@ def cmd_build(args):
         if arr.startswith('objMainMenu.') and any(arr == h[0] for h in hidden) or arr == ROOT:
             lines.append(f'  {arr.split(".")[-1]}: {", ".join(names)}')
     built = [MENUITEMS]
+    redeem = '--keep-redeem' not in args
+    if redeem:
+        src2, dst2 = legacy_src(REDEEM), p(work, REDEEM)
+        feapt.patch_bytes(src2, dst2, plan_redeem(src2), log=lambda *a: None)
+        built.append(REDEEM)
+        lines.append(f'{REDEEM}: подсказки X REDEEM COINS нет, значок и число монет остаются')
     loc = ({EXIT_KEY: EXIT_TEXT} if exit_mode != 'none' else {}) | ({} if '--keep-panel' in args else PANEL)
     if loc:
         sdb = p(P.out, LOC)
@@ -486,7 +522,7 @@ def cmd_build(args):
                 lines.append(f'  {key}: «{old[:40]}…» → «{new[:40]}…»' if old != new else f'  {key}: (уже)')
     open(os.path.join(work, 'build.log'), 'w', encoding='utf-8').write('\n'.join(lines) + '\n')
     json.dump({'exit': exit_mode, 'hide_spec': [list(h) for h in hide], 'hide': [list(h) for h in hidden],
-               'loc': loc, 'files': built},
+               'loc': loc, 'files': built, 'redeem': redeem},
               open(os.path.join(work, 'build.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
     for x in lines:
         log(x)
@@ -510,6 +546,22 @@ def cmd_build(args):
         with open(FILES, 'w', encoding='utf-8', newline='\n') as f:
             f.write(''.join(r + '\n' for r in built))
         log(f'→ {P.out}: {len(built)} файлов; список — {FILES}')
+
+
+def check_redeem(work):
+    """Ролик значка монет: разбирается, BIGF туда-обратно, от оригинала отличается ровно правкой plan_redeem."""
+    f, src = p(work, REDEEM), legacy_src(REDEEM)
+    data = open(f, 'rb').read()
+    mv, orig = febg.FeMovie(data), febg.FeMovie.load(src)
+    rt = febg.build_bigf(feapt.ph.Bigf(data)) == data
+    a0, a1 = orig.apt.data, mv.apt.data
+    [(o, old, new)] = plan_redeem(src)
+    diff = [k for k in range(min(len(a0), len(a1))) if a0[k] != a1[k]]
+    same = len(a0) == len(a1) and a1[o:o + len(new)] == new and all(o <= k < o + len(new) for k in diff)
+    other = {n: x for n, x in orig.raw.items() if n != '0'} == {n: x for n, x in mv.raw.items() if n != '0'}
+    log(f'{REDEEM}: {len(data)} байт, BIGF туда-обратно: {"да" if rt else "НЕТ"}; отличие от оригинала — только правка '
+        f'@{o:#x}: {"да" if same else "НЕТ"}; прочие записи BIGF те же: {"да" if other else "НЕТ"}')
+    return rt and same and other
 
 
 def cmd_check(args):
@@ -561,6 +613,8 @@ def cmd_check(args):
     if meta['exit'] != 'none' and EXIT_NAME not in vis.get(ROOT, []):
         ok = False
         log('  ОШИБКА: EXIT нет в корне')
+    if meta.get('redeem'):
+        ok = check_redeem(work) and ok
     for key, text in meta.get('loc', {}).items():
         t = loc_text(p(work, LOC), legacy_src(LOC_META), key)
         log(f'  {LOC}: {key} = «{t}»')

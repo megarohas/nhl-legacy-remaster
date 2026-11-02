@@ -157,7 +157,7 @@
 - `fefont.py` — шрифты интерфейса: свой TTF/OTF по метрикам шрифта игры или шрифт как есть (`--keep`)
 - `febg.py` — фон меню: разбор, перекраска, превью
 - `menu12_legacy.py` — главное меню NHL 12 в Legacy
-- `menuitems_legacy.py` — пункты меню Legacy: без онлайна, с EXIT
+- `menuitems_legacy.py` — пункты меню Legacy: без онлайна, с EXIT, без подсказки REDEEM COINS
 - `draft32_legacy.py` — доски драфта на 32 клуба (три колонки)
 - `year2026_legacy.py` — 2026 вместо 2015 в надписях
 - `menu12.py`, `menuplayers.py` — главное меню NHL 12 и игроки на его фоне в NHL 13; их функции использует `menu12_legacy.py`

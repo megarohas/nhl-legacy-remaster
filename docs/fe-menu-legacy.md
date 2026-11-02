@@ -371,16 +371,34 @@ NHL 12 проявлялась (`_alpha` 0 → 100 за `m_speedZoomIn` 90 кад
 
 Страницы 3 (Enforcer Engine) и 4 (Live the Life) — прежние.
 
+**Подсказка X REDEEM COINS скрыта** (решение пользователя 02.11.2026: монеты тратить не на что, кнопка вела только к
+окну «You must be signed in to Xbox Live and the EA servers»; потом, может быть, для неё найдётся дело). Значок и число
+монет остаются, разбор монет — [coins.md](coins.md).
+- Подсказка живёт в ролике значка `cacheboot:fe/ion/game/components/nhlpuckdisplay.big`, класс `NHLPuckDisplay`. Её
+  включает только `mainmenuitems.big`: `gESPNTicker.SetPucksRedeemable(true)` при показе меню, `false` при уходе. Другие
+  экраны её не показывают. На X (`OPTION_LEFT`) меню открывает экран монет, только если `ArePucksRedeemable()` — это тот
+  же признак.
+- Правка одна: в `SetRedeemable` вместо параметра пишется 0 (`this.mRedeemable = 0`, @0x7DC, `b9 02` PushRegister 2 →
+  `b5 00` PushByte 0, 2 байта той же длины). От `mRedeemable` зависят подсказка, ширина и `IsRedeemable`: подсказка не
+  появляется, значок встаёт к правому краю, как на остальных экранах, X ничего не делает.
+- Отдельный файл `cache:`, чужие правки меню не задевает. Экран `puckredemptionscreen.big` остаётся в игре, в него просто
+  нельзя попасть.
+- Вернуть: снять файл (`uninstall-legacy-data.sh`, ниже) или собрать с `--keep-redeem`.
+- Проверено в игре 02.11.2026 на копии userdata: главное меню и подменю PLAY — без подсказки, «P 123,456» у правого края,
+  X дважды — ничего, Play Now и экран GAME AWARDS — как раньше. Снятие файла проверено на той же копии.
+
 **Сборка, установка, откат.**
 
 ```bash
 python tools/menuitems_legacy.py build      # → game/work/legacy-data/menu-items/build и out; список — menu-items/files.txt
 python tools/menuitems_legacy.py check      # разбор: ролик целиком, отличия от оригинала — только правки, что в массивах
 python tools/menuitems_legacy.py list [FILE.big]   # все пункты: номер, имя, подпись, смещение push
+bash tools/legacy_data/install-legacy-data.sh fe/ion/game/components/nhlpuckdisplay.big    # только REDEEM COINS, при закрытой игре
+bash tools/legacy_data/uninstall-legacy-data.sh fe/ion/game/components/nhlpuckdisplay.big  # вернуть подсказку
 bash game/work/legacy-fe/install-legacy-fe.sh menu  # при закрытой игре, с бэкапом, ТОЛЬКО вместе с exe legacy-port; откат — uninstall-legacy-fe.sh menu
 ```
 
-`--exit before-featured` — EXIT перед FEATURED, `--exit none` — без EXIT; `--keep ИМЯ,…` — оставить пункты
+`--keep-redeem` — оставить подсказку X REDEEM COINS (файл уходит из `out`). `--exit before-featured` — EXIT перед FEATURED, `--exit none` — без EXIT; `--keep ИМЯ,…` — оставить пункты
 (например `TXT_COMMUNITY`); `--keep-panel` — прежние тексты панели описаний. Локализация в сборке — из `out` (база legacy-data); при пересборке локализации
 legacy-data подпись вернётся к «Xbox Live Marketplace» — тогда `menuitems_legacy.py build` ещё раз. Те же правки
 build вносит и в локализацию накладки «АХЛ на 32» (`game/work/legacy-data/out-ahl32/fe/loc/NHL_ENG_US.db`, CV/HSK):
