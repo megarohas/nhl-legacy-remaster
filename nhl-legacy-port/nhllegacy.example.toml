@@ -27,6 +27,8 @@ input_backend = "xinput"
 # nhl_shader_status = false
 # Заставка при запуске (каток, шайба по кругу, «Loading») вместо чёрного окна — до первого экрана игры.
 # nhl_splash = false
+# Свои вратарские маски в редакторе из userdata/cache/guest/nhllegacy_masks.txt («masktype maskid [preview_id] [подпись]»).
+# nhl_extra_masks = false
 # Монеты за матчи растут дальше 2 500, потолка сервера EA больше нет.
 # nhl_coins_no_cap = false
 

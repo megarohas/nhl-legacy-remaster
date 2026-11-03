@@ -128,8 +128,12 @@ bool FirstTime(std::atomic<uint64_t>* bits, int32_t id) {
 
 }  // namespace
 
-// 82BC2238(m, id) → открыта ли вещь id (0…131).
+void NhlLegacyMasksEditorLoop(PPCContext& ctx, uint8_t* base);  // nhllegacy_masks.cpp
+
+// 82BC2238(m, id) → открыта ли вещь id (0…131). Его же зовёт каждая запись цикла масок редактора: оттуда цикл переходит на
+// каталог со своими масками (nhllegacy_masks.cpp).
 extern "C" void sub_82BC2238(PPCContext& ctx, uint8_t* base) {
+  NhlLegacyMasksEditorLoop(ctx, base);
   const int32_t id = ctx.r4.s32;
   __imp__sub_82BC2238(ctx, base);
   if (Equipment() && id >= 0 && id < kItems && ctx.r3.u32 == 0) {

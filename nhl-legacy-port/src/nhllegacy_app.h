@@ -23,6 +23,7 @@ void NhlLegacyShaderStatusBegin(const std::filesystem::path& cache_root);
 void NhlLegacyShaderStatusEnd();
 void NhlLegacyShaderStatusStop();
 void NhlLegacySplashWindowOpened();  // nhllegacy_splash.cpp
+void NhlLegacyMasksSetRoot(const std::filesystem::path& guest_root);  // nhllegacy_masks.cpp
 
 class NhlLegacyApp : public rex::ReXApp {
  public:
@@ -72,6 +73,7 @@ class NhlLegacyApp : public rex::ReXApp {
     const std::filesystem::path cache_dir = cache_root() / "guest";
     std::error_code ec;
     std::filesystem::create_directories(cache_dir, ec);
+    NhlLegacyMasksSetRoot(cache_dir);  // nhllegacy_masks.txt — свои маски в редакторе
     auto device = std::make_unique<rex::filesystem::HostPathDevice>(
         "\\CACHE", cache_dir, /*read_only=*/false);
     auto* vfs = runtime()->file_system();
