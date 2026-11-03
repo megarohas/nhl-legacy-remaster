@@ -179,6 +179,30 @@ def png(folder, name):
 
 POSE = os.path.join(REPO, "game", "work", "legacy-data", "fepose", "pose.bin")  # модель позы EA (tools/fepose.py fit)
 _POSE = []
+# Сглаживание карты UV модели позы (03.11.2026, пользователь: «проверить сглаживание превьюшек форм в меню»; в игре рядом с
+# превью EA у наших края полос и низа шли лесенкой, у EA гладко): UV каждого пикселя превью подобраны по корреляции с
+# шумом ~0,5 px, и прямые края полос на превью ломались. Гаусс σ px по соседям того же острова развёртки (|Δu|, |Δv| <
+# FE_UV_SAME) — края полос ровные, гербы не мылятся (сглаживается отображение, не цвет). 0 — как было
+FE_UV_SMOOTH = 1.6
+FE_UV_SAME = 0.03
+
+
+def _uv_smooth(U, V, sig):
+    """Карта UV модели позы (NaN — не свитер) — гауссом σ px внутри островов развёртки. -> (U, V)."""
+    r = int(np.ceil(2.5 * sig))
+    fin = np.isfinite(U)
+    U0, V0 = np.where(fin, U, 0.0), np.where(fin, V, 0.0)
+    su, sv, sw = np.zeros_like(U0), np.zeros_like(V0), np.zeros_like(U0)
+    for dy in range(-r, r + 1):
+        for dx in range(-r, r + 1):
+            w = np.exp(-(dx * dx + dy * dy) / (2.0 * sig * sig))
+            Us, Vs, fs = (np.roll(np.roll(a, dy, 0), dx, 1) for a in (U0, V0, fin))
+            ok = fs & fin & (np.abs(Us - U0) < FE_UV_SAME) & (np.abs(Vs - V0) < FE_UV_SAME)
+            su += np.where(ok, Us, 0.0) * w
+            sv += np.where(ok, Vs, 0.0) * w
+            sw += ok * w
+    good = fin & (sw > 0)
+    return np.where(good, su / np.maximum(sw, 1e-9), U), np.where(good, sv / np.maximum(sw, 1e-9), V)
 
 
 def _pose():
@@ -204,6 +228,8 @@ def _pose():
                     warnings.simplefilter("ignore", RuntimeWarning)
                     mu, mv = np.nanmedian(su, 0), np.nanmedian(sv, 0)
             U, V = np.where(iso, mu, U), np.where(iso, mv, V)
+        if FE_UV_SMOOTH:                                 # шум подгонки UV — лесенка краёв полос (03.11.2026)
+            U, V = _uv_smooth(U, V, FE_UV_SMOOTH)
         m["U"], m["V"] = U, V
         m["u"], m["v"] = U[m["ys"], m["xs"]], V[m["ys"], m["xs"]]
         _POSE.append(m)
