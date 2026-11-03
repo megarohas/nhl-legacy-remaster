@@ -1434,8 +1434,8 @@ python tools/legacy_data/nhl24.py verify ПАПКА_CACHE                 # cach
   самый частый цвет зон части (щитки, блин, ловушка) → `base`, следующие по частоте → `accent1`, `accent2`; зоны Legacy по
   ролям — как в белом наборе (2, 3, 5 — графика): `roles` base 1, 4, 6–9, accent1 2–3, accent2 5; клюшка — `stick_roles`
   (1, 2, 3 из 6 зон NHL 27). Нет второго или третьего цвета — чёрный (у светлой основы) или белый;
-- модели щитков, блина, ловушки и маска — как у белого набора (маски NHL 27 itech 420, 515, 516, 609, 85 выгружены, перенос на
-  маску Legacy не сделан);
+- модели щитков, блина, ловушки — как у белого набора; маска — его маска NHL 27, перенесённая `fb.masks` в свободный номер
+  Legacy 292–296 ([goalie-masks.md](goalie-masks.md)); `--clubs` — применить только к этим клубам;
 - поля: `exhibitiongoalieequipment` `padszone1..9color_r/g/b`, `blockerzone1..9color_r/g/b`, `trapperzone1..9color_r/g/b`,
   `stickzone1..3color_r/g/b` (и `showcustomcolors`, `showcustomstick` = 1, как у белого).
 

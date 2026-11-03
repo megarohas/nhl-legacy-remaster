@@ -1,0 +1,24 @@
+# Маски вратарей NHL 27 в свободных номерах масок NHL Legacy (fb.masks, docs/goalie-masks.md).
+# [mask.<номер Legacy>]: nhl27 — номер маски itech NHL 27 (goalie_helmet_itech_<N>_color), masktype — тип маски Legacy
+# (0 — itech, helmet_0_*), name — подпись. Номера 0…291 типа 0 заняты EA, поле maskid — 9 бит (до 511).
+# 03.11.2026, пользователь: «перенос вратарских шлемов Юты, Вегаса и Сиэтла»; номер NHL 27 — у вратаря в nhl_game.db.
+
+[mask.292]
+nhl27 = 420
+name = "Seattle Kraken (Grubauer, Daccord)"
+
+[mask.293]
+nhl27 = 515
+name = "Utah Mammoth (Cossa)"
+
+[mask.294]
+nhl27 = 516
+name = "Utah Mammoth (Vejmelka)"
+
+[mask.295]
+nhl27 = 609
+name = "Vegas Golden Knights (Hill)"
+
+[mask.296]
+nhl27 = 85
+name = "Vegas Golden Knights (Hart)"

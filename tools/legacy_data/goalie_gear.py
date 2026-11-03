@@ -4,6 +4,7 @@
 
     python tools/legacy_data/goalie_gear.py db БАЗА.db [БАЗА.db …] [--dry-run]   # nhlng.db, draft_roster.db
     python tools/legacy_data/goalie_gear.py save СЕЙВ [--write]                   # сохранённый состав (ROSTER …)
+    … [--clubs "Utah Mammoth,Seattle Kraken"]   # только вратари этих клубов (остальные — как есть в базе/сейве)
 
 Как устроено (разбор 12.10.2026, docs/legacy-data.md, «Экипировка вратарей»):
 - набор клуба — строка stockgoalieequipment с team = клуб + 1: модели щитков, блина, ловушки и клюшки, маска
@@ -18,7 +19,8 @@
   keepcustomiftraded, keepcustomstickiftraded;
 - mask_names (по желанию): набор клуба, но маска своя;
 - nhl27_colors (03.11.2026): у клубов списка (UTA, SEA, VGK) белый набор красится цветами зон вратаря из NHL 27 (палитра:
-  самый частый цвет → base, следующие → accent1/accent2 по roles; модели и маска — белого набора);
+  самый частый цвет → base, следующие → accent1/accent2 по roles; модели — белого набора), маска — его маска NHL 27,
+  перенесённая fb.masks в свободный номер (tools/fb/mask_slots.toml), если она там есть;
 - без набора (SEA, VGK, CV, HSK) и клубы из white_names (все спорные — решение пользователя 12.10) (наборы прежних клубов на переименованных
   слотах, у Юты — Аризоны): модели вратаря свои, маска 0/120 (белая), цвета зон — white.zones и white.stick,
   showcustomcolors и showcustomstick = 1.
@@ -86,6 +88,7 @@ def palettes27(path=NHL27_DB):
         for part in ('pads', 'blocker', 'trapper'):
             v[part] = [rgb(db.get(EQ, f'{part}zone{z}color', e)) for z in range(1, 16)]
         v['stick'] = [rgb(db.get(EQ, f'stickzone{z}color', e)) for z in range(1, 7)]
+        v['mask'] = db.get(EQ, 'maskid', e) if db.get(EQ, 'masktype', e) == 0 else None
         _P27[(db.get_string(B, 'firstname', r).lower(), db.get_string(B, 'lastname', r).lower())] = v
     return _P27
 
@@ -125,7 +128,22 @@ def nhl27_values(sp, vals, first, last, club):
         for z in zones:
             for c, x in zip('rgb', pal[role]):
                 vals[f'stickzone{z}color_{c}'] = x
+    mk = masks27().get(src.get('mask'))         # маска NHL 27, перенесённая в свободный номер Legacy (fb.masks)
+    if mk is not None:
+        vals['masktype'], vals['maskid'] = mk
+        how += f', маска {mk[0]}/{mk[1]} ← NHL 27 itech {src["mask"]}'
     return vals, how
+
+
+def masks27():
+    """Номер маски itech NHL 27 → (masktype, maskid) Legacy из tools/fb/mask_slots.toml (маски, перенесённые fb.masks)."""
+    import tomllib
+    p = os.path.join(ROOT, 'tools', 'fb', 'mask_slots.toml')
+    if not os.path.isfile(p):
+        return {}
+    with open(p, 'rb') as f:
+        plan = tomllib.load(f).get('mask', {})
+    return {int(v['nhl27']): (int(v.get('masktype', 0)), int(k)) for k, v in plan.items()}
 
 
 def plan(db):
@@ -244,7 +262,15 @@ def write_db(path, db, meta):
     os.replace(tmp, path)
 
 
-def cmd_db(paths, dry):
+def only_clubs(pl, clubs):
+    """План только для вратарей клубов clubs (названия через запятую; None — все)."""
+    if not clubs:
+        return pl
+    names = [c.strip() for c in clubs.split(',') if c.strip()]
+    return {g: v for g, v in pl.items() if any(v[1].startswith(n + ':') for n in names)}
+
+
+def cmd_db(paths, dry, clubs=None):
     for path in paths:
         meta = meta_for(path)
         db = Tdb(open(path, 'rb').read(), meta)
@@ -253,6 +279,7 @@ def cmd_db(paths, dry):
             nh = os.path.join(os.path.dirname(path), 'nhlng.db')
             src = Tdb(open(nh, 'rb').read(), meta)
         pl, summary = plan(src)
+        pl = only_clubs(pl, clubs)
         players, values = apply_plan(db, pl)
         print(f'{path}: вратарей изменено {players}, значений {values}' + (' (план — по nhlng.db рядом)'
                                                                             if src is not db else ''))
@@ -269,11 +296,12 @@ def cmd_db(paths, dry):
             write_db(path, db, meta)
 
 
-def cmd_save(save, write):
+def cmd_save(save, write, clubs=None):
     meta = load_meta(CACHE_META)
     raw = open(save, 'rb').read()
     sf = SaveFile(raw, meta)
     pl, summary = plan(sf.db)
+    pl = only_clubs(pl, clubs)
     players, values = apply_plan(sf.db, pl)
     print(f'{save}: вратарей изменено {players}, значений {values}')
     report(summary, pl)
@@ -301,11 +329,12 @@ def main(argv):
         print(__doc__)
         sys.exit(2)
     rest = argv[1:]
-    paths = [a for a in rest if not a.startswith('--')]
+    clubs = rest[rest.index('--clubs') + 1] if '--clubs' in rest else None
+    paths = [a for a in rest if not a.startswith('--') and a != clubs]
     if argv[0] == 'db':
-        cmd_db(paths, '--dry-run' in rest)
+        cmd_db(paths, '--dry-run' in rest, clubs)
     else:
-        cmd_save(paths[0], '--write' in rest)
+        cmd_save(paths[0], '--write' in rest, clubs)
 
 
 if __name__ == '__main__':
