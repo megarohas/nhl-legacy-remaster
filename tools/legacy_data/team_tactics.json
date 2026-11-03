@@ -1,0 +1,3001 @@
+{
+ "_doc": "Стратегии 32 клубов НХЛ для NHL Legacy: открытые данные о системах игры (ресёрч 03.11.2026, сезоны 2025/26–2026/27) и косвенные признаки из API НХЛ. Значения — названия вариантов меню игры; «nhl27» — взять из локальной базы NHL 27 (только поля с одинаковым смыслом), поле не указано — не менять. Применяет tools/legacy_data/team_tactics.py, описание — docs/team-tactics.md.",
+ "_version": 1,
+ "clubs": {
+  "ANA": {
+   "coach": "Joel Quenneville",
+   "team": {
+    "forecheck": {
+     "value": "2-3",
+     "why": "ресёрч (слабый источник): Coach history: THN's preview says Quenneville's 2021-22 Panthers used a 2-1-2 offensive-zone forecheck. At Ducks camp (Sep 2025) the staff said the OZ forecheck was still to be installed; a preseason blog noted F2 second-wave pressure winning pucks deep. No 2025-27 Ducks-specific confirmation found. 2-1-2 в игре — «2-3»: два ближних нападающих давят."
+    },
+    "neutral_zone": {
+     "value": "1-2-2 red",
+     "why": "ресёрч (слабый источник): Coach history: his Florida team used a 1-2-2 in the neutral zone (source does not say red-line vs blue-line; 'red line' is my inference from the possession/regroup emphasis)."
+    },
+    "trap_forecheck": {
+     "value": 4,
+     "why": "темп «medium» (слабый источник) + форчек «2-1-2 / 2-3 aggressive»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "standard",
+     "why": "темп «medium» (слабый источник)."
+    },
+    "defense": {
+     "value": "collapsing",
+     "why": "ресёрч (вероятно): At 2025 camp the Ducks dropped the Cronin/Eakins man-to-man for a zone-based 'pressure defense' that out-mans the puck area while keeping a safety valve in the middle; his Florida team ran a box-plus-one zone keeping opponents to the perimeter."
+    },
+    "dpressure": {
+     "value": "contain puck",
+     "why": "зонная «zone / collapsing / protect the house», темп «medium»."
+    },
+    "pp": {
+     "value": "umbrella",
+     "why": "ресёрч (вероятно): Sep 2025 preseason PP1: LaCombe up top, Sennecke and Carlsson on the flanks, Terry in the bumper, Kreider at the net front (a 1-3-1). 1-3-1 в игре — «Umbrella» (один у синей, двое на броски с ходу)."
+    },
+    "pk": {
+     "value": "passive box",
+     "why": "ресёрч (вероятно): Preseason observer: the Ducks played 'a classic box' that was not overly aggressive and conceded perimeter time; no regular-season breakdown found."
+    }
+   },
+   "lines": {
+    "style": [
+     "behind the net",
+     "behind the net",
+     null,
+     null
+    ],
+    "why": "ресёрч (вероятно): Coach history describes cycle-based, possession-first offence; in 2025 preseason the Ducks held pucks longer, used weak-side support and set up a cycle instead of shooting from distance. Стиль клуба — первым двум звеньям; 3-е и 4-е — как у EA."
+   },
+   "sliders": {
+    "carry_dump": {
+     "lines": [
+      1,
+      1,
+      4,
+      5
+     ],
+     "why": "ресёрч (вероятно): Quenneville stressed 'a premium on possession'; his Florida teams carried through centre ice and chipped pucks deep only as a last option; Ducks preseason showed slow, controlled breakouts instead of high flips. 0 — заносить, 10 — вбрасывать; цель 3 (среднее по звеньям, разница между звеньями — как у EA)."
+    },
+    "pinch": {
+     "lines": [
+      7,
+      5,
+      7
+     ],
+     "why": "ресёрч (слабый источник): Coach history: defensemen were as involved as forwards in transition and the offensive zone; THN expected this to suit LaCombe, Zellweger, Mintyukov. No 2025-26 measurement found. 0 — держать синюю, 10 — подключаться; цель 6 (среднее по парам, разница между парами — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      7,
+      7,
+      7,
+      7
+     ],
+     "why": "API НХЛ: бросков за матч 30.0 (4-е место); 0 — разыгрывать, 10 — бросать."
+    },
+    "block": {
+     "lines": [
+      2,
+      2,
+      5,
+      7
+     ],
+     "why": "API НХЛ: блоков за 60 мин 14.3 (15-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      3,
+      3,
+      6,
+      7
+     ],
+     "why": "API НХЛ: силовых за 60 мин 21.3 (12-е место), темп «medium»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://thehockeynews.com/nhl/anaheim-ducks/game-day/preseason-live-blog-utah-mammoth-vs-anaheim-ducks",
+    "https://thehockeynews.com/nhl/anaheim-ducks/latest-news/anaheim-ducks-training-camp-new-defensive-zone-system",
+    "https://thehockeynews.com/nhl/anaheim-ducks/latest-news/joel-quennevilles-on-ice-impact-with-the-ducks"
+   ],
+   "stats": {
+    "shotsForPerGame": 29.958,
+    "hitsPer60": 21.27,
+    "blockedShotsPer60": 14.274,
+    "takeawaysPer60": 4.757,
+    "satPct": 0.515,
+    "games": 96
+   }
+  },
+  "WPG": {
+   "coach": "Scott Arniel",
+   "team": {
+    "neutral_zone": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    },
+    "trap_forecheck": {
+     "value": 3,
+     "why": "темп «medium» (слабый источник) + форчек «не найден»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "standard",
+     "why": "темп «medium» (слабый источник)."
+    },
+    "defense": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    },
+    "dpressure": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    }
+   },
+   "lines": {},
+   "sliders": {
+    "pinch": {
+     "lines": [
+      8,
+      6,
+      5
+     ],
+     "why": "ресёрч (слабый источник): Coach history: under Bowness (Arniel was associate coach, 2022-24) defensemen were encouraged to join the rush (THW, via search snippet). Not confirmed for Arniel's own tenure. 0 — держать синюю, 10 — подключаться; цель 6 (среднее по парам, разница между парами — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      4,
+      4,
+      4,
+      4
+     ],
+     "why": "API НХЛ: бросков за матч 26.4 (24-е место); 0 — разыгрывать, 10 — бросать."
+    },
+    "block": {
+     "lines": [
+      4,
+      6,
+      7,
+      6
+     ],
+     "why": "API НХЛ: блоков за 60 мин 13.5 (23-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      4,
+      4,
+      6,
+      5
+     ],
+     "why": "API НХЛ: силовых за 60 мин 21.8 (8-е место), темп «medium»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://dailyfaceoff.com/news/why-winnipeg-jets-scott-arniel-deserves-more-love-in-the-jack-adams-award-race",
+    "https://thehockeywriters.com/winnipeg-jets-that-have-improved-under-bowness/",
+    "https://www.nhl.com/jets/video/lowry-26-09-18-6405255770112"
+   ],
+   "stats": {
+    "shotsForPerGame": 26.361,
+    "hitsPer60": 21.838,
+    "blockedShotsPer60": 13.497,
+    "takeawaysPer60": 4.026,
+    "satPct": 0.488,
+    "games": 97
+   }
+  },
+  "BOS": {
+   "coach": "Marco Sturm",
+   "team": {
+    "forecheck": {
+     "value": "1-2-2 passive",
+     "why": "ресёрч (слабый источник): BSJ (free preview) says a passive mentality crept into the forecheck as the team leaned on its trap in 2025-26, and the club wants a situational, more attacking forecheck in 2026-27 ('hybrid approach'). Exact O-zone formation not published; 1-2-2 is inference from the trap-first identity."
+    },
+    "neutral_zone": {
+     "value": "1-3-1",
+     "why": "ресёрч (вероятно): NHL.com (de) preview names the Kings' 1-3-1 against the puck (Sturm was a Kings assistant) as a likely key of his Bruins system, slowing the opponent in the NZ and forcing play to the boards; BSJ describes Boston settling into a 'neutral zone-clogging shell' and trapping style in 2025-26."
+    },
+    "trap_forecheck": {
+     "value": 1,
+     "why": "темп «medium-low (2025-26: trap, 3-2/2-1 games); aiming higher in 2026-27» (вероятно) + форчек «1-2-2 passive»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "standard",
+     "why": "темп «medium-low (2025-26: trap, 3-2/2-1 games); aiming higher in 2026-27» (вероятно)."
+    },
+    "defense": {
+     "value": "staggered",
+     "why": "ресёрч (точно): Sturm said the old box-and-one became a hybrid where players 'go with your man' when there is motion; Globe says the system switches zone/man-to-man on the fly and aims to outnumber opponents in any area."
+    },
+    "dpressure": {
+     "value": "normal",
+     "why": "смешанная опека «hybrid / staggered»."
+    },
+    "pp": {
+     "value": "umbrella",
+     "why": "ресёрч (точно): Sturm names the 1-3-1: McAvoy point QB, Pastrnak left-circle one-timer, Peterka right elbow, Geekie bumper (E. Lindholm there in 2025-26), Zacha net front. Built by assistant Steve Spott; PP went 29th -> 9th (23.4%). 1-3-1 в игре — «Umbrella» (один у синей, двое на броски с ходу)."
+    }
+   },
+   "lines": {
+    "style": [
+     "overload",
+     "overload",
+     null,
+     null
+    ],
+    "why": "ресёрч (слабый источник): 2026-27 camp emphasis: defensemen join as the 'fourth guy up the rush' to buy time for forwards; 2025 camp described as straight-line hockey with a punishing forecheck. No source on cycle vs rush share. Стиль клуба — первым двум звеньям; 3-е и 4-е — как у EA."
+   },
+   "sliders": {
+    "pinch": {
+     "lines": [
+      6,
+      8,
+      5
+     ],
+     "why": "ресёрч (точно): Since 2026 camp the staff drills automatic D activation 'in the first few steps'; D had 5 goals in 7 games vs 20 games last year; Lindholm says D still read when to stay back. 0 — держать синюю, 10 — подключаться; цель 6 (среднее по парам, разница между парами — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      4,
+      4,
+      4,
+      4
+     ],
+     "why": "API НХЛ: бросков за матч 26.9 (21-е место); 0 — разыгрывать, 10 — бросать."
+    },
+    "block": {
+     "lines": [
+      6,
+      6,
+      8,
+      8
+     ],
+     "why": "API НХЛ: блоков за 60 мин 14.9 (8-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      5,
+      7,
+      8,
+      9
+     ],
+     "why": "API НХЛ: силовых за 60 мин 22.2 (5-е место), темп «medium-low (2025-26: trap, 3-2/2-1 games); aiming higher in 2026-27»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://bostonglobe.com/2026/10/15/sports/bruins-marco-sturm-defense-scoring",
+    "https://www.boston.com/sports/boston-bruins/2026/09/23/boston-bruins-jj-peterka-nhl-hockey-power-play-david-pastrnak/",
+    "https://www.bostonglobe.com/2025/10/24/sports/marco-sturm-bruins/",
+    "https://www.bostonglobe.com/2025/11/20/sports/bruins-coach-marco-sturm/",
+    "https://www.bostonsportsjournal.com/2026/09/03/haggerty-bruins-looking-to-tweak-passive-approach",
+    "https://www.nhl.com/bruins/news/practice-report-sturm-lindholm-talk-early-defensive-production",
+    "https://www.nhl.com/de/news/32-in-32-drei-fragen-boston-bruins-saison-2025-26"
+   ],
+   "stats": {
+    "shotsForPerGame": 26.908,
+    "hitsPer60": 22.172,
+    "blockedShotsPer60": 14.87,
+    "takeawaysPer60": 4.453,
+    "satPct": 0.49,
+    "games": 98
+   }
+  },
+  "BUF": {
+   "coach": "Lindy Ruff",
+   "team": {
+    "forecheck": {
+     "value": "2-3",
+     "why": "ресёрч (вероятно): R1 2026 recaps credit Buffalo's forecheck pressure for beating Boston 4-2; THW calls it 'an aggressive forechecking style'. No source gives the F1/F2 structure, so 1-2-2 vs 2-1-2 is unknown. Схема не названа; прежний вариант EA и так агрессивный — оставлен."
+    },
+    "neutral_zone": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    },
+    "trap_forecheck": {
+     "value": 5,
+     "why": "темп «high (fast transition, heavy forecheck)» (вероятно) + форчек «aggressive (formation not found)»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "aggressive",
+     "why": "темп «high (fast transition, heavy forecheck)» (вероятно)."
+    },
+    "defense": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    },
+    "dpressure": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    },
+    "pk": {
+     "value": "large box",
+     "why": "ресёрч (слабый источник): Fact: 4th-best PK (81.9%) in 2025-26 and Ryan McLeod led the NHL with 5 shorthanded goals. Inference: a PK that produces that many SHG plays with pressure; no formation stated."
+    }
+   },
+   "lines": {
+    "style": [
+     "overload",
+     "overload",
+     null,
+     null
+    ],
+    "why": "ресёрч (вероятно): Ruff (2025 Global Series camp) wants the team to attack by skating the puck up with D joining rather than dumping; opponents (Leafs, Ruff era) game-plan against Buffalo's speed and goals off the rush. 2026 PP plan: control the puck low. Стиль клуба — первым двум звеньям; 3-е и 4-е — как у EA."
+   },
+   "sliders": {
+    "carry_dump": {
+     "lines": [
+      0,
+      2,
+      3,
+      5
+     ],
+     "why": "ресёрч (вероятно): NHL.com (cs) piece: Ruff wants defensemen to rush the puck up ice rather than just dump it in, with a forward covering behind. 0 — заносить, 10 — вбрасывать; цель 3 (среднее по звеньям, разница между звеньями — как у EA)."
+    },
+    "pinch": {
+     "lines": [
+      7,
+      8,
+      6
+     ],
+     "why": "ресёрч (точно): Ruff's 'active defense' theme: D (Dahlin, Power, Byram) join the attack and a forward fills in; opponents warn about Sabres D 'joining in late in the rush'. 0 — держать синюю, 10 — подключаться; цель 7 (среднее по парам, разница между парами — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      5,
+      5,
+      5,
+      5
+     ],
+     "why": "API НХЛ: бросков за матч 28.1 (13-е место); 0 — разыгрывать, 10 — бросать."
+    },
+    "block": {
+     "lines": [
+      4,
+      5,
+      7,
+      7
+     ],
+     "why": "API НХЛ: блоков за 60 мин 13.9 (20-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      4,
+      6,
+      7,
+      9
+     ],
+     "why": "API НХЛ: силовых за 60 мин 19.0 (25-е место), темп «high (fast transition, heavy forecheck)»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://thehockeywriters.com/?p=1654697",
+    "https://theleafsnation.com/news/craig-berube-jake-mccabe-focused-on-preventing-sabres-chances-off-the-rush",
+    "https://www.nhl.com/cs/news/sabres-chteji-v-praze-hrat-s-aktivni-obranou",
+    "https://www.nhl.com/de/news/die-besten-unterzahleinheiten-der-saison-2025-26",
+    "https://www.nhl.com/sabres/news/buffalo-sabres-training-camp-jarmo-kekalainen-lindy-ruff",
+    "https://www.wivb.com/sports/buffalo-sabres/sabres-bury-bruins-in-boston-to-claim-first-playoff-series-victory-in-19-years/amp/"
+   ],
+   "stats": {
+    "shotsForPerGame": 28.115,
+    "hitsPer60": 18.96,
+    "blockedShotsPer60": 13.927,
+    "takeawaysPer60": 4.82,
+    "satPct": 0.499,
+    "games": 96
+   }
+  },
+  "CGY": {
+   "coach": "Ryan Huska",
+   "team": {
+    "neutral_zone": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    },
+    "trap_forecheck": {
+     "value": 3,
+     "why": "темп «medium» (слабый источник) + форчек «не найден»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "standard",
+     "why": "темп «medium» (слабый источник)."
+    },
+    "defense": {
+     "value": "collapsing",
+     "why": "ресёрч (вероятно): When Huska took over (2023) Calgary switched from Sutter's man-on-man to a zone scheme: four quadrants for wingers/D plus a very active centre helping low, aim is to keep shooters outside the slot. Not re-confirmed for 2025-26 specifically."
+    },
+    "dpressure": {
+     "value": "contain puck",
+     "why": "зонная «zone / collapsing / protect the house», темп «medium»."
+    }
+   },
+   "lines": {
+    "style": [
+     "overload",
+     "overload",
+     null,
+     null
+    ],
+    "why": "ресёрч (слабый источник): Only weak support: team quotes say they are dangerous 'when we're fast in the neutral zone'; Huska tied the poor 2025-26 PP to a lack of team speed. No shot-share or cycle data found. Стиль клуба — первым двум звеньям; 3-е и 4-е — как у EA."
+   },
+   "sliders": {
+    "pinch": {
+     "lines": [
+      6,
+      6,
+      4
+     ],
+     "why": "ресёрч (слабый источник): Under the 2023 system Huska trusted a winger or centre to cover for defencemen caught deep in the offensive zone, i.e. activation is allowed with F3 cover. Inference about degree. 0 — держать синюю, 10 — подключаться; цель 5 (среднее по парам, разница между парами — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      5,
+      5,
+      5,
+      5
+     ],
+     "why": "API НХЛ: бросков за матч 28.1 (15-е место); 0 — разыгрывать, 10 — бросать."
+    },
+    "block": {
+     "lines": [
+      6,
+      4,
+      8,
+      7
+     ],
+     "why": "API НХЛ: блоков за 60 мин 14.6 (10-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      3,
+      4,
+      7,
+      7
+     ],
+     "why": "API НХЛ: силовых за 60 мин 20.5 (15-е место), темп «medium»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://flamesnation.ca/news/how-has-the-new-defensive-system-worked-for-the-calgary-flames",
+    "https://flamesnation.ca/news/the-flames-power-play-struggled-in-2025-26",
+    "https://tsn.ca/nhl/valji-flames-counting-on-new-coach-ryan-huska-to-bring-swagger-back-to-calgary-1.1972432",
+    "https://www.tsn.ca/nhl/salim-valji-calgary-flames-get-back-to-checking-roots-after-lopsided-loss-to-tampa-bay-lightning-1.2219882"
+   ],
+   "stats": {
+    "shotsForPerGame": 28.103,
+    "hitsPer60": 20.511,
+    "blockedShotsPer60": 14.61,
+    "takeawaysPer60": 4.388,
+    "satPct": 0.495,
+    "games": 97
+   }
+  },
+  "CAR": {
+   "coach": "Rod Brind'Amour",
+   "team": {
+    "forecheck": {
+     "value": "1-2-2 aggressive",
+     "why": "ресёрч (точно): Jack Han calls CAR 'the best forechecking team in the NHL' with a 1-2-2 that forces play wide (F1 speed, F2 tenacity, F3 reads); scouting report: mixes 1-2-2 and 2-1-2, both aggressive with 2-3 players deep. Forecheck still the core identity in 2025-26 previews."
+    },
+    "neutral_zone": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    },
+    "trap_forecheck": {
+     "value": 5,
+     "why": "темп «high (relentless forecheck, man-to-man pressure everywhere)» (точно) + форчек «1-2-2 aggressive (switches to 2-1-2 by situation)»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "aggressive",
+     "why": "темп «high (relentless forecheck, man-to-man pressure everywhere)» (точно)."
+    },
+    "defense": {
+     "value": "tight point",
+     "why": "ресёрч (точно): Multiple sources: CAR has played man-to-man D-zone coverage for years under Brind'Amour, players follow their checks rather than protect the slot, creating pressure at the blue line. Персональная опека в игре — «Tight Point» + высокое давление."
+    },
+    "dpressure": {
+     "value": "high pressure",
+     "why": "опека «man-to-man / swarm / high pressure», темп «high (relentless forecheck, man-to-man pressure everywhere)»."
+    },
+    "pk": {
+     "value": "large box",
+     "why": "ресёрч (точно): Brind'Amour: 'everyone knows we're aggressive, but at the right times'; PK is an extension of the forecheck, Staal: 'predicated on pressure'. NHL-best PK% over seven seasons to 2025; 11th (80.5%) in 2025-26 with Slavin hurt."
+    }
+   },
+   "lines": {
+    "style": [
+     "behind the net",
+     "behind the net",
+     null,
+     null
+    ],
+    "why": "ресёрч (вероятно): Offense built on forcing turnovers and keeping pucks in the O-zone; NHL.com preview: aggressive forecheck built around a puck-possession style. Стиль клуба — первым двум звеньям; 3-е и 4-е — как у EA."
+   },
+   "sliders": {
+    "carry_dump": {
+     "lines": [
+      6,
+      5,
+      6,
+      9
+     ],
+     "why": "ресёрч (вероятно): Scouting report: CAR dumps pucks in and is much better at retrieving them (e.g., Slavin dump, Trocheck board win, goal). 0 — заносить, 10 — вбрасывать; цель 7 (среднее по звеньям, разница между звеньями — как у EA)."
+    },
+    "pinch": {
+     "lines": [
+      7,
+      7,
+      6
+     ],
+     "why": "ресёрч (вероятно): Defensemen regularly pinch as part of the forecheck to keep pucks in. 0 — держать синюю, 10 — подключаться; цель 7 (среднее по парам, разница между парами — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      8,
+      8,
+      8,
+      8
+     ],
+     "why": "API НХЛ: бросков за матч 32.3 (2-е место); 0 — разыгрывать, 10 — бросать."
+    },
+    "block": {
+     "lines": [
+      3,
+      3,
+      4,
+      5
+     ],
+     "why": "API НХЛ: блоков за 60 мин 11.3 (32-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      4,
+      5,
+      8,
+      9
+     ],
+     "why": "API НХЛ: силовых за 60 мин 19.8 (21-е место), темп «high (relentless forecheck, man-to-man pressure everywhere)»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://blueseatblogs.com/2022/05/18/scouting-the-hurricanes-systems",
+    "https://jhanhky.substack.com/p/inside-view-car-oz-forecheck-vs-tbl",
+    "https://rinkrapmc.com/2025/11/01/canes-at-bruins-3/",
+    "https://thehockeywriters.com/?p=1696274",
+    "https://www.nhl.com/news/carolina-hurricanes-season-preview-2025-26",
+    "https://www.nhl.com/news/topic/playoffs/penalty-kill-in-sync-for-carolina-hurricanes-during-playoffs",
+    "https://www.thescore.com/nhl/news/3287929"
+   ],
+   "stats": {
+    "shotsForPerGame": 32.316,
+    "hitsPer60": 19.809,
+    "blockedShotsPer60": 11.266,
+    "takeawaysPer60": 5.495,
+    "satPct": 0.59,
+    "games": 98
+   }
+  },
+  "CHI": {
+   "coach": "Jeff Blashill",
+   "team": {
+    "forecheck": {
+     "value": "2-3",
+     "why": "ресёрч (точно): Sun-Times (Oct 16, 2026): Hawks primarily use a 2-1-2 - two forwards pressure the retrieving D, F3 is a second layer who can drop in; they can retreat into a passive 1-1-3. Blashill: 'We want to be a puck-pursuit team.' 2-1-2 в игре — «2-3»: два ближних нападающих давят."
+    },
+    "neutral_zone": {
+     "value": "1-2-2 blue",
+     "why": "ресёрч (слабый источник): No NZ shape named; Blashill wants 'a pressure team when we don't have the puck' and D to step up on pucks rimmed up the boards when F3 covers; passive 1-1-3 is the situational fallback. Category is my inference."
+    },
+    "trap_forecheck": {
+     "value": 5,
+     "why": "темп «high» (вероятно) + форчек «2-1-2 / 2-3 aggressive»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "aggressive",
+     "why": "темп «high» (вероятно)."
+    },
+    "defense": {
+     "value": "staggered",
+     "why": "ресёрч (точно): Blashill (Sep 2025): when the puck is low 'we want five in our quadrant' (zone, outnumber), when it goes high 'we're going into our man right away in man-on-man'."
+    },
+    "dpressure": {
+     "value": "normal",
+     "why": "смешанная опека «hybrid / staggered»."
+    },
+    "pp": {
+     "value": "umbrella",
+     "why": "ресёрч (слабый источник): Only personnel found: one D quarterback per unit (Rinzel / Levshunov) and Blashill saying Bedard can play 'both flanks'. 1-3-1 is my inference from one-D + flank usage. 1-3-1 в игре — «Umbrella» (один у синей, двое на броски с ходу)."
+    },
+    "pk": {
+     "value": "diamond",
+     "why": "ресёрч (вероятно): NHL.com (DE, Jul 2026): Chicago's 2025-26 PK (83.6%, 2nd in NHL) used a diamond, executed consistently and usually aggressively. Several PK regulars (Murphy, Dickinson, Foligno, Mikheyev) have since left."
+    }
+   },
+   "lines": {},
+   "sliders": {
+    "carry_dump": {
+     "lines": [
+      4,
+      4,
+      8,
+      9
+     ],
+     "why": "ресёрч (слабый источник): Blashill encourages flipping pucks into the NZ or off the glass when no forward is open; article does not say he prefers dump-ins over carries. 0 — заносить, 10 — вбрасывать; цель 6 (среднее по звеньям, разница между звеньями — как у EA)."
+    },
+    "pinch": {
+     "lines": [
+      9,
+      7,
+      6
+     ],
+     "why": "ресёрч (вероятно): Blashill wants his big, mobile D to 'get them into people right away'; D step up on pucks cleared up the boards only when F3 is high enough. 0 — держать синюю, 10 — подключаться; цель 7 (среднее по парам, разница между парами — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      2,
+      2,
+      2,
+      2
+     ],
+     "why": "API НХЛ: бросков за матч 24.4 (32-е место); 0 — разыгрывать, 10 — бросать."
+    },
+    "block": {
+     "lines": [
+      2,
+      1,
+      6,
+      6
+     ],
+     "why": "API НХЛ: блоков за 60 мин 12.1 (30-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      3,
+      3,
+      7,
+      8
+     ],
+     "why": "API НХЛ: силовых за 60 мин 16.2 (32-е место), темп «high»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://chicago.suntimes.com/blackhawks/2026/10/12/connor-bedard-returns-blackhawks-power-play-patrick-kane",
+    "https://chicago.suntimes.com/blackhawks/2026/10/16/blackhawks-forward-lineup-strategy-forechecking-puck-pressure",
+    "https://thehockeynews.com/nhl/chicago-blackhawks/latest-news/day-5-of-blackhawks-training-camp-had-heavy-emphasis-on-special-teams",
+    "https://thehockeynews.com/nhl/chicago-blackhawks/latest-news/jeff-blashill-describes-how-blackhawks-will-defend-differently-in-2025-26",
+    "https://www.nhl.com/de/news/die-besten-unterzahleinheiten-der-saison-2025-26"
+   ],
+   "stats": {
+    "shotsForPerGame": 24.351,
+    "hitsPer60": 16.189,
+    "blockedShotsPer60": 12.095,
+    "takeawaysPer60": 4.743,
+    "satPct": 0.459,
+    "games": 97
+   }
+  },
+  "COL": {
+   "coach": "Jared Bednar",
+   "team": {
+    "forecheck": {
+     "value": "2-3",
+     "why": "ресёрч (слабый источник): Shape not named in free sources. Reports call the forecheck 'relentless' (2025-26) and say the system relies on D pinching to keep pucks alive; players credit the forecheck for turnovers and D joining. Category = my inference from aggression level. 2-1-2 в игре — «2-3»: два ближних нападающих давят."
+    },
+    "neutral_zone": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    },
+    "trap_forecheck": {
+     "value": 5,
+     "why": "темп «high» (точно) + форчек «2-1-2 / 2-3 aggressive»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "aggressive",
+     "why": "темп «high» (точно)."
+    },
+    "defense": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    },
+    "dpressure": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    }
+   },
+   "lines": {
+    "style": [
+     "overload",
+     "overload",
+     null,
+     null
+    ],
+    "why": "ресёрч (точно): THN (Aug 2026): Colorado led the NHL with 2,643 skating bursts of 20+ mph in 2025-26, attack built on quick transitions (MacKinnon breakaways, Necas rushes, Makar as a fourth forward); counter-attacking with numbers off forecheck turnovers is the identity. Стиль клуба — первым двум звеньям; 3-е и 4-е — как у EA."
+   },
+   "sliders": {
+    "carry_dump": {
+     "lines": [
+      2,
+      3,
+      0,
+      5
+     ],
+     "why": "ресёрч (слабый источник): Inference from the speed/transition profile (Necas dangerous through the NZ); no entry data found. 0 — заносить, 10 — вбрасывать; цель 3 (среднее по звеньям, разница между звеньями — как у EA)."
+    },
+    "pinch": {
+     "lines": [
+      9,
+      6,
+      5
+     ],
+     "why": "ресёрч (точно): THW (Oct 2026): 'Colorado's system relies heavily on aggressive defensemen pinching to keep pucks alive in the offensive zone'; Makar joins as a fourth forward; Toews: forecheck lets D join the rush. 0 — держать синюю, 10 — подключаться; цель 7 (среднее по парам, разница между парами — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      8,
+      8,
+      8,
+      8
+     ],
+     "why": "API НХЛ: бросков за матч 33.2 (1-е место); 0 — разыгрывать, 10 — бросать."
+    },
+    "block": {
+     "lines": [
+      3,
+      5,
+      4,
+      6
+     ],
+     "why": "API НХЛ: блоков за 60 мин 12.7 (27-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      4,
+      6,
+      4,
+      8
+     ],
+     "why": "API НХЛ: силовых за 60 мин 16.2 (31-е место), темп «high»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://adriandater.substack.com/p/sunday-notes-sudden-avs-defensive",
+    "https://thehockeynews.com/nhl/colorado-avalanche/latest-news/the-avalanche-have-built-an-nhl-juggernaut-on-speed",
+    "https://thehockeynews.com/nhl/colorado-avalanche/latest-news/what-avalanche-did-differently-to-win-games-1-and-5",
+    "https://thehockeywriters.com/?p=1706994",
+    "https://thehockeywriters.com/colorado-avalanche-early-success-through-tough-schedule/"
+   ],
+   "stats": {
+    "shotsForPerGame": 33.247,
+    "hitsPer60": 16.237,
+    "blockedShotsPer60": 12.743,
+    "takeawaysPer60": 4.408,
+    "satPct": 0.558,
+    "games": 97
+   }
+  },
+  "CBJ": {
+   "coach": "Rick Bowness",
+   "team": {
+    "forecheck": {
+     "value": "1-2-2 aggressive",
+     "why": "ресёрч (вероятно): Bowness: 'a much better job with the reads and responsibilities on the forecheck'; forecheck makes it hard for opponents to exit with speed. Formation not described. Схема не названа; агрессивный вариант по умолчанию — 1-2-2 aggressive."
+    },
+    "neutral_zone": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    },
+    "trap_forecheck": {
+     "value": 5,
+     "why": "темп «high (fast tempo, pressure, stay above puck)» (вероятно) + форчек «aggressive (formation not found)»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "aggressive",
+     "why": "темп «high (fast tempo, pressure, stay above puck)» (вероятно)."
+    },
+    "defense": {
+     "value": "staggered",
+     "why": "ресёрч (вероятно): Coaches Site video review (Mar 2026): 'Man-on-man down low, zone defence up top'; organized, tie opponents up 'in the house'."
+    },
+    "dpressure": {
+     "value": "normal",
+     "why": "смешанная опека «hybrid / staggered»."
+    }
+   },
+   "lines": {
+    "style": [
+     "overload",
+     "overload",
+     null,
+     null
+    ],
+    "why": "ресёрч (вероятно): BlueJackets.com: 'one of the NHL's most relentless possession teams', scoring from sustained attacks and quick transitions; Coaches Site: 'offence is the reward for good defence'. Стиль клуба — первым двум звеньям; 3-е и 4-е — как у EA."
+   },
+   "sliders": {
+    "pinch": {
+     "lines": [
+      8,
+      6,
+      5
+     ],
+     "why": "ресёрч (слабый источник): Goal sequences show 'D activates' after side switches; Werenski credits minutes spread over 'all six D'. No stated rule. 0 — держать синюю, 10 — подключаться; цель 6 (среднее по парам, разница между парами — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      6,
+      6,
+      6,
+      6
+     ],
+     "why": "API НХЛ: бросков за матч 28.9 (8-е место); 0 — разыгрывать, 10 — бросать."
+    },
+    "block": {
+     "lines": [
+      5,
+      5,
+      7,
+      8
+     ],
+     "why": "API НХЛ: блоков за 60 мин 14.3 (13-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      5,
+      5,
+      6,
+      9
+     ],
+     "why": "API НХЛ: силовых за 60 мин 19.5 (23-е место), темп «high (fast tempo, pressure, stay above puck)»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://africa.espn.com/nhl/story/_/id/47601719/healthy-now-rick-bowness-70-thrilled-lead-blue-jackets",
+    "https://members.thecoachessite.com/article/a-spark-or-something-real-inside-columbus-rapid-rise",
+    "https://www.nhl.com/bluejackets/news/topic/olympics/5-reasons-why-blue-jackets-stanley-cup-playoffs"
+   ],
+   "stats": {
+    "shotsForPerGame": 28.904,
+    "hitsPer60": 19.493,
+    "blockedShotsPer60": 14.344,
+    "takeawaysPer60": 4.928,
+    "satPct": 0.508,
+    "games": 94
+   }
+  },
+  "DAL": {
+   "coach": "Glen Gulutzan",
+   "team": {
+    "forecheck": {
+     "value": "1-2-2 passive",
+     "why": "ресёрч (вероятно): Daily Faceoff: 'a light forecheck' meant Dallas didn't dominate play-driving; Castillo: tracking data 'unequivocal' that Dallas was not a forechecking team in 2025-26. Exact shape not named; 1-2-2 passive is my mapping."
+    },
+    "neutral_zone": {
+     "value": "1-4",
+     "why": "ресёрч (слабый источник): Dallas 'routinely left the neutral zone wide open' and allowed rush chances at a bottom-10 rate, possibly by design to collapse low. No NZ shape named; '1-4' (sit back) is my inference."
+    },
+    "trap_forecheck": {
+     "value": 1,
+     "why": "темп «low» (вероятно) + форчек «1-2-2 passive»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "conservative",
+     "why": "темп «low» (вероятно)."
+    },
+    "defense": {
+     "value": "collapsing",
+     "why": "ресёрч (точно): Gulutzan switched Dallas from man-on-man to zone defense, 'perhaps the greatest success of his first year'; D kept 'tight to the netfront', 'pucks-to-the-outside scheme'; 6th-best in home-plate chances allowed."
+    },
+    "dpressure": {
+     "value": "protect net",
+     "why": "зонная «zone / collapsing / protect the house», темп «low»."
+    }
+   },
+   "lines": {
+    "style": [
+     "behind the net",
+     "behind the net",
+     null,
+     null
+    ],
+    "why": "ресёрч (слабый источник): Offseason 2026 tweak: more possession and more O-zone time, 'get the puck out quicker and keep it in the offensive end'; 2025-26 even-strength offense called 'a slog', more methodical exits. Category is my inference from the possession/O-zone-time goal. Стиль клуба — первым двум звеньям; 3-е и 4-е — как у EA."
+   },
+   "sliders": {
+    "pinch": {
+     "lines": [
+      4,
+      3,
+      1
+     ],
+     "why": "ресёрч (вероятно): D kept tight to the net front; Castillo calls the approach 'hyper-conservative'; Harley struggled in the 'pucks-to-the-outside' scheme. 0 — держать синюю, 10 — подключаться; цель 3 (среднее по парам, разница между парами — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      3,
+      3,
+      3,
+      3
+     ],
+     "why": "API НХЛ: бросков за матч 25.3 (28-е место); 0 — разыгрывать, 10 — бросать."
+    },
+    "block": {
+     "lines": [
+      5,
+      9,
+      7,
+      8
+     ],
+     "why": "API НХЛ: блоков за 60 мин 14.6 (9-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      1,
+      5,
+      3,
+      3
+     ],
+     "why": "API НХЛ: силовых за 60 мин 18.7 (27-е место), темп «low»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://dailyfaceoff.com/news/2026-2027-nhl-team-preview-dallas-stars-predictions-roster-additions-departures",
+    "https://dcastillo.substack.com/p/stars-stuff-revisiting-the-concept",
+    "https://www.nhl.com/stars/news/one-shift-at-a-time-stars-motivated-to-put-offseason-tweaks-into-action"
+   ],
+   "stats": {
+    "shotsForPerGame": 25.344,
+    "hitsPer60": 18.691,
+    "blockedShotsPer60": 14.616,
+    "takeawaysPer60": 4.475,
+    "satPct": 0.477,
+    "games": 96
+   }
+  },
+  "DET": {
+   "coach": "Todd McLellan",
+   "team": {
+    "neutral_zone": {
+     "value": "1-3-1",
+     "why": "ресёрч (слабый источник): Coach history: THN says the 'polarizing 1-3-1 neutral zone forecheck' arrived in LA with McLellan and his systems stayed under Hiller. No source confirms Detroit runs it; 2026 camp only 'tweaks to the systems and structure already in place'."
+    },
+    "trap_forecheck": {
+     "value": 3,
+     "why": "темп «medium» (слабый источник) + форчек «не найден»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "standard",
+     "why": "темп «medium» (слабый источник)."
+    },
+    "defense": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    },
+    "dpressure": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    }
+   },
+   "lines": {},
+   "sliders": {
+    "cycle_shoot": {
+     "lines": [
+      6,
+      6,
+      6,
+      6
+     ],
+     "why": "API НХЛ: бросков за матч 28.5 (10-е место); 0 — разыгрывать, 10 — бросать."
+    },
+    "block": {
+     "lines": [
+      5,
+      6,
+      9,
+      9
+     ],
+     "why": "API НХЛ: блоков за 60 мин 15.6 (2-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      2,
+      2,
+      5,
+      6
+     ],
+     "why": "API НХЛ: силовых за 60 мин 18.8 (26-е место), темп «medium»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://detroithockeynow.com/2025/12/26/analyzing-mclellans-one-year-anniversary-as-red-wings-coach-larkin/",
+    "https://thehockeynews.com/nhl/detroit-red-wings/latest-news/push-the-gas-pedal-todd-mclellan-expects-high-intensity-efforts-from-red-wings",
+    "https://thehockeynews.com/nhl/los-angeles-kings/latest-news/former-kings-head-coach-hired-by-red-wings",
+    "https://www.nhl.com/redwings/news/red-wings-know-time-is-of-the-essence-as-they-use-2026-training-camp-to-prepare-for-the-journey-ahead"
+   ],
+   "stats": {
+    "shotsForPerGame": 28.454,
+    "hitsPer60": 18.762,
+    "blockedShotsPer60": 15.6,
+    "takeawaysPer60": 4.391,
+    "satPct": 0.497,
+    "games": 97
+   }
+  },
+  "EDM": {
+   "coach": "Mike Babcock",
+   "team": {
+    "forecheck": {
+     "value": "2-3",
+     "why": "ресёрч (слабый источник): Coach history: in Detroit F1 forced D-to-D, F2 cut the short pass and the weak-side forward peeled high to cover a pinching D; a Leafs blog described his forecheck as a 2-1-2. An Oct 2026 report (BVM Sports, secondary) says Edmonton moved to dump-ins and a heavier forecheck. 2-1-2 в игре — «2-3»: два ближних нападающих давят."
+    },
+    "neutral_zone": {
+     "value": "1-2-2 blue",
+     "why": "ресёрч (слабый источник): Coach history: Babcock's Leafs patrolled their defensive blue line to deny controlled entries. Nothing specific found for 2026-27 Oilers beyond 'tracked back through the neutral zone' early on."
+    },
+    "trap_forecheck": {
+     "value": 4,
+     "why": "темп «medium» (слабый источник) + форчек «2-1-2 / 2-3 aggressive»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "standard",
+     "why": "темп «medium» (слабый источник)."
+    },
+    "defense": {
+     "value": "collapsing",
+     "why": "ресёрч (слабый источник): Coach history: Leafs used a strong-side overload that stayed zone-based until a turnover was likely; Detroit wingers sagged low and compressed the zone. Babcock says his 2026 focus is 'our play without the puck'; details not published."
+    },
+    "dpressure": {
+     "value": "contain puck",
+     "why": "зонная «zone / collapsing / protect the house», темп «medium»."
+    }
+   },
+   "lines": {
+    "style": [
+     "crash the net",
+     "crash the net",
+     null,
+     null
+    ],
+    "why": "ресёрч (слабый источник): Coach history: Detroit crashed the net rather than cycling to the points, with counter-attack chances off turnovers. 2026 reports: shift away from 'run-and-gun' to puck management and a 'disciplined 200-foot system'. Стиль клуба — первым двум звеньям; 3-е и 4-е — как у EA."
+   },
+   "sliders": {
+    "carry_dump": {
+     "lines": [
+      4,
+      5,
+      8,
+      8
+     ],
+     "why": "ресёрч (слабый источник): Oct 2026 report says Edmonton now uses more dump-ins with a heavier forecheck (secondary site, page blocked, from search snippet). Conflicts with Babcock's Detroit-era 'we'd like not to dump the puck at all'. 0 — заносить, 10 — вбрасывать; цель 6 (среднее по звеньям, разница между звеньями — как у EA)."
+    },
+    "pinch": {
+     "lines": [
+      7,
+      5,
+      5
+     ],
+     "why": "ресёрч (слабый источник): Coach history: Detroit D pinched on the forecheck with a forward peeling back; early 2026-27 games saw odd-man rushes after bad pinches (Bouchard comment). 0 — держать синюю, 10 — подключаться; цель 6 (среднее по парам, разница между парами — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      7,
+      7,
+      7,
+      7
+     ],
+     "why": "API НХЛ: бросков за матч 29.1 (6-е место); 0 — разыгрывать, 10 — бросать. Стиль «бросай с пятака» +1."
+    },
+    "block": {
+     "lines": [
+      4,
+      6,
+      8,
+      8
+     ],
+     "why": "API НХЛ: блоков за 60 мин 14.3 (14-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      3,
+      5,
+      7,
+      8
+     ],
+     "why": "API НХЛ: силовых за 60 мин 19.6 (22-е место), темп «medium»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://bvmsports.com/2026/10/23/oilers-8-1-1-start-fueled-by-panthers-style-system/",
+    "https://globalnews.ca/news/12063633/babcock-opens-oilers-camp-with-uptempo-practices/",
+    "https://mapleleafshotstove.com/2016/10/12/toronto-maple-leafs-systems-analysis-neutral-zone/",
+    "https://oilersnation.com/news/mike-babcock-edmonton-oilers-coaching-strategy-systems200864",
+    "https://thehockeywriters.com/oilers-new-system-needs-time-but-patience-has-a-limit/",
+    "https://www.mapleleafshotstove.com/2015/05/26/exploring-mike-babcocks-systems/"
+   ],
+   "stats": {
+    "shotsForPerGame": 29.144,
+    "hitsPer60": 19.615,
+    "blockedShotsPer60": 14.292,
+    "takeawaysPer60": 4.075,
+    "satPct": 0.498,
+    "games": 97
+   }
+  },
+  "FLA": {
+   "coach": "Paul Maurice",
+   "team": {
+    "forecheck": {
+     "value": "1-2-2 aggressive",
+     "why": "ресёрч (точно): Breakdowns describe a high-pressure 1-2-2 run by all four lines: F1 attacks the puck, F2 follows behind it, D1 slides/pinches to seal the winger, F3 high covers, D2 holds the line. A 2-1-2 look appears at times."
+    },
+    "neutral_zone": {
+     "value": "1-2-2 blue",
+     "why": "ресёрч (вероятно): NZ is a 1-2-2 with F1 attacking the puck, two forwards between blue line and red line, and D aggressively stepping up on passing options (which can open the middle). Principle: push up ice and out to the walls."
+    },
+    "trap_forecheck": {
+     "value": 5,
+     "why": "темп «high (heavy forecheck, physical, four-line pressure)» (точно) + форчек «1-2-2 aggressive»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "aggressive",
+     "why": "темп «high (heavy forecheck, physical, four-line pressure)» (точно)."
+    },
+    "defense": {
+     "value": "tight point",
+     "why": "ресёрч (вероятно): D-zone described as a pressure scheme, 'de facto man on man', D pressing up to the blue line and collapsing low with the puck; accepts some high-danger chances against. Персональная опека в игре — «Tight Point» + высокое давление."
+    },
+    "dpressure": {
+     "value": "high pressure",
+     "why": "опека «man-to-man / swarm / high pressure», темп «high (heavy forecheck, physical, four-line pressure)»."
+    },
+    "pp": {
+     "value": "shooting",
+     "why": "ресёрч (слабый источник): June 2025 preview: top unit started with two defensemen (Seth Jones, Aaron Ekblad), second unit a one-D look. 2025-26 formation not confirmed; PP finished 19.6%. Brady Tkachuk (acquired 2026) projected as net-front. Две точки у синей и броски с экранами — «Shooting»."
+    },
+    "pk": {
+     "value": "large box",
+     "why": "ресёрч (вероятно): Maurice moved the PK to 'a far more aggressive style' (2023-24) and kept it; Forsling: pressure as quick as possible. Formation itself not named."
+    }
+   },
+   "lines": {
+    "style": [
+     "behind the net",
+     "behind the net",
+     null,
+     null
+    ],
+    "why": "ресёрч (вероятно): Forecheck regains pucks, then they work the cycle to a shot; counterattacks off forced turnovers are the secondary source. Стиль клуба — первым двум звеньям; 3-е и 4-е — как у EA."
+   },
+   "sliders": {
+    "carry_dump": {
+     "lines": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "why": "ресёрч (вероятно): Maurice: 'We don't dump every puck' and 'our forecheck is good because we make the right decisions at the line'; a 2024 systems preview found Florida plays much more dump-and-chase than most, using physical recovery. 0 — заносить, 10 — вбрасывать; цель 7 (среднее по звеньям, разница между звеньями — как у EA)."
+    },
+    "pinch": {
+     "lines": [
+      9,
+      7,
+      5
+     ],
+     "why": "ресёрч (вероятно): D1 slides down the wall behind F2 to keep pucks in, with F3 covering; forwards know when D pinch. NZ D step up aggressively. 0 — держать синюю, 10 — подключаться; цель 7 (среднее по парам, разница между парами — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      5,
+      5,
+      5,
+      5
+     ],
+     "why": "API НХЛ: бросков за матч 28.1 (14-е место); 0 — разыгрывать, 10 — бросать."
+    },
+    "block": {
+     "lines": [
+      2,
+      3,
+      5,
+      4
+     ],
+     "why": "API НХЛ: блоков за 60 мин 11.8 (31-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      5,
+      6,
+      8,
+      8
+     ],
+     "why": "API НХЛ: силовых за 60 мин 25.6 (1-е место), темп «high (heavy forecheck, physical, four-line pressure)»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://blueseatblogs.com/2024/05/21/rangers-panthers-systems-preview/",
+    "https://oilersnation.com/news/edmonton-oilers-florida-panthers-stanley-cup-final-tactical-preview",
+    "https://thehockeynews.com/nhl/florida-panthers/players/how-does-brady-tkachuk-fit-into-the-panthers-lineup-linemates-power-play-usage-and-more",
+    "https://thehockeynews.com/nhl/florida-panthers/players/mission-accomplished-improving-penalty-kill-was-goal-of-panthers-during-offseason",
+    "https://theleafsnation.com/news/what-toronto-maple-leafs-learn-florida-panthers-study-nhl-best-forecheck"
+   ],
+   "stats": {
+    "shotsForPerGame": 28.103,
+    "hitsPer60": 25.602,
+    "blockedShotsPer60": 11.759,
+    "takeawaysPer60": 4.024,
+    "satPct": 0.525,
+    "games": 97
+   }
+  },
+  "LA": {
+   "coach": "Peter Laviolette",
+   "team": {
+    "forecheck": {
+     "value": "2-3",
+     "why": "ресёрч (вероятно): Coach history (Rangers 2023-25): multiple blogs describe an aggressive 2-1-2 / 2-3 OZ forecheck that lets defensemen join; he drops to a more conservative look when protecting leads. No Kings-specific forecheck write-up yet. 2-1-2 в игре — «2-3»: два ближних нападающих давят."
+    },
+    "neutral_zone": {
+     "value": "1-3-1",
+     "why": "ресёрч (слабый источник): Coach history: Rangers blogs say he used a 1-3-1 in the neutral zone (one says mainly to protect late leads). 2026 camp quotes only say players must keep moving through the NZ."
+    },
+    "trap_forecheck": {
+     "value": 5,
+     "why": "темп «high» (вероятно) + форчек «2-1-2 / 2-3 aggressive»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "aggressive",
+     "why": "темп «high» (вероятно)."
+    },
+    "defense": {
+     "value": "staggered",
+     "why": "ресёрч (слабый источник): Coach history: Rangers D-zone described as a zone/man-on-man hybrid that shifts with puck location, compact near the net. New associate coach Housley said the previous Kings group was 'attached to their guy too much'."
+    },
+    "dpressure": {
+     "value": "normal",
+     "why": "смешанная опека «hybrid / staggered»."
+    },
+    "pp": {
+     "value": "shooting",
+     "why": "ресёрч (слабый источник): Coach history claim from a 2023 Rangers blog that he prefers an umbrella PP; new assistant Ray Whitney is installing new PP concepts (details not published). Treat as weak. Две точки у синей и броски с экранами — «Shooting»."
+    }
+   },
+   "lines": {
+    "style": [
+     "behind the net",
+     "behind the net",
+     null,
+     null
+    ],
+    "why": "ресёрч (вероятно): Sep 2026 camp: constant O-zone motion with picks, drops and players turning back into the play, D involved on cycles, plus net-front presence for tips; Housley wants a 'four-man attack'. Стиль клуба — первым двум звеньям; 3-е и 4-е — как у EA."
+   },
+   "sliders": {
+    "carry_dump": {
+     "lines": [
+      5,
+      4,
+      6,
+      8
+     ],
+     "why": "ресёрч (слабый источник): Coach history only: a 2023 Rangers blog expected more dump-and-chase than under Gallant, tied to the 2-1-2 forecheck. No Kings 2026-27 entry data found. 0 — заносить, 10 — вбрасывать; цель 6 (среднее по звеньям, разница между звеньями — как у EA)."
+    },
+    "pinch": {
+     "lines": [
+      9,
+      6,
+      5
+     ],
+     "why": "ресёрч (точно): Housley (Aug 2026): D 'have to get up in the rush'; camp (Sep 2026): D join the attack in-zone, off the rush and on cycles; analysts say Laviolette 'really wants his defense to be activated'. 0 — держать синюю, 10 — подключаться; цель 7 (среднее по парам, разница между парами — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      5,
+      5,
+      5,
+      5
+     ],
+     "why": "API НХЛ: бросков за матч 28.0 (18-е место); 0 — разыгрывать, 10 — бросать."
+    },
+    "block": {
+     "lines": [
+      5,
+      6,
+      7,
+      8
+     ],
+     "why": "API НХЛ: блоков за 60 мин 14.4 (11-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      5,
+      6,
+      7,
+      9
+     ],
+     "why": "API НХЛ: силовых за 60 мин 20.0 (18-е место), темп «high»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://bluelinestation.com/2023/09/30/unveiling-laviolette-system-new-dawn-rangers/",
+    "https://blueseatblogs.com/2023/10/03/peter-laviolette-systems-rangers/",
+    "https://lakingsinsider.com/2026/06/24/discussing-peter-laviolettes-coaching-style-on-the-insider-show/",
+    "https://www.nhl.com/kings/news/insider-offense-the-name-of-the-game-at-kings-training-camp",
+    "https://www.nhl.com/kings/news/new-kings-associate-coach-phil-housley-wants-kings-to-attack-the-game"
+   ],
+   "stats": {
+    "shotsForPerGame": 28.011,
+    "hitsPer60": 19.968,
+    "blockedShotsPer60": 14.421,
+    "takeawaysPer60": 4.38,
+    "satPct": 0.516,
+    "games": 95
+   }
+  },
+  "MIN": {
+   "coach": "John Hynes",
+   "team": {
+    "forecheck": {
+     "value": "2-3",
+     "why": "ресёрч (слабый источник): Hynes describes 'a strong forecheck, heavy in the offensive zone'; players credit forecheck aggressiveness and the top line's forecheck forcing D errors (Oct 2026). Shape never named - category is my inference. 2-1-2 в игре — «2-3»: два ближних нападающих давят."
+    },
+    "neutral_zone": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    },
+    "trap_forecheck": {
+     "value": 5,
+     "why": "темп «high» (слабый источник) + форчек «2-1-2 / 2-3 aggressive»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "aggressive",
+     "why": "темп «high» (слабый источник)."
+    },
+    "defense": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    },
+    "dpressure": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    }
+   },
+   "lines": {
+    "style": [
+     "crash the net",
+     "crash the net",
+     null,
+     null
+    ],
+    "why": "ресёрч (слабый источник): Hynes stresses net-front play; top line 'playing direct', pucks moved toward the net 'not just perimeter' (Hughes); Eriksson Ek works the net front on PP. Category is my inference. Стиль клуба — первым двум звеньям; 3-е и 4-е — как у EA."
+   },
+   "sliders": {
+    "pinch": {
+     "lines": [
+      6,
+      6,
+      6
+     ],
+     "why": "ресёрч (вероятно): Under Hynes the weak-side D who makes the first pass immediately joins the rush; 'They love jumping up into the play' (2023). Hughes (acquired Dec 2025) extends O-zone possessions. 0 — держать синюю, 10 — подключаться; цель 6 (среднее по парам, разница между парами — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      7,
+      7,
+      7,
+      7
+     ],
+     "why": "API НХЛ: бросков за матч 29.4 (5-е место); 0 — разыгрывать, 10 — бросать. Стиль «бросай с пятака» +1."
+    },
+    "block": {
+     "lines": [
+      7,
+      7,
+      9,
+      9
+     ],
+     "why": "API НХЛ: блоков за 60 мин 15.0 (5-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      5,
+      6,
+      7,
+      8
+     ],
+     "why": "API НХЛ: силовых за 60 мин 21.2 (13-е место), темп «high»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://thehockeynews.com/nhl/minnesota-wild/latest-news/we-just-tilt-the-ice-quinn-hughes-reveals-wilds-strategy-to-maximize-top-line",
+    "https://www.dl-online.com/sports/pro/under-john-hynes-wild-pointing-north-to-the-future",
+    "https://www.inforum.com/sports/pro/when-wild-changed-head-coaches-their-ahl-team-tweaked-systems-too",
+    "https://www.nhl.com/de/news/die-aktuelle-top-5-der-powerplayformationen-in-der-nhl"
+   ],
+   "stats": {
+    "shotsForPerGame": 29.439,
+    "hitsPer60": 21.178,
+    "blockedShotsPer60": 15.032,
+    "takeawaysPer60": 4.465,
+    "satPct": 0.491,
+    "games": 98
+   }
+  },
+  "MTL": {
+   "coach": "Martin St. Louis",
+   "team": {
+    "forecheck": {
+     "value": "2-3",
+     "why": "ресёрч (вероятно): Daily Faceoff playoff panel (May 2026) lists a 'consistent', 'relentless' forecheck as one of three core elements of St. Louis's system; St. Louis criticises his team when the forecheck is missing. No 1-2-2/2-1-2 detail. Схема не названа; прежний вариант EA и так агрессивный — оставлен."
+    },
+    "neutral_zone": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    },
+    "trap_forecheck": {
+     "value": 5,
+     "why": "темп «high (tempo, out-work, four lines)» (вероятно) + форчек «aggressive (formation not found)»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "aggressive",
+     "why": "темп «high (tempo, out-work, four lines)» (вероятно)."
+    },
+    "defense": {
+     "value": "staggered",
+     "why": "ресёрч (точно): Man-to-man above the top of the circles, zone below the circles funnelling the puck to the half-wall (THW); St. Louis calls it a hybrid of zone and man-to-man and in 2026 says his D 'kill plays' instead of staying man-on-man when the puck goes to the net."
+    },
+    "dpressure": {
+     "value": "normal",
+     "why": "смешанная опека «hybrid / staggered»."
+    },
+    "pp": {
+     "value": "umbrella",
+     "why": "ресёрч (вероятно): 2025-26 PP1 roles: Hutson alone at the point, Demidov weak-side flank (one-timer set play), Caufield middle/bumper, Slafkovsky goal line/net, Suzuki strong side - a 1-3-1 arrangement (label is my inference from positions). 2026-27: Kreider in front while Demidov is injured. 1-3-1 в игре — «Umbrella» (один у синей, двое на броски с ходу)."
+    },
+    "pk": {
+     "value": "large box",
+     "why": "ресёрч (вероятно): 2025-26 PK was passive and 18th (78.2%). For 2026-27, with Derek Lalonde (Tampa-style 'aggressive pushdown' PK) and Robidas on it, Jake Evans says the kill is 'far less passive, far more aggressive'; early games confirm."
+    }
+   },
+   "lines": {
+    "style": [
+     "overload",
+     "overload",
+     null,
+     null
+    ],
+    "why": "ресёрч (вероятно): DF panel: off-rush offense and long O-zone possession 'coming in waves' are core; St. Louis focuses on 'the play away from the puck' to give the carrier options. In the 2026 ECF they were criticised as perimeter/east-west. Стиль клуба — первым двум звеньям; 3-е и 4-е — как у EA."
+   },
+   "sliders": {
+    "carry_dump": {
+     "lines": [
+      3,
+      3,
+      3,
+      4
+     ],
+     "why": "ресёрч (слабый источник): ECF analysis (May 2026): Montreal tries to carry the puck laterally across the blue line; the writer recommends switching to dump-and-chase. 0 — заносить, 10 — вбрасывать; цель 3 (среднее по звеньям, разница между звеньями — как у EA)."
+    },
+    "pinch": {
+     "lines": [
+      7,
+      6,
+      5
+     ],
+     "why": "ресёрч (вероятно): ECF analysis notes D moving down the walls and into the high slot; Lane Hutson is the PP/transition driver. Not described as a formal pinch rule. 0 — держать синюю, 10 — подключаться; цель 6 (среднее по парам, разница между парами — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      4,
+      4,
+      4,
+      4
+     ],
+     "why": "API НХЛ: бросков за матч 26.5 (23-е место); 0 — разыгрывать, 10 — бросать."
+    },
+    "block": {
+     "lines": [
+      6,
+      7,
+      8,
+      8
+     ],
+     "why": "API НХЛ: блоков за 60 мин 15.5 (3-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      5,
+      6,
+      7,
+      7
+     ],
+     "why": "API НХЛ: силовых за 60 мин 21.5 (9-е место), темп «high (tempo, out-work, four lines)»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://dailyfaceoff.com/news/how-has-martin-st-louis-impacted-montreal-canadiens-success-nhl-stanley-cup-playoffs",
+    "https://jhanhky.substack.com/p/mtl-pit-and-vgk-powerplay-updates",
+    "https://sportsnaut.com/nhl/montreal-canadiens/montreal-canadiens-powerplay-penalty-kill-revamped-special-teams",
+    "https://thehockeynews.com/nhl/montreal-canadiens/latest-news/canadiens-power-play-faces-big-change",
+    "https://thehockeynews.com/nhl/montreal-canadiens/latest-news/canadiens-st-louis-appears-on-new-podcast",
+    "https://thehockeynews.com/nhl/montreal-canadiens/latest-news/lalonde-s-arrival-could-be-a-big-help-for-the-penalty-kill",
+    "https://thehockeywriters.com/?p=1417178",
+    "https://thehockeywriters.com/?p=1664423",
+    "https://www.castanetkamloops.net/news/Hockey/595757/Canadiens-lament-on-forechecking-in-opening-frame-after-loss-to-Sabres",
+    "https://www.noovo.info/nouvelle/canadien-martin-st-louis-espere-voir-son-groupe-resserrer-la-vis-en-defensive.html",
+    "https://www.noovo.info/nouvelle/st-louis-aimerait-voir-le-canadien-passer-moins-de-temps-en-zone-defensive.html"
+   ],
+   "stats": {
+    "shotsForPerGame": 26.469,
+    "hitsPer60": 21.503,
+    "blockedShotsPer60": 15.526,
+    "takeawaysPer60": 4.328,
+    "satPct": 0.49,
+    "games": 96
+   }
+  },
+  "NSH": {
+   "coach": "Andrew Brunette",
+   "team": {
+    "neutral_zone": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    },
+    "trap_forecheck": {
+     "value": 3,
+     "why": "темп «medium» (слабый источник) + форчек «не найден»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "standard",
+     "why": "темп «medium» (слабый источник)."
+    },
+    "defense": {
+     "value": "collapsing",
+     "why": "ресёрч (слабый источник): Brady Skjei (Oct 2024) contrasted Nashville's coverage with Carolina's man-on-man: more reads and 'staying at the net'. Not re-confirmed for 2025-27."
+    },
+    "dpressure": {
+     "value": "contain puck",
+     "why": "зонная «zone / collapsing / protect the house», темп «medium»."
+    }
+   },
+   "lines": {
+    "style": [
+     "overload",
+     "overload",
+     null,
+     null
+    ],
+    "why": "ресёрч (слабый источник): Brunette's system is described as set up for speed and quick play with transition to offense and an aggressive, creative attack (Oct 2024). Стиль клуба — первым двум звеньям; 3-е и 4-е — как у EA."
+   },
+   "sliders": {
+    "cycle_shoot": {
+     "lines": [
+      5,
+      5,
+      5,
+      5
+     ],
+     "why": "API НХЛ: бросков за матч 27.6 (20-е место); 0 — разыгрывать, 10 — бросать."
+    },
+    "block": {
+     "lines": [
+      4,
+      4,
+      7,
+      7
+     ],
+     "why": "API НХЛ: блоков за 60 мин 12.5 (28-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      4,
+      5,
+      6,
+      8
+     ],
+     "why": "API НХЛ: силовых за 60 мин 19.3 (24-е место), темп «medium»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://thehockeynews.com/nhl/nashville-predators/latest-news/predators-big-free-agent-signings-will-quickly-adjust-to-brunettes-system",
+    "https://www.nashvillepost.com/sports/hockey/predators-new-defensive-additions-reflect-teams-top-priority-heading-into-2025-26/article_13aee406-6dda-4af5-ad94-5a0cf74decb6.html"
+   ],
+   "stats": {
+    "shotsForPerGame": 27.635,
+    "hitsPer60": 19.323,
+    "blockedShotsPer60": 12.458,
+    "takeawaysPer60": 5.018,
+    "satPct": 0.489,
+    "games": 96
+   }
+  },
+  "NJ": {
+   "coach": "Sheldon Keefe",
+   "team": {
+    "forecheck": {
+     "value": "1-2-2 aggressive",
+     "why": "ресёрч (вероятно): Keefe installed a 'high-pressure system in all three zones' / three-zone forecheck that does not concede ice; game reviews call the forecheck 'suffocating'. No F1/F2 layout published. Схема не названа; прежний вариант EA и так агрессивный — оставлен."
+    },
+    "neutral_zone": {
+     "value": "1-2-2 blue",
+     "why": "ресёрч (слабый источник): Forwards told to be more aggressive in the NZ, intercepting pucks and pressuring instead of backing into the D-zone (2024 camp). Shape not named; category is inference."
+    },
+    "trap_forecheck": {
+     "value": 4,
+     "why": "темп «medium (pressure without the puck, methodical with it)» (слабый источник) + форчек «aggressive (formation not found)»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "standard",
+     "why": "темп «medium (pressure without the puck, methodical with it)» (слабый источник)."
+    },
+    "defense": {
+     "value": "collapsing",
+     "why": "ресёрч (слабый источник): D-zone structure described as 'more traditional' (position-based, unlike Ruff's); team 'collapses quickly in their own zone' with layers. Man vs zone not stated explicitly."
+    },
+    "dpressure": {
+     "value": "contain puck",
+     "why": "зонная «zone / collapsing / protect the house», темп «medium (pressure without the puck, methodical with it)»."
+    }
+   },
+   "lines": {
+    "style": [
+     "behind the net",
+     "behind the net",
+     null,
+     null
+    ],
+    "why": "ресёрч (вероятно): Breakout 'fight the panic' is one of the most conservative in the NHL, prioritising possession over rush chances; NJ rush chances/60 fell to 12.9 under Keefe (from 19.7 under Ruff). Critics say he removed the stretch-pass rush game. Стиль клуба — первым двум звеньям; 3-е и 4-е — как у EA."
+   },
+   "sliders": {
+    "carry_dump": {
+     "lines": [
+      2,
+      3,
+      4,
+      7
+     ],
+     "why": "ресёрч (слабый источник): F1 swings laterally at the blue line for a short pass and the team enters 'with possession or through a pass'; dumps not emphasised. 0 — заносить, 10 — вбрасывать; цель 4 (среднее по звеньям, разница между звеньями — как у EA)."
+    },
+    "pinch": {
+     "lines": [
+      3,
+      3,
+      3
+     ],
+     "why": "ресёрч (слабый источник): Keefe's breakout reduces the puck-moving burden on D; D2 holds the net front during board battles. No pinch/activation rule found. 0 — держать синюю, 10 — подключаться; цель 3 (среднее по парам, разница между парами — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      7,
+      7,
+      7,
+      7
+     ],
+     "why": "API НХЛ: бросков за матч 30.0 (3-е место); 0 — разыгрывать, 10 — бросать."
+    },
+    "block": {
+     "lines": [
+      3,
+      2,
+      6,
+      7
+     ],
+     "why": "API НХЛ: блоков за 60 мин 13.3 (25-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      2,
+      3,
+      3,
+      7
+     ],
+     "why": "API НХЛ: силовых за 60 мин 18.0 (28-е место), темп «medium (pressure without the puck, methodical with it)»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://njdevilsadvocates.substack.com/p/understanding-the-devils-breakout",
+    "https://thehockeywriters.com/devils-opening-day-mailbag-meier-keefes-system/",
+    "https://thehockeywriters.com/sheldon-keefe-2-0-the-devils-unlocked-a-smarter-stronger-coach/"
+   ],
+   "stats": {
+    "shotsForPerGame": 30.021,
+    "hitsPer60": 18.01,
+    "blockedShotsPer60": 13.35,
+    "takeawaysPer60": 4.598,
+    "satPct": 0.522,
+    "games": 96
+   }
+  },
+  "NYI": {
+   "coach": "Pete DeBoer",
+   "team": {
+    "neutral_zone": {
+     "value": "1-4",
+     "why": "ресёрч (слабый источник): Coach history: Jack Han reports DeBoer's Dallas ran a 1-2-2 NZ forecheck that shifts into a 1-1-3 against quick-developing rushes; DeBoer also used a passive 1-1-3 in Vegas when injuries hit. Speed through the NZ is a core principle. 1-1-3 в игре — «1-4»."
+    },
+    "trap_forecheck": {
+     "value": 4,
+     "why": "темп «medium-high (structured, plays with pace)» (вероятно) + форчек «не найден»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "aggressive",
+     "why": "темп «medium-high (structured, plays with pace)» (вероятно)."
+    },
+    "defense": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    },
+    "dpressure": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    }
+   },
+   "lines": {
+    "style": [
+     "behind the net",
+     "behind the net",
+     null,
+     null
+    ],
+    "why": "ресёрч (слабый источник): Coach history: speed through the NZ, rush and cycle with 'all-hands-on-deck' O-zone play; Dallas 3rd in GF over his last three seasons; analysts expect NYI to be 'more offensive'. Стиль клуба — первым двум звеньям; 3-е и 4-е — как у EA."
+   },
+   "sliders": {
+    "carry_dump": {
+     "lines": [
+      1,
+      4,
+      4,
+      4
+     ],
+     "why": "ресёрч (слабый источник): Coach history: zone entries with possession are the expectation; dump-ins only as an option. 0 — заносить, 10 — вбрасывать; цель 3 (среднее по звеньям, разница между звеньями — как у EA)."
+    },
+    "pinch": {
+     "lines": [
+      7,
+      7,
+      6
+     ],
+     "why": "ресёрч (вероятно): 'DeBoer expects all of his defensemen to activate when given the opportunity' (Dallas); DeBoer on NYI: his scheme needs mobile defensemen. 0 — держать синюю, 10 — подключаться; цель 7 (среднее по парам, разница между парами — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      5,
+      5,
+      5,
+      5
+     ],
+     "why": "API НХЛ: бросков за матч 27.8 (19-е место); 0 — разыгрывать, 10 — бросать."
+    },
+    "block": {
+     "lines": [
+      4,
+      6,
+      7,
+      8
+     ],
+     "why": "API НХЛ: блоков за 60 мин 14.1 (18-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      3,
+      5,
+      6,
+      8
+     ],
+     "why": "API НХЛ: силовых за 60 мин 19.9 (19-е место), темп «medium-high (structured, plays with pace)»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://dcastillo.substack.com/p/systems-check-from-zone-to-zone-whats",
+    "https://jhanhky.substack.com/p/late-season-wobbles-in-dallas",
+    "https://www.nhl.com/islanders/news/islanders-ahead-of-the-curve-for-2026-27-after-four-game-sample-size-under-pete-deboer",
+    "https://www.tsn.ca/nhl/article/islanders-will-get-the-full-effect-of-deboer-in-his-first-camp-as-their-coach/",
+    "https://www.yardbarker.com/nhl/articles/how_will_peter_deboer_impact_the_islanders/s1_16958_44369241"
+   ],
+   "stats": {
+    "shotsForPerGame": 27.781,
+    "hitsPer60": 19.934,
+    "blockedShotsPer60": 14.122,
+    "takeawaysPer60": 4.292,
+    "satPct": 0.494,
+    "games": 96
+   }
+  },
+  "NYR": {
+   "coach": "Mike Sullivan",
+   "team": {
+    "forecheck": {
+     "value": "1-2-2 passive",
+     "why": "ресёрч (вероятно): amNY: Rangers switched to a 1-2-2 where the lead forward pressures and the other two read. Sullivan wanted aggressive 'layered waves' but it happened only occasionally; since 2023 his PIT version was more conservative (F1 holding back). Умеренный 1-2-2 — пассивный вариант."
+    },
+    "neutral_zone": {
+     "value": "1-2-2 red",
+     "why": "ресёрч (вероятно): Coach history: aggressive 1-2-2 NZ forecheck in early PIT years, later a conservative 1-2-2 that 'clogged lanes' and cut off cross-ice passes."
+    },
+    "trap_forecheck": {
+     "value": 3,
+     "why": "темп «medium (intended fast; results inconsistent)» (вероятно) + форчек «1-2-2 (f1 pressures, f2/f3 read) - moderate»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "standard",
+     "why": "темп «medium (intended fast; results inconsistent)» (вероятно)."
+    },
+    "defense": {
+     "value": "collapsing",
+     "why": "ресёрч (точно): Sullivan replaced Laviolette's man-to-man with a zone system: 'protect the house', overload the strong side, block lanes; Trocheck: 'a zone defense' with 'a lot of handoffs'."
+    },
+    "dpressure": {
+     "value": "contain puck",
+     "why": "зонная «zone / collapsing / protect the house», темп «medium (intended fast; results inconsistent)»."
+    },
+    "pp": {
+     "value": "umbrella",
+     "why": "ресёрч (вероятно): 2026-27 PP1 roles: Fox alone at the point, Dorofeyev left flank, Zibanejad right flank, J.T. Miller bumper, Lafreniere net front (1-3-1 layout; label inferred from positions). 2025-26: same core, 24.7% (5th). David Quinn runs the PP. 1-3-1 в игре — «Umbrella» (один у синей, двое на броски с ходу)."
+    }
+   },
+   "lines": {
+    "style": [
+     "overload",
+     "overload",
+     null,
+     null
+    ],
+    "why": "ресёрч (вероятно): Turnovers forced in the NZ are turned into quick transition chances ('waves of speed'). 2025-26 offense was historically bad through November. Стиль клуба — первым двум звеньям; 3-е и 4-е — как у EA."
+   },
+   "sliders": {
+    "pinch": {
+     "lines": [
+      2,
+      4,
+      2
+     ],
+     "why": "ресёрч (слабый источник): Coach history: in Sullivan's conservative 1-2-2 era, defensemen 'stayed home'. No NYR-specific statement. 0 — держать синюю, 10 — подключаться; цель 3 (среднее по парам, разница между парами — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      3,
+      3,
+      3,
+      3
+     ],
+     "why": "API НХЛ: бросков за матч 25.2 (30-е место); 0 — разыгрывать, 10 — бросать."
+    },
+    "block": {
+     "lines": [
+      4,
+      8,
+      8,
+      8
+     ],
+     "why": "API НХЛ: блоков за 60 мин 14.2 (16-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      5,
+      8,
+      8,
+      10
+     ],
+     "why": "API НХЛ: силовых за 60 мин 25.5 (2-е место), темп «medium (intended fast; results inconsistent)»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://bluelinestation.com/will-mike-sullivan-s-bold-system-work-with-the-new-york-rangers",
+    "https://thehockeynews.com/nhl/new-york-rangers/latest-news/analyzing-rangers-new-look-power-play-formation-with-the-addition-of-pavel-dorofeyev",
+    "https://www.amny.com/sports/rangers-season-preview-25-26-10-6-25",
+    "https://www.blueshirtbanter.com/2026-rangers-report-card-the-coaching-staff/"
+   ],
+   "stats": {
+    "shotsForPerGame": 25.155,
+    "hitsPer60": 25.506,
+    "blockedShotsPer60": 14.247,
+    "takeawaysPer60": 4.378,
+    "satPct": 0.486,
+    "games": 97
+   }
+  },
+  "OTT": {
+   "coach": "Travis Green",
+   "team": {
+    "forecheck": {
+     "value": "2-3",
+     "why": "ресёрч (вероятно): Green (Mar 2026): it is 'no secret' Ottawa is a forecheck-heavy team, 'a big part of it is our forecheck'; players describe sustained deep-zone pressure that wears opponents down. Formation not published. Схема не названа; прежний вариант EA и так агрессивный — оставлен."
+    },
+    "neutral_zone": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    },
+    "trap_forecheck": {
+     "value": 5,
+     "why": "темп «medium-high (heavy, physical forecheck but low-event)» (вероятно) + форчек «aggressive (formation not found)»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "aggressive",
+     "why": "темп «medium-high (heavy, physical forecheck but low-event)» (вероятно)."
+    },
+    "defense": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    },
+    "dpressure": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    }
+   },
+   "lines": {
+    "style": [
+     "behind the net",
+     "behind the net",
+     null,
+     null
+    ],
+    "why": "ресёрч (слабый источник): Inference from forecheck-first identity: offense comes from sustained deep-zone pressure after dump-ins; team is low-event (bottom third in shots and xG for, Dec 2025). Стиль клуба — первым двум звеньям; 3-е и 4-е — как у EA."
+   },
+   "sliders": {
+    "carry_dump": {
+     "lines": [
+      5,
+      6,
+      7,
+      10
+     ],
+     "why": "ресёрч (вероятно): Cozens: the team wants to 'manage pucks and make them go get it' and is 'not scared to dump pucks in'. 0 — заносить, 10 — вбрасывать; цель 7 (среднее по звеньям, разница между звеньями — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      5,
+      5,
+      5,
+      5
+     ],
+     "why": "API НХЛ: бросков за матч 28.4 (11-е место); 0 — разыгрывать, 10 — бросать."
+    },
+    "block": {
+     "lines": [
+      4,
+      6,
+      7,
+      7
+     ],
+     "why": "API НХЛ: блоков за 60 мин 13.6 (22-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      4,
+      5,
+      7,
+      8
+     ],
+     "why": "API НХЛ: силовых за 60 мин 23.6 (3-е место), темп «medium-high (heavy, physical forecheck but low-event)»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://thehockeynews.com/nhl/ottawa-senators/latest-news/travis-green-steers-senators-into-top-5-in-several-defensive-metrics",
+    "https://www.nhl.com/senators/news/ottawa-s-four-line-attack-key-to-recent-success"
+   ],
+   "stats": {
+    "shotsForPerGame": 28.388,
+    "hitsPer60": 23.633,
+    "blockedShotsPer60": 13.582,
+    "takeawaysPer60": 4.856,
+    "satPct": 0.519,
+    "games": 98
+   }
+  },
+  "PHI": {
+   "coach": "Rick Tocchet",
+   "team": {
+    "forecheck": {
+     "value": "2-3",
+     "why": "ресёрч (точно): Team-site systems feature (Dec 2025): the O-zone forecheck moved from a 1-2-2 to a more aggressive 2-1-2 for more puck pressure, accepting counterattack risk. 2-1-2 в игре — «2-3»: два ближних нападающих давят."
+    },
+    "neutral_zone": {
+     "value": "1-2-2 blue",
+     "why": "ресёрч (точно): Same feature: NZ is a layered 1-2-2 designed to force turnovers at three points. Nearest listed category: 1-2-2 (blue line)/aggressive."
+    },
+    "trap_forecheck": {
+     "value": 5,
+     "why": "темп «high (2-1-2 pressure, fast puck movement)» (точно) + форчек «2-1-2 / 2-3 aggressive»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "aggressive",
+     "why": "темп «high (2-1-2 pressure, fast puck movement)» (точно)."
+    },
+    "defense": {
+     "value": "collapsing",
+     "why": "ресёрч (точно): 'Box +1' takes away the 'home plate' between the dots, centers support both D; Tocchet calls it 'a very aggressive zone' with doubles/triples to keep pucks outside, 'we don't want to just contain'; dislikes 'run-around pressure'."
+    },
+    "dpressure": {
+     "value": "puck side attack",
+     "why": "зонная «zone / collapsing / protect the house (aggressive box+1)», темп «high (2-1-2 pressure, fast puck movement)»."
+    },
+    "pk": {
+     "value": "diamond",
+     "why": "ресёрч (вероятно): Team-site feature names an 'aggressive diamond' PK approach (details promised for a later article)."
+    }
+   },
+   "lines": {
+    "style": [
+     "behind the net",
+     "crash the net",
+     null,
+     null
+    ],
+    "why": "ресёрч (точно): F1 drives and cycles until the D tire; 'piston offense' has players darting in/out of high-danger ice, else low-to-high reload with traffic; quick counterattack after turnovers. Стиль клуба — первым двум звеньям; 3-е и 4-е — как у EA."
+   },
+   "sliders": {
+    "carry_dump": {
+     "lines": [
+      3,
+      4,
+      5,
+      6
+     ],
+     "why": "ресёрч (точно): Direct passes into open ice, dump when soft ice is behind the D, chip-and-chase under pressure; Tocchet rejects pure 'dump and chase'. 0 — заносить, 10 — вбрасывать; цель 4 (среднее по звеньям, разница между звеньями — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      4,
+      4,
+      4,
+      4
+     ],
+     "why": "API НХЛ: бросков за матч 25.1 (31-е место); 0 — разыгрывать, 10 — бросать. Стиль «бросай с пятака» +1."
+    },
+    "block": {
+     "lines": [
+      5,
+      6,
+      8,
+      9
+     ],
+     "why": "API НХЛ: блоков за 60 мин 14.9 (6-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      5,
+      7,
+      8,
+      9
+     ],
+     "why": "API НХЛ: силовых за 60 мин 22.6 (4-е место), темп «high (2-1-2 pressure, fast puck movement)»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://www.inquirer.com/flyers/rick-tocchet-defensive-strategies-zone-defense-sam-ersson-20250919.html",
+    "https://www.nhl.com/flyers/news/in-depth-flyers-systems-and-beyond"
+   ],
+   "stats": {
+    "shotsForPerGame": 25.112,
+    "hitsPer60": 22.596,
+    "blockedShotsPer60": 14.926,
+    "takeawaysPer60": 4.136,
+    "satPct": 0.47,
+    "games": 98
+   }
+  },
+  "UTA": {
+   "coach": "Andre Tourigny",
+   "team": {
+    "forecheck": {
+     "value": "2-3",
+     "why": "ресёрч (слабый источник): Shape not named. Tourigny calls the forecheck central to the team's identity (praising lines for getting pucks deep and pressuring the net); his 2022 clinic teaches how to 'hunt the puck carrier' with back pressure. Category is my inference. 2-1-2 в игре — «2-3»: два ближних нападающих давят."
+    },
+    "neutral_zone": {
+     "value": "1-4",
+     "why": "ресёрч (слабый источник): Coach history: his 2022 TCS Live presentation covers a 1-1-3 neutral-zone forecheck. Mapping 1-1-3 to '1-4' is my inference; not re-confirmed for 2025-27."
+    },
+    "trap_forecheck": {
+     "value": 5,
+     "why": "темп «high» (слабый источник) + форчек «2-1-2 / 2-3 aggressive»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "aggressive",
+     "why": "темп «high» (слабый источник)."
+    },
+    "defense": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    },
+    "dpressure": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    }
+   },
+   "lines": {
+    "style": [
+     "crash the net",
+     "crash the net",
+     null,
+     null
+    ],
+    "why": "ресёрч (слабый источник): Sergachev (Sep 2025): 'get a lot of shots through, help our forwards down there, create a lot of chaos'; Tourigny praised getting pucks deep and pressuring the net. Стиль клуба — первым двум звеньям; 3-е и 4-е — как у EA."
+   },
+   "sliders": {
+    "pinch": {
+     "lines": [
+      6,
+      7,
+      5
+     ],
+     "why": "ресёрч (слабый источник): Sergachev on the D's role: shots through, help forwards low, 'during the rush we want to be fast, mobile'. 0 — держать синюю, 10 — подключаться; цель 6 (среднее по парам, разница между парами — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      6,
+      6,
+      6,
+      6
+     ],
+     "why": "API НХЛ: бросков за матч 28.1 (16-е место); 0 — разыгрывать, 10 — бросать. Стиль «бросай с пятака» +1."
+    },
+    "block": {
+     "lines": [
+      6,
+      6,
+      8,
+      8
+     ],
+     "why": "API НХЛ: блоков за 60 мин 13.7 (21-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      5,
+      6,
+      7,
+      8
+     ],
+     "why": "API НХЛ: силовых за 60 мин 20.3 (16-е место), темп «high»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://bolavip.com/en/amp/nhl/mikhail-sergachev-warns-nhl-rivals-with-defiant-message-about-mammoths-defensive-plan",
+    "https://members.thecoachessite.com/v/1914"
+   ],
+   "stats": {
+    "shotsForPerGame": 28.052,
+    "hitsPer60": 20.337,
+    "blockedShotsPer60": 13.666,
+    "takeawaysPer60": 4.172,
+    "satPct": 0.533,
+    "games": 97
+   }
+  },
+  "PIT": {
+   "coach": "Dan Muse",
+   "team": {
+    "forecheck": {
+     "value": "1-2-2 aggressive",
+     "why": "ресёрч (вероятно): Shea: 'with our forecheck, the D have to be up in the play', forward always covers; system lets D jump into the forecheck. Coach history: Muse spent five years under heavy-forecheck coach Laviolette. Схема не названа; прежний вариант EA и так агрессивный — оставлен."
+    },
+    "neutral_zone": {
+     "value": "1-4",
+     "why": "ресёрч (вероятно): PHN: a 'unique 1-1-3 setup' creating NZ layers; DF: third forward comes high with three players back, limiting odd-man rushes, while still 'very aggressive at the blue line'. 1-1-3 в игре — «1-4»."
+    },
+    "trap_forecheck": {
+     "value": 5,
+     "why": "темп «medium-high» (слабый источник) + форчек «aggressive with d joining (formation not found)»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "aggressive",
+     "why": "темп «medium-high» (слабый источник)."
+    },
+    "defense": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    },
+    "dpressure": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    }
+   },
+   "lines": {
+    "style": [
+     "crash the net",
+     "crash the net",
+     null,
+     null
+    ],
+    "why": "ресёрч (вероятно): Muse pushed D to shoot more; 'a lot of our goals are coming at the net front' (Shea). Стиль клуба — первым двум звеньям; 3-е и 4-е — как у EA."
+   },
+   "sliders": {
+    "pinch": {
+     "lines": [
+      8,
+      7,
+      6
+     ],
+     "why": "ресёрч (точно): Two sources: D unleashed to jump into the forecheck/rush with a forward rotating back. 0 — держать синюю, 10 — подключаться; цель 7 (среднее по парам, разница между парами — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      7,
+      7,
+      7,
+      7
+     ],
+     "why": "API НХЛ: бросков за матч 28.5 (9-е место); 0 — разыгрывать, 10 — бросать. Стиль «бросай с пятака» +1."
+    },
+    "block": {
+     "lines": [
+      5,
+      6,
+      7,
+      8
+     ],
+     "why": "API НХЛ: блоков за 60 мин 14.2 (17-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      2,
+      2,
+      4,
+      6
+     ],
+     "why": "API НХЛ: силовых за 60 мин 16.4 (30-е место), темп «medium-high»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://dailyfaceoff.com/news/dan-muse-has-made-hockey-pittsburgh-penguins-fun-again",
+    "https://pittsburghhockeynow.com/pittsburgh-penguins-learn-new-dan-muse-system-chaotic-gps-kyle-dubas/",
+    "https://thehockeynews.com/nhl/pittsburgh-penguins/players/penguins-defenseman-aims-to-keep-building-on-early-progress"
+   ],
+   "stats": {
+    "shotsForPerGame": 28.521,
+    "hitsPer60": 16.448,
+    "blockedShotsPer60": 14.165,
+    "takeawaysPer60": 4.759,
+    "satPct": 0.505,
+    "games": 96
+   }
+  },
+  "STL": {
+   "coach": "Jim Montgomery",
+   "team": {
+    "forecheck": {
+     "value": "2-3",
+     "why": "ресёрч (слабый источник): Shape not named. Camp work centred on 'the forecheck, entries and offensive-zone play'; early Blues games credited a forecheck where F3 matters and a D (Parayko) starting it; coach history (Boston 2022-23): D pinched so forwards could stay low, forecheck generated goals. Category is my inference. 2-1-2 в игре — «2-3»: два ближних нападающих давят."
+    },
+    "neutral_zone": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    },
+    "trap_forecheck": {
+     "value": 4,
+     "why": "темп «medium» (слабый источник) + форчек «2-1-2 / 2-3 aggressive»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "standard",
+     "why": "темп «medium» (слабый источник)."
+    },
+    "defense": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    },
+    "dpressure": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    },
+    "pp": {
+     "value": "umbrella",
+     "why": "ресёрч (вероятно): Sep 2026 PP1: Broberg (lone D on the point), Thomas half-wall playmaker, McTavish right-circle one-timer, Holloway bumper, Snuggerud/Thomas rotating net front. Formation not named; roles map to 1-3-1. 1-3-1 в игре — «Umbrella» (один у синей, двое на броски с ходу)."
+    }
+   },
+   "lines": {
+    "style": [
+     "behind the net",
+     "behind the net",
+     null,
+     null
+    ],
+    "why": "ресёрч (слабый источник): Weak: Montgomery's coaching-clinic material is titled 'How to Play a Puck Possession Game' (content paywalled); he wants 'more directness at the net' on the PP. Category is inference. Стиль клуба — первым двум звеньям; 3-е и 4-е — как у EA."
+   },
+   "sliders": {
+    "carry_dump": {
+     "lines": [
+      4,
+      2,
+      2,
+      4
+     ],
+     "why": "ресёрч (слабый источник): Inference from his possession-game philosophy; no entry data. 0 — заносить, 10 — вбрасывать; цель 3 (среднее по звеньям, разница между звеньями — как у EA)."
+    },
+    "pinch": {
+     "lines": [
+      9,
+      5,
+      6
+     ],
+     "why": "ресёрч (вероятно): Coach history: in Boston he gave D more freedom to join the rush out of the D-zone and to pinch in the O-zone (blamed for some own-zone issues); Blues D started forechecks in early games. 0 — держать синюю, 10 — подключаться; цель 7 (среднее по парам, разница между парами — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      3,
+      3,
+      3,
+      3
+     ],
+     "why": "API НХЛ: бросков за матч 25.5 (27-е место); 0 — разыгрывать, 10 — бросать."
+    },
+    "block": {
+     "lines": [
+      5,
+      4,
+      4,
+      7
+     ],
+     "why": "API НХЛ: блоков за 60 мин 13.2 (26-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      3,
+      4,
+      4,
+      7
+     ],
+     "why": "API НХЛ: силовых за 60 мин 21.3 (10-е место), темп «medium»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://members.thecoachessite.com/video/tcs-vault-how-to-play-a-puck-possession-game-jim-montgomery",
+    "https://thehockeynews.com/nhl/st-louis-blues/latest-news/news-and-notes-from-day-2-of-st-louis-blues-training-camp",
+    "https://thehockeynews.com/nhl/st-louis-blues/latest-news/special-teams-must-make-marked-improvements-for-st-louis-blues-to-elevate-in-standings",
+    "https://thehockeywriters.com/bruins-need-better-situational-decisions-montgomery-system/",
+    "https://www.bostonsportsjournal.com/2022/10/07/in-jim-montgomerys-system-could-mike-reilly-be-a-secret-weapon-on-bruins-blue-line",
+    "https://www.bostonsportsjournal.com/2022/10/12/why-jim-montgomery-isnt-fretting-about-bruins-extended-learning-curve-with-his-new-systems-"
+   ],
+   "stats": {
+    "shotsForPerGame": 25.49,
+    "hitsPer60": 21.333,
+    "blockedShotsPer60": 13.177,
+    "takeawaysPer60": 4.214,
+    "satPct": 0.485,
+    "games": 96
+   }
+  },
+  "SJ": {
+   "coach": "Ryan Warsofsky",
+   "team": {
+    "forecheck": {
+     "value": "2-3",
+     "why": "ресёрч (слабый источник): Jack Han (Oct 2025): OZ forecheck has F1 hunting the puck, F2 reading off F1, F3 high to prevent odd-man rushes, D pinching on wall exits - 'fairly conventional'. Mapping to 2-1-2 is my inference from those roles. 2-1-2 в игре — «2-3»: два ближних нападающих давят."
+    },
+    "neutral_zone": {
+     "value": "1-2-2 blue",
+     "why": "ресёрч (вероятно): Sharks opened 2025-26 in a passive 1-1-3 NZ, then from Oct 18, 2025 switched mostly to an aggressive 2-1-2 (F1 on carrier, D step up on wide forwards); Warsofsky said they still return to the 1-1-3 at times."
+    },
+    "trap_forecheck": {
+     "value": 4,
+     "why": "темп «medium» (слабый источник) + форчек «2-1-2 / 2-3 aggressive»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "standard",
+     "why": "темп «medium» (слабый источник)."
+    },
+    "defense": {
+     "value": "staggered",
+     "why": "ресёрч (вероятно): Han's film breakdown: 'aggressive man-on-man pressure near the puck and passive zone marking away from the puck'; strong-side D chases along the wall with F1, F3 holds the high slot, weak-side D shades toward the puck."
+    },
+    "dpressure": {
+     "value": "normal",
+     "why": "смешанная опека «hybrid / staggered»."
+    },
+    "pp": {
+     "value": "umbrella",
+     "why": "ресёрч (точно): Han (Nov 2025): PP1 starts in a 1-3-1 and rotates; Celebrini runs it from the right half-wall, Klingberg/Toffoli/Smith as one-timer options, Eklund near post. Sep 2026 preview discusses Chernyshov in the bumper (1-3-1 retained). 1-3-1 в игре — «Umbrella» (один у синей, двое на броски с ходу)."
+    },
+    "pk": {
+     "value": "diamond",
+     "why": "ресёрч (точно): Han (Nov 2025): in-zone PK is a '1-1-2 Wedge+1', F1 pressures the flank without over-committing; PK forecheck is a 1-3 forcing dump-ins. Sharks PK ranked ~8th (82.4%) in 2025-26 per a search snippet. Wedge+1 в игре ближе всего к «Diamond»."
+    }
+   },
+   "lines": {
+    "style": [
+     "overload",
+     "overload",
+     null,
+     null
+    ],
+    "why": "ресёрч (слабый источник): Weak support: Oct 2026 analysis frames the Sharks' edge as 'NZ transition advantage' and controlled entries (SPORTLOGiQ, one game). No season-long rush/cycle split found. Стиль клуба — первым двум звеньям; 3-е и 4-е — как у EA."
+   },
+   "sliders": {
+    "carry_dump": {
+     "lines": [
+      1,
+      1,
+      4,
+      6
+     ],
+     "why": "ресёрч (слабый источник): In an Oct 2026 game SJ led in controlled entries for two periods (single-game SPORTLOGiQ data); PP breakout is a controlled 'double drop' carry. 0 — заносить, 10 — вбрасывать; цель 3 (среднее по звеньям, разница между звеньями — как у EA)."
+    },
+    "pinch": {
+     "lines": [
+      7,
+      5,
+      5
+     ],
+     "why": "ресёрч (вероятно): D pinch along the boards on exit attempts in the OZ and step up on wide forwards in the 2-1-2 NZ; strong-side D chases in own zone. 0 — держать синюю, 10 — подключаться; цель 6 (среднее по парам, разница между парами — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      4,
+      4,
+      4,
+      4
+     ],
+     "why": "API НХЛ: бросков за матч 26.0 (25-е место); 0 — разыгрывать, 10 — бросать."
+    },
+    "block": {
+     "lines": [
+      4,
+      5,
+      8,
+      8
+     ],
+     "why": "API НХЛ: блоков за 60 мин 14.4 (12-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      4,
+      4,
+      7,
+      8
+     ],
+     "why": "API НХЛ: силовых за 60 мин 22.1 (6-е место), темп «medium»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://sanjosehockeynow.com/san-jose-sharks-celebrini-graf-dellandrea-neutral-zone-forecheck/",
+    "https://sanjosehockeynow.com/san-jose-sharks-jack-han-chernyshov-cagnoni-orlov-power-play/",
+    "https://sanjosehockeynow.com/san-jose-sharks-jack-han-ryan-warsofsky-detroit-red-wings-insight-8/",
+    "https://sanjosehockeynow.com/san-jose-sharks-jack-han-tactics-without-puck/",
+    "https://sanjosehockeynow.com/san-jose-sharks-system-power-play-penalty-kill-jack-han/"
+   ],
+   "stats": {
+    "shotsForPerGame": 25.98,
+    "hitsPer60": 22.128,
+    "blockedShotsPer60": 14.409,
+    "takeawaysPer60": 4.5,
+    "satPct": 0.467,
+    "games": 98
+   }
+  },
+  "TB": {
+   "coach": "Jon Cooper",
+   "team": {
+    "forecheck": {
+     "value": "1-2-2 aggressive",
+     "why": "ресёрч (слабый источник): Coach history only: a 2013 scouting piece describes Cooper's TB running an aggressive 1-2-2 with lots of D pinching, sitting back once up two goals. Recent coverage only notes Hagel as a strong forechecker. No 2025-26 confirmation."
+    },
+    "neutral_zone": {
+     "value": "1-4",
+     "why": "ресёрч (слабый источник): 2022 playoff scouting: main NZ look is a 1-1-3 'lock' used passively, F3 high near the D to stop odd-man rushes. 2019 SI: 3-1 NZ setup on the PK vs usual 2-2. Old sources, same coach. 1-1-3 в игре — «1-4»."
+    },
+    "trap_forecheck": {
+     "value": 4,
+     "why": "темп «medium (structured, opportunistic)» (слабый источник) + форчек «1-2-2 aggressive»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "standard",
+     "why": "темп «medium (structured, opportunistic)» (слабый источник)."
+    },
+    "defense": {
+     "value": "collapsing",
+     "why": "ресёрч (вероятно): Tampa Bay Times (Feb 2024): Lightning switched from man-on-man to a zone 'box+1' scheme, cutting Grade-A chances; 2022 scouting saw low zone coverage with all five collapsing to protect the slot. No later reversal found."
+    },
+    "dpressure": {
+     "value": "contain puck",
+     "why": "зонная «zone / collapsing / protect the house», темп «medium (structured, opportunistic)»."
+    },
+    "pp": {
+     "value": "umbrella",
+     "why": "ресёрч (вероятно): THW 2024-25 preview: Hedman quarterbacks up top, Hagel and Kucherov on the half walls, Point in the bumper (one-timers), Guentzel net front (1-3-1 layout; label inferred). NHL.com 2025-26 preview keeps Guentzel/Kucherov/Point/Hedman on PP1. PP fell to ~17th (20.7%) in 2025-26. 1-3-1 в игре — «Umbrella» (один у синей, двое на броски с ходу)."
+    },
+    "pk": {
+     "value": "large box",
+     "why": "ресёрч (слабый источник): Fact: 3rd-best PK (82.6%) in 2025-26, praised as hard to break down. Staff history: Derek Lalonde described TB's PK as an 'aggressive pushdown' (his 2018-22 TB tenure, 3rd-best PK then). Current formation not confirmed."
+    }
+   },
+   "lines": {},
+   "sliders": {
+    "pinch": {
+     "lines": [
+      7,
+      7,
+      5
+     ],
+     "why": "ресёрч (слабый источник): Team site: under Cooper, Lightning D have had the freedom to roam aggressively in the offensive zone (article undated); 2013 piece notes heavy D pinching. 0 — держать синюю, 10 — подключаться; цель 6 (среднее по парам, разница между парами — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      5,
+      5,
+      5,
+      5
+     ],
+     "why": "API НХЛ: бросков за матч 28.4 (12-е место); 0 — разыгрывать, 10 — бросать."
+    },
+    "block": {
+     "lines": [
+      3,
+      5,
+      6,
+      7
+     ],
+     "why": "API НХЛ: блоков за 60 мин 12.4 (29-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      3,
+      5,
+      6,
+      6
+     ],
+     "why": "API НХЛ: силовых за 60 мин 20.0 (17-е место), темп «medium (structured, opportunistic)»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://blueseatblogs.com/2013/11/25/game-24-the-struggling-and-shorthanded-lightning/",
+    "https://blueseatblogs.com/2022/06/03/scouting-tampa-bay-lightning-systems/",
+    "https://nhl.com/lightning/news/tampa-bay-lightning-defensemen-key-team-s-fast-start-321084464",
+    "https://thehockeynews.com/nhl/montreal-canadiens/latest-news/lalonde-s-arrival-could-be-a-big-help-for-the-penalty-kill",
+    "https://thehockeywriters.com/tampa-bay-lightning-rush-defense-strength-2024-25/",
+    "https://thehockeywriters.com/tampa-bay-lightnings-new-look-power-play/",
+    "https://virtualhockeyscout.substack.com/p/how-brandon-hagel-got-his-groove",
+    "https://www.nhl.com/de/news/die-besten-unterzahleinheiten-der-saison-2025-26",
+    "https://www.nhl.com/news/topic/32-in-32/tampa-bay-lightning-fantasy-projections-for-2025-26-season-32-in-32",
+    "https://www.si.com/nhl/2019/02/06/tampa-bay-lightning-jon-cooper-coaching-staff",
+    "https://www.tampabay.com/sports/lightning/2024/02/03/high-danger-move-lightnings-defensive-zone-change-nets-rewards/"
+   ],
+   "stats": {
+    "shotsForPerGame": 28.379,
+    "hitsPer60": 20.03,
+    "blockedShotsPer60": 12.414,
+    "takeawaysPer60": 3.967,
+    "satPct": 0.532,
+    "games": 95
+   }
+  },
+  "TOR": {
+   "coach": "Jim Hiller",
+   "team": {
+    "neutral_zone": {
+     "value": "1-3-1",
+     "why": "ресёрч (слабый источник): Coach history: LA beat writer says Hiller's Kings were 'very structured with a 1-3-1 through the neutral zone' (2nd in GA/game). Not yet confirmed in Toronto; Hiller says no designated puck carrier in NZ transition."
+    },
+    "trap_forecheck": {
+     "value": 4,
+     "why": "темп «high (new 'faster pace system', close quickly)» (вероятно) + форчек «не найден»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "aggressive",
+     "why": "темп «high (new 'faster pace system', close quickly)» (вероятно)."
+    },
+    "defense": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    },
+    "dpressure": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    }
+   },
+   "lines": {
+    "style": [
+     "behind the net",
+     "behind the net",
+     null,
+     null
+    ],
+    "why": "ресёрч (вероятно): Hiller practices controlled entries, D supporting/trailing at the blue line, forwards rotating around the net and back out to the point; stars get more O-zone freedom. Стиль клуба — первым двум звеньям; 3-е и 4-е — как у EA."
+   },
+   "sliders": {
+    "carry_dump": {
+     "lines": [
+      1,
+      4,
+      4,
+      4
+     ],
+     "why": "ресёрч (вероятно): Under Berube the 'one-and-done' dump-in failed; Hiller's camp stresses controlled entries and far less dump-and-chase. 0 — заносить, 10 — вбрасывать; цель 3 (среднее по звеньям, разница между звеньями — как у EA)."
+    },
+    "pinch": {
+     "lines": [
+      5,
+      6,
+      5
+     ],
+     "why": "ресёрч (вероятно): Rielly-Raddysh pair to join the attack with the top six within reason; D move up ice at pace and trail the rush. 0 — держать синюю, 10 — подключаться; цель 5 (среднее по парам, разница между парами — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      4,
+      4,
+      4,
+      4
+     ],
+     "why": "API НХЛ: бросков за матч 26.6 (22-е место); 0 — разыгрывать, 10 — бросать."
+    },
+    "block": {
+     "lines": [
+      5,
+      6,
+      6,
+      7
+     ],
+     "why": "API НХЛ: блоков за 60 мин 14.9 (7-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      5,
+      7,
+      7,
+      8
+     ],
+     "why": "API НХЛ: силовых за 60 мин 22.1 (7-е место), темп «high (new 'faster pace system', close quickly)»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://thehockeynews.com/nhl/toronto-maple-leafs/latest-news/sergei-bobrovsky-s-presence-jim-hiller-s-fast-system-and-8-more-maple-leafs-training-camp-takeaways",
+    "https://thehockeynews.com/nhl/toronto-maple-leafs/latest-news/three-reasons-why-jim-hillers-maple-leafs-are-completely-different-than-craig-berubes",
+    "https://www.tsn.ca/nhl/video/2026/09/18/hiller-hockey-should-open-door-for-leafs-matthews-to-show-off-takeaway-talent/",
+    "https://www.yardbarker.com/nhl/articles/will_jim_hiller_adjust_his_style_with_leafs/s1_16958_44365859"
+   ],
+   "stats": {
+    "shotsForPerGame": 26.622,
+    "hitsPer60": 22.099,
+    "blockedShotsPer60": 14.873,
+    "takeawaysPer60": 4.44,
+    "satPct": 0.457,
+    "games": 98
+   }
+  },
+  "VAN": {
+   "coach": "Manny Malhotra",
+   "team": {
+    "forecheck": {
+     "value": "1-2-2 aggressive",
+     "why": "ресёрч (вероятно): Coach history (Abbotsford film, June 2026): base OZ forecheck is a 1-2-2 with F1 forcing the carrier to the boards, F2's aggression varying with score/time, switching to 2-1-2 when the goalie plays the puck behind the net. In Sep 2026 Malhotra called the new system 'structured and aggressive'."
+    },
+    "neutral_zone": {
+     "value": "1-4",
+     "why": "ресёрч (слабый источник): Coach history: Abbotsford used an 'uncommon' 1-1-3 NZ forecheck where the bench-side winger drops back into a defenceman's role (three across the blue line). Mapping 1-1-3 to the '1-4' category is my inference."
+    },
+    "trap_forecheck": {
+     "value": 5,
+     "why": "темп «high» (слабый источник) + форчек «1-2-2 aggressive»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "aggressive",
+     "why": "темп «high» (слабый источник)."
+    },
+    "defense": {
+     "value": "collapsing",
+     "why": "ресёрч (слабый источник): Abbotsford used a 'box-and-one' that protects the middle and pushes play to the wall, D and centre tie up near the net, wingers cover points; Malhotra says it is not passive ('not sitting on the inside and soaking shots') with layered support and double-teams."
+    },
+    "dpressure": {
+     "value": "contain puck",
+     "why": "зонная «zone / collapsing / protect the house», темп «high»."
+    }
+   },
+   "lines": {},
+   "sliders": {
+    "carry_dump": {
+     "lines": [
+      2,
+      3,
+      4,
+      5
+     ],
+     "why": "ресёрч (слабый источник): Inference from the possession emphasis and middle-ice bump-pass exits at Abbotsford; no entry data. 0 — заносить, 10 — вбрасывать; цель 3 (среднее по звеньям, разница между звеньями — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      3,
+      3,
+      3,
+      3
+     ],
+     "why": "API НХЛ: бросков за матч 25.2 (29-е место); 0 — разыгрывать, 10 — бросать."
+    },
+    "block": {
+     "lines": [
+      4,
+      6,
+      7,
+      8
+     ],
+     "why": "API НХЛ: блоков за 60 мин 13.5 (24-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      4,
+      4,
+      7,
+      8
+     ],
+     "why": "API НХЛ: силовых за 60 мин 21.3 (11-е место), темп «high»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://canucksarmy.com/news/inside-manny-malhotra-systems-abbotsford-canucks-tactics-nhl-vancouver",
+    "https://dailyhive.com/vancouver/canucks-manny-malhotra-intense-efficient-training-camp",
+    "https://dailyhive.com/vancouver/malhotra-new-canucks-defensive-system"
+   ],
+   "stats": {
+    "shotsForPerGame": 25.235,
+    "hitsPer60": 21.326,
+    "blockedShotsPer60": 13.477,
+    "takeawaysPer60": 4.316,
+    "satPct": 0.462,
+    "games": 98
+   }
+  },
+  "WSH": {
+   "coach": "Spencer Carbery",
+   "team": {
+    "neutral_zone": {
+     "value": "nhl27",
+     "why": "ресёрч не нашёл — как в NHL 27."
+    },
+    "trap_forecheck": {
+     "value": 4,
+     "why": "темп «medium-high» (слабый источник) + форчек «не найден»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "aggressive",
+     "why": "темп «medium-high» (слабый источник)."
+    },
+    "defense": {
+     "value": "tight point",
+     "why": "ресёрч (вероятно): Carbery's Caps play 'a lot of man-to-man' in their own zone (replacing Laviolette's hybrid); theory: quicker closing, more turnovers, faster transition. Source is 2024; no later change found. Персональная опека в игре — «Tight Point» + высокое давление."
+    },
+    "dpressure": {
+     "value": "puck side attack",
+     "why": "опека «man-to-man / swarm / high pressure», темп «medium-high»."
+    },
+    "pp": {
+     "value": "umbrella",
+     "why": "ресёрч (слабый источник): 2026 camp: PP1 = 4 forwards + Chychrun (Strome, Dubois, Wilson, Ovechkin); PP2 roles stated as Hutson QB, Kyrou half-wall, Tuch bumper - a 1-3-1 layout (label is inference). PP was 25th in 2025-26. 1-3-1 в игре — «Umbrella» (один у синей, двое на броски с ходу)."
+    }
+   },
+   "lines": {
+    "style": [
+     "overload",
+     "overload",
+     null,
+     null
+    ],
+    "why": "ресёрч (слабый источник): Man-to-man is meant to produce turnovers and fast transition up ice; 2025-26 zone entries were a problem (Kyrou added to fix). Стиль клуба — первым двум звеньям; 3-е и 4-е — как у EA."
+   },
+   "sliders": {
+    "pinch": {
+     "lines": [
+      8,
+      5,
+      6
+     ],
+     "why": "ресёрч (слабый источник): Chychrun and Cole Hutson expected to be the main offensive catalysts in 2026-27. 0 — держать синюю, 10 — подключаться; цель 6 (среднее по парам, разница между парами — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      5,
+      5,
+      5,
+      5
+     ],
+     "why": "API НХЛ: бросков за матч 28.0 (17-е место); 0 — разыгрывать, 10 — бросать."
+    },
+    "block": {
+     "lines": [
+      7,
+      7,
+      9,
+      10
+     ],
+     "why": "API НХЛ: блоков за 60 мин 16.0 (1-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      3,
+      4,
+      5,
+      7
+     ],
+     "why": "API НХЛ: силовых за 60 мин 19.9 (20-е место), темп «medium-high»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://russianmachineneverbreaks.com/2024/03/21/the-one-coaching-strategy-brian-maclellan-didnt-like-about-spencer-carbery/",
+    "https://thehockeynews.com/nhl/washington-capitals/latest-news/capitals-notebook-first-look-at-power-play-units-protas-brothers-kyrou-finding-quick-chemistry"
+   ],
+   "stats": {
+    "shotsForPerGame": 28.011,
+    "hitsPer60": 19.878,
+    "blockedShotsPer60": 15.962,
+    "takeawaysPer60": 4.297,
+    "satPct": 0.494,
+    "games": 95
+   }
+  },
+  "SEA": {
+   "coach": "Lane Lambert",
+   "team": {
+    "forecheck": {
+     "value": "1-2-2 passive",
+     "why": "ресёрч (слабый источник): Projection from his Toronto (assistant) systems: read-based OZ pressure - two forecheckers only when opposing D are going back under pressure, otherwise fall into the NZ structure; 2025-26 players stress 'a good F3' staying above everything. Category choice is my inference (conservative read forecheck)."
+    },
+    "neutral_zone": {
+     "value": "1-2-2 red",
+     "why": "ресёрч (вероятно): 1-2-2 NZ: F1 presses, F2/F3 deny the red line and funnel, D deny controlled entries; his Toronto team was top-5 in entry denials. Kraken were reported No.1 in limiting odd-man rushes in Oct 2025."
+    },
+    "trap_forecheck": {
+     "value": 1,
+     "why": "темп «low» (вероятно) + форчек «1-2-2 passive»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "conservative",
+     "why": "темп «low» (вероятно)."
+    },
+    "defense": {
+     "value": "collapsing",
+     "why": "ресёрч (вероятно): Projected 2-3 zone coverage: D cover dots-down, centre guards the slot, weak-side D on the net front, priority 'protecting the middle over all else'; no source calls it man-to-man."
+    },
+    "dpressure": {
+     "value": "protect net",
+     "why": "зонная «zone / collapsing / protect the house», темп «low»."
+    },
+    "pk": {
+     "value": "diamond",
+     "why": "ресёрч (слабый источник): Coach history: Lambert's Toronto PK moved from a diamond to a triangle-and-one (two D at crease edges, one F mid-slot, one F pressuring). Projection only; Seattle's 2025-26 PK was 72.2%. Wedge+1 в игре ближе всего к «Diamond»."
+    }
+   },
+   "lines": {},
+   "sliders": {
+    "pinch": {
+     "lines": [
+      6,
+      5,
+      5
+     ],
+     "why": "ресёрч (слабый источник): Players say F3 must stay above any defenseman joining the rush, and D should not back off the offensive blue line; degree of pinching not described. 0 — держать синюю, 10 — подключаться; цель 5 (среднее по парам, разница между парами — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      3,
+      3,
+      3,
+      3
+     ],
+     "why": "API НХЛ: бросков за матч 25.5 (26-е место); 0 — разыгрывать, 10 — бросать."
+    },
+    "block": {
+     "lines": [
+      5,
+      7,
+      8,
+      9
+     ],
+     "why": "API НХЛ: блоков за 60 мин 15.5 (4-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      1,
+      1,
+      4,
+      5
+     ],
+     "why": "API НХЛ: силовых за 60 мин 18.0 (29-е место), темп «low»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://soundofhockey.com/2025/07/24/projecting-the-seattle-kraken-defensive-systems-under-lane-lambert/",
+    "https://soundofhockey.com/2025/10/27/kraken-defense-limiting-rushes-mccann-kakko-injury/",
+    "https://thehockeynews.com/nhl/vancouver-canucks/latest-news/2026-27-vancouver-canucks-divisional-opponent-previews-seattle-kraken"
+   ],
+   "stats": {
+    "shotsForPerGame": 25.531,
+    "hitsPer60": 18.008,
+    "blockedShotsPer60": 15.485,
+    "takeawaysPer60": 4.692,
+    "satPct": 0.455,
+    "games": 96
+   }
+  },
+  "VGK": {
+   "coach": "Ryan Craig",
+   "team": {
+    "forecheck": {
+     "value": "1-2-2 passive",
+     "why": "ресёрч (вероятно): Craig says the on-ice product will look much like Cassidy's system, which he also ran in Henderson. Cassidy-era OZ forecheck (2025 breakdown): tight 1-2-2 with F3 holding the middle lane, D1 pinching the wall, but little physical pressure on opposing D."
+    },
+    "neutral_zone": {
+     "value": "1-2-2 red",
+     "why": "ресёрч (слабый источник): Cassidy reinstated a 1-2-2 NZ (2022) and Vegas mixes in an intentional 1-1-3 'picket fence' at the blue line to force dump-ins (2025). Red-line variant is my inference; continuity under Craig assumed from his statement."
+    },
+    "trap_forecheck": {
+     "value": 2,
+     "why": "темп «medium» (вероятно) + форчек «1-2-2 passive»: 0 — сидеть в средней зоне, 6 — всегда форчек."
+    },
+    "opressure": {
+     "value": "standard",
+     "why": "темп «medium» (вероятно)."
+    },
+    "defense": {
+     "value": "collapsing",
+     "why": "ресёрч (вероятно): Box-plus-one: one player pressures, four hold shape; chase hard on high pucks, collapse to the slot on dangerous low pucks; strong shot-blocking, middle-lane denial, 'defense-first foundation'."
+    },
+    "dpressure": {
+     "value": "contain puck",
+     "why": "зонная «zone / collapsing / protect the house», темп «medium»."
+    },
+    "pp": {
+     "value": "umbrella",
+     "why": "ресёрч (вероятно): 2025: 1-3-1 with Eichel running the left flank, Dorofeyev right-side shooter, Hertl in the bumper; THW (Jul 2026) notes Vegas uses a five-forward PP. 1-3-1 в игре — «Umbrella» (один у синей, двое на броски с ходу)."
+    }
+   },
+   "lines": {
+    "style": [
+     "overload",
+     "overload",
+     null,
+     null
+    ],
+    "why": "ресёрч (вероятно): Recoveries turned into quick attacks with up to four players leading the rush; Vegas runs named rush plays (e.g. 'Marner Delay'); THW calls it a rush-oriented team. Стиль клуба — первым двум звеньям; 3-е и 4-е — как у EA."
+   },
+   "sliders": {
+    "carry_dump": {
+     "lines": [
+      2,
+      1,
+      3,
+      5
+     ],
+     "why": "ресёрч (слабый источник): Inference from rush-first transition and Craig's emphasis on clean breakouts from below the goal line; no entry data found. 0 — заносить, 10 — вбрасывать; цель 3 (среднее по звеньям, разница между звеньями — как у EA)."
+    },
+    "pinch": {
+     "lines": [
+      8,
+      5,
+      4
+     ],
+     "why": "ресёрч (вероятно): 2025: D join the rush, one stays committed to the attack, D1 pinches down the wall on the forecheck; Craig calls the blue line 'the backbone'. Note: in 2022 Cassidy asked Pietrangelo to tone down NZ aggression. 0 — держать синюю, 10 — подключаться; цель 6 (среднее по парам, разница между парами — как у EA)."
+    },
+    "cycle_shoot": {
+     "lines": [
+      6,
+      6,
+      6,
+      6
+     ],
+     "why": "API НХЛ: бросков за матч 28.9 (7-е место); 0 — разыгрывать, 10 — бросать."
+    },
+    "block": {
+     "lines": [
+      5,
+      6,
+      7,
+      8
+     ],
+     "why": "API НХЛ: блоков за 60 мин 14.1 (19-е место); сдвиг от значений EA."
+    },
+    "energy": {
+     "lines": [
+      4,
+      5,
+      6,
+      8
+     ],
+     "why": "API НХЛ: силовых за 60 мин 20.7 (14-е место), темп «medium»; сдвиг от значений EA (0 — экономить силы, 10 — энергия)."
+    }
+   },
+   "sources": [
+    "https://lasvegassun.com/news/2022/dec/01/defensemen-have-thrived-in-golden-knights-coachs-s/",
+    "https://oilersnation.com/news/oilers-golden-knights-tactical-preview",
+    "https://thehockeywriters.com/golden-knights-system-perfectly-fits-2026-draft-pick-juho-piiparinen/"
+   ],
+   "stats": {
+    "shotsForPerGame": 28.949,
+    "hitsPer60": 20.747,
+    "blockedShotsPer60": 14.052,
+    "takeawaysPer60": 4.236,
+    "satPct": 0.522,
+    "games": 98
+   }
+  }
+ }
+}

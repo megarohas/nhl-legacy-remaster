@@ -78,6 +78,7 @@
 - `roster_merge.py` — переносит новую базу в сейв ROSTER (трёхстороннее слияние, правки пользователя сохраняются)
 - `roster_update.py` — новый ростер: трейды по спеке и свежие звенья 32 клубов → база и файл `ROSTER ДД.ММ.ГГГГ` ([docs/roster-update.md](../docs/roster-update.md))
 - `special_rosters.py` — сборные (NHL 27 и своя спека `special_rosters_nations.txt`) и команды Матча звёзд → база и файл `ROSTER ДД.ММ.ГГГГ` ([docs/special-rosters.md](../docs/special-rosters.md))
+- `team_tactics.py` — стратегии 32 клубов НХЛ по спеке `team_tactics.json` (системы тренеров, API НХЛ, NHL 27) → база и сейв ROSTER ([docs/team-tactics.md](../docs/team-tactics.md))
 - `save_sync_ratings.py` — переносит атрибуты из базы в сохранённый состав (сейв ROSTER) после установки
 - `schedule.py save` — переносит календарь в сейв ROSTER: без этого игра возьмёт старый календарь из сейва ([docs/schedule.md](../docs/schedule.md))
 - `draft_roster.py` — собирает `db/draft_roster.db` для старта «NHL Entry Draft» из 10 таблиц нашей базы
