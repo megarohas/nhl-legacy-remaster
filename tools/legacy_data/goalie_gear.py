@@ -17,6 +17,8 @@
 - в exhibitiongoalieequipment вратаря копируются все поля набора, кроме своих: jerseytuck, sticktapecolor,
   keepcustomiftraded, keepcustomstickiftraded;
 - mask_names (по желанию): набор клуба, но маска своя;
+- nhl27_colors (03.11.2026): у клубов списка (UTA, SEA, VGK) белый набор красится цветами зон вратаря из NHL 27 (палитра:
+  самый частый цвет → base, следующие → accent1/accent2 по roles; модели и маска — белого набора);
 - без набора (SEA, VGK, CV, HSK) и клубы из white_names (все спорные — решение пользователя 12.10) (наборы прежних клубов на переименованных
   слотах, у Юты — Аризоны): модели вратаря свои, маска 0/120 (белая), цвета зон — white.zones и white.stick,
   showcustomcolors и showcustomstick = 1.
@@ -57,6 +59,73 @@ def white_values(db, sp, row):
         for c, x in zip('rgb', rgb):
             v[f'stickzone{z}color_{c}'] = x
     return v
+
+
+NHL27_DB = os.path.join(ROOT, 'game', 'work', 'nhl27', 'db', 'nhl_game.db')
+_P27 = None
+
+
+def palettes27(path=NHL27_DB):
+    """Вратари NHL 27: {(имя, фамилия) в нижнем регистре: {'team': название клуба, 'pads'|'blocker'|'trapper': [rgb ×15],
+    'stick': [rgb ×6]}} из exhibitiongoalieequipment (цвет зоны — 0xRRGGBB). Нет базы — {}."""
+    global _P27
+    if _P27 is not None:
+        return _P27
+    _P27 = {}
+    if not os.path.isfile(path):
+        return _P27
+    db = Tdb(open(path, 'rb').read(), load_meta(os.path.join(os.path.dirname(path), 'nhl_game-meta.xml')))
+    eq = {db.get(EQ, 'game_id', r): r for r in db.live_rows(EQ)}
+    rgb = lambda v: [(v >> 16) & 255, (v >> 8) & 255, v & 255]
+    for r in db.live_rows(B):
+        e = eq.get(db.get(B, 'game_id', r))
+        if e is None or db.get(B, 'position', r) != 4:
+            continue
+        t = db.get(B, 'team', r) - 1
+        v = {'team': db.get_string(T, 'teamname', t) if 0 <= t < db.by_name[T]['rows'] else ''}
+        for part in ('pads', 'blocker', 'trapper'):
+            v[part] = [rgb(db.get(EQ, f'{part}zone{z}color', e)) for z in range(1, 16)]
+        v['stick'] = [rgb(db.get(EQ, f'stickzone{z}color', e)) for z in range(1, 7)]
+        _P27[(db.get_string(B, 'firstname', r).lower(), db.get_string(B, 'lastname', r).lower())] = v
+    return _P27
+
+
+def palette(colors):
+    """Цвета зон → [base, accent1, accent2]: по частоте (при равенстве — кто раньше); не хватает — чёрный или белый."""
+    order = []
+    for c in colors:
+        if c not in order:
+            order.append(c)
+    order.sort(key=lambda c: -colors.count(c))
+    while len(order) < 3:
+        order.append([32, 32, 32] if sum(order[0]) > 3 * 128 else [231, 231, 231])
+    return order[:3]
+
+
+def nhl27_values(sp, vals, first, last, club):
+    """Белый набор vals + цвета зон вратаря из NHL 27 (nhl27_colors в goalie_gear.json). -> (vals, откуда) или (vals, None)."""
+    p27 = palettes27()
+    src = p27.get((first.lower(), last.lower()))
+    how = 'свои'
+    if src is None:
+        same = [k for k, v in p27.items() if v['team'] == club]
+        if not same:
+            return vals, None
+        src, how = p27[sorted(same)[0]], f'клуба ({" ".join(sorted(same)[0]).title()})'
+    cfg = sp['nhl27_colors']
+    vals = dict(vals)
+    for part in ('pads', 'blocker', 'trapper'):
+        pal = dict(zip(('base', 'accent1', 'accent2'), palette(src[part])))
+        for role, zones in cfg['roles'].items():
+            for z in zones:
+                for c, x in zip('rgb', pal[role]):
+                    vals[f'{part}zone{z}color_{c}'] = x
+    pal = dict(zip(('base', 'accent1', 'accent2'), palette(src['stick'])))
+    for role, zones in cfg['stick_roles'].items():
+        for z in zones:
+            for c, x in zip('rgb', pal[role]):
+                vals[f'stickzone{z}color_{c}'] = x
+    return vals, how
 
 
 def plan(db):
@@ -119,7 +188,11 @@ def plan(db):
         else:
             why = 'нет набора' if not rows else 'спорный набор — white_names'
             for _, g in gs:
-                out[g] = (white_values(db, sp, None), f'{name}: белый ({why})')
+                vals, src = white_values(db, sp, None), None
+                if name in sp.get('nhl27_colors', {}).get('clubs', ()):   # 03.11.2026: расцветка вратаря из NHL 27
+                    vals, src = nhl27_values(sp, vals, db.get_string(B, 'firstname', bio[g]),
+                                             db.get_string(B, 'lastname', bio[g]), name)
+                out[g] = (vals, f'{name}: белый ({why})' + (f', цвета зон NHL 27 — {src}' if src else ''))
             summary[t] = (name, 'белый', len(gs), len(rows), why)
     return out, summary
 
