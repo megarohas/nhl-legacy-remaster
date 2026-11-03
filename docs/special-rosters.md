@@ -115,6 +115,10 @@ Toews» (те же функции) и «Zdeno Chara» (`82A86448`, CPracticeIonA
 из cvar `nhl_practice_goalie` (по умолчанию `Andrei Vasilevskiy`; имя до 7 байт, фамилия до 11; пусто — Кроуфорд). Полевые
 по умолчанию не меняются.
 
+Где это видно (проверено 03.11.2026 на копии): CUSTOMIZE → CREATION ZONE → EDIT PLAYER → игрок → `START` (Test On Ice) — в
+воротах Василевский (№ 88, синяя маска), в журнале игры `practice goalie: Andrei Vasilevskiy`. В Free Skate, сценариях
+вратаря и обучении поиск по имени не вызывается: там вратарь выбранного клуба или пустые ворота.
+
 Чтобы поиск по имени не промахнулся, строки этих игроков (`NAME_LOOKUP` в `add_players.py`: Чара, Тэйвз, Кроуфорд,
 Василевский) не берутся донорами ни здесь, ни в `add_players.py`/`roster_update.py`, даже если игрок остался без клуба: после
 пересборки Тэйвз, Кроуфорд и Чара именно такие.
@@ -143,7 +147,7 @@ python tools/tdb.py verify "game/work/special-rosters/out/ROSTER 03.11.2026" --m
 В игре: Play Now → команды `Green / Red` и `Black / Blue`, экран составов; сборные — CUSTOMIZE → ROSTER
 MANAGEMENT → EDIT LINES (`LB`/`RB` — команда) или Play Now → лига National → Starting Lineups (проверено 03.11.2026: звенья
 России и Eastern All-Stars в игре такие же, как в базе, меню без окна «damaged»). Вратарь Кроуфорд, по словам пользователя, —
-в редакторе игрока при проверке на льду (CUSTOMIZE → Creation Zone → Edit Player).
+в редакторе игрока при проверке на льду (CUSTOMIZE → Creation Zone → Edit Player → `START`); после врезки там Василевский.
 
 ## Грабли
 
