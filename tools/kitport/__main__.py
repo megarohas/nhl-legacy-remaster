@@ -1,6 +1,7 @@
 """CLI kitport (python -m kitport …, из папки tools/). Команды и порядок — docstring пакета и docs/kitport.md."""
 import argparse
 import datetime
+import json
 import os
 import re
 import shutil
@@ -270,6 +271,67 @@ def cmd_rollback(a):
     return 0
 
 
+KIT_FILES = ("rendering/jersey/texlib_{s}_{a}_{v}.rx2", "rendering/jersey/name_{s}_{a}_{v}_cm.rx2",
+             "rendering/pant/texlib_{s}_{a}_{v}.rx2", "rendering/sock/sock_{s}_{a}_{v}_cm.rx2",
+             "fe/ion/artassets/jerseys/jersey_{s}_{a}_{f}.big", "rendering/logo/texlib_{a}_{s}_{v}.rx2")
+
+
+def put_list(src, clubs):
+    """Файлы форм в раскладке cache: src: клубы реестра nhl24_kits.json (edge_home / edge_away) или все файлы src."""
+    if not clubs:
+        return sorted(os.path.relpath(os.path.join(dp, f), src).replace(os.sep, "/")
+                      for dp, _, fn in os.walk(src) for f in fn)
+    reg = json.load(open(os.path.join(core.TOOLS, "legacy_data", "nhl24_kits.json"), encoding="utf-8"))["kits"]
+    out = []
+    for k in reg:
+        if k["club"] in clubs and k["kit"] in ("edge_home", "edge_away"):
+            for tpl in KIT_FILES:
+                rel = tpl.format(s=k["style"], a=k["art"], v=k["variant"], f=k["fevariant"])
+                if os.path.exists(os.path.join(src, rel)):
+                    out.append(rel)
+    return out
+
+
+def cmd_put(a):
+    """Файлы форм прямо из раскладки (слот форм edgekit/slot/cache или другая, --from) в cache: игры — с копией
+    заменённого (как install: backup-cache, manifest.json, откат — kitport rollback). База и сейвы не меняются, накладка
+    legacy-data не пересобирается (03.11.2026: правки форм ставились отдельно от работы других агентов над базой).
+    Следующая полная установка (kitport install) ставит накладку: перед ней — --stages pack,overlay, иначе она вернёт
+    прежние файлы форм."""
+    import filecmp
+    src = a.src or os.path.join(core.EDGE_WORK, "slot", "cache")
+    clubs = [c for c in a.clubs.split(",") if c] if a.clubs else []
+    files = put_list(src, clubs)
+    cache = core.cache_dir()
+    changes = []
+    for rel in files:
+        dst = os.path.join(cache, *rel.split("/"))
+        if not os.path.exists(dst):
+            changes.append(("NEW", rel, os.path.join(src, rel)))
+        elif not filecmp.cmp(os.path.join(src, rel), dst, shallow=False):
+            changes.append(("CHANGED", rel, os.path.join(src, rel)))
+    if not changes:
+        say(f"ставить нечего: {len(files)} файлов из {src} уже в cache:")
+        return 0
+    if core.game_blocks_cache():
+        sys.exit("NHL Legacy запущена с этим cache: — закройте игру")
+    for kind, rel, _ in changes:
+        say(f"  {kind:8} {rel}")
+    if not confirm(a, f"поставить {len(changes)} файлов из {src} в {cache}?"):
+        say("отменено")
+        return 1
+    bdir, man = core.backup(changes, a.tag)
+    for _, rel, s in changes:
+        dst = os.path.join(cache, *rel.split("/"))
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        shutil.copy2(s, dst)
+    left = [rel for _, rel, s in changes if not filecmp.cmp(s, os.path.join(cache, *rel.split("/")), shallow=False)]
+    say(f"поставлено {len(changes) - len(left)} из {len(changes)}; копия заменённого — {bdir}; откат — "
+        f"python -m kitport rollback {os.path.basename(bdir)}")
+    say("перед следующей полной установкой (kitport install) — kitport build --stages pack,overlay: накладка ещё прежняя")
+    return 0 if not left else 1
+
+
 # ---------------------------------------------------------------- main
 
 def main():
@@ -295,6 +357,11 @@ def main():
     s.add_argument("--meshes", action="store_true", help="и сетки слота (fb.edge_kit meshes) — после правки сеток")
     s = sub.add_parser("install", help="установка в игру с копией заменённого")
     s.add_argument("--tag", required=True, help="метка копии: edge12, mgrhs …")
+    s.add_argument("--yes", action="store_true")
+    s = sub.add_parser("put", help="файлы форм из раскладки слота (или --from) прямо в cache: с копией, без накладки")
+    s.add_argument("--clubs", default="", help="клубы реестра через запятую (FLA,UTA); без них — все файлы --from")
+    s.add_argument("--from", dest="src", default=None, help="раскладка cache: (по умолчанию edgekit/slot/cache)")
+    s.add_argument("--tag", required=True, help="метка копии заменённого: forms-1103 …")
     s.add_argument("--yes", action="store_true")
     s = sub.add_parser("rollback", help="вернуть файлы из backup-cache")
     s.add_argument("dir", help="папка в backup-cache (user-20261021-edge11) или полный путь")
@@ -435,7 +502,7 @@ def main():
         from . import params
         return params.cmd_params(a)
     return {"doctor": cmd_doctor, "status": cmd_status, "snapshot": cmd_snapshot, "compare": cmd_compare, "diff": cmd_diff,
-            "build": cmd_build, "install": cmd_install, "rollback": cmd_rollback}[a.cmd](a)
+            "build": cmd_build, "install": cmd_install, "rollback": cmd_rollback, "put": cmd_put}[a.cmd](a)
 
 
 if __name__ == "__main__":
