@@ -11,8 +11,10 @@
   swoosh   — рисунок 0/125 перекрашен: серебро → light, чёрное → dark; рельеф и блики образца сохраняются (яркость
              текселя внутри своего класса), вентиляционные отверстия (тёмные точки белой маски 0/120) — чёрные;
   stripes  — однотонная оболочка base и две полосы stripe (с тонкой окантовкой trim) от лба к затылку по куполу;
-  carbon   — графитовый карбон (саржа 2×2, шаг CARBON_MM) с тонкой окантовкой trim по линии лба;
-  gradient — сверху top к низу bottom по высоте модели, тонкая полоса trim по границе.
+  carbon   — графитовый карбон (саржа 2×2, шаг CARBON_MM);
+  gradient — сверху top к низу bottom по высоте модели.
+  (03.11.2026: окантовку trim по линии лба у carbon и gradient убрал — на листе она читалась белой чертой поперёк лица,
+  координатор: «шов развёртки/край текстуры».)
 Во всех стилях вентиляционные отверстия — тёмные (по белой маске 0/120). Варианты — VARIANTS ниже (имя → стиль и цвета),
 цвета — sRGB. Номера масок — свободные после 319 (292–319 заняты масками NHL 27, fb/mask_slots.toml); в выбор редактора
 выбранные вписываются в список каталога, который читает exe (формат — docs/goalie-masks.md, раздел агента «Порт»).
@@ -56,8 +58,8 @@ VARIANTS = {
     "black_red": ("swoosh", {"light": (16, 16, 18), "dark": (176, 20, 32)}),
     "stripes_navy": ("stripes", {"base": (10, 28, 66), "stripe": (236, 236, 236), "trim": (196, 22, 36)}),
     "stripes_white": ("stripes", {"base": (236, 236, 236), "stripe": (16, 16, 18), "trim": (150, 154, 160)}),
-    "carbon": ("carbon", {"trim": (176, 180, 186)}),
-    "gradient_red": ("gradient", {"top": (200, 24, 38), "bottom": (16, 16, 18), "trim": (176, 180, 186)}),
+    "carbon": ("carbon", {}),
+    "gradient_red": ("gradient", {"top": (200, 24, 38), "bottom": (16, 16, 18)}),
 }
 
 
@@ -134,7 +136,7 @@ def style_stripes(base, stripe, trim):
     return out
 
 
-def style_carbon(trim):
+def style_carbon(trim=None):
     G = geometry()
     p = G["pos"]
     s = CARBON_MM / 1000.0
@@ -143,17 +145,14 @@ def style_carbon(trim):
     fine = 0.5 + 0.5 * np.sin((p[..., 0] + p[..., 1] - p[..., 2]) / s * np.pi * 4)
     g = 34 + 22 * weave + 8 * fine
     out = np.repeat(g[..., None], 3, -1) * np.array([1.0, 1.02, 1.06])
-    out[np.abs(p[..., 1] - 1.74) < 0.0025] = trim             # тонкая окантовка по линии лба
     return out
 
 
-def style_gradient(top, bottom, trim):
+def style_gradient(top, bottom, trim=None):
     G = geometry()
     y = G["pos"][..., 1]
     t = np.clip((y - 1.66) / (1.90 - 1.66), 0, 1)[..., None]
     out = np.array(bottom) * (1 - t) + np.array(top) * t
-    line = np.abs(y - 1.74) < 0.0025
-    out[line] = trim
     return out
 
 
