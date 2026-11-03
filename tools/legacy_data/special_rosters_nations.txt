@@ -1,0 +1,15 @@
+# Сборные, которые special_rosters.py собирает сам, а не из базы NHL 27 (docs/special-rosters.md).
+#
+# Строка: СБОРНАЯ | G: игроки | D: игроки | F: игроки. Игрок — имя и фамилия, как в базе; тёзок различает клуб в
+# скобках: «Elias Pettersson (VAN)». [C] и [A] — буквы; без них C — у самого опытного одетого полевого (игры в НХЛ),
+# A — у двух следующих. Кого нет в базе, инструмент называет в отчёте и пропускает (данные не придумываются).
+# Новые строки и правки — просто здесь же; # — комментарий.
+#
+# Россия, 03.11.2026. В NHL 27 сборная России есть, но её состав EA не обновляет с 2022 года (Тарасенко и Гусев без
+# клуба, нет Демидова и Мичкова), поэтому состав свой. Правило: кандидаты — игроки, которых называют разборы «какой была
+# бы сборная России на Олимпиаде-2026» (ESPN, 13.01.2026; CBS Sports, 10.02.2026; The Big Lead, 17.02.2026) и списки
+# лучших россиян НХЛ 2025/26 (news.ru, 16.04 и 11.10.2026); из них — те, кто в 2026/27 играет в клубе НХЛ нашей базы
+# (списки клубов сверены с API НХЛ 02.11.2026), по OVR базы: 3 вратаря, 8 защитников, 14 нападающих, из них не меньше
+# двух настоящих центров. Буквы — Овечкин, Малкин, Кучеров. Романов (84) — вместо Минтюкова (82) из списка CBS. Не
+# вошли (OVR ниже или нет в разборах): Бобровский, Воронков, Чинахов, Юров, Канцеров, Свечков; Тарасенко без клуба.
+RUS | G: Andrei Vasilevskiy, Igor Shesterkin, Ilya Sorokin | D: Mikhail Sergachev, Vladislav Gavrikov, Ivan Provorov, Nikita Zadorov, Dmitry Orlov, Alexander Nikishin, Artem Zub, Alexander Romanov | F: Nikita Kucherov [A], Kirill Kaprizov, Artemi Panarin, Kirill Marchenko, Alex Ovechkin [C], Evgeni Malkin [A], Ivan Demidov, Andrei Svechnikov, Pavel Dorofeyev, Ivan Barbashev, Matvei Michkov, Valeri Nichushkin, Pavel Buchnevich, Vladislav Namestnikov

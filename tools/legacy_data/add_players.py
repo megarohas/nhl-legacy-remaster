@@ -73,6 +73,13 @@ SPEC_FIELDS = {
 }
 
 
+# Игроки, которых код игры ищет по имени и фамилии (sub_82B29980): полевой и вратарь тренировки по умолчанию (82A86448
+# «Zdeno Chara», 82AB0DE0/82AB2C88 «Jonathan Toews» и «Corey Crawford»; вратаря порт подменяет на nhl_practice_goalie,
+# по умолчанию Vasilevskiy). Их строки донорами не берутся, даже если игрок остался без клуба (03.11.2026,
+# docs/special-rosters.md, «Вратарь тренировки»).
+NAME_LOOKUP = {('Zdeno', 'Chara'), ('Jonathan', 'Toews'), ('Corey', 'Crawford'), ('Andrei', 'Vasilevskiy')}
+
+
 class SpecError(ValueError):
     pass
 
@@ -298,6 +305,8 @@ class AddWriter(AhlWriter):
         pool = {'G': [], 'S': []}
         for r in range(v.nbio):
             if r in taken or v.created_slot(r) or not v.ai(r) or v.teams_of[r] or r in v.fa_rows:
+                continue
+            if (v.s('firstname', r), v.s('lastname', r)) in NAME_LOOKUP:
                 continue
             pool['G' if v.is_goalie(r) else 'S'].append((v.birth(r), r))
         for k in pool:

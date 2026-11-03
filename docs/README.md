@@ -60,6 +60,7 @@
 - [roster-pipeline.md](roster-pipeline.md) — конвейер `tools/roster`: составы НХЛ 2026/27 → `nhlng.db` (игроки, звенья, номера, рейтинги)
 - [roster-expansion.md](roster-expansion.md) — что добавлено в конвейер: рейтинги по статистике, свободные агенты, тон кожи, европейские лиги, фото не из НХЛ
 - [roster-update.md](roster-update.md) — **новый ростер**: трейды по спеке и свежие звенья 32 клубов → база и файл `ROSTER ДД.ММ.ГГГГ` (`tools/legacy_data/roster_update.py`)
+- [special-rosters.md](special-rosters.md) — **сборные и Матч звёзд**: 19 сборных из NHL 27, Россия по своей спеке, звёзды Востока и Запада для Play Now → база и `ROSTER ДД.ММ.ГГГГ`; вратарь тренировки по умолчанию (`tools/legacy_data/special_rosters.py`, cvar `nhl_practice_goalie`)
 - [add-players.md](add-players.md) — **свои игроки** в базе Legacy по спекам JSON (`tools/legacy_data/add_players.py`, этап `players`): новые и правка, клуб, звенья, OVR, портрет
 - [draft-pool.md](draft-pool.md) — пул драфта франшизы: откуда берётся класс, почему в нём составы CHL 2012 года, пенсия ветеранов
 
