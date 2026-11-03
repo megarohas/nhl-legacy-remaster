@@ -131,6 +131,41 @@ t/s/d/c/w 76 и 20087.
    по шаблону: наш файл из `legacy-data/out` у SEA, VGK, UTA, иначе архив Legacy), затем `kitport install`.
    Сейв ROSTER центры льда не хранит.
 
+**АХЛ из NHL 27 (03.11.2026, все 32 клуба АХЛ).** Пользователь: «обновить логотипы и центры льда клубов АХЛ … как для
+32 клубов НХЛ». Логотипы АХЛ в игре уже нынешние (этап `logos`, PNG HockeyTech 2026/27 — сверено по md5 с
+`game/work/logos/out-ahl`), а центр льда у 29 клубов был EA 2015 года: у восьми переименованных слотов и у SJ на льду —
+прежний клуб (Albany Devils у Абботсфорда, Portland Pirates у Спрингфилда, San Antonio у Colorado Eagles, Stockton у
+Калгари, St. John's у Лаваля и т. д.). В NHL 27 у каждого клуба АХЛ свой `ice_centerlogo_<N>_color`, но номер N у семи
+клубов не равен арту Legacy, поэтому сопоставление — таблица `fb.ice.AHL27` (клуб, арт Legacy, код базы Legacy, N, название)
+по названию клуба в обеих базах (`exhibitionteams` Legacy ↔ `nhl_game.db` NHL 27: город + прозвище или `teamname`):
+
+| код | арт Legacy ← N NHL 27 | код | арт ← N |
+|---|---|---|---|
+| ABB | 141 ← 146 | HMR | 132 ← 160 |
+| SPR | 149 ← 153 (в NHL 27 149 — Тусон!) | COE | 152 ← 456 |
+| TUC | 105 ← 149 | CV | 102 ← 167 |
+| HSK | 103 ← 166 | остальные 25 | арт = N |
+
+- `python -m fb.ice --source nhl27 check` — сверка таблицы с базой NHL 27 (32 из 32; `build` с АХЛ без сверки не идёт).
+- `--league nhl|ahl|all` у `build` и `sheet` (по умолчанию `all`); `extract-cmd` печатает команду выгрузки центров.
+- `edge_kit.pack_ice_centers` берёт `ice.clubs("nhl27")` — теперь и 32 центра АХЛ (шаблон — наш файл из `legacy-data/out`
+  у CV, HSK, TUC, иначе архив Legacy). Менять `edge_kit` не пришлось.
+- Как в NHL 27: у CGW в центре «C» Флэймз и Scotiabank Saddledome (Рэнглерс играют там), у MAN — логотип Jets, у ABB —
+  без синего кольца (зелёный диск во весь круг). Надписи арен у HER, TOA, PRO, CGW выходят за диск льда Legacy (r > 388),
+  как и у клубов НХЛ.
+- Сопоставление мест АХЛ ↔ клубов NHL 27 из `AHL27` — общее и для других переносов (формы АХЛ — агент «Формы»).
+
+```bash
+cd tools
+FB_GAME=nhl27 python -m fb.ice --source nhl27 --league ahl extract-cmd   # команда выгрузки → выполнить её
+python -m fb.ice --source nhl27 check
+python -m fb.ice --source nhl27 --league ahl build && python -m fb.ice --source nhl27 --league ahl sheet
+python -m kitport build --stages pack,overlay && python -m kitport install --tag ahl-ice --yes   # при закрытой игре
+```
+
+Проверено в игре 03.11.2026 (стенд-копия, Play Now Миннесота — Абботсфорд): в центре — Абботсфорд NHL 27 (было Albany
+Devils), красная линия поверх, без артефактов; другие арены АХЛ в игре не смотрели. Лист — `game/work/nhl27/compare/ice_center_ahl.png`.
+
 ## 3. Номера арта SEA = 98, VGK = 99: проверка
 
 - **Архивы** (оглавления всех `.big` диска и TU2): ни одного файла с номером 98/99 ни в одном наборе,

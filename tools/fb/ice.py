@@ -15,6 +15,14 @@ r 378–383 — как у Legacy; N — номер арта EA (0 ANA … 29 WSH
 32 — VGK, 33 — SEA, 22 — прежняя Аризона и 31 — Матч всех звёзд не берутся. Выгрузка источника — python -m fb.extract
 "rink/textures/centerlogo/ice_centerlogo_([0-9]|[1-3][0-9])_color$" --out ice27 (FB_GAME=nhl27). В игру — edge_kit pack
 (центры из game/work/nhl27/out/ice, ICE_CENTERS) → накладка → kitport install.
+
+АХЛ (03.11.2026, пользователь: «обновить логотипы и центры льда клубов АХЛ … как для 32 клубов НХЛ»): все 32 клуба АХЛ
+Legacy (база на 32, nhl_ahl_teams = 32) — в NHL 27 у каждого свой ice_centerlogo_<N>_color. Номер N у 7 клубов не равен
+арту Legacy (переименованные слоты, Тусон, CV, HSK), поэтому таблица AHL27 сопоставлена по названию клуба (база Legacy
+exhibitionteams ↔ nhl_game.db NHL 27) и сверяется при сборке (check_ahl27). До этого у 29 клубов был лёд EA 2015 года
+(у ABB, HMR, BLV, CLE, SPR, LAV, COE, CGW на льду — прежний клуб слота). Выгрузка — тот же fb.extract с номерами из
+AHL27 (python -m fb.ice --source nhl27 extract-cmd печатает команду). --league nhl|ahl|all — какие клубы (по умолчанию
+all: edge_kit pack кладёт в пакет и АХЛ).
 """
 import argparse
 import os
@@ -38,6 +46,28 @@ SKIP27 = {"ARI"}                                       # арт 22 — преж�
 LEGACY_BIG = os.path.join(REPO, "game", "other", "legacy", "big")
 OURS = os.path.join(REPO, "game", "work", "legacy-data", "out", "rendering", "icesurface")
 EA_INDEX = {"vegas": 32, "seattle": 33}  # у остальных номер EA = artid Legacy (0…29)
+# АХЛ: (клуб, арт Legacy, код базы Legacy, номер центра NHL 27, название в обеих базах) — сопоставлено по названию
+# (03.11.2026). Номер ≠ арту: ABB 141←146, HMR 132←160, SPR 149←153 (Тусон в NHL 27 — 149!), COE 152←456, TUC 105←149,
+# CV 102←167, HSK 103←166. CGW: в NHL 27 на льду «C» Флэймз и Saddledome (Рэнглерс играют там) — как в NHL 27.
+AHL27 = [
+    ("abbotsford", 141, "ABB", 146, "Abbotsford Canucks"), ("bakersfield", 163, "BAK", 163, "Bakersfield Condors"),
+    ("belleville", 131, "BLV", 131, "Belleville Senators"), ("hamilton", 132, "HMR", 160, "Hamilton Hammers"),
+    ("charlotte", 162, "CHA", 162, "Charlotte Checkers"), ("chicagowolves", 133, "CHW", 133, "Chicago Wolves"),
+    ("grandrapids", 135, "GRA", 135, "Grand Rapids Griffins"), ("hartford", 137, "HAR", 137, "Hartford Wolf Pack"),
+    ("hershey", 138, "HER", 138, "Hershey Bears"), ("iowa", 139, "IOW", 139, "Iowa Wild"),
+    ("cleveland", 134, "CLE", 134, "Cleveland Monsters"), ("lehighvalley", 148, "LVP", 148, "Lehigh Valley Phantoms"),
+    ("manitoba", 143, "MAN", 143, "Manitoba Moose"), ("milwaukee", 144, "MIL", 144, "Milwaukee Admirals"),
+    ("ontario", 142, "ONT", 142, "Ontario Reign"), ("springfield", 149, "SPR", 153, "Springfield Thunderbirds"),
+    ("providence", 150, "PRO", 150, "Providence Bruins"), ("rochester", 151, "RCH", 151, "Rochester Americans"),
+    ("rockford", 158, "RFD", 158, "Rockford IceHogs"), ("laval", 165, "LAV", 165, "Laval Rocket"),
+    ("coloradoeagles", 152, "COE", 456, "Colorado Eagles"), ("sandiego", 145, "SD", 145, "San Diego Gulls"),
+    ("sanjose_ahl", 157, "SJ", 157, "San Jose Barracuda"), ("tucson", 105, "TUC", 149, "Tucson Roadrunners"),
+    ("calgary_ahl", 161, "CGW", 161, "Calgary Wranglers"), ("syracuse", 154, "SYR", 154, "Syracuse Crunch"),
+    ("texas", 159, "TEX", 159, "Texas Stars"), ("toronto_ahl", 155, "TOA", 155, "Toronto Marlies"),
+    ("utica", 164, "UTI", 164, "Utica Comets"), ("wilkesbarre", 156, "WBS", 156, "Wilkes-Barre/Scranton Penguins"),
+    ("coachella", 102, "CV", 167, "Coachella Valley Firebirds"), ("henderson", 103, "HSK", 166, "Henderson Silver Knights"),
+]
+NHL27_DB = os.path.join(NHL27, "db")
 H = 1024
 
 
@@ -85,11 +115,45 @@ def legacy_current(art):
     return None
 
 
-def clubs(source):
-    """[(клуб, арт Legacy, код, номер центра источника)]."""
+def clubs(source, league="all"):
+    """[(клуб, арт Legacy, код, номер центра источника)]. league: nhl | ahl | all (АХЛ — только у NHL 27)."""
     if source == "nhl27":
-        return [(c, art, code, INDEX27.get(c, art)) for c, art, code in CLUBS + NEW_CLUBS if code not in SKIP27]
-    return [(c, art, code, EA_INDEX.get(c, art)) for c, art, code in CLUBS]
+        nhl = [(c, art, code, INDEX27.get(c, art)) for c, art, code in CLUBS + NEW_CLUBS if code not in SKIP27]
+        ahl = [(c, art, code, n) for c, art, code, n, _ in AHL27]
+        return {"nhl": nhl, "ahl": ahl, "all": nhl + ahl}[league]
+    return [(c, art, code, EA_INDEX.get(c, art)) for c, art, code in CLUBS] if league != "ahl" else []
+
+
+def _norm(s):
+    return "".join(ch for ch in s.lower() if ch.isalnum())
+
+
+def check_ahl27(log=print):
+    """Сверка AHL27 с базой NHL 27 (game/work/nhl27/db/nhl_game.db): у клуба с этим названием (город + прозвище или
+    teamname) номер центра льда (centericelogo, иначе artid) — тот, что в таблице. Нет базы — пропуск. -> число ошибок."""
+    p = os.path.join(NHL27_DB, "nhl_game.db")
+    if not os.path.exists(p):
+        log(f"  сверка АХЛ пропущена: нет {p}")
+        return 0
+    sys.path.insert(0, os.path.join(REPO, "tools"))
+    from tdb import Tdb
+    from tdb_read import load_meta
+    db = Tdb(open(p, "rb").read(), load_meta(os.path.join(NHL27_DB, "nhl_game-meta.xml")))
+    t = "exhibitionteams"
+    by = {}
+    for r in db.live_rows(t):
+        num = {db.get(t, "centericelogo", r), db.get(t, "artid", r)}
+        for nm in (db.get_string(t, "cityname", r) + db.get_string(t, "nickname", r), db.get_string(t, "teamname", r)):
+            by.setdefault(_norm(nm), set()).update(num)
+    bad = 0
+    for _c, art, code, n, name in AHL27:
+        got = by.get(_norm(name))
+        if got is None or n not in got:
+            log(f"  АХЛ {code} «{name}»: в NHL 27 {'нет клуба' if got is None else 'номера ' + str(sorted(got))}, "
+                f"в таблице {n}")
+            bad += 1
+    log(f"  сверка АХЛ с базой NHL 27: {len(AHL27) - bad} из {len(AHL27)} совпали")
+    return bad
 
 
 def paths(source):
@@ -99,7 +163,9 @@ def paths(source):
 def cmd_build(a):
     src, out, name = paths(a.source)
     os.makedirs(out, exist_ok=True)
-    for club, art, code, n in clubs(a.source):
+    if a.source == "nhl27" and a.league != "nhl" and check_ahl27():
+        raise SystemExit("таблица AHL27 расходится с базой NHL 27 — поправить номера (fb/ice.py) и повторить")
+    for club, art, code, n in clubs(a.source, a.league):
         p = os.path.join(src, f"ice_centerlogo_{n}_color.png")
         if not os.path.exists(p):
             print(code, "нет чанка", p)
@@ -117,7 +183,7 @@ def cmd_sheet(a):
         font = ImageFont.load_default()
     S, cols, pad, top = 210, 4, 10, 26
     _, out_dir, name = paths(a.source)
-    lst = clubs(a.source)
+    lst = clubs(a.source, a.league)
     rows = (len(lst) + cols - 1) // cols
     sheet = Image.new("RGB", (cols * (2 * S + 3 * pad), rows * (S + top + pad) + pad), (30, 30, 34))
     d = ImageDraw.Draw(sheet)
@@ -133,20 +199,34 @@ def cmd_sheet(a):
             sheet.paste(Image.open(newp).resize((S, S), Image.LANCZOS), (x + S + pad, y + top))
         else:
             d.text((x + S + pad + 20, y + top + S // 2), "нет чанка", fill=(220, 130, 130), font=font)
-    out = os.path.join(NHL27 if a.source == "nhl27" else NHL24, "compare", "ice_center_32.png")
+    out = os.path.join(NHL27 if a.source == "nhl27" else NHL24, "compare",
+                       "ice_center_32.png" if a.league == "nhl" else f"ice_center_{a.league}.png")
     os.makedirs(os.path.dirname(out), exist_ok=True)
     sheet.save(out)
     print(out, sheet.size)
 
 
+def cmd_extract_cmd(a):
+    """Команда выгрузки центров источника для выбранных клубов (fb.extract, FB_GAME=nhl27)."""
+    nums = sorted({n for _c, _a, _k, n in clubs("nhl27", a.league)})
+    print('FB_GAME=nhl27 python -m fb.extract "rink/textures/centerlogo/ice_centerlogo_(' + "|".join(map(str, nums))
+          + ')_color$" --out ice27')
+
+
 def main():
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--source", choices=("nhl24", "nhl27"), default="nhl24", help="источник центров льда")
+    ap.add_argument("--league", choices=("nhl", "ahl", "all"), default="all",
+                    help="клубы: nhl — 32 НХЛ, ahl — 32 АХЛ (только NHL 27), all — все (по умолчанию)")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("build")
-    sub.add_parser("sheet")
+    sub.add_parser("build", help="PNG центров в формате Legacy → <work>/out/ice/centerlogo_<КОД>.png")
+    sub.add_parser("sheet", help="лист «Legacy сейчас | источник» → <work>/compare/ice_center_<лига>.png")
+    sub.add_parser("check", help="сверка таблицы АХЛ с базой NHL 27")
+    sub.add_parser("extract-cmd", help="напечатать команду выгрузки центров источника")
     a = ap.parse_args()
-    return {"build": cmd_build, "sheet": cmd_sheet}[a.cmd](a)
+    if a.cmd == "check":
+        return 1 if check_ahl27() else 0
+    return {"build": cmd_build, "sheet": cmd_sheet, "extract-cmd": cmd_extract_cmd}[a.cmd](a)
 
 
 if __name__ == "__main__":
