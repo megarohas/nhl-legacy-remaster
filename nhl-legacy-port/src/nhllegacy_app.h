@@ -18,9 +18,11 @@
 void NhlLegacyInstallCrashReporter();  // nhllegacy_crash.cpp
 void NhlLegacyStartCursorHide(rex::ui::Window* window, rex::ui::ImGuiDrawer* drawer);  // nhllegacy_cursor.cpp
 void NhlLegacyStopCursorHide();
-void NhlLegacyShaderStatusBegin(const std::filesystem::path& cache_root);  // nhllegacy_shaderstatus.cpp
+void NhlLegacyOverlayStart();  // nhllegacy_shaderstatus.cpp: поток надписи о шейдерах и заставки
+void NhlLegacyShaderStatusBegin(const std::filesystem::path& cache_root);
 void NhlLegacyShaderStatusEnd();
 void NhlLegacyShaderStatusStop();
+void NhlLegacySplashWindowOpened();  // nhllegacy_splash.cpp
 
 class NhlLegacyApp : public rex::ReXApp {
  public:
@@ -81,9 +83,12 @@ class NhlLegacyApp : public rex::ReXApp {
     }
   }
 
-  // Окно и ImGui уже есть, поток — UI: курсор над окном игры (nhllegacy_cursor.cpp).
+  // Окно и ImGui уже есть, поток — UI: курсор над окном игры (nhllegacy_cursor.cpp), заставка первой загрузки поверх
+  // чёрного окна до первого кадра игры (nhllegacy_splash.cpp, рисует поток надписи о шейдерах).
   void OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) override {
     NhlLegacyStartCursorHide(window(), drawer);
+    NhlLegacySplashWindowOpened();
+    NhlLegacyOverlayStart();
   }
 
   void OnShutdown() override {

@@ -11,6 +11,8 @@
 #include <windows.h>
 #endif
 
+#include <atomic>
+
 #include <rex/cvar.h>
 #include <rex/logging.h>
 #include <rex/ui/imgui_drawer.h>
@@ -24,10 +26,13 @@ namespace {
 
 rex::ui::Window* g_window = nullptr;
 rex::ui::ImGuiDrawer* g_drawer = nullptr;
+std::atomic<bool> g_dialogs{false};  // для заставки (nhllegacy_splash.cpp): окно SDK не должно оказаться под ней
 
 void UpdateCursor() {
   using Visibility = rex::ui::Window::CursorVisibility;
-  const bool hide = REXCVAR_GET(nhl_hide_cursor) && !g_drawer->HasDialogs();
+  const bool dialogs = g_drawer->HasDialogs();
+  g_dialogs.store(dialogs);
+  const bool hide = REXCVAR_GET(nhl_hide_cursor) && !dialogs;
   const Visibility want = hide ? Visibility::kHidden : Visibility::kVisible;
   if (g_window->GetCursorVisibility() != want) {
     g_window->SetCursorVisibility(want);
@@ -53,6 +58,11 @@ void NhlLegacyStartCursorHide(rex::ui::Window* window, rex::ui::ImGuiDrawer* dra
 #if defined(_WIN32)
   g_timer = SetTimer(nullptr, 0, kPollMs, OnCursorTimer);
 #endif
+}
+
+// Открыто ли окно SDK (F3, F4, консоль, сообщение, клавиатура Xam). Обновляется таймером потока UI раз в 200 мс.
+bool NhlLegacySdkDialogOpen() {
+  return g_dialogs.load();
 }
 
 void NhlLegacyStopCursorHide() {

@@ -8,6 +8,8 @@
 // Рисуем своим окном поверх игры, а не окном ImGui: при старте поток UI занят, а окно ImGui переводит вывод кадра в поток
 // UI (задержка и рывки, см. nhllegacy_app.h). Окно прозрачно для мыши и фокуса, лежит сразу над окном игры в Z-порядке,
 // поэтому другие окна его закрывают. Скрытый владелец нужен, чтобы окно не считалось главным окном процесса.
+// Этот же поток рисует заставку первой загрузки (nhllegacy_splash.cpp) и держит порядок: игра, заставка, надпись. Поток
+// запускается при открытии окна (NhlLegacyOverlayStart из OnCreateDialogs), папку хранилища получает позже, в Begin.
 
 #include <filesystem>
 
@@ -17,6 +19,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <mutex>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -28,6 +31,8 @@
 
 #include <rex/cvar.h>
 #include <rex/logging.h>
+
+#include "nhllegacy_splash.h"
 
 REXCVAR_DEFINE_BOOL(nhl_shader_status, true, "NHLLegacy",
                     "Show a \"Compiling shaders\" badge with a spinner over the game window while shaders compile");
@@ -55,6 +60,9 @@ constexpr int kGapAt720 = 10;
 std::atomic<bool> g_stop{false};
 std::atomic<int64_t> g_startup_since{0};  // Clock в мс, 0 — не старт
 std::thread g_thread;
+std::mutex g_thread_mutex;
+std::mutex g_dir_mutex;
+std::filesystem::path g_dir;  // shaders/shareable; пусто — ещё не известна (до OnPreLaunchModule)
 
 int64_t NowMs() {
   return std::chrono::duration_cast<milliseconds>(Clock::now().time_since_epoch()).count();
@@ -131,7 +139,8 @@ class Badge {
     }
   }
 
-  void Show(HWND game, double seconds) {
+  // base — окно, над которым лежит надпись: окно игры или заставка над ним.
+  void Show(HWND game, HWND base, double seconds) {
     RECT client{};
     GetClientRect(game, &client);
     POINT origin{0, 0};
@@ -151,7 +160,7 @@ class Badge {
     BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
     UpdateLayeredWindow(wnd_, nullptr, &pos, &size, dc_, &src, 0, &blend, ULW_ALPHA);
     const bool topmost = (GetWindowLongW(game, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
-    HWND above = GetWindow(game, GW_HWNDPREV);
+    HWND above = GetWindow(base, GW_HWNDPREV);
     if (topmost || above != wnd_ || !visible_) {
       SetWindowPos(wnd_, topmost ? HWND_TOPMOST : (above && above != wnd_ ? above : HWND_TOP), 0, 0, 0, 0,
                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
@@ -266,8 +275,15 @@ class Badge {
   bool visible_ = false;
 };
 
-void Run(std::filesystem::path dir) {
+std::filesystem::path StorageDir() {
+  std::lock_guard<std::mutex> lock(g_dir_mutex);
+  return g_dir;
+}
+
+void Run() {
   Badge badge;
+  NhlLegacySplash splash;
+  std::filesystem::path dir;
   const auto started = Clock::now();
   uint64_t bytes = 0;
   bool have_bytes = false;
@@ -284,7 +300,10 @@ void Run(std::filesystem::path dir) {
     }
     const auto now = Clock::now();
     const int64_t startup_since = g_startup_since.load();
-    if (startup_since) {
+    if (dir.empty()) {
+      dir = StorageDir();
+    }
+    if (startup_since || dir.empty()) {
       have_bytes = false;  // файлы хранилища ещё открываются, за рост не считаем
     } else if (now >= next_poll) {
       next_poll = now + kPoll;
@@ -301,12 +320,15 @@ void Run(std::filesystem::path dir) {
     }
     const bool startup_long = startup_since && NowMs() - startup_since >= kStartupShow.count();
     const bool want = REXCVAR_GET(nhl_shader_status) && (startup_long || growths >= kMinGrowths);
-    if (want && (!game || !IsWindow(game))) {
+    const bool splash_pending = splash.Pending();
+    if ((want || splash_pending) && (!game || !IsWindow(game))) {
       game = nullptr;
       EnumWindows(FindGameWindow, reinterpret_cast<LPARAM>(&game));
     }
+    // Сначала заставка (сразу над игрой), потом надпись над ней.
+    HWND splash_wnd = splash_pending ? splash.Update(game) : nullptr;
     if (want && game) {
-      badge.Show(game, std::chrono::duration<double>(now - started).count());
+      badge.Show(game, splash_wnd ? splash_wnd : game, std::chrono::duration<double>(now - started).count());
     } else {
       badge.Hide();
     }
@@ -314,18 +336,26 @@ void Run(std::filesystem::path dir) {
       shown = want;
       REXLOG_INFO("[nhllegacy] shaders: {}", want ? "compiling" : "idle");
     }
-    Sleep(DWORD((want ? kFrame : kPoll).count()));
+    Sleep(DWORD((want || splash_pending ? kFrame : kPoll).count()));
   }
 }
 
 }  // namespace
 
+void NhlLegacyOverlayStart() {
+  std::lock_guard<std::mutex> lock(g_thread_mutex);
+  if (!g_thread.joinable() && !g_stop.load()) {
+    g_thread = std::thread(Run);
+  }
+}
+
 void NhlLegacyShaderStatusBegin(const std::filesystem::path& cache_root) {
-  if (g_thread.joinable()) {
-    return;
+  {
+    std::lock_guard<std::mutex> lock(g_dir_mutex);
+    g_dir = cache_root / "shaders" / "shareable";
   }
   g_startup_since.store(NowMs());
-  g_thread = std::thread(Run, cache_root / "shaders" / "shareable");
+  NhlLegacyOverlayStart();
 }
 
 void NhlLegacyShaderStatusEnd() {
@@ -333,6 +363,7 @@ void NhlLegacyShaderStatusEnd() {
 }
 
 void NhlLegacyShaderStatusStop() {
+  std::lock_guard<std::mutex> lock(g_thread_mutex);
   g_stop.store(true);
   if (g_thread.joinable()) {
     g_thread.join();
@@ -341,6 +372,7 @@ void NhlLegacyShaderStatusStop() {
 
 #else
 
+void NhlLegacyOverlayStart() {}
 void NhlLegacyShaderStatusBegin(const std::filesystem::path&) {}
 void NhlLegacyShaderStatusEnd() {}
 void NhlLegacyShaderStatusStop() {}

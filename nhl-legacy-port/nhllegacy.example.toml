@@ -25,6 +25,8 @@ input_backend = "xinput"
 # nhl_hide_cursor = false
 # Надпись «Compiling shaders» со спиннером, пока собираются шейдеры.
 # nhl_shader_status = false
+# Заставка при запуске (каток, шайба по кругу, «Loading») вместо чёрного окна — до первого экрана игры.
+# nhl_splash = false
 # Монеты за матчи растут дальше 2 500, потолка сервера EA больше нет.
 # nhl_coins_no_cap = false
 
