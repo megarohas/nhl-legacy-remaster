@@ -82,6 +82,7 @@ VERDICT = {
 
 LETTERING_FROM = "1_14_4"                  # форма EA, с карты номеров которой места фамилии и номера на спине (MIN дом)
 SLEEVE_SMALL = 0.8                         # номер на рукаве мельче, если на цвете верха руки ему нет места (ABB, 03.11)
+FULL_EQUIP = ["ABB", "SPR", "COE", "CLE", "ONT", "CV", "HSK"]   # полный перенос: шлем и краги — NHL 27 (03.11)
 # арт Legacy → арт формы EA, копией которой он стоит (tools/legacy_data/build-all.sh, этап art: teamart.py alias)
 ALIAS_SRC = {102: 153, 103: 150}
 
@@ -823,6 +824,299 @@ def fit_back_number(d):
         rep.append(f"мельче ×{kk:.2f} {sz}, верх на месте")
     return f"номер на спине: был {(ys.min() - hem / f) * per_row * 100:+.1f} см над полосами подола — " + "; ".join(rep)
 
+# ---------------------------------------------------------------- шорты, экипировка, копия формы НХЛ (03.11.2026)
+# Пользователь, 03.11: «трусы, шлемы, перчатки для команд АХЛ, у которых ты серьёзно менял форму, ты не поменял — это
+# косяк». Шорты — текстура формы (pant/texlib_S_A_V); шлем и краги — строки stockteamequipmenttable клуба (equipment 7 и
+# 4, ключ — era, вариант формы, бренд; nhl24.py eq_lookup — как выбирает игра).
+
+def pants27(d, leg, color_png, base_png):
+    """Шорты NHL 27 формы → d/pant_cm.png: ткань — 3D-перенос base_color (сетки шорт NHL 24 → Legacy, как fb.pilot), нашивки
+    — наклейками на шорты полевых в игре (fb.pant_decals.apply), рельеф и блеск — образца Legacy leg без его гербов и с
+    рельефом наших (pant_decals.relief). У АХЛ NHL 27 шорты однотонные — полос низа нет (у CBJ переносом рвались они).
+    Прежде (до 03.11) — родные шорты Legacy с тонировкой: оставались полосы и герб прежнего клуба. -> описание."""
+    import numpy as np
+    from PIL import Image
+    from fb import kit3d, pilot, pant_decals
+    pN, pL = kit3d.load_nhl24(pilot.PANT_N24), kit3d.load_legacy(pilot.PANT_L)
+    bN = kit3d.bbox(pN)
+    bN[3] = pilot.PANT_WAIST
+    pLa = kit3d.aligned(pL, bN, kit3d.bbox(pL))
+    pcol, pbase = kit3d.load_tex(color_png), kit3d.load_tex(base_png)
+    pimg = kit3d.transfer(pbase, pN, pLa, 512, 2)[0]
+    masks = {}
+    pimg, prep = pant_decals.apply(pimg, pcol, pbase, pN, 512, masks=masks)
+    Image.fromarray(np.clip(pimg, 0, 255).astype(np.uint8)).convert("RGB").save(os.path.join(d, "pant_cm.png"))
+    mp = os.path.join(d, pant_decals.MASKS)
+    pant_decals.save_masks(mp, masks)
+    info = pant_decals.relief(leg, d, mp)
+    return f"NHL 27 (3D, нашивок {len(prep)}; рельеф — {pant_decals.relief_note(info)})"
+
+
+EQ_HELMET, EQ_GLOVES = 7, 4
+COPY_FROM = {"UTI": "NJD"}                 # клуб АХЛ → клуб НХЛ, чья форма слота — за основу (03.11, пользователь по Utica:
+#                                    «возьмём за основу форму НХЛ (Нью-Джерси), уберём шильдик НХЛ и поменяем логотип»)
+COPY_KITS = {"home": "away", "away": "home"}   # дом АХЛ — белая (выезд NJD), выезд — красная (дом NJD), как принято в АХЛ
+SHIELD_BOX_UV0 = (0.470, 0.575, 0.530, 0.607)   # щит НХЛ у ворота в развёртке Edge (uv0; у NJD — u 0,488–0,511, v 0,584–0,598):
+#                                    рамка внутри чёрного мыса V — фон рамки (самый частый цвет) — мыс, щит в нём
+
+
+def team27_index():
+    """{код АХЛ: index клуба в exhibitionteams NHL 27} — по названию (fb.ice.AHL27)."""
+    from tdb import Tdb
+    from tdb_read import load_meta
+    from fb.ice import AHL27, _norm
+    D = os.path.join(ROOT, "game", "work", "nhl27", "db")
+    db = Tdb(open(os.path.join(D, "nhl_game.db"), "rb").read(), load_meta(os.path.join(D, "nhl_game-meta.xml")))
+    t = "exhibitionteams"
+    by = {}
+    for r in db.live_rows(t):
+        for nm in (db.get_string(t, "cityname", r) + db.get_string(t, "nickname", r), db.get_string(t, "teamname", r)):
+            by[_norm(nm)] = db.get(t, "index", r)
+    return db, {code: by.get(_norm(name)) for _c, _a, code, _n, name in AHL27}
+
+
+FOLDER_VARIANT = {"home": 0, "away": 1}    # папка комплекта АХЛ NHL 27 → вариант (номер папки, как ten = 10 у НХЛ): у NHL 27
+#                                    белая home — variant 0 с locstring 1; наша форма дома собрана из папки home
+
+
+def zones27(db27, team, eq, var):
+    """Зоны 1–9 строки экипировки NHL 27 для формы клуба с этим вариантом: (−1, вариант) → (−1, −1) → первая.
+    -> [27 чисел] или None."""
+    from kitport.profile import nhl27_equipment
+    rows = nhl27_equipment(db27, team, eq)
+    for v in (var, -1):
+        r = next((x for x in rows if x[1] == v and x[2] == -1), None)
+        if r is not None:
+            return [c for z in r[3] for c in z]
+    return [c for z in rows[0][3] for c in z] if rows else None
+
+
+def equip_plan(db, kits):
+    """План экипировки: [(клуб, форма, equipment, строка базы, зоны было, стало)] — у строк, которые игра берёт для формы
+    (nhl24.eq_lookup: era = стиль формы, вариант, бренд −1 и бренды строк клуба). Клубы — полный перенос (FULL_EQUIP) и
+    копии форм НХЛ (COPY_FROM: экипировка клуба НХЛ той же формы)."""
+    sys.path.insert(0, os.path.join(TOOLS, "legacy_data"))
+    import nhl24 as N
+    low = N.eq_low(db)
+    db27, t27 = team27_index()
+    J = "stockteamjerseys"
+    teamid = {code: next((db.get(J, "teamid", r) for r in db.live_rows(J) if db.get(J, "teamartid", r) == art), None)
+              for _c, art, code, _n, _nm in __import__("fb.ice", fromlist=["AHL27"]).AHL27}
+    ref = _ref_db()                                      # экипировка формы-основы — из базы cache: (с накладкой NHL 27):
+    rlow = N.eq_low(ref)                                 # в базе out строк стиля 2 у NJD ещё нет
+    reg = json.load(open(os.path.join(TOOLS, "legacy_data", "nhl24_kits.json"), encoding="utf-8"))["kits"]
+    plan, seen = [], {}
+    for code in FULL_EQUIP + list(COPY_FROM):
+        if teamid.get(code) is None:
+            print(f"  {code}: клуба нет в этой базе (CV, HSK — только --ahl32) — пропуск")
+            continue
+        tag_h, tag_a, _ = kits[code]
+        recs = N.club_equipment(db, low, teamid[code])
+        for loc, (kit, tag) in enumerate((("home", tag_h), ("away", tag_a))):
+            s_, a_, v_ = (int(x) for x in tag.split("_"))
+            for eq in (EQ_HELMET, EQ_GLOVES):
+                if code in COPY_FROM:                     # экипировка формы клуба НХЛ (слот стиля 2)
+                    src = COPY_FROM[code]
+                    r = next(x for x in reg if x["club"] == src and x["kit"] == f"edge_{COPY_KITS[kit]}")
+                    srecs = N.club_equipment(ref, rlow, r["teamid"])
+                    want = list(N.eq_lookup(srecs, (r["style"], r["variant"], eq, -1))[5])
+                else:
+                    want = zones27(db27, t27[code], eq, FOLDER_VARIANT[kit])
+                if want is None:
+                    continue
+                brands = sorted({x[3] for x in recs if x[2] == eq} | {-1})
+                for b in brands:
+                    best = N.eq_lookup(recs, (s_, v_, eq, b))
+                    if best[2] != eq:
+                        continue
+                    row = best[4]
+                    key = (code, eq, row)
+                    if key in seen and seen[key] != want:
+                        print(f"  {code} {kit}: строка {row} (equipment {eq}) общая с другой формой — оставлена по "
+                              f"{seen[key + ('kit',)]}")
+                        continue
+                    seen[key], seen[key + ("kit",)] = want, kit
+                    if list(best[5]) != want and not any(p_[3] == row for p_ in plan):
+                        plan.append((code, kit, eq, row, list(best[5]), want))
+    return plan
+
+
+_REF = []
+
+
+def _ref_db():
+    from tdb import Tdb
+    from tdb_read import load_meta
+    if not _REF:
+        _REF.append(Tdb(open(os.path.join(CACHE_DB, "nhlng.db"), "rb").read(), load_meta(os.path.join(CACHE_DB, "nhlng-meta.xml"))))
+    return _REF[0]
+
+
+def equip_apply(db, plan):
+    sys.path.insert(0, os.path.join(TOOLS, "legacy_data"))
+    import nhl24 as N
+    lows = db.by_name[N.EQ]["lows"]
+    for _c, _k, _e, row, _old, new in plan:
+        for f, v in zip(N.EQ_ZONES, new):
+            db.set(N.EQ, f, row, v - lows.get(f, 0))
+
+
+def cmd_equip(a):
+    """Шлем и краги полностью перенесённых клубов АХЛ (FULL_EQUIP) — цвета NHL 27 их новой формы, копий форм НХЛ (UTI) — как
+    у формы-основы; база (--db, по умолчанию cache: пользователя) или сейв (--save, ROSTER / DYNASTY). Строки не добавляются
+    — меняются зоны тех, что игра уже берёт для этих форм. Проба — без --write; запись — копия рядом, CRC, повторный план
+    пуст. -> 0."""
+    import shutil
+    import time
+    from tdb import SaveFile, Tdb, load_meta
+    meta_p = a.meta or os.path.join(CACHE_DB, "nhlng-meta.xml")
+    meta = load_meta(meta_p)
+    kits = legacy_kits()
+    targets = [("db", p) for p in (a.db or [])] + [("save", p) for p in (a.save or [])]
+    if not targets:
+        targets = [("db", os.path.join(CACHE_DB, "nhlng.db"))]
+    for kind, path in targets:
+        raw = open(path, "rb").read()
+        if kind == "save":
+            sf = SaveFile(raw, meta)
+            bad0 = sf.verify()
+            if bad0:
+                sys.exit(f"{path}: сейв не проходит проверку до правки: {bad0}")
+            db = sf.db
+        else:
+            db = Tdb(raw, meta)
+        plan = equip_plan(db, kits)
+        print(f"{path}: строк к правке {len(plan)}")
+        for code, kit, eq, row, old, new in plan:
+            print(f"  {code} {kit} {'шлем' if eq == EQ_HELMET else 'краги'} (строка {row}): {old[:3]} → {new[:3]}")
+        if not a.write or not plan:
+            print("  проба: не записано" if not a.write else "  уже так")
+            continue
+        equip_apply(db, plan)
+        bdir = os.path.join(OUT, "backup", f"{os.path.basename(path)}-{time.strftime('%Y%m%d-%H%M%S')}")
+        os.makedirs(bdir, exist_ok=True)
+        shutil.copy2(path, os.path.join(bdir, os.path.basename(path)))
+        if kind == "save":
+            out = sf.bytes(fix=True)
+            if len(out) != len(raw):
+                sys.exit("размер сейва изменился — не пишу")
+            chk = SaveFile(out, meta)
+            bad = chk.verify()
+            if not bad and equip_plan(chk.db, kits):
+                bad = ["повторный план не пуст"]
+        else:
+            db.fix()
+            out = bytes(db.d)
+            chk = Tdb(out, meta)
+            bad = [f"CRC {x}" for x in chk.verify()]
+            if not bad and equip_plan(chk, kits):
+                bad = ["повторный план не пуст"]
+        if bad:
+            sys.exit(f"{path}: проверка не прошла, не записано: {bad}")
+        open(path + ".part", "wb").write(out)
+        os.replace(path + ".part", path)
+        print(f"  записано; CRC — OK; копия до записи — {bdir}")
+    return 0
+
+
+def copy_pants_clean(d, leg, src_out):
+    """Шорты формы-основы без её гербов (NJD: «N» Devils на ноге): по маскам нашивок стадии kit (src_out/pant_decals_a.png,
+    R — гербы спереди) — заливка тканью вокруг; рельеф и блеск — образца Legacy leg без его гербов и без наших
+    (pant_decals.relief с пустой маской). -> описание."""
+    import numpy as np
+    from PIL import Image
+    from scipy import ndimage as ndi
+    from fb import pant_decals
+    mp = os.path.join(src_out, pant_decals.MASKS)
+    if not os.path.exists(mp):
+        return "шорты основы как есть (нет масок нашивок)"
+    pc = np.asarray(Image.open(os.path.join(d, "pant_cm.png")).convert("RGB"))
+    mk = np.asarray(Image.open(mp).convert("RGB").resize(pc.shape[1::-1], Image.NEAREST))
+    m = mk[..., 0] > 20                                  # гербы спереди; щит сзади (G) — шорты НХЛ-клуба, у АХЛ его нет тоже
+    m |= mk[..., 1] > 20
+    n = int(m.sum())
+    if n:
+        out = pc.astype(np.float64).copy()
+        lab, k = ndi.label(ndi.binary_dilation(m, iterations=3))
+        for i in range(1, k + 1):
+            part = lab == i
+            ys, xs = np.nonzero(part)
+            sub_m = part[ys.min() - 2:ys.max() + 3, xs.min() - 2:xs.max() + 3]
+            img = out[ys.min() - 2:ys.max() + 3, xs.min() - 2:xs.max() + 3]
+            ring = ndi.binary_dilation(sub_m, iterations=2) & ~sub_m
+            img[sub_m] = np.median(img[ring], 0)
+        Image.fromarray(np.clip(np.round(out), 0, 255).astype(np.uint8)).save(os.path.join(d, "pant_cm.png"))
+    empty = os.path.join(d, "_no_decals.png")
+    pant_decals.save_masks(empty, {})
+    info = pant_decals.relief(leg, d, empty)
+    os.remove(empty)
+    return f"шорты основы: гербы стёрты ({n} текс.), рельеф — {pant_decals.relief_note(info)}"
+
+
+def cmd_copy(a):
+    """Форма клуба АХЛ — копия формы слота клуба НХЛ (COPY_FROM; 03.11, Utica ← NJD): свитер (развёртка Edge, uv0 —
+    edge_kit.deislanded: у строк АХЛ сетка стиля 1), рельеф, блеск, шрифт, карта номеров, шорты, гетры — формы НХЛ; щит НХЛ
+    у ворота стёрт, герб на груди — герб клуба из NHL 27; превью — заново, наклейка шлема — герб. Дом АХЛ — белая
+    (COPY_KITS). Раскладка — game/work/ahl27/cache."""
+    import shutil
+    import numpy as np
+    from PIL import Image
+    from fb import edge_kit as E, jersey_mesh as J, pilot
+    kits = legacy_kits()
+    cache = os.path.join(OUT, "cache")
+    slot = os.path.join(ROOT, "game", "work", "nhl24", "edgekit", "slot", "kits")
+    for code in a.clubs.split(","):
+        src_club = COPY_FROM[code]
+        folder = FOLDER27[code]
+        s27 = os.path.join(OUT, "src", f"{folder}_crest")
+        base = f"content/character/skater/league/ahl/{folder}/rbk/"
+        if not os.path.exists(os.path.join(s27, f"jersey_rbk_{folder}_home_color.png")):
+            decode27([base + f"{k}/jersey_rbk_{folder}_{k}_{s}" for k in ("home", "away") for s in ("color", "base_color")], s27)
+        k27 = {k: (np.asarray(Image.open(os.path.join(s27, f"jersey_rbk_{folder}_{k}_color.png")).convert("RGB")
+                              .resize((1024, 1024), Image.LANCZOS)),
+                   np.asarray(Image.open(os.path.join(s27, f"jersey_rbk_{folder}_{k}_base_color.png")).convert("RGB")
+                              .resize((1024, 1024), Image.LANCZOS))) for k in ("home", "away")}
+        for i, kit in enumerate(("home", "away")):
+            tag = kits[code][i]
+            leg = os.path.join(OUT, "legacy", tag)
+            if not os.path.exists(os.path.join(leg, "kit.json")):
+                os.makedirs(leg, exist_ok=True)
+                J.unpack_kit(tag, leg)
+            sd = os.path.join(slot, f"{src_club}_{COPY_KITS[kit]}")
+            d = os.path.join(OUT, "kits", f"{code}_{kit}")
+            if os.path.isdir(d):
+                shutil.rmtree(d)
+            shutil.copytree(leg, d)
+            for f in ("jersey_nm", "jersey_sm", "font_cm", "font_nm", "font_sm", "name_cm", "pant_cm", "pant_nm",
+                      "pant_sm", "sock_cm"):
+                shutil.copy2(os.path.join(sd, f + ".png"), os.path.join(d, f + ".png"))
+            E.deislanded(os.path.join(sd, "jersey_cm.png"), os.path.join(d, "jersey_cm.png"))
+            rep_p = copy_pants_clean(d, leg, os.path.join(ROOT, "game", "work", "nhl24", "edgekit", "out",
+                                                          f"{src_club}_{COPY_KITS[kit]}"))
+            jc = np.asarray(Image.open(os.path.join(d, "jersey_cm.png")).convert("RGB"))
+            rep = [f"{code} {kit} {tag} ← {src_club} {COPY_KITS[kit]}", rep_p]
+            m_sh, _ = _patch_mask(jc, SHIELD_BOX_UV0, bg="mode")
+            if m_sh is not None:
+                jc, _ = _erase(jc, m_sh, grow=1)
+                rep.append(f"щит НХЛ стёрт ({int(m_sh.sum())} текс.)")
+            m_old, body = _patch_mask(jc, CREST_BOX)
+            if m_old is None:
+                m_old, body = _patch_mask(jc, CREST_BOX_WIDE)
+            score = {k: -crest_contrast(_decal27(*k27[k], CREST_BOX), body) for k in k27}
+            kk = min(score, key=score.get)
+            crest = _decal27(*k27[kk], CREST_BOX)
+            jc, _ = _erase(jc, m_old)
+            jc, place = _paste(jc, crest, m_old)
+            rep.append(f"герб — NHL 27 {kk}, место {place}")
+            Image.fromarray(jc).save(os.path.join(d, "jersey_cm.png"))
+            pilot.fe_preview_ea(os.path.join(d, "jersey_cm.png")).save(os.path.join(d, "fe.png"))
+            pack_kit(d, tag, cache)
+            rel = put_helmet(tag, crest, cache)
+            rep.append(f"шлем — герб ({rel})")
+            print("; ".join(rep), flush=True)
+    print("раскладка cache: →", cache)
+
+
 def cmd_decode(a):
     """Подпроцесс с FB_GAME=nhl27: текстуры дампа NHL 27 по именам → PNG (1024², как catalog27._decode)."""
     sys.path.insert(0, os.path.join(TOOLS, "kitpicker"))
@@ -871,8 +1165,8 @@ def cmd_build(a):
             base = f"content/character/skater/league/ahl/{folder}/rbk/{kit}/"
             names = [base + f"{l}_rbk_{folder}_{kit}_{s}" for l, s in
                      (("jersey", "color"), ("font", "color"), ("font", "normal"), ("pant", "color"), ("sock", "color"),
-                      ("jersey", "base_color"), ("helmetlogo", "0_color"))]
-            if not os.path.exists(os.path.join(src, names[-2].rsplit("/", 1)[1] + ".png")):
+                      ("jersey", "base_color"), ("helmetlogo", "0_color"), ("pant", "base_color"))]
+            if not os.path.exists(os.path.join(src, names[-1].rsplit("/", 1)[1] + ".png")):
                 decode27(names, src)
 
             def sp(l, s):
@@ -912,9 +1206,8 @@ def cmd_build(a):
                 simg, _, _, _ = kit3d.transfer(kit3d.load_tex(sp("sock", "color")), sN, sLa, (1024, 512), 2)
                 Image.fromarray(np.clip(simg, 0, 255).astype(np.uint8)).convert("RGB").save(os.path.join(d, "sock_cm.png"))
                 rep.append("гетры 3D")
-            if os.path.exists(sp("pant", "color")):
-                rep.append("шорты Legacy цветами NHL 27: " + E.tint_pant(os.path.join(d, "pant_cm.png"), sp("pant", "color"),
-                                                                          second=True))
+            if os.path.exists(sp("pant", "color")) and os.path.exists(sp("pant", "base_color")):
+                rep.append("шорты — " + pants27(d, leg, sp("pant", "color"), sp("pant", "base_color")))
             pilot.fe_preview_ea(os.path.join(d, "jersey_cm.png")).save(os.path.join(d, "fe.png"))
             ref = os.path.join(OUT, "legacy", LETTERING_FROM)    # фамилия и номер на спине — места MIN (как у клубов НХЛ,
             if not os.path.exists(os.path.join(ref, "kit.json")):   # стандарт спины): у карты EA прежнего клуба свои (CLE —
@@ -961,14 +1254,22 @@ def main():
     p = sub.add_parser("crest", help="только герб: форма Legacy, гербы и наклейка шлема — NHL 27 (--clubs HMR,LAV)")
     p.add_argument("--clubs", required=True, help="коды через запятую")
     p.add_argument("--dry", action="store_true", help="без раскладки cache: — только папки форм (картинки)")
+    p = sub.add_parser("copy", help="форма — копия формы слота клуба НХЛ (UTI ← NJD): щит стёрт, герб NHL 27 клуба")
+    p.add_argument("--clubs", default="UTI")
+    p = sub.add_parser("equip", help="шлем и краги клубов с новой формой — цвета NHL 27 (база --db, сейв --save)")
+    p.add_argument("--db", action="append", help="база nhlng.db (по умолчанию — cache: пользователя); можно несколько")
+    p.add_argument("--save", action="append", help="сейв ROSTER/DYNASTY (файл внутри папки сейва)")
+    p.add_argument("--meta", default=None, help="nhlng-meta.xml (по умолчанию — из cache: пользователя)")
+    p.add_argument("--write", action="store_true")
     p = sub.add_parser("out", help="раскладку game/work/ahl27/cache — в дерево (накладка, пакет)")
     p.add_argument("dir", help="корень дерева cache:")
     p = sub.add_parser("decode", help="(служебная) текстуры NHL 27 → PNG, FB_GAME=nhl27")
     p.add_argument("--names", required=True)
     p.add_argument("--out", required=True)
     a = ap.parse_args()
-    os.environ["FB_GAME"] = "nhl24" if a.cmd in ("build", "crest") else "nhl27"   # fb.cas берёт корень дампа при импорте
-    {"sheet": cmd_sheet, "build": cmd_build, "crest": cmd_crest, "out": cmd_out, "decode": cmd_decode}[a.cmd](a)
+    os.environ["FB_GAME"] = "nhl24" if a.cmd in ("build", "crest", "copy", "equip") else "nhl27"   # fb.cas: корень дампа
+    {"sheet": cmd_sheet, "build": cmd_build, "crest": cmd_crest, "out": cmd_out, "decode": cmd_decode, "copy": cmd_copy,
+     "equip": cmd_equip}[a.cmd](a)
 
 
 if __name__ == "__main__":

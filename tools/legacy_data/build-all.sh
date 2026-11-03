@@ -441,6 +441,10 @@ if want nhl24; then
     # календарь — по той же причине: без него пересборка out/db молча вернула бы старый
     want schedule || python $T/schedule.py db out out-ahl32 --write || say "календарь: ошибка — накладка с прежним календарём"
     say "пакет NHL 24 → накладка out-nhl24"
+    # шлем и краги клубов АХЛ с новой формой (kitpicker/ahl27.py equip, docs/kitport.md §13; 03.11.2026) — по той же
+    # причине, что арены: правка строк экипировки базы out, пересборка out/db иначе молча вернула бы прежние цвета
+    "$PYA" tools/kitpicker/ahl27.py equip --db "$W/out/db/nhlng.db" --db "$W/out-ahl32/db/nhlng.db" --write \r
+      || say "шлемы и краги АХЛ: ошибка — накладка с прежними цветами"
     python $T/nhl24.py build "$P"
   else
     say "пакет NHL 24: нет $P/manifest.json — этап пропущен"
