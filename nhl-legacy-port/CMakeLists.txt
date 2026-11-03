@@ -41,6 +41,7 @@ set(NHLLEGACY_SOURCES
     src/nhllegacy_settings.cpp
     src/nhllegacy_unlock.cpp
     src/nhllegacy_user.cpp
+    src/nhllegacy_practice.cpp
 )
 
 if(WIN32)
