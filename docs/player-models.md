@@ -156,6 +156,7 @@ NHL Legacy) — исправлено агентом экипировки.
 | `import EDITED.obj [--src rendering/…] [--out DIR] [--no-lods]` | позиции из OBJ → `.rx2` в раскладке `cache:` (по умолчанию `game/work/models/out`), правка переносится на `_0` и `_3` |
 | `transfer SRC SRC_NEW DST OUT` | перенести правку одной детализации на другую |
 | `shin [--strength 1] [--taper 0.15] [--variants 0,1,2,3] [--no-preview] [--compare 0.5]` | автоправка голени (§6), OBJ и превью |
+| `back [--out DIR] [--socks DIR] [--margin 2]` | задник конька (`skatetongue_0/3`) наружу, где сквозь него проходит гетра ([skates.md](skates.md), «Задник», 03.11.2026) |
 | `check [--out DIR]` | гетры из DIR против ботинка, шнуровки и языка/задника в 7 позах стопы |
 | `preview [--out DIR]` / `objs` | картинки до/после по готовым файлам / OBJ исходных гетр и деталей рядом |
 

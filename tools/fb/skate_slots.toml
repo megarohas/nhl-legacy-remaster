@@ -26,6 +26,9 @@ key = "bauersupreme1s"
 [slot.47]    # C — BAUER Vapor 1X (3430); имя — у клюшки C («BAUER Vapor FlyLite»)
 from = "nhl27:bauer_vapor_flylite_base"
 key = "bauervapor1x"
+# 03.11.2026, пользователь (Свечников): «синий задник и просвечивается икра» — серо-голубые пятка и задник FlyLite сзади
+# темнее и в серый (fb.skates.back_dark, docs/skates.md «Тёмный задник»)
+back = "dark"
 
 [slot.43]    # D — CCM Jetspeed (405)
 from = "nhl27:ccm_jetspeed_ft8_base"

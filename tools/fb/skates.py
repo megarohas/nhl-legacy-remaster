@@ -367,8 +367,63 @@ def convert(model, n=None, var=None):
         out[lm] = np.asarray(Image.open(legacy_png(LACE_REF)).convert("RGBA").resize(SIZE))[lm]
         inner = part_texels(INNER, SIZE)                  # изнанка (стелька, подкладка задника) — тёмная, как у EA (слот
         out[inner] = np.asarray(Image.open(legacy_png(LACE_REF)).convert("RGBA").resize(SIZE))[inner]   # LACE_REF: у 45 — светлая
+        if slot_opts(n).get("back") == "dark":
+            out = back_dark(out)
         im = Image.fromarray(out, "RGBA")
     return im
+
+
+# Тёмный задник (03.11.2026, пользователь про коньки Свечникова, слот 47 Vapor FlyLite: «синий задник и просвечивается
+# икра»). У FlyLite в NHL 27 пятка ботинка и задник над ботинком — светлые серо-голубые панели с синей полосой; на задник
+# детали skatetongue (у skatesocktuck 0 и 3 — поверх гетры сзади, так у 3041 игрока со слотом 47) переносом ложилась ещё и
+# светлая подкладка верха fulltuck — сзади над ботинком светлое пятно, будто видна икра. Правило слота back = "dark"
+# (skate_slots.toml): тексели сзади (задник детали и пятка ботинка над стаканом, позади BACK_Z) с голубым оттенком —
+# в серый и темнее (яркость × BACK_GAIN); чёрное и белое (надписи, белая пятка) не трогаются, переход по оттенку —
+# BACK_BLUE, по яркости — BACK_LUM.
+BACK_Z = -0.045                     # м: середина треугольника ботинка позади — пятка (сустав стопы z −0,033; носок +0,17)
+BACK_Y = 0.105                      # м: выше — ботинок, ниже — стакан (HOLDER_Y)
+BACK_BLUE = (6.0, 14.0)             # B − (R + G)/2: от первого — начало перехода, от второго — полностью в серый
+BACK_LUM = (165.0, 200.0)           # яркость: светлее первого — переход к «не трогать» (белая пятка FlyLite и надписи
+#                                     с лёгкой голубизной иначе шли пятнами), от второго — как есть
+BACK_GAIN = 0.38                    # яркость серо-голубых панелей ×: 130 → ~50, как тёмные части ботинка FlyLite
+
+
+def back_texels(size):
+    """Тексели развёртки (size) сзади: задник детали над ботинком (tongue_legacy() == BACK) и пятка ботинка (треугольники
+    выше BACK_Y и позади BACK_Z), кроме изнанки и подошвы."""
+    key = ("btex", tuple(size))
+    if key not in _M:
+        tt = kit3d.raster_uv(mesh_tongue(), size)[0]
+        lab = tongue_legacy()
+        back = (tt >= 0) & (lab[np.maximum(tt, 0)] == BACK)
+        m = mesh_legacy()
+        c = m["pos"][m["tri"]].mean(1)
+        heel = (c[:, 2] < BACK_Z) & (c[:, 1] > BACK_Y)
+        tb = kit3d.raster_uv(m, size)[0]
+        back |= (tb >= 0) & heel[np.maximum(tb, 0)] & ~part_texels(INNER, size) & ~sole_texels(size)
+        _M[key] = back
+    return _M[key]
+
+
+def back_dark(rgba):
+    """Голубые тексели сзади (back_texels) — в серый, яркость × BACK_GAIN (переход по оттенку BACK_BLUE). -> RGBA."""
+    out = np.asarray(rgba).copy()
+    k = back_texels((out.shape[1], out.shape[0]))
+    c = out[..., :3].astype(np.float64)
+    blue = c[..., 2] - (c[..., 0] + c[..., 1]) / 2
+    lum = c.mean(-1)
+    t = np.clip((blue - BACK_BLUE[0]) / (BACK_BLUE[1] - BACK_BLUE[0]), 0, 1) * k
+    t *= np.clip((BACK_LUM[1] - lum) / (BACK_LUM[1] - BACK_LUM[0]), 0, 1)
+    gray = lum[..., None] * BACK_GAIN
+    out[..., :3] = np.clip(np.round(c * (1 - t[..., None]) + gray * t[..., None]), 0, 255).astype(np.uint8)
+    return out
+
+
+def slot_opts(n):
+    """Необязательные поля слота n в skate_slots.toml (back и т. п.) -> dict."""
+    import tomllib
+    with open(SLOTS, "rb") as f:
+        return dict(tomllib.load(f)["slot"].get(str(n), {}))
 
 
 def part_texels(part, size):

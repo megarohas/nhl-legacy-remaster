@@ -1,5 +1,5 @@
 #!/bin/bash
-# 3D-правки игроков для NHL Legacy: гетры (голень), обмотка клюшки до носка («низ-2», вратарские — без скругления,
+# 3D-правки игроков для NHL Legacy: гетры (голень), задник конька не сквозь икру (skatetongue_0/3), обмотка клюшки до носка («низ-2», вратарские — без скругления,
 # и реквизит вратарской клюшки prop/goaliestick*_left/right_0), нижний край свитера сзади как в NHL 10.
 # Клюшки полевых и клюшка на льду — с осевым UV ленты (tape/out-bottom2-axial, sticktape.py --axial-uv) и варианты
 # обмотки texlib_999.rx2 (tools/tapestyles.py → tapevar/: коды 3, 4, 6, 8, 9 — белая частичная, docs/player-models.md §13).
@@ -18,6 +18,8 @@ O=${LEGACY_DATA_WORK:-game/work/legacy-data}/out
 export PYTHONIOENCODING=utf-8
 if [ "$1" != "--collect" ]; then
   python tools/rw4mesh.py --game legacy shin --no-preview > $M/build-sock.log 2>&1 || { echo "гетры: ошибка, $M/build-sock.log"; exit 1; }
+  # задник конька наружу, где сквозь него проходит гетра (03.11.2026; гетры — только что собранные, models/out)
+  python tools/rw4mesh.py --game legacy back > $M/build-back.log 2>&1 || { echo "задник конька: ошибка, $M/build-back.log"; exit 1; }
   python tools/sticktape.py --game legacy build --round bottom2 --no-preview > $M/build-tape.log 2>&1 \
     || { echo "клюшки: ошибка, $M/build-tape.log"; exit 1; }
   python tools/sticktape.py --game legacy build --round bottom2 --axial-uv --kinds player,dropped --no-preview \

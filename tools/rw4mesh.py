@@ -18,6 +18,8 @@
                                                        # (подробно — docs/player-models.md)
     python rw4mesh.py preview [--out DIR] [--preview DIR]
                                                        # картинки до/после (спереди и сбоку) по готовым файлам
+    python rw4mesh.py back [--out DIR] [--socks DIR] [--margin 2]   # задник конька (skatetongue_0/3) наружу, где сквозь него
+                                                       # проходит гетра (03.11.2026), сводка — manifest-back.json
     python rw4mesh.py check [--out DIR]                # гетры из DIR против ботинка и языка/задника конька: в позе
                                                        # привязки и при сгибе стопы (не проткнула ли деталь гетру)
     python rw4mesh.py objs [--obj DIR]                 # OBJ исходных гетр и деталей рядом (для Blender)
@@ -1496,6 +1498,163 @@ def relation_changes(sock0, sock1, obstacle, axes, ys, na=96, gap=SHIN_GAP):
     return out
 
 
+# ---------------------------------------------------------------- задник конька не сквозь икру (back)
+#
+# 03.11.2026, пользователь (коньки Свечникова): «икра реально проходила через задник. Его нужно, если возможно, немного
+# отогнуть назад». Задник — задняя часть детали конька над ботинком skatetongue_T (T = skatesocktuck 0 — язык и задник,
+# 3 — только задник), одна сетка на все 11 коньков (бренд — только текстура). У EA гетра сзади на высоте 0,22–0,30 м
+# проходит сквозь задник: у 0 — до 10 мм, у 3 — до 16,5 мм (замер лучами из оси голени, гетры EA и мода shin одинаковы —
+# shin ниже 0,30 у 0 и 3 не меняет). Обе детали — на кости голени, поэтому в позах стопы пересечение то же, что в покое.
+# Правило: каждая вершина задней половины детали (луч из оси голени смотрит назад) уходит наружу по лучу так, чтобы
+# внутренняя поверхность детали на этом луче была снаружи гетры не меньше BACK_MARGIN; сдвиг разглаживается по соседям
+# (BACK_SPREAD, не меньше нужного), толщина детали сохраняется (обе стороны стенки — на одну величину). Средняя и дальняя
+# детализации — тем же полем сдвига (transfer).
+BACK_MARGIN = 0.002               # м: задник снаружи гетры не ближе (запас на half-float позиций и сглаживание гетры)
+BACK_SPREAD = 6                   # итераций разглаживания сдвига по соседям
+BACK_PASSES = 2                   # проходов: замер → сдвиг (края крыльев задника после сдвига встречают гетру заново)
+BACK_VARIANTS = (0, 3)            # детали с задником
+BACK_MAX = 0.006                  # м: сдвиг не больше («немного отогнуть»; больше — задник выпирает горбом)
+BACK_Y = (0.243, 0.253)           # м: ниже первого (верх ботинка) задник под ботинком — не двигаем; до второго — сдвиг
+#                                   растёт (иначе у верха ботинка щель между ним и задником)
+
+
+def back_build(margin=BACK_MARGIN, variants=BACK_VARIANTS, sock_dir=None, log=print):
+    """Задник детали конька над ботинком — наружу, где сквозь него проходит гетра (из sock_dir — правленая, иначе игры).
+    → ({путь: Mesh}, сводка)."""
+    skel = Skeleton.game()
+    axes = (LegAxis(skel, 0), LegAxis(skel, 1))
+    res, summary = {}, {}
+    for t in variants:
+        rel = TONGUE.format(t=t, lod=2)
+        m0, m = Mesh.game(rel), Mesh.game(rel)
+        srel = SOCK.format(t=t, lod=2)
+        sp = os.path.join(sock_dir, *srel.split('/')) if sock_dir else None
+        sock = Slicer(Mesh.load(sp) if sp and os.path.exists(sp) else Mesh.game(srel))
+        w = Weld(m)
+        nb = [set() for _ in range(w.ngroups)]
+        for a, b, c in w.faces:
+            ga, gb, gc = w.group[a], w.group[b], w.group[c]
+            nb[ga].update((gb, gc)); nb[gb].update((ga, gc)); nb[gc].update((ga, gb))
+        old = [p[:] for p in m.pos]
+        moved, dmax, first = set(), 0.0, None
+        for _pass in range(BACK_PASSES):        # после сдвига лучи у краёв крыльев задника видят новую стенку — ещё проход
+            tong = Slicer(m)
+            need = [0.0] * w.ngroups
+            for i in range(m.nv):
+                side = leg_of(m0, i)
+                th, _r = axes[side].polar(m.pos[i])
+                if math.sin(th) >= 0:
+                    continue
+                y = m.pos[i][1]
+                if y < BACK_Y[0]:               # ниже верха ботинка задник закрыт ботинком — не трогаем
+                    continue
+                # сечение ровно на высоте вершины теряет её треугольники (касание) — берём чуть выше и ниже
+                sh = sock.hits(axes[side], y, th)
+                oh = tong.hits(axes[side], y + 0.0007, th) + tong.hits(axes[side], y - 0.0007, th)
+                if sh and oh:
+                    g = w.group[i]
+                    ramp = min(1.0, (y - BACK_Y[0]) / (BACK_Y[1] - BACK_Y[0]))
+                    need[g] = max(need[g], (max(sh) + margin - min(oh)) * ramp)
+            req = [max(0.0, x) for x in need]
+            if first is None:
+                first = max(req)
+            if max(req) < 0.0002:
+                break
+            d = req[:]
+            for _ in range(BACK_SPREAD):
+                d = [max(req[g], 0.5 * d[g] + 0.5 * (sum(d[k] for k in nb[g]) / len(nb[g]) if nb[g] else d[g]))
+                     for g in range(w.ngroups)]
+            cur = [p[:] for p in m.pos]
+            for i in range(m.nv):
+                di = min(d[w.group[i]], max(0.0, BACK_MAX - math.dist(old[i], cur[i])))
+                if di <= 1e-6:
+                    continue
+                side = leg_of(m0, i)
+                th, r = axes[side].polar(cur[i])
+                x, z = axes[side].place(cur[i][1], th, r + di)
+                m.set_pos(i, [x, cur[i][1], z])
+                moved.add(i)
+        for i in moved:
+            dmax = max(dmax, math.dist(old[i], m.pos[i]))
+        req = [first or 0.0]
+        moved = len(moved)
+        frames = update_frames(m, old, w)
+        res[rel] = m
+        summary[rel] = {'moved_vertices': moved, 'max_shift_mm': round(dmax * 1000, 2), 'frames_rotated': frames,
+                        'need_max_mm': round(max(req) * 1000, 2)}
+        log(f'  {rel}: сквозь задник было до {max(req) * 1000 - margin * 1000:.1f} мм; сдвинуто {moved} вершин, '
+            f'до {dmax * 1000:.1f} мм')
+        for lod in (0, 3):
+            r2 = TONGUE.format(t=t, lod=lod)
+            dst = Mesh.game(r2)
+            summary[r2] = transfer(m0, m, dst)
+            res[r2] = dst
+            log(f'  {r2}: {summary[r2]}')
+    return res, summary
+
+
+def back_report(res, sock_dir=None, margin=BACK_MARGIN, log=print):
+    """Проверка back_build (лучи сзади, 0,20–0,34 м): выше верха ботинка — гетра в стенке задника и снаружи него (видна
+    сквозь), ниже — щель между деталью и ботинком; до и после. → {путь: {...}}."""
+    skel = Skeleton.game()
+    axes = (LegAxis(skel, 0), LegAxis(skel, 1))
+    boot = Slicer(Mesh.game(BOOT.format(lod=2)))
+    out = {}
+    for rel, m in res.items():
+        if not rel.endswith('_2.rx2'):
+            continue
+        t = int(rel.split('_')[-2])
+        srel = SOCK.format(t=t, lod=2)
+        sp = os.path.join(sock_dir, *srel.split('/')) if sock_dir else None
+        sock = Slicer(Mesh.load(sp) if sp and os.path.exists(sp) else Mesh.game(srel))
+        row = {}
+        for tag, mm in (('было', Mesh.game(rel)), ('стало', m)):
+            tg = Slicer(mm)
+            wall, out_, nwall, nout, gap = 0.0, 0.0, 0, 0, 0.0
+            for side in (0, 1):
+                for k in range(57):
+                    y = 0.20 + 0.0025 * k
+                    for i in range(120):
+                        th = -math.pi + math.pi * i / 120
+                        oh = tg.hits(axes[side], y, th)
+                        if not oh:
+                            continue
+                        bh = boot.hits(axes[side], y, th)
+                        if bh and y < BACK_Y[0]:      # нижний край детали у верха ботинка: щель от ботинка наружу
+                            gap = max(gap, min(oh) - max(bh))
+                        if y < BACK_Y[0]:              # ниже верха ботинка — закрыто ботинком
+                            continue
+                        sh = sock.hits(axes[side], y, th)
+                        if not sh:
+                            continue
+                        if max(sh) > min(oh) - 1e-4:
+                            nwall += 1
+                            wall = max(wall, max(sh) - min(oh))
+                        if max(sh) > max(oh):
+                            nout += 1
+                            out_ = max(out_, max(sh) - max(oh))
+            row[tag] = {'rays_sock_in_wall': nwall, 'sock_past_inner_mm': round(wall * 1000, 1),
+                        'rays_sock_outside': nout, 'sock_outside_mm': round(out_ * 1000, 1),
+                        'gap_to_boot_mm': round(gap * 1000, 1)}
+        out[rel] = row
+        log(f'  {rel}: {row}')
+    return out
+
+
+def cmd_back(args):
+    out = opt(args, '--out', os.path.join(models_dir(), 'out'))
+    sock_dir = opt(args, '--socks', out)
+    margin = float(opt(args, '--margin', str(BACK_MARGIN * 1000))) / 1000
+    print(f'задник конька: запас {margin * 1000:g} мм, гетры — {sock_dir} (нет файла — игры)')
+    res, summary = back_build(margin, sock_dir=sock_dir)
+    summary['check'] = back_report(res, sock_dir, margin)
+    for rel, m in res.items():
+        write_out(out, rel, m)
+    json.dump(summary, open(os.path.join(out, 'manifest-back.json'), 'w', encoding='utf-8'), ensure_ascii=False,
+              indent=1)
+    print(f'файлы: {out} ({len(res)} шт., раскладка cache:), сводка — manifest-back.json')
+
+
 def clearance_report(outdir, lods=(2, 0, 3), poses=SHIN_POSES, log=print):
     """Гетры из outdir против ботинка, шнуровки и языка/задника своего варианта — в позе привязки и в позах poses.
     Проблема (← ПРОВЕРИТЬ) — «внутри → снаружи», «снаружи → внутри», «щель под деталью шире» глубже 1 мм.
@@ -2051,6 +2210,8 @@ def main():
         open(args[3], 'wb').write(d.bytes())
     elif cmd == 'shin':
         cmd_shin(args)
+    elif cmd == 'back':
+        cmd_back(args)
     elif cmd == 'preview':
         cmd_preview(args)
     elif cmd == 'check':
