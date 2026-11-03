@@ -3,15 +3,19 @@
 #   bash tools/device_release.sh            # nhl-legacy-port/dist/device/NHL Legacy Remaster vX.Y.Z
 #   bash tools/device_release.sh --check    # и запустить копию папки до главного меню (снимок и журнал рядом с папкой)
 #   bash tools/device_release.sh --check-only   # только запуск готовой папки
+#   bash tools/device_release.sh --no-saves     # без PROFILE и ROSTER: игра на устройстве с нуля (03.11.2026, по просьбе
+#                                               # пользователя — проверить чистый старт и импорт ростера вручную)
 # Берёт то, что установлено у пользователя: exe, лаунчер, моды, список шейдеров, последние PROFILE и ROSTER
 # (scripts/make_dist.sh --mods), и добавляет файлы игры в game\. Игра должна быть закрыта.
 set -euo pipefail
 
 CHECK=0
+SAVES=1
 for arg in "$@"; do
   case "$arg" in
     --check) CHECK=1 ;;
     --check-only) CHECK=2 ;;
+    --no-saves) SAVES=0 ;;
     *) echo "что? $arg (см. начало файла)"; exit 2 ;;
   esac
 done
@@ -89,7 +93,7 @@ shopt -s nullglob
 old=("$OUT"/*/)
 shopt -u nullglob
 
-bash "$P/scripts/make_dist.sh" --mods
+SAVES=$SAVES bash "$P/scripts/make_dist.sh" --mods
 mv "$P/dist/$NAME" "$D"
 rm -f "$D/game/"*.txt
 rmdir "$D/game"
@@ -114,6 +118,7 @@ done
   echo "коммит $(git -C "$R" rev-parse --short HEAD)"
   echo "exe $(md5sum "$D/nhllegacy.exe" | cut -c1-8)"
   echo "лаунчер $(md5sum "$D/nhllegacy_launcher.exe" | cut -c1-8)"
+  [ "$SAVES" = 1 ] && echo "сейвы: последние PROFILE и ROSTER" || echo "сейвы: нет (старт с нуля)"
 } > "$D/release.txt"
 
 # Основа будущих обновлений частями: у следующей версии будет с чем сравнить.
