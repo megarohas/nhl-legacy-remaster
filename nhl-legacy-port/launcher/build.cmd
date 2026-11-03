@@ -6,7 +6,9 @@ rem Icon: tools\make_icon.py -> icon\nhllegacy.ico (not in git, drawn from the g
 setlocal
 set "PATH=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer;%PATH%"
 call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" >nul || exit /b 1
+rem NHL_LAUNCHER_OUT=<folder> builds elsewhere (test stands), out\launcher stays untouched.
 set "OUT=%~dp0..\out\launcher"
+if defined NHL_LAUNCHER_OUT set "OUT=%NHL_LAUNCHER_OUT%"
 if not exist "%OUT%" mkdir "%OUT%"
 set "VER=dev"
 if exist "%~dp0..\..\VERSION" set /p VER=<"%~dp0..\..\VERSION"

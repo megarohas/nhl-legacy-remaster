@@ -78,14 +78,6 @@ std::wstring Widen(const std::string& s) {
   return w;
 }
 
-std::string Narrow(const std::wstring& w) {
-  if (w.empty()) return {};
-  int n = WideCharToMultiByte(CP_UTF8, 0, w.data(), static_cast<int>(w.size()), nullptr, 0, nullptr, nullptr);
-  std::string s(n, '\0');
-  WideCharToMultiByte(CP_UTF8, 0, w.data(), static_cast<int>(w.size()), s.data(), n, nullptr, nullptr);
-  return s;
-}
-
 bool ReadFileBytes(const std::wstring& path, std::string& out) {
   HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                          nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -177,7 +169,6 @@ struct State {
   bool vibration = true;
   int season = 2015;
   long long cap = 0, floor = 0, min_salary = 0;  // $
-  std::string user_name;  // nhl_user_name; пусто — как у SDK, User
 };
 
 struct Kv {
@@ -206,38 +197,52 @@ double GetDouble(const Cvars& c, const char* key, double def) {
   return std::strtod(it->second.c_str(), nullptr);
 }
 
-// Имя игрока. У игры на него 15 байт UTF-8 и нуль, поэтому русская буква занимает два места. Шрифт игры рисует латиницу,
-// кириллицу, цифры и знаки ниже (проверено в игре 02.11.2026, docs/launcher.md, «Имя игрока»), прочее выбрасывается при вводе.
-constexpr size_t kNameMax = 15;
+// Имя игрока в лаунчере больше не задаётся (пользователь, 03.11.2026: «пусть будет всегда User»): поле убрано, игре имя не
+// передаётся, и она берёт умолчание SDK, User (cvar nhl_user_name в exe остался, docs/launcher.md, «Имя игрока»). Строку
+// nhl_user_name, которую записал лаунчер 0.14, при запуске убирает DropUserNameLine.
+constexpr char kUserNameKey[] = "nhl_user_name";
 
-bool NameChar(wchar_t c) {
-  if ((c >= L'A' && c <= L'Z') || (c >= L'a' && c <= L'z') || (c >= L'0' && c <= L'9')) return true;
-  if ((c >= 0x0410 && c <= 0x044F) || c == 0x0401 || c == 0x0451) return true;
-  return c != 0 && std::wcschr(L" -_.'!?+&@#", c) != nullptr;
-}
+bool WriteFileAtomic(const std::wstring& path, const std::string& text);
 
-// Только допустимое и не длиннее kNameMax байт.
-std::wstring NameFilter(const std::wstring& text) {
-  std::wstring out;
-  size_t bytes = 0;
-  for (wchar_t c : text) {
-    if (!NameChar(c)) continue;
-    const size_t size = c < 0x80 ? 1 : 2;
-    if (bytes + size > kNameMax) break;
-    bytes += size;
-    out.push_back(c);
+// Убирает из файла лаунчера строки nhl_user_name и заголовок их блока («# Player» / «# Игрок»), остальное — как было.
+// true — файл переписан.
+bool DropUserNameLine(const std::wstring& path) {
+  std::string text;
+  if (!ReadFileBytes(path, text)) return false;
+  std::vector<std::string> lines;
+  for (size_t pos = 0; pos <= text.size();) {
+    size_t nl = text.find('\n', pos);
+    if (nl == std::string::npos) nl = text.size();
+    lines.push_back(text.substr(pos, nl - pos));
+    pos = nl + 1;
   }
-  return out;
-}
-
-// Значение для игры: ещё и без пробелов по краям и двойных.
-std::string CleanName(const std::wstring& text) {
-  std::wstring out;
-  for (wchar_t c : NameFilter(text)) {
-    if (c != L' ' || (!out.empty() && out.back() != L' ')) out.push_back(c);
+  auto key_of = [](const std::string& line) {
+    const std::string t = Trim(line);
+    const size_t eq = t.find('=');
+    return t.empty() || t[0] == '#' || eq == std::string::npos ? std::string() : Trim(t.substr(0, eq));
+  };
+  std::vector<std::string> kept;
+  bool dropped = false;
+  for (size_t i = 0; i < lines.size(); ++i) {
+    if (key_of(lines[i]) == kUserNameKey) {
+      dropped = true;
+      continue;
+    }
+    // Заголовок блока имени: сразу за ним шла только строка имени.
+    const std::string t = Trim(lines[i]);
+    if ((t == "# Player" || t == "# Игрок") && i + 1 < lines.size() && key_of(lines[i + 1]) == kUserNameKey) {
+      if (!kept.empty() && Trim(kept.back()).empty()) kept.pop_back();
+      continue;
+    }
+    kept.push_back(lines[i]);
   }
-  while (!out.empty() && out.back() == L' ') out.pop_back();
-  return Narrow(out);
+  if (!dropped) return false;
+  std::string out;
+  for (size_t i = 0; i < kept.size(); ++i) {
+    out += kept[i];
+    if (i + 1 < kept.size()) out += '\n';
+  }
+  return WriteFileAtomic(path, out);
 }
 
 State FromCvars(const Cvars& c) {
@@ -268,7 +273,6 @@ State FromCvars(const Cvars& c) {
   s.cap = GetInt(c, "nhl_salary_cap", 0);
   s.floor = GetInt(c, "nhl_salary_floor", 0);
   s.min_salary = GetInt(c, "nhl_salary_min", 0);
-  s.user_name = CleanName(Widen(Get(c, "nhl_user_name", "")));
   return s;
 }
 
@@ -302,7 +306,6 @@ std::vector<Kv> ToCvars(const State& s) {
   const char* kScreen = T8("Display", "Экран");
   const char* kInput = T8("Controls", "Управление");
   const char* kLeague = T8("Season and finances", "Сезон и финансы");
-  const char* kPlayer = T8("Player", "Игрок");
   const char* kAlways = T8("Always on", "Всегда включено");
   auto b = [](bool v) { return std::string(v ? "true" : "false"); };
   std::vector<Kv> kv;
@@ -333,7 +336,6 @@ std::vector<Kv> ToCvars(const State& s) {
   kv.push_back({"nhl_salary_cap", std::to_string(s.cap), false, kLeague});
   kv.push_back({"nhl_salary_floor", std::to_string(s.floor), false, kLeague});
   kv.push_back({"nhl_salary_min", std::to_string(s.min_salary), false, kLeague});
-  kv.push_back({"nhl_user_name", s.user_name, true, kPlayer});
   for (const auto& e : kAlwaysOn) kv.push_back({e.key, e.value, false, kAlways});
   return kv;
 }
@@ -359,6 +361,11 @@ bool WriteLauncherToml(const std::wstring& path, const std::vector<Kv>& kv) {
     }
     text += e.key + " = " + (e.quoted ? "\"" + e.value + "\"" : e.value) + "\n";
   }
+  return WriteFileAtomic(path, text);
+}
+
+// Через .tmp и замену: оборванной записи в файле не будет.
+bool WriteFileAtomic(const std::wstring& path, const std::string& text) {
   const std::wstring tmp = path + L".tmp";
   HANDLE f = CreateFileW(tmp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
   if (f == INVALID_HANDLE_VALUE) return false;
@@ -396,7 +403,6 @@ enum HintId {
   kHintReset,
   kHintPlay,
   kHintLanguage,
-  kHintName,
   kHintRosters,
   kHintCount
 };
@@ -438,13 +444,10 @@ const Hint kHintsEn[kHintCount] = {
      L"Salary cap, floor and minimum salary of the first season, $ millions. 0 — as on the disc "
      L"(2015/16: 71.4 / 52.8 / 0.575). After that they grow by the game's rules. Doesn't affect an existing "
      L"franchise."},
-    {L"Reset", L"Restore all settings as in nhllegacy.toml (as without the launcher). The player name stays."},
+    {L"Reset", L"Restore all settings as in nhllegacy.toml (as without the launcher)."},
     {L"Play",
      L"Save the settings to nhllegacy_launcher.toml and start the game. nhllegacy.toml is not changed."},
     {L"Language", L"Launcher language: English or Russian. The game itself is not affected."},
-    {L"Player name",
-     L"Your name in the game instead of “User”: Profile Management, the SAVE/LOAD lists and the bar at the bottom of "
-     L"the menus. Up to 15 characters, a Cyrillic letter takes two places. Saves don't depend on it. Empty — User."},
     {L"Update rosters",
      L"Add a roster made on another PC: pick the file from ...\\454109EC\\00000001\\ROSTER <date>. The launcher "
      L"checks it against this game's data and adds it, the game loads it on the next start. Your earlier rosters and "
@@ -487,13 +490,10 @@ const Hint kHintsRu[kHintCount] = {
     {L"Финансы новой франшизы",
      L"Потолок зарплат, нижний порог и минимальная зарплата первого сезона, млн $. 0 — как на диске "
      L"(2015/16: 71,4 / 52,8 / 0,575). Дальше растут по правилам игры. На созданную франшизу не влияет."},
-    {L"Сбросить", L"Вернуть все настройки как в nhllegacy.toml (как без лаунчера). Имя игрока остаётся."},
+    {L"Сбросить", L"Вернуть все настройки как в nhllegacy.toml (как без лаунчера)."},
     {L"Играть",
      L"Сохранить настройки в nhllegacy_launcher.toml и запустить игру. nhllegacy.toml не меняется."},
     {L"Язык", L"Язык лаунчера: английский или русский. На саму игру не влияет."},
-    {L"Имя игрока",
-     L"Ваше имя в игре вместо «User»: Profile Management, списки SAVE/LOAD и нижняя строка меню. До 15 символов, "
-     L"русская буква занимает два места, то есть до 7 букв. Сейвы от имени не зависят. Пусто — User."},
     {L"Обновить ростеры",
      L"Добавить ростер, сделанный на другом ПК: выберите файл из ...\\454109EC\\00000001\\ROSTER <дата>. Лаунчер "
      L"сверит его с данными этой игры и добавит, игра загрузит его при следующем запуске. Прежние ростеры и профиль "
@@ -531,7 +531,6 @@ enum ControlId {
   kIdPlay,
   kIdNote,
   kIdLang,
-  kIdName,
   kIdRosters,
 };
 
@@ -741,14 +740,10 @@ void CreateControls() {
   MoneyEdit(T(L"Minimum", L"Минимум"), kIdMin, jx, 228, lab, 80);
   AddZone(jx, 132, rcw, 120, kHintMoney);
 
-  // Игрок и ростеры: группа вровень с «Экраном».
-  Group(T(L"Player and rosters", L"Игрок и ростеры"), rx, 282, rw, 106);
-  Label(T(L"Player name", L"Имя игрока"), jx, 304, lab);
-  HWND name = Add(L"EDIT", L"", ES_AUTOHSCROLL | WS_TABSTOP, jx + lab, 304, rcw - lab, 24, kIdName, kFontNormal,
-                  WS_EX_CLIENTEDGE);
-  SendMessageW(name, EM_SETLIMITTEXT, kNameMax, 0);
-  g.hint_of[name] = kHintName;
-  AddZone(jx, 304, rcw, 26, kHintName);
+  // Ростеры: группа вровень с «Экраном». Поля имени игрока здесь больше нет (03.11.2026, имя всегда User).
+  Group(T(L"Rosters", L"Ростеры"), rx, 282, rw, 106);
+  Label(T(L"A roster made on another PC:", L"Ростер, сделанный на другом ПК:"), jx, 304, rcw, 24);
+  AddZone(jx, 304, rcw, 26, kHintRosters);
   HWND rosters = Add(L"BUTTON", T(L"Update rosters…", L"Обновить ростеры…"), BS_PUSHBUTTON | WS_TABSTOP, jx, 342, rcw,
                      32, kIdRosters);
   g.hint_of[rosters] = kHintRosters;
@@ -817,18 +812,6 @@ std::wstring TextOf(int id) {
   return buf;
 }
 
-// Поле имени: недопустимое и лишнее убирается сразу, курсор остаётся на месте.
-void FilterName() {
-  HWND edit = Item(kIdName);
-  const std::wstring text = TextOf(kIdName), kept = NameFilter(text);
-  if (kept == text) return;
-  DWORD from = 0;
-  SendMessageW(edit, EM_GETSEL, reinterpret_cast<WPARAM>(&from), 0);
-  const DWORD left = std::min(static_cast<DWORD>(kept.size()), from);
-  SetWindowTextW(edit, kept.c_str());
-  SendMessageW(edit, EM_SETSEL, left, left);
-}
-
 void UpdateSharpLabel() {
   int v = static_cast<int>(SendMessageW(Item(kIdSharp), TBM_GETPOS, 0, 0));
   wchar_t buf[16];
@@ -872,7 +855,6 @@ void ToUi(const State& s) {
   SetWindowTextW(Item(kIdCap), MoneyText(s.cap).c_str());
   SetWindowTextW(Item(kIdFloor), MoneyText(s.floor).c_str());
   SetWindowTextW(Item(kIdMin), MoneyText(s.min_salary).c_str());
-  SetWindowTextW(Item(kIdName), Widen(s.user_name).c_str());
   SetComboSel(kIdLang, g_lang);
   UpdateEnabled();
 }
@@ -895,7 +877,6 @@ bool FromUi() {
   s.vibration = GetCheck(kIdVibration);
   int sel = ComboSel(kIdSeason);
   if (sel >= 0) s.season = static_cast<int>(SendMessageW(Item(kIdSeason), CB_GETITEMDATA, sel, 0));
-  s.user_name = CleanName(TextOf(kIdName));
   struct {
     int id;
     double max;
@@ -984,7 +965,7 @@ bool SaveState() {
   return true;
 }
 
-// Командная строка игры: значение с пробелом — в кавычках (имя игрока). Пустое значение не передаётся: разбор аргументов SDK
+// Командная строка игры: значение с пробелом — в кавычках. Пустое значение не передаётся: разбор аргументов SDK
 // (CLI11) принял бы за него следующий аргумент, и пропала бы настройка после имени.
 std::wstring GameCommand() {
   std::wstring cmd = L"\"" + g.exe + L"\"";
@@ -1295,7 +1276,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
       const int id = LOWORD(wp);
       const int code = HIWORD(wp);
       if (id == kIdFullscreen && code == BN_CLICKED) UpdateEnabled();
-      if (id == kIdName && code == EN_CHANGE) FilterName();
       if (id == kIdRosters && code == BN_CLICKED) UpdateRosters();
       if (id == kIdPresent && code == CBN_SELCHANGE) {
         // У CAS и FSR своя резкость: запомнить ползунок старого режима, показать нового.
@@ -1308,9 +1288,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         UpdateEnabled();
       }
       if (id == kIdReset && code == BN_CLICKED) {
-        const std::string name = CleanName(TextOf(kIdName));  // имя — не настройка запуска, «Сбросить» его не трогает
         g.state = BaseState();
-        g.state.user_name = name;
         ToUi(g.state);
       }
       if (id == kIdLang && code == CBN_SELCHANGE && ComboSel(kIdLang) != g_lang) {
@@ -1461,6 +1439,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
     FileTimeToLocalFileTime(&fa.ftLastWriteTime, &local);
     FileTimeToSystemTime(&local, &g.exe_time);
   }
+  // Имя игрока лаунчер 0.14 писал в свой файл: убрать, чтобы игре оно больше не попадало (снимок окна файл не меняет).
+  if (!g.shot) DropUserNameLine(g.launcher_toml);
   LoadState();
   if (lang_arg == L"en" || lang_arg == L"ru") g_lang = lang_arg == L"ru" ? 1 : 0;
   if (print_command) {
