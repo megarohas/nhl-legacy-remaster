@@ -6,7 +6,8 @@
     python tools/legacy_data/special_rosters.py show [--db БАЗА] RUS EAS WES  # состав и звенья команд базы или сейва
 
 Что делает (подробно — docs/special-rosters.md):
-- **Сборные из NHL 27** (по умолчанию 19 стран: все, что есть у Legacy, кроме RUS и BEL). Состав, номера, буквы и звенья —
+- **Сборные из NHL 27** (по умолчанию 20 стран: все, что есть у Legacy, кроме RUS; Беларусь — с 03.11.2026, решение
+  пользователя). Состав, номера, буквы и звенья —
   из сборной базы NHL 27 (лига 10, best-on-best). Игрок, который есть в нашей базе (имя и дата рождения), идёт в сборную
   как есть: клуб, атрибуты и голова — наши. Кого в базе нет, занимает строку игрока, который был только в сборной и
   выбыл (сначала своей страны, потом другой), потом строку игрока без клуба: биография и атрибуты — из NHL 27, без
@@ -18,7 +19,7 @@
   по амплуа), остальные места — лучшим по OVR, равный OVR решают очки (у вратарей — победы) прошлого сезона. Звенья по
   позициям (pos_lines: в центре — центры, крайние по своей стороне, пары лево/право, одноклубники вместе), C и A — у
   трёх лучших полевых.
-- Сборные и звёзды, которые не пересобираются (Беларусь и др.), не трогаются. Выбывший из сборной игрок без клуба
+- Сборные из --keep не трогаются (по умолчанию — никакие). Выбывший из сборной игрок без клуба
   становится игроком без клуба, как ветераны. Игроков, которых игра ищет в коде по имени (вратарь и полевые тренировки по
   умолчанию — NAME_LOOKUP), инструмент строками-донорами не берёт.
 
@@ -60,7 +61,8 @@ from tdb import SaveFile, Tdb, load_meta  # noqa: E402
 WORK = os.path.join(ROOT, 'game', 'work', 'special-rosters')
 NATIONS_SPEC = os.path.join(HERE, 'special_rosters_nations.txt')
 LEAGUE27_NATIONAL = 10                 # лига NHL 27 со сборными best-on-best (25 — чемпионат мира, 24 — юниоры)
-KEEP_DEFAULT = ('BEL',)                # Беларусь не пересобираем: не просили (03.11.2026), в NHL 27 состав 2022 года
+KEEP_DEFAULT = ()                      # не трогать никого. Беларусь — из NHL 27: решение пользователя 03.11.2026
+                                       # («Беларусь бери из NHL 27»); до этого её не трогали (BEL)
 OWN_DEFAULT = ('RUS',)                 # Россия — своя спека: у NHL 27 состав не обновлялся с 2022 года
 ALLSTAR_SIZE = {'G': 3, 'D': 8, 'F': 13}   # 24 игрока, как у команд Матча звёзд базы (24–25); одеты 20
 MIN_CENTRES = 4
@@ -101,6 +103,8 @@ def parse_nations(path):
                 raise SpecError(f'{where}: «{col}» — нужно «G: игроки», «D: …» или «F: …»')
             grp, names = col.split(':', 1)
             grp = grp.strip().upper()
+            add = grp.startswith('+')
+            grp = grp.lstrip('+').strip()
             if grp in LINE_COLS:
                 who = [CLUB.sub('', TAG.sub('', x)).strip() for x in names.split(' - ')]
                 if len(who) != LINE_COLS[grp] or not all(who):
@@ -119,7 +123,7 @@ def parse_nations(path):
                 if len(name.split()) < 2:
                     raise SpecError(f'{where}: «{it}» — нужно имя и фамилия')
                 players.append({'name': name, 'group': grp, 'letter': {'C': 1, 'A': 2}.get(tag.group(1)) if tag else 0,
-                                'club': club.group(1) if club else None})
+                                'club': club.group(1) if club else None, 'add': add})
         out[abbr] = players
         got = parse_nations.lines.get(abbr)
         if got and set(got) != set(LINE_COLS):
@@ -206,10 +210,11 @@ class Special:
         self.centre_ok = self.centres()
 
     def centres(self):
-        """game_id тех, кто может играть в центре: своя позиция C или центр звена своего клуба на странице DailyFaceoff
-        (кэш roster_update.py, game/work/roster-cache/dailyfaceoff): там видно, кто сейчас играет в центре."""
+        """game_id тех, кто сейчас играет центром в клубе: центр звена своего клуба на странице DailyFaceoff (кэш
+        roster_update.py, game/work/roster-cache/dailyfaceoff). Своя позиция C добавляется в lines() — по биографии на
+        момент звеньев (строки доноров к тому времени уже переписаны)."""
         v, u = self.v, self.u
-        out = {v.gid[r] for r in range(v.nbio) if not v.created_slot(r) and v.ai(r) and v.g('position', r) == 0}
+        out = set()
         try:
             src = RU.sources.dfo_lines(RU.CACHE)
         except Exception as e:                               # кэша нет — только своя позиция
@@ -294,6 +299,8 @@ class Special:
             if abbr not in self.slot_of:
                 raise SpecError(f'{abbr}: такой сборной в базе нет ({sorted(self.slot_of)})')
             slot = self.slot_of[abbr]
+            if any(it['add'] for it in spec[abbr]):
+                raise SpecError(f'{abbr}: «+G/+D/+F» — добавка к сборной NHL 27, а {abbr} собирается по спеке целиком')
             plan = self.plans.setdefault(slot, [])
             for it in spec[abbr]:
                 rows = [r for r in self.find(it['name'], it['group'] == 'G', it['club'])
@@ -326,6 +333,33 @@ class Special:
                 self.rules[slot] = f'спека {os.path.basename(NATIONS_SPEC)}, звенья и пары — из спеки'
             else:
                 self.rules[slot] = f'спека {os.path.basename(NATIONS_SPEC)}, звенья по позициям'
+
+    def plan_add(self, spec, abbrs):
+        """Добавки к сборным NHL 27 из спеки (строка «BEL | +F: …»): игрок нашей базы — в состав поверх NHL 27, звенья
+        такой сборной — по позициям (pos_lines). Уже стоящий в составе NHL 27 не дублируется."""
+        for abbr in abbrs:
+            items = [it for it in spec.get(abbr, []) if it['add']]
+            if not items:
+                continue
+            if len(items) != len(spec[abbr]):
+                raise SpecError(f'{abbr}: в строке спеки и добавки (+), и полный состав — что-то одно')
+            slot = self.slot_of[abbr]
+            plan = self.plans.setdefault(slot, [])
+            added = []
+            for it in items:
+                rows = [r for r in self.find(it['name'], it['group'] == 'G', it['club'])
+                        if (it['group'] == 'G') == self.v.is_goalie(r)]
+                if not rows:
+                    self.missing[slot].append(f"{it['name']} ({it['group']}): нет в базе")
+                    continue
+                if any(x['row'] == rows[0] for x in plan):
+                    continue
+                r = rows[0]
+                plan.append({'row': r, 'how': 'spec+', 'name': self.v.name(r), 'pos': POS_NAME[self.v.g('position', r)],
+                             'jersey': None, 'letter': it['letter'], 'flags': None, 'p27': None, 'src': 'spec'})
+                added.append(self.v.name(r))
+            if added:
+                self.rules[slot] += f"; из спеки добавлены {', '.join(added)} — звенья по позициям"
 
     # Матч звёзд ----------------------------------------------------------------------------------------------------
     def last_season(self):
@@ -567,7 +601,8 @@ class Special:
                 keys = {f: v.gid[r] for f, r in self.spec_lines[slot].items()}
                 dressed = set(keys.values())
             else:
-                keys, dressed = pos_lines(lp, self.centre_ok, self.club_key)
+                ok = self.centre_ok | {p['key'] for p in lp if p['pos'] == 'C'}
+                keys, dressed = pos_lines(lp, ok, self.club_key)
             # большинство, меньшинство, овертайм, буллиты, лишние — по рейтингу среди тех же 20 одетых
             rest, d2 = LN.build([p for p in lp if p['key'] in dressed])
         except LN.NotEnoughPlayers as e:
@@ -806,10 +841,12 @@ def run(a):
     every = sorted(db.get_string(T, 'abbrname', t) for t in NATIONAL)
     nhl = [x for x in (split(a.nhl27) if a.nhl27 is not None else every) if x not in keep and x not in own]
     if a.only in (None, 'nations'):
+        spec = parse_nations(a.spec) if os.path.isfile(a.spec) else {}
         if nhl:
             sp.plan_nhl27(nhl27.open_db(a.db27), nhl)
+            sp.plan_add(spec, nhl)
         if own:
-            sp.plan_spec(parse_nations(a.spec), own)
+            sp.plan_spec(spec, own)
     if a.only in (None, 'allstar'):
         sp.plan_allstar()
     teams = set(sp.plans)
@@ -891,7 +928,7 @@ def main(argv=None):
     r.add_argument('--only', choices=('nations', 'allstar'), help='только сборные или только Матч звёзд')
     r.add_argument('--nhl27', help='сборные из NHL 27 через запятую (по умолчанию все, кроме --own и --keep)')
     r.add_argument('--own', help=f'сборные по своей спеке (по умолчанию {",".join(OWN_DEFAULT)})')
-    r.add_argument('--keep', help=f'не трогать (по умолчанию {",".join(KEEP_DEFAULT)}); пустая строка — никого')
+    r.add_argument('--keep', help='не трогать эти сборные (по умолчанию — никакие)')
     r.add_argument('--spec', default=NATIONS_SPEC, help='спека своих сборных (по умолчанию %(default)s)')
     r.add_argument('--db', help='база, на которой сделан сейв (по умолчанию установленная); схема — рядом')
     r.add_argument('--db27', help='база NHL 27 (по умолчанию game/work/nhl27/db/nhl_game.db)')
