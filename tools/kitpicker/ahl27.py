@@ -536,7 +536,14 @@ def put_helmet(tag, rgba, out_root):
     canvas = np.zeros((h, w, 4))
     y0, x0 = (h - nh) // 2, (w - nw) // 2
     canvas[y0:y0 + nh, x0:x0 + nw] = small
-    kp.tex_replace(rwf, tx, np.clip(np.round(canvas), 0, 255).astype(np.uint8).tobytes(), w, h)
+    canvas = np.clip(np.round(canvas), 0, 255).astype(np.uint8)
+    from fb import helmet_window as HW                   # в окно шлема (03.11, SEA Amazon: на шлеме модели 20 край
+    if (w, h) == (HW.W, HW.H):                           # наклейки во всю текстуру обрезается)
+        k_, (dx, dy), was = HW.fit_params(canvas)
+        if k_ != 1.0 or dx or dy:
+            canvas = HW.place(canvas, k_, dx, dy)
+            print(f"  наклейка {tag}: окно шлема — вне окна было {was * 100:.1f} %, ×{k_:.2f}, сдвиг ({dx}, {dy})")
+    kp.tex_replace(rwf, tx, np.ascontiguousarray(canvas).tobytes(), w, h)
     open(path, "wb").write(rwf.bytes())
     return rel
 

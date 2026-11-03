@@ -2789,6 +2789,8 @@ def use_club(code):
     global LETTER_ZONE_SCALE, HELMET_LOGO_X             # буква капитана мельче (DET), наклейка шлема у́же (ANA) — 26.10
     LETTER_ZONE_SCALE = float(prof.get("letter_zone_scale", 1.0))
     HELMET_LOGO_X = float(prof.get("helmet_logo_x", 1.0))
+    global HELMET_LOGO_FIT                              # наклейка шлема — в окно шлема (03.11, SEA Amazon)
+    HELMET_LOGO_FIT = bool(prof.get("helmet_logo_fit", True))
     split = prof.get("armhole_split", "zones")
     # по форме — таблица { away = "full" } (22.10, агент plain, CAR: в гостях красные рукава на белом — по шву Edge, дома
     # тёмная кокетка с красной полосой заходит с плеч на руку — шов по всей пройме резал её вертикальной красной чертой);
@@ -7572,6 +7574,11 @@ HELMET_LOGO_X = 1.0                # профиль helmet_logo_x (26.10, ANA; �
 #                                    У ANA helmetlogo NHL 27 шире той же эмблемы на свитере в 1,228 раза (маска 310×238 против
 #                                    210×198, вся 532×385 против 360×320), а шлем Legacy наклейку не искажает (у EA лапа ANA на
 #                                    шлеме 1,82, на свитере 1,87; круг BOS у NHL 27 — 82×83). 1 — как было
+HELMET_LOGO_FIT = True             # профиль helmet_logo_fit (03.11, пользователь после игры: «у Сиэтла не влезает надпись
+#                                    Amazon на шлеме, она обрезается»): наклейка из источника — в окно шлема Legacy
+#                                    (fb.helmet_window: часть текстуры, видная на шлемах, где видны наклейки EA), ×k и сдвиг.
+#                                    Наклейки NHL 27 крупнее EA: 59 из 64 вылезали на 1,5–22 % (Amazon — «amazo» на шлеме
+#                                    модели 20, у 16 % игроков). false — как было
 
 
 def zone_shift_px(png, zone, out_cm, up_cm):
@@ -8481,7 +8488,7 @@ def cmd_slot(a):
         if spec.get("helmet_logo", "legacy") == "source":
             h = helmet_from_source(a.club, kit, ls[1], ls[2], r["art"], r["variant"], a.out)
         else:
-            h = J.helmet_copy(ls[1], ls[2], r["art"], r["variant"], a.out, style=SLOT_STYLE)
+            h = helmet_copy_fit(kit, ls[1], ls[2], r["art"], r["variant"], a.out)
         print(f"{a.club} {spec['kit']} → {new}: шаблон {tpl}, превью (перед ворота на uv0: {n} текселей), "
               f"наклейка на шлем {h}")
 
@@ -8519,6 +8526,28 @@ def cmd_fe(a):
             print(f"{code} {kit}: превью → {os.path.relpath(big, a.out)}", flush=True)
 
 
+def cmd_helmet(a):
+    """Только наклейки на шлем слота (03.11.2026, окно шлема fb.helmet_window): rendering/logo/texlib_A_S_V.rx2 в a.out
+    (helmet_logo = source — из источника, legacy — копия наклейки образца); остальные файлы формы не трогаются.
+    --club all — все клубы со слотом."""
+    import json
+    clubs = sorted(club_profiles()) if a.club == "all" else a.club.split(",")
+    reg = json.load(open(REGISTRY, encoding="utf-8"))
+    regmap = {(k["club"], k["kit"]): k for k in reg["kits"]}
+    for code in clubs:
+        use_club(code)
+        for kit, spec in SLOT_KITS.items():
+            r = regmap.get((code, spec["kit"]))
+            if r is None:
+                continue
+            ls = spec["legacy"].split("_")
+            if spec.get("helmet_logo", "legacy") == "source":
+                rel = helmet_from_source(code, kit, ls[1], ls[2], r["art"], r["variant"], a.out)
+            else:
+                rel = helmet_copy_fit(kit, ls[1], ls[2], r["art"], r["variant"], a.out)
+            print(f"{code} {kit}: наклейка → {rel}", flush=True)
+
+
 def slot_container(n):
     """Форма стиля ARCHIVE_STYLE из архива Legacy с номером длины n («0_108_0» под «2_17_10») — контейнер kitpaint."""
     d = os.path.join(REPO, "game", "other", "legacy", "big", "nocacherender", "rendering", "jersey")
@@ -8551,11 +8580,22 @@ def helmet_squeeze(img, k):
     return out
 
 
+def helmet_copy_fit(kit, leg_art, leg_v, art, v, dst_root):
+    """Наклейка образца Legacy (J.helmet_copy) и, при HELMET_LOGO_FIT, — в окно шлема (у EA часть наклеек на шлеме
+    модели 20 тоже обрезана: MIN, CGY выезд; 03.11). -> путь или None."""
+    rel = J.helmet_copy(leg_art, leg_v, art, v, dst_root, style=SLOT_STYLE)
+    if rel and HELMET_LOGO_FIT:
+        from . import helmet_window as HW
+        print(f"  наклейка {kit} (образца): окно шлема —", HW.fit_file(os.path.join(dst_root, *rel.split("/"))))
+    return rel
+
+
 def helmet_from_source(code, kit, leg_art, leg_v, art, v, dst_root):
     """Наклейка на шлем формы стиля SLOT_STYLE — helmetlogo источника (у NHL 27 — реклама на шлеме, 1024×512) в
     контейнере наклейки EA той же длины имени (образец формы или HELMET_CONTAINERS), 256×128 DXT5. -> путь или None."""
     from PIL import Image
     from . import kitsrc
+    from . import helmet_window as HW
     from .jersey_hybrid import CLUB_NAME
     import kitpaint as kp
     import teamart as ta
@@ -8565,7 +8605,7 @@ def helmet_from_source(code, kit, leg_art, leg_v, art, v, dst_root):
                        f"helmetlogo_adidas_{club}_{src}_0_color.png")
     if not os.path.exists(png):
         print(f"  наклейка {kit}: нет {png} — как у образца")
-        return J.helmet_copy(leg_art, leg_v, art, v, dst_root, style=SLOT_STYLE)
+        return helmet_copy_fit(kit, leg_art, leg_v, art, v, dst_root)
     want = len(f"{art}_{SLOT_STYLE}_{v}")
     rel = None
     for tag in (f"{leg_art}_1_{leg_v}",) + HELMET_CONTAINERS:
@@ -8583,13 +8623,26 @@ def helmet_from_source(code, kit, leg_art, leg_v, art, v, dst_root):
     img = helmet_squeeze(Image.open(png).convert("RGBA"), HELMET_LOGO_X)   # у́же — профиль helmet_logo_x (ANA, 26.10)
     if HELMET_LOGO_X != 1.0:
         print(f"  наклейка {kit}: по ширине ×{HELMET_LOGO_X} (helmet_logo_x)")
-    a = np.asarray(img).astype(np.float64)
-    a[..., :3] *= a[..., 3:4] / 255.0                    # уменьшение с премультипликацией (кайма без тёмного ореола)
-    small = np.asarray(Image.fromarray(np.clip(a, 0, 255).astype(np.uint8)).resize((w, h), Image.LANCZOS)).astype(np.float64)
-    al = np.asarray(img.getchannel("A").resize((w, h), Image.LANCZOS)).astype(np.float64)
-    small[..., :3] = np.where(al[..., None] > 0, small[..., :3] * 255.0 / np.maximum(al[..., None], 1), 0)
-    small[..., 3] = al
-    kp.tex_replace(rwf, t, np.clip(np.round(small), 0, 255).astype(np.uint8).tobytes(), w, h)
+
+    def down(im):                                        # уменьшение с премультипликацией (кайма без тёмного ореола)
+        a = np.asarray(im).astype(np.float64)
+        a[..., :3] *= a[..., 3:4] / 255.0
+        sm = np.asarray(Image.fromarray(np.clip(a, 0, 255).astype(np.uint8)).resize((w, h), Image.LANCZOS)).astype(np.float64)
+        al = np.asarray(im.getchannel("A").resize((w, h), Image.LANCZOS)).astype(np.float64)
+        sm[..., :3] = np.where(al[..., None] > 0, sm[..., :3] * 255.0 / np.maximum(al[..., None], 1), 0)
+        sm[..., 3] = al
+        return np.clip(np.round(sm), 0, 255).astype(np.uint8)
+
+    small = down(img)
+    if HELMET_LOGO_FIT and (w, h) == (HW.W, HW.H):       # в окно шлема (профиль helmet_logo_fit; SEA Amazon, 03.11)
+        k, (dx, dy), was = HW.fit_params(small)
+        if k != 1.0 or dx or dy:                         # ×k и сдвиг — на исходнике, потом уменьшение
+            img = Image.fromarray(HW.place(np.asarray(img), k, dx * img.width / w, dy * img.height / h), "RGBA")
+            small = down(img)
+        print(f"  наклейка {kit}: окно шлема — вне окна было {was * 100:.1f} %, " +
+              (f"×{k:.2f}, сдвиг ({dx}, {dy}) текс., стало {HW.out_frac(small) * 100:.1f} %" if k != 1.0 or dx or dy
+               else "влезает"))
+    kp.tex_replace(rwf, t, small.tobytes(), w, h)
     open(path, "wb").write(rwf.bytes())
     return rel
 
@@ -8860,6 +8913,9 @@ def main():
     p = sub.add_parser("fe", help="только превью меню форм слота (fe.png и jersey_S_A_F.big в --out) — после правки превью")
     p.add_argument("--club", default="MIN", help="код клуба или all — все клубы со слотом")
     p.add_argument("--out", default=os.path.join(WORK, "slot", "cache"))
+    p = sub.add_parser("helmet", help="только наклейки на шлем (helmet_logo = source) в --out — после правки наклейки")
+    p.add_argument("--club", default="MIN", help="код клуба или all — все клубы со слотом")
+    p.add_argument("--out", default=os.path.join(WORK, "slot", "cache"))
     p = sub.add_parser("pack")
     p.add_argument("--club", default="MIN")
     p.add_argument("--src", default=os.path.join(WORK, "slot", "cache"))
@@ -8870,7 +8926,7 @@ def main():
     p.add_argument("--gap", type=float, default=None, help="мм: и сдвиг щита под этот зазор под кромкой")
     a = ap.parse_args()
     {"preview": cmd_preview, "kit": cmd_kit, "meshes": cmd_meshes, "slot": cmd_slot, "pack": cmd_pack, "fe": cmd_fe,
-     "shield": cmd_shield}[a.cmd](a)
+     "helmet": cmd_helmet, "shield": cmd_shield}[a.cmd](a)
 
 
 if __name__ == "__main__":
