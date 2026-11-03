@@ -259,8 +259,9 @@ DESIGNS = {
 }
 
 
-# Короткие английские имена — для листов и документации. В список каталога редактора (`masktype maskid preview_id цвет`,
-# агент «Порт», docs/goalie-masks.md) идёт не имя (игра его не покажет), а ближайший ключ цвета EA — COLOR_KEY.
+# Короткие английские имена — для листов и документации. В список каталога редактора (`masktype maskid preview_id`,
+# docs/goalie-masks.md) ни имя, ни COLOR_KEY не пишутся: своё имя игра не покажет, а ключ цвета EA даёт чужую подпись
+# (red → «BAUER White Middle»); без четвёртого поля в списке «BAUER» (03.11.2026). COLOR_KEY оставлен для листов.
 COLOR_KEY = {1: "white", 2: "red", 3: "white", 4: "black", 5: "white", 6: "blue", 7: "red", 8: "black", 9: "white",
              10: "orange", 11: "blue", 12: "green", 13: "blue", 14: "green", 15: "black", 16: "black", 17: "white",
              18: "red", 19: "blue", 20: "yellow", 21: "green", 22: "red", 23: "blue", 24: "black", 25: "blue", 26: "red",
@@ -342,18 +343,16 @@ def cmd_build(a):
         mid = a.start + k
         if not 0 <= mid <= 511:
             raise SystemExit(f"номер маски {mid} вне 0…511")
-        lines.append(f"0 {mid} {M.FE_BASE + mid} {COLOR_KEY[n]}   # №{n} {NAMES[n]}")
+        lines.append(f"# №{n} {NAMES[n]}")
+        lines.append(f"0 {mid} {M.FE_BASE + mid}")
         img = make(n)
         q, _ = M.write_rx2(img, 0, mid, os.path.join(WORK, "cache"))
         M.write_fe(img, M.FE_BASE + mid, os.path.join(WORK, "cache"))
         print(f"№{n} ({DESIGNS[n][0]}) → 0/{mid}: {q}; превью mask{M.FE_BASE + mid}.big")
     out = os.path.join(WORK, "catalog_lines.txt")
-    with open(out, "w", encoding="utf-8", newline="
-") as f:
-        f.write("
-".join(lines) + "
-")
-    print(f"строки списка каталога (masktype maskid preview_id цвет) → {out}")
+    with open(out, "w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(lines) + "\n")
+    print(f"строки списка каталога (masktype maskid preview_id) → {out}")
 
 
 def main():
