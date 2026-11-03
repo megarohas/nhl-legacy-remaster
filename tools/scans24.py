@@ -60,6 +60,7 @@ os.environ.setdefault('NHL_GAME', 'legacy')
 import photos24 as P24  # noqa: E402
 import headeyes as HE  # noqa: E402
 import headhelmet as HH  # noqa: E402
+import headmouth as HM  # noqa: E402
 import rw4mesh as R  # noqa: E402
 from tdb import Tdb, SaveFile  # noqa: E402
 from tdb_read import load_meta  # noqa: E402
@@ -84,7 +85,8 @@ POSE_DEG, POSE_MM = 2.5, 6.0
 # лица берёт переносы суставов общего скелета, а InvBind — из файла головы, так что сдвинутый сустав даёт в покое
 # смещение вершин на (J_общий − J_головы). У век это раздвигало веки (Matthews: белок по кругу, DeBrincat: веко поднято —
 # пользователь, 12.10). 23/24, 34/35 — оси век в центре глаза, 36/37 — нижние веки, 38–41 — брови, 25/26 — скулы у
-# глаза. Челюсть и губы (16–22, 27–33, 42–47) — как раньше, по смещению вершин (рот в этом экране приоткрыт у всех).
+# глаза. Челюсть и губы (16–22, 27–33, 42–47) — с 03.11.2026 тоже общий скелет (headmouth.MOUTH_BONES): сдвиг по
+# смещению вершин в игре возвращал губы к губам шаблона, а зубы оставались по скану и выходили сквозь губу (Бертуцци).
 EYE_BONES = (25, 26, 34, 35, 36, 37, 38, 39, 40, 41)
 # 23/24 — ось взгляда (игра поворачивает яблоко вокруг сустава из файла головы: у сканов EA он точно у центра яблока,
 # J − центр = ±1,3/0/1,6 мм, а от общего скелета у EA глаза на 5–15 мм). С v6 сустав двигается вместе с глазом:
@@ -609,7 +611,7 @@ def build_one(job):
     new, folder, tpl = job['new'], job['folder'], job['tpl']
     out = os.path.join(work(), 'cache', str(new))
     info_fn = os.path.join(out, 'info.json')
-    key = {'version': VERSION, 'eyes': HE.RULE, 'helmet': HH.RULE, 'folder': folder, 'tpl': tpl,
+    key = {'version': VERSION, 'eyes': HE.RULE, 'helmet': HH.RULE, 'mouth': HM.RULE, 'folder': folder, 'tpl': tpl,
            'old_head': job.get('old_head'),
            'style': job.get('style'), 'face_hair': FACE_HAIR if P24.SOURCE in FACE_HAIR_SOURCES else None,
            'hair_color': job.get('hair_color')}
@@ -683,6 +685,8 @@ def build_one(job):
     inv0 = skeleton_inv()
     for bone in EYE_BONES:
         inv2[bone] = inv0[bone]
+    for bone in HM.MOUTH_BONES:                 # челюсть и губы — общий скелет, как веки (03.11.2026, headmouth.py): в покое
+        inv2[bone] = inv0[bone]                 # игры рот = рот скана; сдвинутый сустав уводил губы от зубов (Бертуцци)
     for name, bone in GAZE_BONES.items():      # ось взгляда — вместе с глазом
         jn = Jt[bone] + eye_shift[name]
         inv2[bone] = inv[bone].copy()
@@ -690,6 +694,11 @@ def build_one(job):
     struct.pack_into('>%df' % inv2.size, raw, bpo + 16, *inv2.reshape(-1))
     rep['joints_moved'] = moved
     rep['eye_bones_global'] = len(EYE_BONES)
+    # зубы не сквозь губу в позе игры (03.11.2026, пользователь: Бертуцци «зубы», Сергачёв «челюсть залезает через кожу»):
+    # не хватает зазора — рот (mouthbag) назад по z, у края рта без сдвига (headmouth.fit_teeth)
+    mb_new, rep['mouth'] = HM.fit_teeth({'head': dict(P['head'], pos=newp[:nh]), 'mouthbag': dict(P['mouthbag'], pos=newp[nh:])},
+                                        inv2, joints(skeleton_inv()))
+    newp[nh:] = mb_new
     # haircap: поле смещений + высота по прядям NHL 24
     cap = P['haircap']
     d, ii = th.query(cap['pos'], k=8)
