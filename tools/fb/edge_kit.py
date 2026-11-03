@@ -8643,6 +8643,9 @@ def cmd_pack(a):
         if rel in have:
             man["files"] = [x for x in man["files"] if x["file"] != rel]
         man["files"].append(e)
+    n_ahl = pack_ahl27(man, cache)                       # формы АХЛ NHL 27 (03.11, kitpicker/ahl27.py)
+    if n_ahl:
+        print(f"формы АХЛ (kitpicker/ahl27.py, game/work/ahl27/cache): {n_ahl} файлов")
     n_ice = pack_ice_centers(man, cache)                 # центры льда NHL 27 у всех клубов (23.10)
     if n_ice:
         print(f"центры льда NHL 27 (fb.ice --source nhl27): {n_ice}")
@@ -8672,6 +8675,33 @@ def cmd_pack(a):
     with open(os.path.join(a.out, "manifest.json"), "w", encoding="utf-8", newline="\n") as f:
         json.dump(man, f, ensure_ascii=False, indent=1)
     print(f"{a.out}: сеток заменено {n_mesh}, форм {len(man['kits'])}, файлов {len(man['files'])}")
+
+
+AHL27_CACHE = os.path.join(REPO, "game", "work", "ahl27", "cache")   # раскладка форм АХЛ (kitpicker/ahl27.py build, crest)
+
+
+def pack_ahl27(man, cache):
+    """Формы АХЛ из NHL 27 в пакет (03.11.2026, пользователь: формы АХЛ должны переживать полную переустановку, а не
+    откатываться к старым копиям CV/HSK): все файлы AHL27_CACHE — в cache пакета, тип other (те же имена, что у форм EA:
+    строки базы не меняются; накладка nhl24 ставится поверх out, где этап art пишет прежние копии). Нет папки — ничего.
+    -> число файлов."""
+    import hashlib
+    import shutil
+    if not os.path.isdir(AHL27_CACHE):
+        return 0
+    n = 0
+    for dp, _, fn in os.walk(AHL27_CACHE):
+        for f in sorted(fn):
+            rel = os.path.relpath(os.path.join(dp, f), AHL27_CACHE).replace(os.sep, "/")
+            q = os.path.join(cache, *rel.split("/"))
+            os.makedirs(os.path.dirname(q), exist_ok=True)
+            shutil.copy2(os.path.join(dp, f), q)
+            e = {"file": rel, "type": "other", "md5": hashlib.md5(open(q, "rb").read()).hexdigest(),
+                 "size": os.path.getsize(q), "action": "replace",
+                 "note": "форма клуба АХЛ из NHL 27 (целиком или только герб; kitpicker/ahl27.py)"}
+            man["files"] = [x for x in man["files"] if x["file"] != rel] + [e]
+            n += 1
+    return n
 
 
 ICE_CENTERS = os.path.join(REPO, "game", "work", "nhl27", "out", "ice")   # центры льда NHL 27 (fb.ice --source nhl27 build)
