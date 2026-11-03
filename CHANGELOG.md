@@ -4,6 +4,22 @@
 порта NHL Legacy (exe), третья — правки данных и инструментов без новой сборки. Файлы игры, базы EA и ассеты в
 репозиторий не входят: здесь только код, инструменты и документация.
 
+## 0.16.0 — 03.11.2026 (сборка порта, данные и инструменты)
+
+- **Свои вратарские маски в редакторе** ([docs/goalie-masks.md](docs/goalie-masks.md), «Свои маски в редакторе»): каталог масок
+  длиннее 86 масок EA, новые читаются из `cache:/nhllegacy_masks.txt` (`masktype maskid [preview_id]`), с превью. Настройка
+  `nhl_extra_masks`, по умолчанию включена. 12 масок без логотипов по выбору пользователя — 0/320–331, генератор
+  `tools/fb/mask_designs.py`.
+- **Формы АХЛ из NHL 27** ([docs/kitport.md](docs/kitport.md) §13): Abbotsford, Springfield, Colorado Eagles, Cleveland, Ontario,
+  Coachella Valley и Henderson — форма целиком, с трусами, шлемом и перчатками NHL 27; Utica — форма Нью-Джерси с гербом
+  Comets; Hamilton, Laval, Belleville, Rockford, San Jose, Tucson, Calgary Wranglers, Hartford — прежняя форма с новым гербом
+  (`tools/kitpicker/ahl27.py crest`). Наклейки на шлемах у всех клубов АХЛ — новые.
+- **Вратари и цвета клубов АХЛ** ([docs/goalie-masks.md](docs/goalie-masks.md)): маски и цвета экипировки из NHL 27 у 34 вратарей
+  16 клубов, базовые цвета 8 клубов с новой формой (`tools/legacy_data/team_colors27.py`).
+- **Стратегии клубов НХЛ** ([docs/team-tactics.md](docs/team-tactics.md)): форчек, средняя зона, давление, оборона, большинство,
+  меньшинство и стиль звеньев у 32 клубов по разборам тренерских систем; NHL 27 — только там, где разборов нет.
+  `tools/legacy_data/team_tactics.py`. Начатые франшизы держат свои стратегии.
+
 ## 0.15.0 — 03.11.2026 (сборка порта, лаунчер, данные и инструменты)
 
 - **Заставка загрузки** ([docs/legacy-port.md](docs/legacy-port.md), «Заставка загрузки»): вместо чёрного окна при старте —
