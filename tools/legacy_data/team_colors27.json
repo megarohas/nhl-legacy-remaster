@@ -1,0 +1,5 @@
+{
+  "note": "03.11.2026, пользователь: «для обновлённых команд обнови цвета базовые …»; координатор по game/work/ahl27/decisions.txt: базовые цвета из NHL 27 — только клубам АХЛ с формой целиком из NHL 27; у клубов «новый логотип на старой форме» (HMR, LAV, BLV, RFD, SJ, TUC, CGW, HAR) цвета прежние, чтобы совпадали с формой (решение координатора, пользователь может поменять). Инструмент — team_colors27.py.",
+  "clubs": ["Coachella Valley Firebirds", "Henderson Silver Knights", "Abbotsford Canucks", "Springfield Thunderbirds",
+            "Colorado Eagles", "Utica Comets", "Cleveland Monsters", "Ontario Reign"]
+}

@@ -1445,6 +1445,23 @@ python tools/legacy_data/nhl24.py verify ПАПКА_CACHE                 # cach
 `game/work/models-check/goalies_colors_before_after.png`. В игре не проверено; ставится тем же этапом `goaliegear` (база) и
 `goalie_gear.py save` (сейв ROSTER — игра берёт экипировку из него).
 
+### Базовые цвета клубов АХЛ из NHL 27 (03.11.2026, `tools/legacy_data/team_colors27.py`)
+
+Пользователь: «для обновлённых команд обнови цвета базовые …». `exhibitionteams.primarycolor_r/g/b` и `secondarycolor_r/g/b`
+(меню, табло, интерфейс) ← `feprimarycolor` и `fesecondarycolor` клуба в NHL 27 (0xRRGGBB): у клубов НХЛ EA сделала так же —
+у Чикаго в Legacy (208, 18, 42) и (35, 31, 32) = #d0122a и #231f20 NHL 27. Клуб — по названию (Legacy `fullname` ↔ NHL 27
+`teamname`). Список — `team_colors27.json`: 8 клубов АХЛ с формой целиком из NHL 27 (CV, HSK, ABB, SPR, COE, UTI, CLE, ONT); у
+клубов «новый логотип на старой форме» цвета прежние, чтобы совпадали с формой (решение координатора 03.11). `stockteamcolorstable`
+(палитра клуба) не трогается: порядок цветов в ней у EA и NHL 27 разный, а на неё ссылаются цвета экипировки. Проба на копии
+базы 2bdc4466 и ROSTER 20261103060852: 13 цветов из 16 (у CLE и второй HSK — уже такие). Ютика: синий с зелёным (эпоха «Кэнакс»)
+→ красный с чёрным, Абботсфорд: красный с чёрным (Albany Devils) → синий с серебром, Colorado Eagles: серый → золото с синим.
+
+```bash
+python tools/legacy_data/team_colors27.py show                       # сейчас → NHL 27 по базе пользователя
+python tools/legacy_data/team_colors27.py db БАЗА.db [--clubs "A,B"]  # nhlng.db; draft_roster.db без exhibitionteams — пропуск
+python tools/legacy_data/team_colors27.py save СЕЙВ_ROSTER --write [--clubs "A,B"]
+```
+
 ## Контракты 2026/27 (этап contracts, 12.10.2026)
 
 Настоящие кэп-хиты и подписанные продления вместо заглушек конвейера. Страницы контрактов 32 клубов собрал

@@ -99,7 +99,12 @@
   },
   "nhl27_colors": {
     "note": "03.11.2026, пользователь: «перенос … цветов экипы (не покроя щитков, а хотя бы просто расцветки)» у Юты, Вегаса и Сиэтла. У этих клубов белый набор; вратарь берёт цвета зон щитков, блина, ловушки и клюшки у себя же в NHL 27 (game/work/nhl27/db/nhl_game.db, exhibitiongoalieequipment, по имени; нет его там — первый вратарь клуба в NHL 27). У NHL 27 15 зон своих моделей, у Legacy 9: переносится палитра — самый частый цвет зон → base, следующие → accent1, accent2 (roles, как в белом наборе: 2, 3, 5 — графика). Модели и маска — как у белого набора.",
-    "clubs": ["Utah Mammoth", "Seattle Kraken", "Vegas Golden Knights"],
+    "clubs": ["Utah Mammoth", "Seattle Kraken", "Vegas Golden Knights",
+              "Coachella Valley Firebirds", "Henderson Silver Knights", "Abbotsford Canucks", "Springfield Thunderbirds",
+              "Colorado Eagles", "Utica Comets", "Cleveland Monsters", "Ontario Reign",
+              "Hamilton Hammers", "Laval Rocket", "Belleville Senators", "Rockford IceHogs", "San Jose Barracuda",
+              "Tucson Roadrunners", "Calgary Wranglers", "Hartford Wolf Pack"],
+    "clubs_note": "03.11.2026 (второе задание, game/work/ahl27/decisions.txt): 16 клубов АХЛ — маски и цвета вратарей из NHL 27; у тех, кто был в white_names или с набором EA, набор заменяется NHL 27. Вратарь клуба, которого в этом клубе NHL 27 нет, берёт вратаря клуба NHL 27 с маской основного (первый) или запасного (остальные).",
     "roles": {"base": [1, 4, 6, 7, 8, 9], "accent1": [2, 3], "accent2": [5]},
     "stick_roles": {"base": [1], "accent1": [2], "accent2": [3]}
   }

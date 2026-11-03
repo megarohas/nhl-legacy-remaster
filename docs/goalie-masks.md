@@ -30,16 +30,26 @@
 | 0/294 | 516 | Vejmelka (UTA) |
 | 0/295 | 609 | Hill (VGK) |
 | 0/296 | 85 | Hart (VGK) |
+| 0/297–319 | 451, 450, 404, 403, 423, 424, 103, 298, 263, 163, 84, 92, 161, 288, 287, 258, 187, 108, 270, 99, 178, 289, 87 | 16 клубов АХЛ (CV, HSK, ABB, SPR, COE, UTI, CLE, ONT, HMR, LAV, BLV, RFD, SJ, TUC, CGW, HAR), по клубу — `mask_slots.toml` |
+
+**Клубы АХЛ (03.11.2026, второе задание).** Пользователь: «для обновлённых команд обнови … шлема вратарей и цвета экипы
+вратарей»; список — `game/work/ahl27/decisions.txt` (решение по формам). Маски — все маски вратарей этих клубов в NHL 27
+(23 штуки, у части клубов основной и запасной в разных). Вратарь Legacy, которого нет в этом клубе NHL 27 (другой клуб,
+нет в NHL 27, имя пишется иначе: Nikke/Niklas Kokko, Georgii/Georgi Romanov), берёт маску и цвета вратаря клуба NHL 27 с
+маской основного (первый в составе) или запасного (остальные), `goaliemask0_starter/backup` клуба в NHL 27. Имена
+сравниваются без диакритики (Málek = Malek). Проба на копии базы 2bdc4466 и ROSTER 20261103060852: 34 вратаря 16 клубов;
+у клубов с набором EA (HAR, ONT, RFD, SJ, TUC) и из `white_names` набор заменён NHL 27, остальные `white_names` — как были.
 
 ## Запуск
 
 ```bash
 cd tools
-FB_GAME=nhl27 python -m fb.extract "goalie/helmet/itech/.*goalie_helmet_itech_(420|515|516|609|85)_color$" --out masks27
+FB_GAME=nhl27 python -m fb.extract "goalie/helmet/itech/.*goalie_helmet_itech_(<номера NHL 27 из mask_slots.toml через |>)_color$" --out masks27
 FB_GAME=nhl27 python -m fb.masks build    # → game/work/nhl27/out/masks/cache/rendering/goaliehelmet/*.rx2 и PNG
 python -m fb.masks sheet                  # → game/work/nhl27/out/masks/sheet.png: Legacy сейчас | NHL 27 | в Legacy
-python legacy_data/goalie_gear.py db БАЗА.db --clubs "Utah Mammoth,Seattle Kraken,Vegas Golden Knights"
-python legacy_data/goalie_gear.py save СЕЙВ_ROSTER --write --clubs "Utah Mammoth,Seattle Kraken,Vegas Golden Knights"
+python -m kitport put --from ../game/work/nhl27/out/masks/cache --tag masks-<дата> --yes   # рисунки в cache: с копией
+python legacy_data/goalie_gear.py db БАЗА.db --clubs "<клубы через запятую>"
+python legacy_data/goalie_gear.py save СЕЙВ_ROSTER --write --clubs "<клубы через запятую>"
 ```
 
 Добавить вратаря: номер его маски в NHL 27 (`nhl_game.db`) → новая строка `[mask.<свободный номер>]` в `mask_slots.toml`,

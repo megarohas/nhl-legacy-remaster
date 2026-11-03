@@ -89,8 +89,21 @@ def palettes27(path=NHL27_DB):
             v[part] = [rgb(db.get(EQ, f'{part}zone{z}color', e)) for z in range(1, 16)]
         v['stick'] = [rgb(db.get(EQ, f'stickzone{z}color', e)) for z in range(1, 7)]
         v['mask'] = db.get(EQ, 'maskid', e) if db.get(EQ, 'masktype', e) == 0 else None
-        _P27[(db.get_string(B, 'firstname', r).lower(), db.get_string(B, 'lastname', r).lower())] = v
+        _P27[fold(db.get_string(B, 'firstname', r), db.get_string(B, 'lastname', r))] = v
+    _T27.clear()
+    for t in db.live_rows(T):                  # маски основного и запасного вратаря клуба (тип 0)
+        _T27[db.get_string(T, 'teamname', t)] = (db.get(T, 'goaliemask0_starter', t), db.get(T, 'goaliemask0_backup', t))
     return _P27
+
+
+_T27 = {}
+
+
+def fold(first, last):
+    """(имя, фамилия) без диакритики, в нижнем регистре: Málek = Malek, Östman = Ostman."""
+    import unicodedata
+    f = lambda x: unicodedata.normalize('NFKD', x).encode('ascii', 'ignore').decode().lower().strip()
+    return f(first), f(last)
 
 
 def palette(colors):
@@ -105,16 +118,21 @@ def palette(colors):
     return order[:3]
 
 
-def nhl27_values(sp, vals, first, last, club):
-    """Белый набор vals + цвета зон вратаря из NHL 27 (nhl27_colors в goalie_gear.json). -> (vals, откуда) или (vals, None)."""
+def nhl27_values(sp, vals, first, last, club, order=0):
+    """Белый набор vals + цвета зон и маска вратаря из NHL 27 (nhl27_colors в goalie_gear.json). Источник — сам вратарь в
+    NHL 27, если он там в этом же клубе; иначе (другой клуб, нет в NHL 27, имя пишется иначе) — вратарь клуба NHL 27 с маской
+    основного (order 0) или запасного (order ≥ 1) вратаря клуба (exhibitionteams.goaliemask0_starter/backup), нет такого —
+    первый вратарь клуба по имени. -> (vals, откуда) или (vals, None)."""
     p27 = palettes27()
-    src = p27.get((first.lower(), last.lower()))
+    src = p27.get(fold(first, last))
     how = 'свои'
-    if src is None:
-        same = [k for k, v in p27.items() if v['team'] == club]
+    if src is None or src['team'] != club:
+        same = sorted(k for k, v in p27.items() if v['team'] == club)
         if not same:
             return vals, None
-        src, how = p27[sorted(same)[0]], f'клуба ({" ".join(sorted(same)[0]).title()})'
+        want = _T27.get(club, (None, None))[0 if order == 0 else 1]
+        pick = [k for k in same if p27[k]['mask'] == want] or same
+        src, how = p27[pick[0]], f'клуба ({" ".join(pick[0]).title()})'
     cfg = sp['nhl27_colors']
     vals = dict(vals)
     for part in ('pads', 'blocker', 'trapper'):
@@ -185,7 +203,8 @@ def plan(db):
         name = db.get_string(T, 'fullname', t)
         gs.sort()
         rows = sets.get(t, [])
-        if rows and name not in white_names:
+        nhl27_clubs = set(sp.get('nhl27_colors', {}).get('clubs', ()))
+        if rows and name not in white_names and name not in nhl27_clubs:
             def rank(r):
                 mt, mid = db.get(SG, 'masktype', r), db.get(SG, 'maskid', r)
                 st = db.get(T, f'goaliemask{mt}_starter', t) if f'goaliemask{mt}_starter' in tf else None
@@ -204,12 +223,12 @@ def plan(db):
                 used.append(db.get(SG, 'key', s))
             summary[t] = (name, 'набор', len(gs), len(rows), used)
         else:
-            why = 'нет набора' if not rows else 'спорный набор — white_names'
-            for _, g in gs:
+            why = 'нет набора' if not rows else 'спорный набор — white_names' if name in white_names else                 'набор EA заменён NHL 27 (nhl27_colors)'
+            for k, (_, g) in enumerate(gs):
                 vals, src = white_values(db, sp, None), None
-                if name in sp.get('nhl27_colors', {}).get('clubs', ()):   # 03.11.2026: расцветка вратаря из NHL 27
+                if name in nhl27_clubs:        # 03.11.2026: расцветка и маска вратаря из NHL 27
                     vals, src = nhl27_values(sp, vals, db.get_string(B, 'firstname', bio[g]),
-                                             db.get_string(B, 'lastname', bio[g]), name)
+                                             db.get_string(B, 'lastname', bio[g]), name, k)
                 out[g] = (vals, f'{name}: белый ({why})' + (f', цвета зон NHL 27 — {src}' if src else ''))
             summary[t] = (name, 'белый', len(gs), len(rows), why)
     return out, summary

@@ -22,3 +22,99 @@ name = "Vegas Golden Knights (Hill)"
 [mask.296]
 nhl27 = 85
 name = "Vegas Golden Knights (Hart)"
+
+# 03.11.2026 (второе задание): 16 клубов АХЛ — маски вратарей клуба из NHL 27 (координатор по решению пользователя
+# game/work/ahl27/decisions.txt: формы NHL 27 у CV, HSK, ABB, SPR, COE, UTI, CLE, ONT; новый логотип — у HMR, LAV, BLV, RFD,
+# SJ, TUC, CGW, HAR — маски и цвета вратарей всем 16).
+
+[mask.297]
+nhl27 = 451
+name = "Coachella Valley Firebirds (Kokko)"
+
+[mask.298]
+nhl27 = 450
+name = "Coachella Valley Firebirds (Östman)"
+
+[mask.299]
+nhl27 = 404
+name = "Henderson Silver Knights (Lindbom)"
+
+[mask.300]
+nhl27 = 403
+name = "Henderson Silver Knights (Whitehead)"
+
+[mask.301]
+nhl27 = 423
+name = "Abbotsford Canucks (Young)"
+
+[mask.302]
+nhl27 = 424
+name = "Abbotsford Canucks (Weeks)"
+
+[mask.303]
+nhl27 = 103
+name = "Springfield Thunderbirds"
+
+[mask.304]
+nhl27 = 298
+name = "Colorado Eagles"
+
+[mask.305]
+nhl27 = 263
+name = "Utica Comets"
+
+[mask.306]
+nhl27 = 163
+name = "Cleveland Monsters (Copley)"
+
+[mask.307]
+nhl27 = 84
+name = "Cleveland Monsters (Lalonde)"
+
+[mask.308]
+nhl27 = 92
+name = "Ontario Reign"
+
+[mask.309]
+nhl27 = 161
+name = "Hamilton Hammers"
+
+[mask.310]
+nhl27 = 288
+name = "Laval Rocket (Kähkönen)"
+
+[mask.311]
+nhl27 = 287
+name = "Laval Rocket (Mandolese)"
+
+[mask.312]
+nhl27 = 258
+name = "Belleville Senators"
+
+[mask.313]
+nhl27 = 187
+name = "Rockford IceHogs (Commesso)"
+
+[mask.314]
+nhl27 = 108
+name = "Rockford IceHogs (Gale)"
+
+[mask.315]
+nhl27 = 270
+name = "San Jose Barracuda"
+
+[mask.316]
+nhl27 = 99
+name = "Tucson Roadrunners (Stauber)"
+
+[mask.317]
+nhl27 = 178
+name = "Tucson Roadrunners (Vikman)"
+
+[mask.318]
+nhl27 = 289
+name = "Calgary Wranglers"
+
+[mask.319]
+nhl27 = 87
+name = "Hartford Wolf Pack"
