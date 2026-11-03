@@ -259,6 +259,18 @@ DESIGNS = {
 }
 
 
+# Короткие английские имена для списка каталога редактора (строка `masktype maskid preview_id имя`, агент «Порт»).
+NAMES = {
+    1: "Retro Silver Black", 2: "Retro Red Black", 3: "Retro White Navy", 4: "Center Stripe Black", 5: "Center Stripe White",
+    6: "Side Stripes Navy", 7: "Side Stripes Red", 8: "Diagonal Graphite", 9: "Diagonal White Green", 10: "Chevrons Orange",
+    11: "Chevrons Navy Gold", 12: "Pixel Camo Olive", 13: "Pixel Camo Blue", 14: "Camo Olive", 15: "Camo Urban",
+    16: "Grid Black Red", 17: "Grid White", 18: "Fade Red Black", 19: "Fade Blue Metallic", 20: "Fade Gold Metallic",
+    21: "Fade Teal", 22: "Flames Red", 23: "Flames Blue", 24: "Bolts Yellow", 25: "Bolts Purple", 26: "Panels Maroon",
+    27: "Panels Green", 28: "Checkered Black", 29: "Waves Teal", 30: "Tiger Orange", 31: "Halftone Red", 32: "Hex Graphite",
+    33: "Silver Metallic", 34: "Matte Black",
+}
+
+
 def make(num):
     """Дизайн num → RGBA 512²: оболочка — рисунком, ремни, пряжки, подкладка — как у 0/125, отверстия тёмные."""
     style, kw = DESIGNS[num]
@@ -320,12 +332,23 @@ def cmd_build(a):
     bad = [n for n in nums if n not in DESIGNS]
     if bad:
         raise SystemExit(f"нет дизайнов {bad}; есть 1…{max(DESIGNS)}")
+    lines = []
     for k, n in enumerate(nums):
         mid = a.start + k
         if not 0 <= mid <= 511:
             raise SystemExit(f"номер маски {mid} вне 0…511")
-        q, _ = M.write_rx2(make(n), 0, mid, os.path.join(WORK, "cache"))
-        print(f"№{n} ({DESIGNS[n][0]}) → 0/{mid}: {q}")
+        lines.append(f"0 {mid} {M.FE_BASE + mid} {NAMES[n]}")
+        img = make(n)
+        q, _ = M.write_rx2(img, 0, mid, os.path.join(WORK, "cache"))
+        M.write_fe(img, M.FE_BASE + mid, os.path.join(WORK, "cache"))
+        print(f"№{n} ({DESIGNS[n][0]}) → 0/{mid}: {q}; превью mask{M.FE_BASE + mid}.big")
+    out = os.path.join(WORK, "catalog_lines.txt")
+    with open(out, "w", encoding="utf-8", newline="
+") as f:
+        f.write("
+".join(lines) + "
+")
+    print(f"строки списка каталога (masktype maskid preview_id имя) → {out}")
 
 
 def main():

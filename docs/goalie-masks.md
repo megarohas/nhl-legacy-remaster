@@ -97,3 +97,60 @@ cd tools
 python -m fb.mask_designs sheet [--only 1,5] [--big 3,7]     # листы → masks-gen/designs_1.png, _2.png, designs_best.png
 python -m fb.mask_designs build --pick 3,7 --from 320        # выбранные → masks-gen/cache (затем kitport put --from …)
 ```
+
+## Свои маски в редакторе (exe, `nhl_extra_masks`, 03.11.2026)
+
+Каталог масок редактора удлиняет exe: новые записи читаются из простого списка, пересобирать exe для новых номеров не
+нужно. Код — `nhl-legacy-port/src/nhllegacy_masks.cpp`, как устроено — [legacy-port.md](legacy-port.md), «Каталог масок
+вратаря».
+
+**Файл** — `userdata/cache/guest/nhllegacy_masks.txt` (рядом с модами `cache:`; на ПК пользователя —
+`nhl-legacy-port/userdata/cache/guest/`). Строка — одна маска:
+
+```
+# masktype maskid [preview_id] [цвет]      # — комментарий
+0 320
+0 321 1321 red
+```
+
+| Поле | Что | Если не указано |
+|---|---|---|
+| `masktype` | тип маски 0–3 (0 — itech, как у 0/292–319) | — |
+| `maskid` | номер рисунка 0–511: файл `rendering/goaliehelmet/goaliehelmet_<masktype>_<maskid>_cm.rx2` | — |
+| `preview_id` | номер превью в списке: файл `fe/ion/artassets/createplayer/mask/mask<preview_id>.big` | 1000 + `maskid` (у EA заняты 1…221) |
+| цвет | ключ подписи из каталога EA (`white`, `red`, `blue`, `black`, `green`, `orange`, `yellow`…): в списке «BAUER <цвет>» | как у первой маски того же типа в каталоге |
+
+- Новые маски стоят в списке после 86 масок EA, в порядке файла. Маска, которая уже есть в каталоге, и повтор в файле
+  пропускаются (строка в журнале).
+- Превью — BIGF/Apt, как превью экипировки EA (у EA 88 файлов `mask*.big` в `cache.big`; холст 256 × 128). Делают его
+  генераторы «Моделей» вместе с маской. Без файла превью клетка в списке пустая, маска выбирается.
+- Нет файла или `nhl_extra_masks = false` в `nhllegacy.toml` — список как у EA. Файл читается при старте игры.
+
+**Проверено 03.11.2026** на копии userdata (exe 742aba40, файл с 0/292 и 0/295): в Edit Player у вратаря (Brossoit, ANA)
+88 масок, первые 86 — как у EA (места и превью те же), новые — в последнем ряду, на превью справа их рисунок; выбранная
+надета, после выхода из Edit Player игра записала ROSTER, в нём у Brossoit 0/295 (было 0/126). Известное: если на вратаре
+маска не из «стандартных» диапазонов EA (82AE2EF0: тип 0 — 119…125 и 212…221 и т. п.), курсор в списке встаёт на первую
+маску — так же у EA для командных масок; сама маска на вратаре остаётся.
+
+**Превью в редакторе (03.11.2026).** `fe/ion/artassets/createplayer/mask/mask<ID>.big` — BIGF/Apt 8888, холст 256×128, у EA
+маска 3/4 с решёткой на стойке. У записей каталога EA ID — первое слово записи (запись 6 = [9, 0, 125] → `mask9.big`), у
+своих масок — 1000 + maskid (список «Свои маски в редакторе»). `fb.masks.write_fe` рисует его по шаблону EA `mask9`: стойка
+из шаблона (выше её — только штанга), маска — рендер модели itech с решёткой `cage_0_0_2` под углом `FE_YAW` 45° в рамке
+`FE_BOX`. `fb.masks build` и `fb.mask_designs build` пишут превью вместе с рисунком; `python -m fb.masks fe` — превью для
+уже собранных масок плана. Отличие от EA: маска на превью чуть меньше и правее (у EA вид немного сбоку и шире).
+
+**Выбор пользователя 03.11.2026** (лист `designs_1/2`): в маски 0/320–331 и в список каталога `nhllegacy_masks.txt`
+(цвет — ближайший ключ EA):
+
+| дизайн | маска | цвет | дизайн | маска | цвет |
+|---|---|---|---|---|---|
+| №6 Side Stripes Navy | 0/320 | blue | №23 Flames Blue | 0/326 | blue |
+| №8 Diagonal Graphite | 0/321 | black | №24 Bolts Yellow | 0/327 | black |
+| №9 Diagonal White Green | 0/322 | white | №30 Tiger Orange | 0/328 | orange |
+| №11 Chevrons Navy Gold | 0/323 | blue | №31 Halftone Red | 0/329 | red |
+| №17 Grid White | 0/324 | white | №32 Hex Graphite | 0/330 | black |
+| №22 Flames Red | 0/325 | red | №33 Silver Metallic | 0/331 | white |
+
+Пакет — `game/work/models-check/install/masks-1103` (рисунки 0/292–331, превью `mask1292…1331.big`, список):
+`python -m kitport put --from ../game/work/models-check/install/masks-1103 --tag masks-1103 --yes`. Маски клубов
+(292–319) в список не внесены — их ставит вратарям `goalie_gear`; превью у них есть на случай, если их добавят.

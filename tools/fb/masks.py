@@ -13,6 +13,7 @@ nhl27_colors, маска по номеру маски вратаря в NHL 27).
   FB_GAME=nhl27 python -m fb.extract "goalie/helmet/itech/.*goalie_helmet_itech_(420|515)_color$" --out masks27
   python -m fb.masks build     # → game/work/nhl27/out/masks/cache/rendering/goaliehelmet/goaliehelmet_0_<id>_cm.rx2 (+ PNG)
   python -m fb.masks sheet     # → game/work/nhl27/out/masks/sheet.png: Legacy (белая 0/120) | NHL 27 | перенос
+  python -m fb.masks fe        # превью редактора fe/ion/artassets/createplayer/mask/mask<1000+номер>.big (build делает и их)
 Первый запуск — с FB_GAME=nhl27 (сетка NHL 27 кэшируется в game/work/nhl27/out/masks/itech27.pkl).
 """
 import argparse
@@ -170,6 +171,94 @@ def write_rx2(img, t, mid, cache):
     return q, ren
 
 
+# Превью маски в редакторе (03.11.2026): fe/ion/artassets/createplayer/mask/mask<ID>.big (cache.big, BIGF/Apt, 8888 256×128;
+# у EA — маска 3/4 с решёткой на чёрной стойке в левой части холста). ID — первое слово записи каталога редактора
+# (0x83A2C5D8, запись 6 = [9, 0, 125] → mask9.big); для новых записей (список каталога агента «Порт») — FE_BASE + maskid
+# (решение координатора 03.11). Шаблон — превью EA mask9 (маска 0/125): стойка и холст его, маска — наш рендер.
+FE_REL = "fe/ion/artassets/createplayer/mask/mask{}.big"
+FE_TEMPLATE = 9
+FE_BASE = 1000
+FE_YAW = 45.0                         # °, лицом вправо, как у EA (подбор по превью mask9)
+FE_BOX = (24, 0, 121, 98)             # x0, y0, x1, y1 маски на холсте превью EA (стойка — ниже)
+FE_STAND = 112                        # строка превью EA, где уже только стойка (ниже подбородка маски EA)
+_FE = {}
+
+
+def _fe_scene():
+    if not _FE:
+        sys.path.insert(0, os.path.join(REPO, "tools"))
+        import rw4mesh as rm
+        rm.use_game("legacy")
+        p = legacy_file("rendering/goaliehelmet/cage_0_0_2.rx2")
+        c = rm.Mesh(open(p, "rb").read(), p)
+        n = np.asarray(c.nrm, np.float64)[:, :3]
+        _FE["cage"] = {"pos": np.asarray(c.pos, np.float64)[:, :3], "tri": np.asarray(c.tris, np.int64),
+                       "uv": np.zeros((c.nv, 2)), "nrm": n / np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-9),
+                       "tex": np.full((4, 4, 4), 205, np.uint8), "twosided": True, "spec": 0.4}
+        _FE["mesh"] = mesh_legacy(0)
+    return _FE
+
+
+def fe_preview(tex):
+    """Рисунок маски (RGBA 512²) → превью редактора RGBA 256×128 по шаблону EA mask9: маска с решёткой — рендер."""
+    sys.path.insert(0, os.path.join(REPO, "tools"))
+    os.environ.setdefault("PHOTOS_SOURCE", "nhl24")
+    import scans24 as S
+    import teamart as ta
+    sc = _fe_scene()
+    m = sc["mesh"]
+    part = {"pos": m["pos"], "nrm": m["nrm"], "uv": m["uv"], "tri": m["tri"], "tex": np.asarray(tex.convert("RGBA")),
+            "twosided": True, "spec": 0.25}
+    img = np.asarray(S.render([part, sc["cage"]], np.radians(FE_YAW), width=320, frame=(-0.16, 0.16, 1.58, 1.95),
+                              bg=(0, 0, 0))).astype(np.float64)
+    sil = img.sum(-1) > 4
+    ys, xs = np.nonzero(sil)
+    img, sil = img[ys.min():ys.max() + 1, xs.min():xs.max() + 1], sil[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+    x0, y0, x1, y1 = FE_BOX
+    k = min((x1 - x0) / sil.shape[1], (y1 - y0) / sil.shape[0])
+    W, H = max(1, round(sil.shape[1] * k)), max(1, round(sil.shape[0] * k))
+    rgba = np.dstack([img, sil * 255.0]).astype(np.uint8)
+    small = Image.fromarray(rgba, "RGBA").resize((W, H), Image.LANCZOS)
+    o = ta.UiLogo.load(os.path.join(LEGACY_BIG, "cache", *FE_REL.format(FE_TEMPLATE).split("/")))
+    w, h, px = o.decode()
+    base = np.frombuffer(bytes(px), np.uint8).reshape(h, w, 4).copy()
+    row = base[FE_STAND].copy()                          # маска EA убрана: выше строки FE_STAND — только штанга стойки
+    lit = np.nonzero(row[:, :3].mean(-1) >= 30)[0]       # (от первого до последнего светлого столбца этой строки — блики
+    keep = np.zeros(len(row), bool)                      # по краям штанги), тёмное основание по бокам — нет
+    if len(lit):
+        keep[lit.min():lit.max() + 1] = True
+    row[~keep] = 0
+    base[:FE_STAND] = row
+    base[:y1 - 30] = 0
+    can = Image.fromarray(base, "RGBA")
+    can.alpha_composite(small, (x1 - W, y0 + (y1 - y0 - H)))
+    return can
+
+
+def write_fe(tex, preview_id, cache):
+    """Превью маски → cache/fe/ion/artassets/createplayer/mask/mask<preview_id>.big по шаблону EA (тот же формат)."""
+    sys.path.insert(0, os.path.join(REPO, "tools"))
+    import teamart as ta
+    tpl = ta.UiLogo.load(os.path.join(LEGACY_BIG, "cache", *FE_REL.format(FE_TEMPLATE).split("/")))
+    img = fe_preview(tex)
+    q = os.path.join(cache, *FE_REL.format(preview_id).split("/"))
+    os.makedirs(os.path.dirname(q), exist_ok=True)
+    with open(q, "wb") as f:
+        f.write(tpl.build(img.tobytes(), "md5"))
+    return q
+
+
+def cmd_fe(a):
+    """Превью редактора для масок плана (ID = FE_BASE + номер маски) из уже собранных PNG."""
+    cache = os.path.join(WORK, "cache")
+    for mid, t, n27, name in plan():
+        src = os.path.join(WORK, f"goaliehelmet_{t}_{mid}.png")
+        if not os.path.exists(src):
+            print(f"{t}/{mid}: нет {src} — сначала build")
+            continue
+        print(f"{t}/{mid} ({name}) → {write_fe(Image.open(src), FE_BASE + mid, cache)}")
+
+
 def cmd_build(a):
     os.makedirs(WORK, exist_ok=True)
     cache = os.path.join(WORK, "cache")
@@ -177,7 +266,9 @@ def cmd_build(a):
         img = convert(n27, t)
         img.save(os.path.join(WORK, f"goaliehelmet_{t}_{mid}.png"))
         q, ren = write_rx2(img, t, mid, cache)
-        print(f"{t}/{mid} ← NHL 27 itech {n27} ({name}) → {q}" + (f"; растры: {ren}" if ren else ""))
+        write_fe(img, FE_BASE + mid, cache)
+        print(f"{t}/{mid} ← NHL 27 itech {n27} ({name}) → {q}" + (f"; растры: {ren}" if ren else "") +
+              f"; превью mask{FE_BASE + mid}.big")
 
 
 def _render(m, tex, ang, frame, width=240):
@@ -234,8 +325,9 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("build", help="рисунки масок плана → WORK/cache (дерево cache:) и PNG")
     sub.add_parser("sheet", help="лист: Legacy сейчас | NHL 27 | перенос")
+    sub.add_parser("fe", help="превью редактора mask<1000+номер>.big для масок плана (из PNG build)")
     a = ap.parse_args()
-    return {"build": cmd_build, "sheet": cmd_sheet}[a.cmd](a)
+    return {"build": cmd_build, "sheet": cmd_sheet, "fe": cmd_fe}[a.cmd](a)
 
 
 if __name__ == "__main__":
