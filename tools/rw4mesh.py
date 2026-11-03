@@ -18,6 +18,7 @@
                                                        # (подробно — docs/player-models.md)
     python rw4mesh.py preview [--out DIR] [--preview DIR]
                                                        # картинки до/после (спереди и сбоку) по готовым файлам
+    python rw4mesh.py slim [--out DIR] [--socks DIR] [--target 3]   # низ голени 1 и 2 — к видимому контуру 3 (03.11.2026), после shin
     python rw4mesh.py back [--out DIR] [--socks DIR] [--margin 2]   # задник конька (skatetongue_0/3) наружу, где сквозь него
                                                        # проходит гетра (03.11.2026), сводка — manifest-back.json
     python rw4mesh.py check [--out DIR]                # гетры из DIR против ботинка и языка/задника конька: в позе
@@ -1498,6 +1499,105 @@ def relation_changes(sock0, sock1, obstacle, axes, ys, na=96, gap=SHIN_GAP):
     return out
 
 
+# ---------------------------------------------------------------- низ голени у 1 и 2 — как у 3 (slim)
+#
+# 03.11.2026, пользователь: варианты «гетра поверх конька» (1) и «гетра поверх задника, язык снаружи» (2) — «два самых
+# толстых снизу … как будто поролон под гетры подкладывали»; «по диаметру снизу, в зоне соединения конька и гетры (зона
+# сантиметров 10), … приближены к варианту, когда язычок конька заправлен, а задник конька торчит» (3). Замер (лист
+# game/work/models-check/probe/socksect.png, гетры после shin): выше 0,25 м 1, 2 и 3 уже почти одинаковы; разница — ниже,
+# где 1 лежит поверх ботинка (на 0,22 м обхват 485 мм) и 2 — поверх края задника ботинка, а у 3 там виден сам ботинок и
+# задник конька. Правило: в зоне SLIM_Y каждая вершина гетры 1 и 2 тянется внутрь к видимому контуру варианта 3 (внешний
+# радиус объединения гетры 3, ботинка, шнуровки и задника skatetongue_3 по тому же лучу из оси голени), только внутрь;
+# детали конька своего варианта не ближе SHIN_MARGIN, щель под языком у 2 — не шире SHIN_GAP (clamp_radius в 7 позах стопы,
+# в вершинах и в точках треугольников, как у shin). Сила — 1 до SLIM_Y[1], дальше плавно до 0 к SLIM_Y[2] (у всех
+# вариантов там одна икра — ступеньки нет). Средняя и дальняя детализации — то же отношение радиусов, что у ближней.
+SLIM_VARIANTS = (1, 2)
+SLIM_TARGET = 3
+SLIM_Y = (0.15, 0.30, 0.36)       # м: снизу (ниже — гетры нет), полная сила до, ноль к
+
+
+class SlimField(ShinField):
+    """Низ гетры варианта t → видимый контур варианта SLIM_TARGET (см. выше); ограничения — как у ShinField."""
+
+    def __init__(self, t, axes, own2, target, skel, poses=SHIN_POSES, ys=SLIM_Y):
+        super().__init__(t, axes, [own2], 1.0, None, CALF, 0.0, skel, poses)
+        self.own2, self.target, self.ys = own2, target, ys
+
+    def weight(self, y):
+        return 1.0 - smoothstep(self.ys[1], self.ys[2], y) if y >= self.ys[0] else 0.0
+
+    def move(self, m, i, p):
+        y = p[1]
+        w = self.weight(y)
+        if w <= 0.0:
+            return None
+        side = leg_of(m, i)
+        ax = self.axes[side]
+        th, r0 = ax.polar(p)
+        ro = self.own2.outer(ax, y + 1e-5, th)
+        rt = max((sl.outer(ax, y + 1e-5, th) for sl in self.target), default=0.0)
+        if ro <= 0 or rt <= 0 or rt >= ro:
+            return None
+        r1 = r0 * (1.0 + w * (rt / ro - 1.0))
+        free = r1
+        if self.obst:
+            r1 = self._clamp_all(m, i, p, side, r0, r1)
+        if abs(r1 - free) > 1e-7:
+            self.clamped += 1
+        if abs(r1 - r0) < 1e-7:
+            return None
+        x, z = ax.place(y, th, r1)
+        return [x, y, z]
+
+
+def slim_build(sock_dir, variants=SLIM_VARIANTS, lods=SOCK_LODS, poses=SHIN_POSES, log=print, target_t=SLIM_TARGET):
+    """Низ голени вариантов variants (гетры из sock_dir — после shin; нет файла — игры) к видимому контуру SLIM_TARGET.
+    Задник skatetongue_<SLIM_TARGET> — из sock_dir, если там есть (после back). → ({путь: Mesh}, сводка)."""
+    skel = Skeleton.game()
+    axes = (LegAxis(skel, 0), LegAxis(skel, 1))
+    load = lambda rel: Mesh.load(os.path.join(sock_dir, *rel.split('/'))) \
+        if os.path.exists(os.path.join(sock_dir, *rel.split('/'))) else Mesh.game(rel)
+    target = [Slicer(load(SOCK.format(t=target_t, lod=2))), Slicer(Mesh.game(BOOT.format(lod=2))),
+              Slicer(Mesh.game(LACE.format(lod=2)))]
+    if target_t != 1:
+        target.append(Slicer(load(TONGUE.format(t=target_t, lod=2))))
+    obst = Obstacles(skel, poses)
+    out, summary = {}, {'zone_m': list(SLIM_Y), 'target_variant': target_t, 'margin_mm': SHIN_MARGIN * 1000,
+                        'gap_mm': SHIN_GAP * 1000, 'poses': [pose_name(p) for p in poses], 'files': {}}
+    for t in variants:
+        own2 = Slicer(load(SOCK.format(t=t, lod=2)))
+        field = SlimField(t, axes, own2, target, skel, poses)
+        for lod in lods:
+            rel = SOCK.format(t=t, lod=lod)
+            m = load(rel)
+            field.set_obstacles(obst.for_variant(t, lod))
+            field.clamped = 0
+            rep = field.apply(m)
+            rep['clamped'] = field.clamped
+            rep['clamped_edges'] = field.edge_reduced
+            out[rel] = m
+            summary['files'][rel] = rep
+            log(f'  {rel}: сдвинуто {rep["moved_vertices"]} вершин, до {rep["max_shift_mm"]} мм; ограничено деталями '
+                f'конька: {rep["clamped"]} вершин, ещё {rep["clamped_edges"]} — по треугольникам')
+    return out, summary
+
+
+def cmd_slim(args):
+    out = opt(args, '--out', os.path.join(models_dir(), 'out'))
+    src = opt(args, '--socks', out)
+    tt = int(opt(args, '--target', str(SLIM_TARGET)))
+    print(f'низ голени 1 и 2 → контур варианта {tt}: гетры из {src}, зона {SLIM_Y}')
+    res, summary = slim_build(src, target_t=tt)
+    for rel, m in list(res.items()):
+        if summary['files'][rel]['moved_vertices'] == 0:   # без изменений (дальняя детализация) — не пишется
+            del res[rel]
+            continue
+        write_out(out, rel, m)
+    json.dump(summary, open(os.path.join(out, 'manifest-slim.json'), 'w', encoding='utf-8'), ensure_ascii=False,
+              indent=1)
+    print(f'файлы: {out} ({len(res)} шт.), сводка — manifest-slim.json; проверка — rw4mesh check --out {out}')
+
+
 # ---------------------------------------------------------------- задник конька не сквозь икру (back)
 #
 # 03.11.2026, пользователь (коньки Свечникова): «икра реально проходила через задник. Его нужно, если возможно, немного
@@ -2212,6 +2312,8 @@ def main():
         cmd_shin(args)
     elif cmd == 'back':
         cmd_back(args)
+    elif cmd == 'slim':
+        cmd_slim(args)
     elif cmd == 'preview':
         cmd_preview(args)
     elif cmd == 'check':

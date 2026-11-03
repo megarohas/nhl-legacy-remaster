@@ -20,6 +20,8 @@ if [ "$1" != "--collect" ]; then
   python tools/rw4mesh.py --game legacy shin --no-preview > $M/build-sock.log 2>&1 || { echo "гетры: ошибка, $M/build-sock.log"; exit 1; }
   # задник конька наружу, где сквозь него проходит гетра (03.11.2026; гетры — только что собранные, models/out)
   python tools/rw4mesh.py --game legacy back > $M/build-back.log 2>&1 || { echo "задник конька: ошибка, $M/build-back.log"; exit 1; }
+  # низ голени у 1 и 2 — к видимому контуру 3 (03.11.2026; по гетрам shin из models/out, ~2 ч: проверка в 7 позах)
+  python tools/rw4mesh.py --game legacy slim > $M/build-slim.log 2>&1 || { echo "низ голени: ошибка, $M/build-slim.log"; exit 1; }
   python tools/sticktape.py --game legacy build --round bottom2 --no-preview > $M/build-tape.log 2>&1 \
     || { echo "клюшки: ошибка, $M/build-tape.log"; exit 1; }
   python tools/sticktape.py --game legacy build --round bottom2 --axial-uv --kinds player,dropped --no-preview \
