@@ -16,7 +16,8 @@
 - **Матч звёзд** (Play Now, команды 222 «Green / Red» = Восток и 223 «Black / Blue» = Запад): по 24 игрока (3 G, 8 D,
   13 F, из них не меньше 4 центров) своей конференции; от каждого клуба минимум один (лучший по OVR из тех, кто проходит
   по амплуа), остальные места — лучшим по OVR, равный OVR решают очки (у вратарей — победы) прошлого сезона. Звенья по
-  рейтингу, C и A — у трёх лучших полевых.
+  позициям (pos_lines: в центре — центры, крайние по своей стороне, пары лево/право, одноклубники вместе), C и A — у
+  трёх лучших полевых.
 - Сборные и звёзды, которые не пересобираются (Беларусь и др.), не трогаются. Выбывший из сборной игрок без клуба
   становится игроком без клуба, как ветераны. Игроков, которых игра ищет в коде по имени (вратарь и полевые тренировки по
   умолчанию — NAME_LOOKUP), инструмент строками-донорами не берёт.
@@ -80,9 +81,14 @@ def group(pos):
 
 
 # --- спека своих сборных --------------------------------------------------------------------------------------------
+LINE_COLS = {'L1': 3, 'L2': 3, 'L3': 3, 'L4': 3, 'D1': 2, 'D2': 2, 'D3': 2}
+
+
 def parse_nations(path):
-    """{сборная: [{'name', 'group', 'letter', 'club'}]} из строк «RUS | G: … | D: … | F: …»."""
+    """{сборная: [{'name', 'group', 'letter', 'club'}]} из строк «RUS | G: … | D: … | F: … [| L1: … | D1: …]»;
+    звенья (если есть) — в parse_nations.lines[сборная] = {'L1': [имена LW, C, RW], 'D1': [LD, RD], …}."""
     out = {}
+    parse_nations.lines = {}
     for no, raw in enumerate(open(path, encoding='utf-8-sig'), 1):
         line = raw.strip()
         if not line or line.startswith('#'):
@@ -95,8 +101,14 @@ def parse_nations(path):
                 raise SpecError(f'{where}: «{col}» — нужно «G: игроки», «D: …» или «F: …»')
             grp, names = col.split(':', 1)
             grp = grp.strip().upper()
+            if grp in LINE_COLS:
+                who = [CLUB.sub('', TAG.sub('', x)).strip() for x in names.split(' - ')]
+                if len(who) != LINE_COLS[grp] or not all(who):
+                    raise SpecError(f'{where}: {grp} — {LINE_COLS[grp]} игрока через « - » (левый - центр - правый)')
+                parse_nations.lines.setdefault(abbr, {})[grp] = who
+                continue
             if grp not in ('G', 'D', 'F'):
-                raise SpecError(f'{where}: группа {grp} — только G, D, F')
+                raise SpecError(f'{where}: группа {grp} — только G, D, F, L1–L4, D1–D3')
             for it in names.split(','):
                 it = it.strip()
                 if not it:
@@ -109,7 +121,74 @@ def parse_nations(path):
                 players.append({'name': name, 'group': grp, 'letter': {'C': 1, 'A': 2}.get(tag.group(1)) if tag else 0,
                                 'club': club.group(1) if club else None})
         out[abbr] = players
+        got = parse_nations.lines.get(abbr)
+        if got and set(got) != set(LINE_COLS):
+            raise SpecError(f'{where}: звенья — все семь: L1–L4 и D1–D3, нет {sorted(set(LINE_COLS) - set(got))}')
     return out
+
+
+# --- звенья по позициям ---------------------------------------------------------------------------------------------
+def side_of(p):
+    """Сторона крайнего: своя позиция (L/R), у центра на краю — по хвату."""
+    return 'lw' if p['pos'] == 'L' or (p['pos'] == 'C' and p['shoots'] == 'L') else 'rw'
+
+
+def pos_lines(lp, centre_ok, club):
+    """Тройки, пары и вратари по позициям (решение пользователя 03.11.2026: «в центре — центры, крайние по своей
+    стороне, пары лево/право, по возможности одноклубники вместе»):
+    - центры — четыре сильнейших по OVR из тех, кто может играть в центре (centre_ok: своя позиция C или центр
+      звена клуба на странице DailyFaceoff); нет четырёх — лучший из прочих;
+    - крайние — восемь сильнейших из остальных; сначала одноклубники центров — к своему центру на свою сторону, потом
+      остальные от сильнейшего — в самое верхнее звено со свободной своей стороной, иначе на другую сторону;
+    - защитники — шесть сильнейших: леворукие слева, праворукие справа (не хватает — лишние другой руки на чужую
+      сторону, слабейшие), пары — сначала одноклубники, потом k-й левый с k-м правым, пары по силе;
+    - вратари — двое сильнейших.
+    → ({место: key} только для l1…l4 и g1/g2, 20 одетых key)."""
+    rank = lambda p: (-p['ovr'], p['key'])
+    fw = sorted((p for p in lp if p['pos'] in ('C', 'L', 'R')), key=rank)
+    dd = sorted((p for p in lp if p['pos'] == 'D'), key=rank)
+    gg = sorted((p for p in lp if p['pos'] == 'G'), key=rank)
+    if len(gg) < 2 or len(fw) + len(dd) < 18:
+        raise LN.NotEnoughPlayers(f'{len(gg)} вратарей, {len(dd)} защитников, {len(fw)} нападающих')
+    while len(dd) < 6:
+        dd.append(fw.pop())
+    while len(fw) < 12:
+        fw.append(dd.pop())
+    centres = [p for p in fw if p['key'] in centre_ok][:4]
+    centres += [p for p in fw if p not in centres][:4 - len(centres)]
+    centres.sort(key=rank)
+    wings = [p for p in fw if p not in centres][:8]
+    slots = {f'l{k + 1}c': c['key'] for k, c in enumerate(centres)}
+    has_mate = lambda w: any(club(c['key']) and club(c['key']) == club(w['key']) for c in centres)
+    for w in sorted(wings, key=lambda w: (not has_mate(w), rank(w))):    # сначала одноклубники центров
+        s = side_of(w)
+        o = 'rw' if s == 'lw' else 'lw'
+        mates = [k for k, c in enumerate(centres) if club(c['key']) and club(c['key']) == club(w['key'])]
+        order = [(k, s) for k in mates] + [(k, s) for k in range(4)] + [(k, o) for k in range(4)]
+        k, side = next((k, x) for k, x in order if f'l{k + 1}{x}' not in slots)
+        slots[f'l{k + 1}{side}'] = w['key']
+    d6 = dd[:6]
+    left = [p for p in d6 if p['shoots'] == 'L']
+    right = [p for p in d6 if p['shoots'] != 'L']
+    while len(left) > 3:
+        right.append(left.pop())
+    while len(right) > 3:
+        left.append(right.pop())
+    pairs = []
+    for ld in list(left):
+        rd = next((r for r in right if club(r['key']) and club(r['key']) == club(ld['key'])), None)
+        if rd:
+            pairs.append((ld, rd))
+            left.remove(ld)
+            right.remove(rd)
+    pairs += list(zip(sorted(left, key=rank), sorted(right, key=rank)))
+    pairs.sort(key=lambda pr: -(pr[0]['ovr'] + pr[1]['ovr']))
+    for k, (ld, rd) in enumerate(pairs):
+        slots[f'l{k + 1}ld'], slots[f'l{k + 1}rd'] = ld['key'], rd['key']
+    slots['g1'], slots['g2'] = gg[0]['key'], gg[1]['key']
+    dressed = set(slots.values())
+    assert len(dressed) == 20, slots
+    return slots, dressed
 
 
 # --- сбор составов ----------------------------------------------------------------------------------------------------
@@ -123,6 +202,34 @@ class Special:
         self.rules = {}                      # команда → как собрана
         self.new = []                        # новые игроки (строки доноров)
         self.slot_of = {db.get_string(T, 'abbrname', t): t for t in sorted(set(NATIONAL) | set(ALLSTAR))}
+        self.spec_lines = {}                 # команда → {место: строка} из спеки (звенья вручную)
+        self.centre_ok = self.centres()
+
+    def centres(self):
+        """game_id тех, кто может играть в центре: своя позиция C или центр звена своего клуба на странице DailyFaceoff
+        (кэш roster_update.py, game/work/roster-cache/dailyfaceoff): там видно, кто сейчас играет в центре."""
+        v, u = self.v, self.u
+        out = {v.gid[r] for r in range(v.nbio) if not v.created_slot(r) and v.ai(r) and v.g('position', r) == 0}
+        try:
+            src = RU.sources.dfo_lines(RU.CACHE)
+        except Exception as e:                               # кэша нет — только своя позиция
+            self.log(f'страниц DailyFaceoff нет ({e}): центры — только по позиции в базе')
+            return out
+        for abbr, page in src.items():
+            for name, grp in page.get('groups', {}).items():
+                if not (name.startswith('f') and isinstance(grp, list)):
+                    continue
+                for p in grp:
+                    if isinstance(p, dict) and p.get('slot') == 'c' and p.get('name'):
+                        for r in u.find(p['name'], goalie=False):
+                            if u.abbr(u.club_of(r)) == abbr:
+                                out.add(v.gid[r])
+        return out
+
+    def club_key(self, gid):
+        r = self.v.row_of_gid[gid]
+        cl = [t for t in self.v.teams_of[r] if t not in SPECIAL]
+        return cl[0] if cl else None
 
     def abbr(self, t):
         return self.db.get_string(T, 'abbrname', t)
@@ -200,7 +307,25 @@ class Special:
                 pos = POS_NAME[self.v.g('position', r)]
                 plan.append({'row': r, 'how': 'spec', 'name': self.v.name(r), 'pos': pos, 'jersey': None,
                              'letter': it['letter'], 'flags': None, 'p27': None, 'src': 'spec'})
-            self.rules[slot] = f'спека {os.path.basename(NATIONS_SPEC)}, звенья по рейтингу'
+            lines = getattr(parse_nations, 'lines', {}).get(abbr)
+            if lines:
+                rows = {norm(x['name']): x['row'] for x in plan}
+                fixed = {}
+                for grp, who in lines.items():
+                    places = ('lw', 'c', 'rw') if grp[0] == 'L' else ('ld', 'rd')
+                    for place, name in zip(places, who):
+                        hit = [r for n, r in rows.items() if n == norm(name)] or [r for n, r in rows.items() if n.endswith(norm(name))]
+                        if len(hit) != 1:
+                            raise SpecError(f'{abbr}: {grp} — «{name}» не из состава спеки (или не один)')
+                        fixed[f'l{grp[1]}{place}'] = hit[0]
+                gk = [x['row'] for x in plan if x['pos'] == 'G'][:2]
+                fixed['g1'], fixed['g2'] = gk
+                if len(set(fixed.values())) != 20:
+                    raise SpecError(f'{abbr}: в звеньях спеки игрок дважды')
+                self.spec_lines[slot] = fixed
+                self.rules[slot] = f'спека {os.path.basename(NATIONS_SPEC)}, звенья и пары — из спеки'
+            else:
+                self.rules[slot] = f'спека {os.path.basename(NATIONS_SPEC)}, звенья по позициям'
 
     # Матч звёзд ----------------------------------------------------------------------------------------------------
     def last_season(self):
@@ -283,7 +408,7 @@ class Special:
                                  'src': 'allstar', 'club': SLOT_TEAM[c['club']], 'stat': c['stat']}
                                 for c in chosen]
             self.rules[slot] = (f"Матч звёзд: конференция {'Восток' if slot == conf_of.get(2) else 'Запад'}, "
-                                f"{sum(ALLSTAR_SIZE.values())} игроков, от каждого из {len(clubs)} клубов, дальше по OVR")
+                                f"{sum(ALLSTAR_SIZE.values())} игроков, от каждого из {len(clubs)} клубов, дальше по OVR; звенья по позициям")
 
     # запись --------------------------------------------------------------------------------------------------------
     def apply(self):
@@ -438,10 +563,19 @@ class Special:
                 return
             self.rules[slot] += '; звенья по рейтингу (в NHL 27 не все места)' if any(x['src'] == 'nhl27' for x in plan) else ''
         try:
-            keys, dressed = LN.build(lp)
+            if slot in self.spec_lines:
+                keys = {f: v.gid[r] for f, r in self.spec_lines[slot].items()}
+                dressed = set(keys.values())
+            else:
+                keys, dressed = pos_lines(lp, self.centre_ok, self.club_key)
+            # большинство, меньшинство, овертайм, буллиты, лишние — по рейтингу среди тех же 20 одетых
+            rest, d2 = LN.build([p for p in lp if p['key'] in dressed])
         except LN.NotEnoughPlayers as e:
             raise SpecError(f'{self.abbr(slot)}: звенья не собрать ({e})')
-        u.put_lines(lp, keys, dressed)
+        if d2 != dressed:
+            raise SpecError(f'{self.abbr(slot)}: одетые спецбригад не совпали с одетыми звеньев')
+        rest.update(keys)
+        u.put_lines(lp, rest, dressed)
 
     def letters(self, slot, plan):
         """Ровно один C и два A у одетых полевых: данные источника, недостающие — самым опытным (игры в НХЛ, потом OVR)."""
