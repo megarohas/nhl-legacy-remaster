@@ -188,21 +188,41 @@ FE_UV_SAME = 0.03
 
 
 def _uv_smooth(U, V, sig):
-    """Карта UV модели позы (NaN — не свитер) — гауссом σ px внутри островов развёртки. -> (U, V)."""
+    """Карта UV модели позы (NaN — не свитер) — локальной плоскостью (взвешенный МНК по соседям того же острова развёртки,
+    гаусс σ px): шум подгонки уходит, наклон UV сохраняется. Простое среднее у шва острова (середина подола спереди, край
+    силуэта) брало соседей с одной стороны — сдвиг UV, на превью ступенька полос посередине подола и разрывы тонких кантов
+    (пользователь, 03.11: «посередине нижней полосы косяки», CAR, MIN, WSH). -> (U, V)."""
     r = int(np.ceil(2.5 * sig))
     fin = np.isfinite(U)
     U0, V0 = np.where(fin, U, 0.0), np.where(fin, V, 0.0)
-    su, sv, sw = np.zeros_like(U0), np.zeros_like(V0), np.zeros_like(U0)
+    acc = {k: np.zeros_like(U0) for k in ("w", "x", "y", "xx", "xy", "yy", "u", "ux", "uy", "v", "vx", "vy")}
     for dy in range(-r, r + 1):
         for dx in range(-r, r + 1):
             w = np.exp(-(dx * dx + dy * dy) / (2.0 * sig * sig))
-            Us, Vs, fs = (np.roll(np.roll(a, dy, 0), dx, 1) for a in (U0, V0, fin))
+            Us, Vs, fs = (np.roll(np.roll(a, -dy, 0), -dx, 1) for a in (U0, V0, fin))
             ok = fs & fin & (np.abs(Us - U0) < FE_UV_SAME) & (np.abs(Vs - V0) < FE_UV_SAME)
-            su += np.where(ok, Us, 0.0) * w
-            sv += np.where(ok, Vs, 0.0) * w
-            sw += ok * w
-    good = fin & (sw > 0)
-    return np.where(good, su / np.maximum(sw, 1e-9), U), np.where(good, sv / np.maximum(sw, 1e-9), V)
+            ww = ok * w
+            acc["w"] += ww
+            acc["x"] += ww * dx
+            acc["y"] += ww * dy
+            acc["xx"] += ww * dx * dx
+            acc["xy"] += ww * dx * dy
+            acc["yy"] += ww * dy * dy
+            for c, S in (("u", Us), ("v", Vs)):
+                acc[c] += ww * S
+                acc[c + "x"] += ww * S * dx
+                acc[c + "y"] += ww * S * dy
+    A = np.stack([np.stack([acc["w"], acc["x"], acc["y"]], -1), np.stack([acc["x"], acc["xx"], acc["xy"]], -1),
+                  np.stack([acc["y"], acc["xy"], acc["yy"]], -1)], -2)
+    good = fin & (acc["w"] > 0) & (np.abs(np.linalg.det(A)) > 1e-6)
+    A[~good] = np.eye(3)
+    out = []
+    for c, X in (("u", U), ("v", V)):
+        b = np.stack([acc[c], acc[c + "x"], acc[c + "y"]], -1)
+        b[~good] = 0.0
+        sol = np.linalg.solve(A, b[..., None])[..., 0, 0]   # значение плоскости в самом пикселе (dx = dy = 0)
+        out.append(np.where(good, sol, X))
+    return out[0], out[1]
 
 
 def _pose():
