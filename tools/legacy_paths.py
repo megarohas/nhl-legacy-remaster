@@ -28,6 +28,8 @@ content\\<часть rel>\\rel. cache — то, что вернул cache_dir() 
         # в cache\\game, highlights.sav — в saves\\highlights, список шейдеров — в cache\\shaders. Старое не трогается.
         # Перевод установки пользователя — только с его «да» (CLAUDE.md: его данные — только копией).
         # --content-only — только наш контент (так собирает папку релиза scripts/make_dist.sh).
+    python tools/legacy_paths.py verify [--install DIR] [--from GUEST]
+        # после migrate: каждый файл на новом месте и совпадает по SHA-256 (список — content/migrated.sha256)
 
 --install — папка с nhllegacy.exe и nhllegacy.toml, по умолчанию установка на этом ПК.
 """
@@ -256,10 +258,48 @@ def migrate(inst, guest, write, content_only=False):
     return 1 if clash else 0
 
 
+def new_place(inst, rel, kind, part):
+    if kind == 'content':
+        return os.path.join(inst.content or os.path.join(inst.dir, 'content'), part, *rel.split('/'))
+    if kind == 'game':
+        return os.path.join(inst.dir, 'cache', 'game', *rel.split('/'))
+    return os.path.join(inst.saves, 'highlights', *rel.split('/'))
+
+
+def verify(inst, guest, content_only=False):
+    """Каждый файл guest на своём новом месте и совпадает по SHA-256; список — <content>/migrated.sha256."""
+    import hashlib
+
+    def sha(p):
+        h = hashlib.sha256()
+        with open(p, 'rb') as f:
+            for b in iter(lambda: f.read(1 << 20), b''):
+                h.update(b)
+        return h.hexdigest()
+
+    plan = [x for x in plan_migrate(guest) if not content_only or x[1][0] == 'content']
+    missing, differ, lines = [], [], []
+    for rel, (k, part) in plan:
+        src, dst = os.path.join(guest, *rel.split('/')), new_place(inst, rel, k, part)
+        if not os.path.exists(dst):
+            missing.append(rel)
+            continue
+        a, b = sha(src), sha(dst)
+        if a != b:
+            differ.append(rel)
+        lines.append(f'{b}  {os.path.relpath(dst, inst.dir).replace(os.sep, "/")}')
+    out = os.path.join(inst.content or os.path.join(inst.dir, 'content'), 'migrated.sha256')
+    open(out, 'w', encoding='utf-8', newline='\n').write('\n'.join(lines) + '\n')
+    print(f'{len(plan)} файлов: нет на новом месте {len(missing)}, отличаются {len(differ)}; список — {out}')
+    for r in (missing + differ)[:20]:
+        print('  ', r)
+    return 1 if missing or differ else 0
+
+
 def main():
     sys.stdout.reconfigure(encoding='utf-8')
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument('cmd', choices=['where', 'part', 'migrate'])
+    p.add_argument('cmd', choices=['where', 'part', 'migrate', 'verify'])
     p.add_argument('rel', nargs='?', help='part: путь игры, например rendering/jersey/x.rx2')
     p.add_argument('--install', help='папка установки (nhllegacy.exe, nhllegacy.toml)')
     p.add_argument('--from', dest='src', help='migrate: откуда (по умолчанию <user_data_root>/cache/guest)')
@@ -283,6 +323,8 @@ def main():
         guest = os.path.abspath(a.src) if a.src else inst.guest
         if not os.path.isdir(guest):
             sys.exit(f'нет папки {guest}')
+        if a.cmd == 'verify':
+            sys.exit(verify(inst, guest, a.content_only))
         sys.exit(migrate(inst, guest, a.write, a.content_only))
 
 
