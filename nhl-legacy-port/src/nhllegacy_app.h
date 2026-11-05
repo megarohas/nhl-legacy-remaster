@@ -24,6 +24,12 @@ void NhlLegacyReleaseCursor(const char* reason, bool ui_thread);
 void NhlLegacyConfigureSaves(const std::filesystem::path& exe_dir,
                              const std::filesystem::path& user_data_root);  // nhllegacy_saves.cpp
 void NhlLegacyLogSaves();
+const std::filesystem::path& NhlLegacySavesRoot();
+bool NhlLegacyContentConfigure(const std::filesystem::path& exe_dir);  // nhllegacy_content.cpp
+bool NhlLegacyContentOn();
+std::filesystem::path NhlLegacyMountContent(rex::filesystem::VirtualFileSystem* vfs,
+                                            const std::filesystem::path& game_cache,
+                                            const std::filesystem::path& highlights);
 void NhlLegacyOverlayStart();  // nhllegacy_shaderstatus.cpp: поток надписи о шейдерах и заставки
 void NhlLegacyShaderStatusBegin(const std::filesystem::path& cache_root);
 void NhlLegacyShaderStatusEnd();
@@ -63,10 +69,13 @@ class NhlLegacyApp : public rex::ReXApp {
     } else {
       paths.user_data_root = exe_dir / "userdata";
     }
+    // Папка content рядом с exe (nhllegacy_content.cpp): cache: — её части, служебный кэш игры и шейдеров — cache
+    // рядом с exe. Без неё — как раньше: cache: = <cache_root>/guest, cache_root = userdata/cache.
+    const bool content = NhlLegacyContentConfigure(exe_dir);
     if (auto v = rex::cvar::GetFlagByName("cache_root"); !v.empty()) {
       paths.cache_root = v;
     } else {
-      paths.cache_root = paths.user_data_root / "cache";
+      paths.cache_root = content ? exe_dir / "cache" : paths.user_data_root / "cache";
     }
     // Сейвы, ачивки, настройки профиля — в saves\ рядом с exe (nhllegacy_saves.cpp), старые оттуда переносятся.
     NhlLegacyConfigureSaves(exe_dir, std::filesystem::absolute(paths.user_data_root, ec));
@@ -79,6 +88,12 @@ class NhlLegacyApp : public rex::ReXApp {
   void OnPostSetup() override {
     NhlLegacyInstallCrashReporter();
     NhlLegacyLogSaves();
+    if (NhlLegacyContentOn()) {
+      const auto& saves = NhlLegacySavesRoot();
+      NhlLegacyMasksSetRoot(NhlLegacyMountContent(runtime()->file_system(), cache_root() / "game",
+                                                  saves.empty() ? std::filesystem::path() : saves / "highlights"));
+      return;
+    }
     const std::filesystem::path cache_dir = cache_root() / "guest";
     std::error_code ec;
     std::filesystem::create_directories(cache_dir, ec);
