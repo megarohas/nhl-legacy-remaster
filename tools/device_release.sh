@@ -122,7 +122,7 @@ done
   echo "коммит $(git -C "$R" rev-parse --short HEAD)"
   echo "exe $(md5sum "$D/nhllegacy.exe" | cut -c1-8)"
   echo "лаунчер $(md5sum "$D/nhllegacy_launcher.exe" | cut -c1-8)"
-  [ -f "$D/nhllegacy_editor.exe" ] && echo "редактор $(md5sum "$D/nhllegacy_editor.exe" | cut -c1-8)"
+  [ -f "$D/editor/NHL Legacy Editor.exe" ] && echo "редактор $(cat "$D/editor/version.txt" 2>/dev/null | tr -d '\r\n'), сервер $(md5sum "$D/editor/backend/nhllegacy_editor_server.exe" | cut -c1-8)"
   [ "$SAVES" = 1 ] && echo "сейвы: стартовые PROFILE и ROSTER в start-saves (в saves, только если там пусто)" ||
     echo "сейвы: нет (старт с нуля)"
 } > "$D/release.txt"
