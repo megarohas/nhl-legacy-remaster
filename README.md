@@ -14,7 +14,11 @@ What you get:
   center ice and arenas, NHL 27 sticks, skates and equipment, custom goalie masks;
 - face scans from NHL 24 and NHL 27, portraits, logos, plus the NHL 12 font and main menu;
 - per-club team tactics, Stanley Cup and award history;
-- fixes for franchise mode, the draft and Be a Pro; a loading screen; the mouse cursor hidden over the game window.
+- fixes for franchise mode, the draft and Be a Pro; a loading screen; the mouse cursor hidden over the game window;
+- a game editor app: browse uniforms, logos, photos, heads, equipment, arenas, menus, music and models, export them and
+  import your edited version back; edit rosters (player cards, transfers, new players) without touching code;
+- all personal files (saves, rosters, launcher settings) in one `saves\` folder, so a new version is copied over the old
+  one without losing anything.
 
 The project started as an NHL 13 port (`nhl-13-port/`). That port is now frozen.
 
@@ -36,13 +40,15 @@ section) or get a ready-made `NHL Legacy` folder from someone in person.
 2. **Launcher.** `nhllegacy_launcher.exe` opens a settings window before the game starts. You pick the renderer
    (D3D12 or Vulkan), resolution, FSR 1 / CAS, season and franchise finances there. The 32-club NHL and AHL and the
    fixes are always on ([docs/launcher.md](docs/launcher.md)). Started without the launcher, `nhllegacy.exe` reads
-   `nhllegacy.toml`.
-   **Editor.** `editor\NHL Legacy Editor.exe` (its own window; the launcher's «Editor…» button) shows the game's assets by section — uniforms,
-   logos, photos, heads, equipment, arenas, menus, music, models — exports them to PNG / OBJ / MP3 and imports your
-   edited version back into `content\my`. It also edits rosters (player card, transfers, new players) and saves them as
-   a new roster; appearance and equipment are picked from tiles with the game's own previews
-   ([docs/editor.md](docs/editor.md)).
-3. **Folder layout** (since 0.17.0, [docs/legacy-port.md](docs/legacy-port.md), sections «Папка saves» and
+   `nhllegacy.toml`. The launcher also has «Update rosters…» (adds a roster file to `saves\rosters`) and «Editor…».
+3. **Editor.** `editor\NHL Legacy Editor.exe` is a desktop app with its own window (Electron; no Python or browser
+   needed). It shows the game's assets by section — uniforms by club and kit, logos, photos, heads, equipment, arenas,
+   menus and fonts, music, models — previews them, exports them to PNG / OBJ / MP3 and imports your edited version
+   back into `content\my`; «Restore» puts the original back. It also edits rosters: the player card (ratings, info,
+   appearance and equipment picked from tiles with the game's own previews), transfers, lines, new players, a new kit
+   based on an existing one, a new menu song, your own club in a Custom Team slot. Rosters are saved as a new roster
+   file, the old ones stay. Writing is blocked while the game is running ([docs/editor.md](docs/editor.md)).
+4. **Folder layout** (since 0.17.0, [docs/legacy-port.md](docs/legacy-port.md), sections «Папка saves» and
    «Папка content»):
 
    ```
@@ -61,11 +67,11 @@ section) or get a ready-made `NHL Legacy` folder from someone in person.
    Inside each `content\<part>\` the paths are the game's own (`db\…`, `fe\…`, `rendering\…`). The game reads these
    files before its archives and never writes into `content\`, so deleting a file removes that mod, and any part can be
    replaced on its own. Building and installing the set: [docs/legacy-data.md](docs/legacy-data.md).
-4. **Updating to a new version:** copy the new folder over the old one, except `saves\` (even with it nothing gets
+5. **Updating to a new version:** copy the new folder over the old one, except `saves\` (even with it nothing gets
    overwritten). New rosters come as a separate file: «Update rosters» in the launcher adds it to `saves\rosters` next
    to the old ones. Saves from versions before 0.17.0 (`userdata\B13EBABEBABEBABE\…`) are copied into `saves\` on the
    first start; the originals stay where they were.
-5. Controls and known limitations are covered in
+6. Controls and known limitations are covered in
    [nhl-legacy-port/dist-template/README.txt](nhl-legacy-port/dist-template/README.txt) (in Russian).
 
 ## Quick start: developers
@@ -81,7 +87,9 @@ section) or get a ready-made `NHL Legacy` folder from someone in person.
   (nightly SDK, with symbols). The first build runs ReXGlue codegen by itself (15–20 minutes), then compiles. Output:
   `nhl-legacy-port/out/build/<preset>/nhllegacy.exe` ([docs/legacy-port.md](docs/legacy-port.md), section «Сборка»).
 - **Launcher:** `nhl-legacy-port\launcher\build.cmd` (output in `nhl-legacy-port/out/launcher/`). **Editor:**
-  `bash tools/editor/build.sh` (one exe with Python and Pillow, output in `nhl-legacy-port/out/editor/`). **Player folder:**
+  `bash tools/editor/build.sh` (output: the `editor\` folder in `nhl-legacy-port/out/editor/editor/`; the server is
+  Python + Pillow via PyInstaller, the window is the official Electron build, downloaded and checked against
+  `SHASUMS256.txt` by the script itself). **Player folder:**
   `bash nhl-legacy-port/scripts/make_dist.sh [--mods]`; a full folder for another PC of your own:
   `bash tools/device_release.sh [--no-saves] --check` ([docs/device-release.md](docs/device-release.md)).
 - **Data mods:** `bash tools/legacy_data/build-all.sh [STAGE…] [--ahl32]` builds the set into
@@ -118,7 +126,7 @@ build.
 ## Legal
 
 There are no game files here. The repository holds only our own port code, tools and documentation. Code generated
-from the game, builds, game files, EA saves and databases, player photos, assets from other games (NHL 24) and music
+from the game, builds, game files, EA saves and databases, player photos, assets from other games (NHL 24, NHL 27) and music
 never go in: they live in `game/` and other folders listed in `.gitignore`. You need your own copy of the game to
 build anything. NHL, EA SPORTS, and club names and logos are trademarks of their respective owners. This project is
 not affiliated with or endorsed by them.
