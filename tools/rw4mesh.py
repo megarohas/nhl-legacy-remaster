@@ -359,8 +359,23 @@ class Mesh:
         self.path = path
         self.sub = sub
         raw = f.raw
-        # объявление вершин
-        sd = f.one(TYPE_VDECL) if sub is None else f.find(TYPE_VDECL)[min(sub, len(f.find(TYPE_VDECL)) - 1)]
+        # объявление вершин; у подсетки — то, на которое ссылается её часть 0x00EF0004 (+0 вызов отрисовки, +4
+        # объявление; вызов — слово 5 = буфер вершин). Так у голов rendering/player/player_<headid>: 5 подсеток на два
+        # объявления (шаг 32 и 44) не по порядку (05.11.2026, редактор). Не нашлось — прежнее правило (по номеру).
+        sd = None
+        if sub is not None:
+            vbs = f.find(TYPE_VB)
+            if sub < len(vbs):
+                for part in f.find(TYPE_SHADER):
+                    pb = f.body(part)
+                    d, vd = struct.unpack_from('>2I', pb, 0)
+                    if d < len(f.sections) and vd < len(f.sections) and f.sections[d].type == TYPE_DRAW \
+                            and f.sections[vd].type == TYPE_VDECL \
+                            and struct.unpack_from('>6I', f.body(f.sections[d]), 0)[5] == vbs[sub].index:
+                        sd = f.sections[vd]
+                        break
+        if sd is None:
+            sd = f.one(TYPE_VDECL) if sub is None else f.find(TYPE_VDECL)[min(sub, len(f.find(TYPE_VDECL)) - 1)]
         db = f.body(sd)
         self.decl_head = struct.unpack_from('>4I', db, 0)
         ne, stride = db[8], db[9]
