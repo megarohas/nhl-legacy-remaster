@@ -454,7 +454,7 @@ const Hint kHintsEn[kHintCount] = {
      L"checks it against this game's data and adds it, the game loads it on the next start. Your earlier rosters and "
      L"profile stay in saves. Close the game first."},
     {L"Editor",
-     L"Open the game editor (nhllegacy_editor.exe): kits, logos, photos, heads, equipment, arenas, menus, music, "
+     L"Open the game editor (editor\\NHL Legacy Editor.exe, its own window): kits, logos, photos, heads, equipment, arenas, menus, music, "
      L"models and rosters — view, export to PNG/OBJ/MP3 and import your version back. Edits go to content\\my, "
      L"rosters — as a new roster in saves. Nothing is written while the game is running."},
 };
@@ -504,7 +504,7 @@ const Hint kHintsRu[kHintCount] = {
      L"сверит его с данными этой игры и добавит, игра загрузит его при следующем запуске. Прежние ростеры и профиль "
      L"остаются в saves. Сначала закройте игру."},
     {L"Редактор",
-     L"Открыть редактор игры (nhllegacy_editor.exe): формы, логотипы, фото, головы, экипировка, арены, меню, музыка, "
+     L"Открыть редактор игры (editor\\NHL Legacy Editor.exe, своё окно): формы, логотипы, фото, головы, экипировка, арены, меню, музыка, "
      L"модели и составы — просмотр, выгрузка в PNG/OBJ/MP3 и загрузка своей версии обратно. Правки — в content\\my, "
      L"составы — новым ростером в saves. Пока игра запущена, редактор ничего не записывает."},
 };
@@ -1105,8 +1105,9 @@ std::wstring RosterDbDir(const std::wstring& userdata) {
   return guest;
 }
 
-// Редактор игры рядом с лаунчером (tools/editor, docs/editor.md), язык — как у лаунчера.
-std::wstring EditorExe() { return g.dir + L"\\nhllegacy_editor.exe"; }
+// Редактор игры — приложение в папке editor рядом с лаунчером (Electron + сервер редактора; tools/editor,
+// docs/editor.md «Приложение»), язык — как у лаунчера. Второй запуск выводит вперёд уже открытое окно.
+std::wstring EditorExe() { return g.dir + L"\\editor\\NHL Legacy Editor.exe"; }
 
 void OpenEditor() {
   const std::wstring exe = EditorExe();
@@ -1117,7 +1118,7 @@ void OpenEditor() {
   std::vector<wchar_t> buf(cmd.begin(), cmd.end());
   buf.push_back(L'\0');
   if (!CreateProcessW(exe.c_str(), buf.data(), nullptr, nullptr, FALSE, 0, nullptr, g.dir.c_str(), &si, &pi)) {
-    ShowError(T(L"Could not start nhllegacy_editor.exe.", L"Не удалось запустить nhllegacy_editor.exe."));
+    ShowError(T(L"Could not start editor\\NHL Legacy Editor.exe.", L"Не удалось запустить editor\\NHL Legacy Editor.exe."));
     return;
   }
   CloseHandle(pi.hThread);
