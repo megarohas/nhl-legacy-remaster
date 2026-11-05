@@ -772,9 +772,9 @@ void CreateControls() {
   AddZone(704, 568, 160, 34, kHintPlay);
   EnableWindow(play, g.exe_found);
   // Редактор (05.11.2026): свой exe рядом с лаунчером; нет его — кнопка неактивна.
-  HWND editor = Add(L"BUTTON", T(L"Editor…", L"Редактор…"), BS_PUSHBUTTON | WS_TABSTOP, 148, 568, 140, 34, kIdEditor);
+  HWND editor = Add(L"BUTTON", T(L"Editor…", L"Редактор…"), BS_PUSHBUTTON | WS_TABSTOP, 148, 568, 120, 34, kIdEditor);
   g.hint_of[editor] = kHintEditor;
-  AddZone(148, 568, 140, 34, kHintEditor);
+  AddZone(148, 568, 120, 34, kHintEditor);
   EnableWindow(editor, GetFileAttributesW(EditorExe().c_str()) != INVALID_FILE_ATTRIBUTES);
 
   // Язык — в шапке справа (названия языков не переводятся).
@@ -1274,7 +1274,7 @@ void Paint(HDC dc) {
   // Строка о файлах между кнопками.
   SelectObject(dc, g.fonts[kFontSmall]);
   SetTextColor(dc, kColGrayText);
-  RECT fr = {S(150), S(568), S(690), S(602)};
+  RECT fr = {S(276), S(568), S(696), S(602)};   // после кнопки «Редактор…» (148…268)
   DrawTextW(dc,
             T(L"Saved to nhllegacy_launcher.toml · nhllegacy.toml is not changed",
               L"Сохраняется в nhllegacy_launcher.toml · nhllegacy.toml не меняется"),
