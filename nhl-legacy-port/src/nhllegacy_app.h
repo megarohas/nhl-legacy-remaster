@@ -18,6 +18,12 @@
 void NhlLegacyInstallCrashReporter();  // nhllegacy_crash.cpp
 void NhlLegacyStartCursorHide(rex::ui::Window* window, rex::ui::ImGuiDrawer* drawer);  // nhllegacy_cursor.cpp
 void NhlLegacyStopCursorHide();
+void NhlLegacyCursorFocus(bool focused);
+void NhlLegacyCursorMinimized(bool minimized);
+void NhlLegacyReleaseCursor(const char* reason, bool ui_thread);
+void NhlLegacyConfigureSaves(const std::filesystem::path& exe_dir,
+                             const std::filesystem::path& user_data_root);  // nhllegacy_saves.cpp
+void NhlLegacyLogSaves();
 void NhlLegacyOverlayStart();  // nhllegacy_shaderstatus.cpp: поток надписи о шейдерах и заставки
 void NhlLegacyShaderStatusBegin(const std::filesystem::path& cache_root);
 void NhlLegacyShaderStatusEnd();
@@ -62,6 +68,8 @@ class NhlLegacyApp : public rex::ReXApp {
     } else {
       paths.cache_root = paths.user_data_root / "cache";
     }
+    // Сейвы, ачивки, настройки профиля — в saves\ рядом с exe (nhllegacy_saves.cpp), старые оттуда переносятся.
+    NhlLegacyConfigureSaves(exe_dir, std::filesystem::absolute(paths.user_data_root, ec));
   }
 
   // NHL Legacy при загрузке открывает cache:\ (раздел кэша жёсткого диска 360): сначала ищет там
@@ -70,6 +78,7 @@ class NhlLegacyApp : public rex::ReXApp {
   // Xenia). Туда же кладутся моды-данные: файл в cache:\ главнее архива.
   void OnPostSetup() override {
     NhlLegacyInstallCrashReporter();
+    NhlLegacyLogSaves();
     const std::filesystem::path cache_dir = cache_root() / "guest";
     std::error_code ec;
     std::filesystem::create_directories(cache_dir, ec);
@@ -95,8 +104,19 @@ class NhlLegacyApp : public rex::ReXApp {
 
   void OnShutdown() override {
     NhlLegacyShaderStatusStop();
-    NhlLegacyStopCursorHide();
+    NhlLegacyReleaseCursor("shutdown", true);
   }
+
+  // Крестик, Alt+F4 и EXIT в меню (WM_CLOSE) идут через запрос закрытия. После него ReXApp::OnClosing выходит
+  // std::_Exit, ничего не восстанавливая, поэтому курсор возвращаем здесь (nhllegacy_cursor.cpp).
+  bool OnWindowCloseRequested() override {
+    NhlLegacyReleaseCursor("window close", true);
+    return true;
+  }
+
+  void OnWindowFocusChanged(bool focused) override { NhlLegacyCursorFocus(focused); }
+  void OnWindowMinimized() override { NhlLegacyCursorMinimized(true); }
+  void OnWindowRestored() override { NhlLegacyCursorMinimized(false); }
 
   // Между этими вызовами SDK загружает хранилище шейдеров на потоке UI (nhllegacy_shaderstatus.cpp).
   void OnPreLaunchModule() override { NhlLegacyShaderStatusBegin(cache_root()); }

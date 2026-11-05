@@ -44,6 +44,8 @@ set(NHLLEGACY_SOURCES
     src/nhllegacy_unlock.cpp
     src/nhllegacy_user.cpp
     src/nhllegacy_practice.cpp
+    src/nhllegacy_saves.cpp
+    src/nhllegacy_camera.cpp
 )
 
 if(WIN32)

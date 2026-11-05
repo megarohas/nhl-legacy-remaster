@@ -1,0 +1,276 @@
+diff --git a/src/system/kernel_state.cpp b/src/system/kernel_state.cpp
+index 697399c..e39bd4a 100644
+--- a/src/system/kernel_state.cpp
++++ b/src/system/kernel_state.cpp
+@@ -16,6 +16,7 @@
+ 
+ #include <fmt/format.h>
+ #include <rex/assert.h>
++#include <rex/cvar.h>
+ #include <rex/image_info.h>
+ #include <rex/logging.h>
+ #include <rex/math.h>
+@@ -306,7 +307,11 @@ void KernelState::LoadAchievementsData() {
+   }
+ 
+   // Set up the unlock save path and restore persisted state.
+-  const auto user_root = emulator_->user_data_root();
++  // With saved_game_root (patch 0007) the unlock state stays with the saves.
++  const auto saved_game_root = rex::cvar::GetFlagByName("saved_game_root");
++  const auto user_root = saved_game_root.empty()
++                             ? emulator_->user_data_root()
++                             : std::filesystem::absolute(rex::to_path(saved_game_root));
+   if (!user_root.empty()) {
+     achievement_manager_.SetUnlockSavePath(user_root / "achievements" /
+                                            fmt::format("{:08X}.toml", title_id()));
+diff --git a/src/system/xam/content_manager.cpp b/src/system/xam/content_manager.cpp
+index d0c7bfd..64de3b1 100644
+--- a/src/system/xam/content_manager.cpp
++++ b/src/system/xam/content_manager.cpp
+@@ -10,12 +10,17 @@
+  */
+ 
+ #include <array>
++#include <cctype>
+ #include <cstring>
++#include <mutex>
+ #include <queue>
+ #include <string>
++#include <utility>
++#include <vector>
+ 
+ #include <fmt/format.h>
+ 
++#include <rex/cvar.h>
+ #include <rex/filesystem.h>
+ #include <rex/filesystem/devices/host_path_device.h>
+ #include <rex/filesystem/devices/stfs_container_device.h>
+@@ -36,6 +41,157 @@ static const char* kGameUserContentDirName = "profile";
+ 
+ static const char* kGameContentHeaderDirName = "Headers";
+ 
++// Saved-game layout (patch 0007, NHL Legacy port, docs/legacy-port.md, "Saves folder").
++// With saved_game_root set, saved games (content type 1) of the running title no longer live in
++// content_root/xuid/title_id/00000001/<name>/ (header: .../Headers/00000001/<name>.header) but in
++//   saved_game_root/<folder>/<name>/          the package
++//   saved_game_root/<folder>/<name>.header    its header
++// <folder> comes from the save name: its leading letters (ROSTER for "ROSTER 20261024125927") are looked
++// up in saved_game_folders ("PROFILE=profiles;ROSTER=rosters;*=other"), case-insensitively; no match ->
++// the "*" folder (default "other"). Opening and enumerating look into every listed folder, so a save
++// dropped into the wrong one is still found; new saves go to the folder of their prefix.
++REXCVAR_DEFINE_STRING(saved_game_root, "", "Content",
++                      "Folder for saved games of the running title, one subfolder per save kind "
++                      "(saved_game_folders); empty = content_root/xuid/title/00000001");
++REXCVAR_DEFINE_STRING(saved_game_folders, "", "Content",
++                      "Save name prefix -> subfolder of saved_game_root, e.g. "
++                      "\"PROFILE=profiles;ROSTER=rosters;*=other\" (* = everything else, default other)");
++
++namespace {
++
++struct SavedGameLayout {
++  std::filesystem::path root;
++  std::vector<std::pair<std::string, std::string>> folders;  // upper-case prefix -> folder
++  std::string fallback = "other";
++  std::vector<std::string> all;  // every folder once: mapped ones in order, the fallback last
++};
++
++std::string UpperAscii(std::string_view s) {
++  std::string out(s);
++  for (char& c : out) {
++    c = char(std::toupper(static_cast<unsigned char>(c)));
++  }
++  return out;
++}
++
++std::string Trim(std::string_view s) {
++  size_t b = 0, e = s.size();
++  while (b < e && std::isspace(static_cast<unsigned char>(s[b]))) ++b;
++  while (e > b && std::isspace(static_cast<unsigned char>(s[e - 1]))) --e;
++  return std::string(s.substr(b, e - b));
++}
++
++void AddFolderOnce(std::vector<std::string>& all, const std::string& dir) {
++  for (const auto& d : all) {
++    if (UpperAscii(d) == UpperAscii(dir)) {
++      return;
++    }
++  }
++  all.push_back(dir);
++}
++
++// Parsed again only when one of the two cvars changes (they are set at startup).
++bool GetSavedGameLayout(SavedGameLayout& out) {
++  static std::mutex mutex;
++  static std::string cached_root, cached_folders;
++  static SavedGameLayout cached;
++  static bool cached_valid = false;
++  std::lock_guard lock(mutex);
++  const std::string root = REXCVAR_GET(saved_game_root);
++  if (root.empty()) {
++    return false;
++  }
++  const std::string folders = REXCVAR_GET(saved_game_folders);
++  if (!cached_valid || root != cached_root || folders != cached_folders) {
++    SavedGameLayout layout;
++    layout.root = rex::to_path(root);
++    std::error_code ec;
++    if (layout.root.is_relative()) {
++      layout.root = std::filesystem::absolute(layout.root, ec);
++    }
++    size_t pos = 0;
++    while (pos <= folders.size()) {
++      size_t end = folders.find(';', pos);
++      if (end == std::string::npos) end = folders.size();
++      const std::string item = Trim(std::string_view(folders).substr(pos, end - pos));
++      const size_t eq = item.find('=');
++      if (eq != std::string::npos) {
++        std::string key = UpperAscii(Trim(std::string_view(item).substr(0, eq)));
++        std::string dir = Trim(std::string_view(item).substr(eq + 1));
++        if (!dir.empty() && dir.find_first_of("\\/:") == std::string::npos && dir != "." && dir != "..") {
++          if (key == "*") {
++            layout.fallback = dir;
++          } else if (!key.empty()) {
++            layout.folders.emplace_back(std::move(key), std::move(dir));
++          }
++        }
++      }
++      pos = end + 1;
++    }
++    for (const auto& entry : layout.folders) {
++      AddFolderOnce(layout.all, entry.second);
++    }
++    AddFolderOnce(layout.all, layout.fallback);
++    cached = std::move(layout);
++    cached_root = root;
++    cached_folders = folders;
++    cached_valid = true;
++  }
++  out = cached;
++  return true;
++}
++
++// Saved games of the running title only: other titles' content and DLC keep the stock layout.
++bool UsesSavedGameLayout(KernelState* kernel_state, XContentType content_type, uint32_t title_id) {
++  if (content_type != XContentType::kSavedGame) {
++    return false;
++  }
++  if (title_id != kCurrentlyRunningTitleId && title_id != 0 && title_id != kernel_state->title_id()) {
++    return false;
++  }
++  return !REXCVAR_GET(saved_game_root).empty();
++}
++
++const std::string& FolderForSave(const SavedGameLayout& layout, std::string_view file_name) {
++  size_t n = 0;
++  while (n < file_name.size() &&
++         (std::isalpha(static_cast<unsigned char>(file_name[n])) || file_name[n] == '_')) {
++    ++n;
++  }
++  const std::string prefix = UpperAscii(file_name.substr(0, n));
++  for (const auto& entry : layout.folders) {
++    if (entry.first == prefix) {
++      return entry.second;
++    }
++  }
++  return layout.fallback;
++}
++
++// The package folder of a save: where it already is (the folder of its kind first, then any other),
++// else where a new one goes.
++std::filesystem::path SavedGamePackagePath(const SavedGameLayout& layout, std::string_view file_name) {
++  const auto name = rex::to_path(file_name);
++  const auto own = layout.root / rex::to_path(FolderForSave(layout, file_name)) / name;
++  std::error_code ec;
++  if (std::filesystem::is_directory(own, ec)) {
++    return own;
++  }
++  for (const auto& dir : layout.all) {
++    auto candidate = layout.root / rex::to_path(dir) / name;
++    if (std::filesystem::is_directory(candidate, ec)) {
++      return candidate;
++    }
++  }
++  return own;
++}
++
++std::filesystem::path SavedGameHeaderPath(const SavedGameLayout& layout, std::string_view file_name) {
++  auto package = SavedGamePackagePath(layout, file_name);
++  return package.parent_path() / rex::to_path(std::string(file_name) + ".header");
++}
++
++}  // namespace
++
+ static int content_device_id_ = 0;
+ 
+ ContentPackage::ContentPackage(KernelState* kernel_state, const std::string_view root_name,
+@@ -108,6 +264,13 @@ std::filesystem::path ContentManager::ResolvePackagePath(uint64_t xuid,
+     used_xuid = 0;
+   }
+ 
++  if (UsesSavedGameLayout(kernel_state_, data.content_type, data.title_id)) {
++    SavedGameLayout layout;
++    if (GetSavedGameLayout(layout)) {
++      return SavedGamePackagePath(layout, data.file_name());
++    }
++  }
++
+   // Content path:
+   // content_root/xuid/title_id/content_type/data_file_name/
+   auto package_root = ResolvePackageRoot(used_xuid, data.content_type, data.title_id);
+@@ -125,6 +288,13 @@ std::filesystem::path ContentManager::ResolvePackageHeaderPath(const std::string
+     xuid = 0;
+   }
+ 
++  if (UsesSavedGameLayout(kernel_state_, content_type, title_id)) {
++    SavedGameLayout layout;
++    if (GetSavedGameLayout(layout)) {
++      return SavedGameHeaderPath(layout, file_name);
++    }
++  }
++
+   auto xuid_str = fmt::format("{:016X}", xuid);
+   auto title_id_str = fmt::format("{:08X}", title_id);
+   auto content_type_str = fmt::format("{:08X}", uint32_t(content_type));
+@@ -147,8 +317,26 @@ std::vector<XCONTENT_AGGREGATE_DATA> ContentManager::ListContent(uint32_t device
+ 
+   // Search path:
+   // content_root/xuid/title_id/type_name/*
+-  auto package_root = ResolvePackageRoot(xuid, content_type, title_id);
+-  auto file_infos = rex::filesystem::ListFiles(package_root);
++  // or, for saved games with saved_game_root: saved_game_root/<every folder>/*, each name once
++  std::vector<rex::filesystem::FileInfo> file_infos;
++  SavedGameLayout layout;
++  if (UsesSavedGameLayout(kernel_state_, content_type, title_id) && GetSavedGameLayout(layout)) {
++    for (const auto& dir : layout.all) {
++      for (auto& info : rex::filesystem::ListFiles(layout.root / rex::to_path(dir))) {
++        const std::string name = UpperAscii(rex::path_to_utf8(info.name));
++        bool seen = false;
++        for (const auto& known : file_infos) {
++          seen = seen || UpperAscii(rex::path_to_utf8(known.name)) == name;
++        }
++        if (!seen) {
++          file_infos.push_back(std::move(info));
++        }
++      }
++    }
++  } else {
++    auto package_root = ResolvePackageRoot(xuid, content_type, title_id);
++    file_infos = rex::filesystem::ListFiles(package_root);
++  }
+   for (const auto& file_info : file_infos) {
+     if (file_info.type != rex::filesystem::FileInfo::Type::kDirectory) {
+       // Directories only.
+@@ -446,6 +634,13 @@ std::filesystem::path ContentManager::ResolveGameUserContentPath() {
+   auto title_id = fmt::format("{:08X}", kernel_state_->title_id());
+   auto user_name = rex::to_path(kernel_state_->user_profile()->name());
+ 
++  // With the saved-game layout the per-title profile settings stay with the saves:
++  // saved_game_root/xbox-profile/user_name
++  SavedGameLayout layout;
++  if (GetSavedGameLayout(layout)) {
++    return layout.root / "xbox-profile" / user_name;
++  }
++
+   // Per-game per-profile data location:
+   // content_root/title_id/profile/user_name
+   return root_path_ / title_id / kGameUserContentDirName / user_name;
