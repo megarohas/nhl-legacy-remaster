@@ -499,7 +499,7 @@ def registry_plan(L, code):
     def installed(k):
         rel = L.KIT_FILES["jersey"].format(s=k.get("style", 1), a=k["art"], v=k["variant"])
         if cache:
-            return os.path.exists(os.path.join(cache, *rel.split("/")))
+            return os.path.exists(core.cache_file(cache, rel))
         return (k["club"], k["kit"]) in in_man
     helm = {(x[0], x[1]) for x in L.club_equipment(db, L.eq_low(db), team) if x[2] == L.EQ_HELMET}
     for kit in EDGE_KIT.values():

@@ -62,7 +62,8 @@ def md5(path):
 
 
 def pj(root, rel):
-    return os.path.join(root, *rel.split("/"))
+    """root/rel; если root — папка content (exe 0.17.0+), то content/<часть>/rel (tools/legacy_paths.py)."""
+    return core.cache_file(root, rel)
 
 
 # ---------------------------------------------------------------- что куда переезжает

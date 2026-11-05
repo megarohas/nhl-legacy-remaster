@@ -35,6 +35,14 @@ def cache_dir():
     return installer().cache_dir()
 
 
+def cache_file(cache, rel):
+    """Файл rel (путь игры через «/») в cache: в любой раскладке (tools/legacy_paths.py)."""
+    if TOOLS not in sys.path:
+        sys.path.insert(0, TOOLS)
+    import legacy_paths
+    return legacy_paths.cache_file(cache, rel)
+
+
 def install_flags():
     """Флаги последней полной установки (install-flags.txt): установка с другими сняла бы накладки."""
     p = installer().FLAGS
@@ -55,7 +63,7 @@ def diff(flags=None, prefix=""):
     srcs = m.sources(ahl, n24, parts)
     todo, gone = m.plan(cache, ahl, n24, parts)
     return [("CHANGED" if k == "изменён" else "NEW", rel, srcs[rel]) for k, rel in todo] + \
-        [("GONE", rel, None) for rel in gone if os.path.exists(os.path.join(cache, *rel.split("/")))]
+        [("GONE", rel, None) for rel in gone if os.path.exists(cache_file(cache, rel))]
 
 
 def game_blocks_cache():
@@ -99,7 +107,7 @@ def backup(changes, tag):
         if kind in ("CHANGED", "GONE"):
             dst = os.path.join(d, rel)
             os.makedirs(os.path.dirname(dst), exist_ok=True)
-            shutil.copy2(os.path.join(cache, rel), dst)
+            shutil.copy2(cache_file(cache, rel), dst)
             man["changed"].append(rel)
         else:
             man["new"].append(rel)
@@ -124,13 +132,13 @@ def restore(d):
     for rel in files:
         src = os.path.join(d, rel)
         if os.path.isfile(src):
-            dst = os.path.join(cache, rel)
+            dst = cache_file(cache, rel)
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             shutil.copy2(src, dst)
             back += 1
     gone = 0
     for rel in (man or {}).get("new", []):
-        p = os.path.join(cache, rel)
+        p = cache_file(cache, rel)
         if os.path.exists(p):
             os.remove(p)
             gone += 1

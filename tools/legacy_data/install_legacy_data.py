@@ -79,10 +79,26 @@ def cache_source():
             m = re.match(r'CACHE:\s*(\S+)', line)
             if m:
                 return os.path.normpath(m.group(1)), 'game/work/status/legacy-port.md'
+    inst = _install()
+    if inst.new:                                    # exe 0.17.0+ с папкой content: cache: — её части
+        return inst.content, 'папка content установки'
     root = _toml_root(PORT_EXE)
     if root:
         return os.path.join(root, 'cache', 'guest'), 'nhllegacy.toml рядом с exe порта'
     return None, None
+
+
+def _install():
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    import legacy_paths
+    return legacy_paths.Install(os.path.dirname(PORT_EXE))
+
+
+def cache_file(cache, rel):
+    """Файл rel (путь игры через «/») в cache: — cache\\guest\\rel или content\\<часть>\\rel (tools/legacy_paths.py)."""
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    import legacy_paths
+    return legacy_paths.cache_file(cache, rel)
 
 
 def cache_dir():
@@ -175,7 +191,7 @@ def installed_flags(cache):
     """Флаги стоящей установки: из install-flags.txt; до него (установки 08–09.10) --ahl32 узнаётся по базе."""
     if os.path.exists(FLAGS):
         return set(read_list(FLAGS))
-    db = os.path.join(cache, 'db', 'nhlng.db')
+    db = cache_file(cache, 'db/nhlng.db')
     ref = os.path.join(SRC_AHL32, 'db', 'nhlng.db')
     if read_list(LIST) and os.path.exists(db) and os.path.exists(ref) and _md5(db) == _md5(ref):
         return {'--ahl32'}
@@ -227,7 +243,7 @@ def plan(cache, ahl32, nhl24, parts):
     srcs = sources(ahl32, nhl24, parts)
     out = []
     for rel in sorted(srcs):
-        dst = os.path.join(cache, *rel.split('/'))
+        dst = cache_file(cache, rel)
         if not os.path.exists(dst):
             out.append(('новый', rel))
         elif not filecmp.cmp(srcs[rel], dst, shallow=False):
@@ -280,10 +296,10 @@ def cmd_verify(args, cwd):
         return
     had = installed_flags(cache)
     srcs = sources('--ahl32' in had, '--nhl24' in had)
-    missing = [r for r in items if not os.path.exists(os.path.join(cache, *r.split('/')))]
+    missing = [r for r in items if not os.path.exists(cache_file(cache, r))]
     nosrc = [r for r in items if r not in srcs]
     differ = [r for r in items if r in srcs and r not in missing and
-              not filecmp.cmp(srcs[r], os.path.join(cache, *r.split('/')), shallow=False)]
+              not filecmp.cmp(srcs[r], cache_file(cache, r), shallow=False)]
     print(f'поставлено {len(items)}: нет в cache: {len(missing)}, нет в сборке {len(nosrc)}, отличаются от сборки '
           f'{len(differ)}')
     for lab, xs in (('нет в cache:', missing), ('нет в сборке', nosrc), ('отличается', differ)):
@@ -320,7 +336,7 @@ def install(args, cwd):
     before = set(read_list(LIST))
     changed = 0
     for rel in files:
-        dst = os.path.join(cache, *rel.split('/'))
+        dst = cache_file(cache, rel)
         src = srcs[rel]
         bak = os.path.join(BACKUP, *rel.split('/'))
         if os.path.exists(dst) and rel not in before and not os.path.exists(bak):
@@ -348,7 +364,7 @@ def install(args, cwd):
 
 
 def restore(cache, rel):
-    dst = os.path.join(cache, *rel.split('/'))
+    dst = cache_file(cache, rel)
     bak = os.path.join(BACKUP, *rel.split('/'))
     if os.path.exists(bak):
         shutil.copy2(bak, dst)
@@ -397,7 +413,9 @@ def main():
         return {'status': cmd_status, 'diff': cmd_diff, 'verify': cmd_verify}[sys.argv[1]](sys.argv[2:], cwd)
     if game_running():
         # игра с другой папкой userdata (например, тестовая копия nhl-legacy-port) этот cache: не читает — можно
-        target = _norm(os.path.join(cache_dir(), os.pardir, os.pardir))      # CACHE = <user_data_root>/cache/guest
+        inst = _install()
+        target = _norm(inst.userdata if inst.new else
+                       os.path.join(cache_dir(), os.pardir, os.pardir))      # CACHE = <user_data_root>/cache/guest
         roots = running_roots()
         if any(r is None or r == target for r in roots):
             print(f'NHL Legacy запущена с этим cache: (или не удалось проверить: {roots}) — закройте игру')

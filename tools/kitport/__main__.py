@@ -305,7 +305,7 @@ def cmd_put(a):
     cache = core.cache_dir()
     changes = []
     for rel in files:
-        dst = os.path.join(cache, *rel.split("/"))
+        dst = core.cache_file(cache, rel)
         if not os.path.exists(dst):
             changes.append(("NEW", rel, os.path.join(src, rel)))
         elif not filecmp.cmp(os.path.join(src, rel), dst, shallow=False):
@@ -322,10 +322,10 @@ def cmd_put(a):
         return 1
     bdir, man = core.backup(changes, a.tag)
     for _, rel, s in changes:
-        dst = os.path.join(cache, *rel.split("/"))
+        dst = core.cache_file(cache, rel)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         shutil.copy2(s, dst)
-    left = [rel for _, rel, s in changes if not filecmp.cmp(s, os.path.join(cache, *rel.split("/")), shallow=False)]
+    left = [rel for _, rel, s in changes if not filecmp.cmp(s, core.cache_file(cache, rel), shallow=False)]
     say(f"поставлено {len(changes) - len(left)} из {len(changes)}; копия заменённого — {bdir}; откат — "
         f"python -m kitport rollback {os.path.basename(bdir)}")
     say("перед следующей полной установкой (kitport install) — kitport build --stages pack,overlay: накладка ещё прежняя")
