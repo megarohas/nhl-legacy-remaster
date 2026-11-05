@@ -260,12 +260,20 @@ def render(parts, view, bg=(58, 60, 68), mark=True):
 TONGUE_MOVE = {'rot_x_deg': 0.0, 'up_m': -0.006, 'fwd_m': 0.015}
 # дальняя детализация _3: её грубый ботинок спереди выше — при −6 мм язык входит в него до 17 мм; −2 мм — не входит
 TONGUE_MOVE_LOD = {3: {'up_m': -0.002}}
-FILL_MARGIN = 0.0015              # м: гетра у верха ботинка — внутри стенки ботинка не ближе (во всех позах)
+# Гетра у края ботинка (fill_rim), виды без задника. Набор 06:56: запас 1,5 мм, над краем — до стенки − 1,5, без смены
+# костей — у угла пятки осталась полоска изнанки ботинка (до 3×16 мм у _2, у _0 — до 6 мм). 05.11.2026 (задание
+# «убрать полоску гетрой/ботинком, задник не добавлять»): запас 0,5 мм (верх ботинка — только на кости голени, в позах
+# не ходит), над краем — вровень со стенкой (+1…+2 мм дают «зубцы» гетры поверх края), полный сдвиг до 7 мм над краем
+# (кольцо гетры у _2 — на 3–6 мм выше края), у края — кость только голени (у _0 EA низ гетры на 20–25 % на стопе).
+# Изнанки на 6 крупных ракурсах: _2 362 → 114 пикс., _0 1125 → 418 — как у EA 3 (113 и 466).
+# Лист вариантов — game/work/models-check/tuck4/v2/fill_grid.png (C — принятый).
+FILL_MARGIN = 0.0005              # м: гетра у верха ботинка — внутри стенки ботинка не ближе (во всех позах)
 FILL_DEPTH = (0.020, 0.030)       # м под краем ботинка: до первого — полная сила, к второму — с нуля (глубже не видно)
-FILL_UP = (0.004, 0.020)          # м над краем ботинка: до первого — полный сдвиг (первое кольцо гетры — на 1–6 мм выше
-#                                   края), ко второму — спад к исходной гетре
+FILL_UP = (0.007, 0.020)          # м над краем ботинка: до первого — полный сдвиг, ко второму — спад к исходной гетре
 FILL_POSES = rm.SHIN_POSES
-FILL_MAX = 0.009                  # м: сдвиг гетры не больше (щель у верха ботинка сзади — до 8 мм)
+FILL_OVER = 0.0                   # м: над краем ботинка — до наружной стенки у края + FILL_OVER
+FILL_SHIN = 0.015                 # м: вершины гетры от края ботинка − FILL_SHIN и выше — только на кости голени (0 — нет)
+FILL_MAX = 0.012                  # м: сдвиг гетры не больше (щель у верха ботинка сзади — до 8 мм, у угла пятки — до 11)
 FILL_SIN = 0.2                    # только задняя половина и бока (sin угла < FILL_SIN; 90° — вперёд): дыра — сзади,
 #                                   спереди гетра 3 и так поверх ботинка
 
@@ -355,6 +363,17 @@ def boot_rim(boot_sl, ax, th, y_top=0.26, y_bot=0.19, step=0.0005):
     return None
 
 
+def _shin_only(m, i, side):
+    """Вершина гетры — целиком на кости голени (как верх ботинка: у него выше 0,21 м только голень). У средней
+    детализации EA низ гетры у края ботинка на 20–25 % на кости стопы и в позах ходит против неподвижного края — сдвинуть
+    её к стенке нельзя, не проткнув ботинок. → менялись ли кости."""
+    knee = rm.LEGS[side]['knee']
+    if all(b == knee or w <= 0 for b, w in zip(m.bones[i], m.weights[i])):
+        return False
+    m.set_skin(i, [knee], [1.0])
+    return True
+
+
 def _posed_limit(m, i, ax, th, d, boots, poses, skel, margin):
     """Сдвиг d вершины i гетры наружу — меньше, если в какой-то позе стопы (низ гетры частью на кости стопы, ботинок —
     тоже) вершина выходит за наружную стенку ботинка − margin; поиск делением пополам."""
@@ -419,10 +438,19 @@ def fill_rim(m, boot, axes, skel, poses=FILL_POSES, margin=FILL_MARGIN):
             dy = y - ry
             if dy >= FILL_UP[1]:
                 continue
-            d = max(0.0, rwall - margin - r) * (1.0 - rm.smoothstep(FILL_UP[0], FILL_UP[1], dy))
+            d = max(0.0, rwall + FILL_OVER - r) * (1.0 - rm.smoothstep(FILL_UP[0], FILL_UP[1], dy))
         d = min(d, FILL_MAX)
+        raw0 = None
+        if d > 1e-6 and FILL_SHIN and y > ry - FILL_SHIN:       # кость — только у сдвигаемых вершин
+            raw0 = (m.vertex_raw(i), list(m.bones[i]), list(m.weights[i]))
+            if not _shin_only(m, i, side):
+                raw0 = None
         if d > 1e-6:
             d = _posed_limit(m, i, axes[side], th, d, boots, poses, skel, margin)
+        if d <= 1e-6 and raw0:                                    # не сдвинули — кости как были, байт в байт
+            o = m.vo + i * m.stride
+            m.f.raw[o:o + m.stride] = raw0[0]
+            m.bones[i], m.weights[i] = tuple(raw0[1]), tuple(raw0[2])
         if d > 1e-6:
             _push(m, i, axes, d)
             moved += 1
@@ -471,11 +499,13 @@ def build(base=CACHE, out=OUT, fill=True, log=print):
     use_legacy()
     skel = rm.Skeleton.game()
     axes = (rm.LegAxis(skel, 0), rm.LegAxis(skel, 1))
-    piv = tongue_pivot(load(base, rm.TONGUE.format(t=2, lod=2)))
+    # язык и контейнер кольца — всегда родные EA из архива: в cache: под этими именами может лежать уже наша сборка
+    piv = tongue_pivot(rm.Mesh.game(rm.TONGUE.format(t=2, lod=2)))
     summary = {'base': base, 'source_variant': SRC_T, 'tongue_move': TONGUE_MOVE, 'tongue_move_lod': TONGUE_MOVE_LOD,
                'tongue_pivot_m': piv,
                'fill': fill, 'fill_margin_mm': FILL_MARGIN * 1000, 'fill_depth_m': list(FILL_DEPTH),
-               'fill_up_m': list(FILL_UP), 'fill_max_mm': FILL_MAX * 1000, 'views': NAMES, 'files': {}}
+               'fill_up_m': list(FILL_UP), 'fill_max_mm': FILL_MAX * 1000, 'fill_over_mm': FILL_OVER * 1000,
+               'fill_shin_m': FILL_SHIN, 'views': NAMES, 'files': {}}
     files = {}
 
     def put(rel, data, note):
@@ -497,12 +527,12 @@ def build(base=CACHE, out=OUT, fill=True, log=print):
                 dict(rep, what=f'копия {srel}' + (', низ у стенки ботинка (fill_rim)' if fill else '')))
         # язык: родной skatetongue_2 целиком вперёд
         k2rel, k3rel, k0rel = (rm.TONGUE.format(t=t, lod=lod) for t in (2, 3, 0))
-        k2 = load(base, k2rel)
+        k2 = rm.Mesh.game(k2rel)
         mv = move_rigid(k2, piv, dict(TONGUE_MOVE, **TONGUE_MOVE_LOD.get(lod, {})))
         put(k2rel, k2.bytes(), {'what': f'{k2rel} EA целиком сдвинут', 'move': mv})
         # кольцо: родной задник skatetongue_3 как есть + тот же язык
         k3 = load(base, k3rel)
-        put(k0rel, merged(load(base, k0rel), k3, k2),
+        put(k0rel, merged(rm.Mesh.game(k0rel), k3, k2),
             {'what': f'{k3rel} как есть + {k2rel} (сдвинутый) одной сеткой', 'vertices': k3.nv + k2.nv})
     # затенение гетр: у 0, 1, 2 — от 3 (UV те же)
     for k in (0, 1):
@@ -546,21 +576,24 @@ class Look:
         self.pant = tx(f'rendering/pant/texlib_{kit}.rx2', f'pant_{kit}_cm')
         self.ao = {}
 
-    def sock_ao(self, src, t):
+    def sock_ao(self, src, t, fallback='base'):
         rel = AM.format(t=t, k=0)
-        if (src, t) not in self.ao:
+        if (src, t, fallback) not in self.ao:
             p = os.path.join(src, *rel.split('/')) if src else None
-            self.ao[(src, t)] = Tex(open(p, 'rb').read() if p and os.path.exists(p) else raw_file(self.base, rel),
-                                    'playersock')
-        return self.ao[(src, t)]
+            data = open(p, 'rb').read() if p and os.path.exists(p) else (
+                raw_file(self.base, rel) if fallback == 'base' else rm.source(rel))
+            self.ao[(src, t, fallback)] = Tex(data, 'playersock')
+        return self.ao[(src, t, fallback)]
 
-    def parts(self, t, src=None, lod=2, pose=None, skel=None):
-        """Нога x > 0 варианта t: гетра и деталь — из src (раскладка cache:; None — нынешние из base)."""
+    def parts(self, t, src=None, lod=2, pose=None, skel=None, fallback='base'):
+        """Нога x > 0 варианта t: гетра и деталь — из src (раскладка cache:), нет там — из base (fallback 'base') или
+        из архива игры ('archive': так «как было до» — бэкап и родное EA)."""
         kw = dict(pose=pose, skel=skel)
         get = lambda rel: rm.Mesh.load(os.path.join(src, *rel.split('/'))) if src and os.path.exists(
-            os.path.join(src, *rel.split('/'))) else load(self.base, rel)
+            os.path.join(src, *rel.split('/'))) else (load(self.base, rel) if fallback == 'base' else rm.Mesh.game(rel))
         ps = [Part(load(self.base, f'rendering/pant/pant_0_0_0_{lod}.rx2'), self.pant, name='pant', **kw),
-              Part(get(rm.SOCK.format(t=t, lod=lod)), self.sock, self.sock_nm, self.sock_ao(src, t), name='sock', **kw),
+              Part(get(rm.SOCK.format(t=t, lod=lod)), self.sock, self.sock_nm, self.sock_ao(src, t, fallback),
+                   name='sock', **kw),
               Part(rm.Mesh.game(rm.BOOT.format(lod=lod)), self.skate, self.skate_nm, self.boot_ao, name='boot', **kw),
               Part(rm.Mesh.game(rm.LACE.format(lod=lod)), self.lace, name='lace', **kw)]
         if t != 1:
@@ -619,25 +652,29 @@ def grid(rows, cols, cells, path, title='', note=''):
     return path
 
 
-ROWS = [  # (подпись, вариант T, откуда файлы: 'new' — сборка, 'base' — нынешние)
+ROWS = [  # (подпись, вариант T, откуда файлы: 'new' — сборка, 'base' — нынешние, 'before' — как было до этой правки)
     ('Вид 1 = T 3 (как есть)\n= родной EA 3: гетра 3 + задник 3', 3, 'base'),
     ('Вид 2 = T 1\nгетра 3, ничего не торчит', 1, 'new'),
     ('Вид 3 = T 2\nгетра 3 + язык 2 (сдвинут)', 2, 'new'),
     ('Вид 4 = T 0\nгетра 3 + задник 3 + язык 2', 0, 'new'),
-    ('Родной EA 2 (сейчас)\nдля сравнения', 2, 'base'),
+    ('Родной EA 2 (до правки)\nдля сравнения', 2, 'before'),
 ]
+# «как было до»: бэкап cache: перед первой установкой (05.11.2026 06:56, раскладка cache:); чего там нет — архив игры
+BEFORE = os.path.join(REPO, 'game', 'work', 'models-check', 'tuck4', 'install-tuck4', 'backup-20261105-065658')
 
 
-def sheet(out=OUT, base=CACHE, kit=SHEET_KIT, skate=SHEET_SKATE, pics=None, log=print):
+def sheet(out=OUT, base=CACHE, kit=SHEET_KIT, skate=SHEET_SKATE, pics=None, before=BEFORE, log=print):
     """Листы: views.png — 4 вида и родной EA 2 спереди/сбоку/сзади (вид 1 — это и есть EA 3); holes.png — места
     возможных дыр крупно (пурпурное — изнанка: в игре там просвет или внутренняя сторона) у видов и EA 0–3;
-    poses.png — вид 2 и 4 в позах стопы. → {имя: путь}."""
+    poses.png — вид 2 и 4 в позах стопы. before — файлы «до правки» (раскладка cache:, нет — архив). → {имя: путь}."""
     pics = pics or os.path.join(os.path.dirname(out), 'pics')
     lk = Look(base, kit, skate)
     skel = rm.Skeleton.game()
-    src = lambda w: out if w == 'new' else None
+    before = before if before and os.path.isdir(before) else None
+    srcs = {'new': (out, 'base'), 'base': (None, 'base'), 'before': (before, 'archive')}
+    parts = lambda t, w, **kw: lk.parts(t, srcs[w][0], fallback=srcs[w][1], **kw)
     res = {}
-    cells = [[shot(lk.parts(t, src(w)), yaw, pitch, 0.12, 0.42, 1300)[0] for _, yaw, pitch in SHEET_VIEWS]
+    cells = [[shot(parts(t, w), yaw, pitch, 0.12, 0.42, 1300)[0] for _, yaw, pitch in SHEET_VIEWS]
              for _, t, w in ROWS]
     res['views'] = grid([r[0] for r in ROWS], [v[0] for v in SHEET_VIEWS], cells, os.path.join(pics, 'views.png'),
                         'Четыре вида заправки из гетры 3 (NHL Legacy, ближняя детализация, PIT выезд, CCM FT6)',
@@ -645,14 +682,14 @@ def sheet(out=OUT, base=CACHE, kit=SHEET_KIT, skate=SHEET_SKATE, pics=None, log=
                         f'на {TONGUE_MOVE["fwd_m"] * 1000:.0f} мм и вниз на {-TONGUE_MOVE["up_m"] * 1000:.0f} мм '
                         '(наклон и форма EA). Пурпурное — изнанка.')
     log(f'  лист: {res["views"]}')
-    zrows = ROWS[1:4] + [('Родной EA 3', 3, 'base'), ('Родной EA 2', 2, 'base'), ('Родной EA 1', 1, 'base'),
-                         ('Родной EA 0', 0, 'base')]
+    zrows = ROWS[1:4] + [('Родной EA 3', 3, 'base'), ('Родной EA 2', 2, 'before'), ('Родной EA 1', 1, 'before'),
+                         ('Родной EA 0', 0, 'before')]
     holes = {}
     zc = []
     for name, t, w in zrows:
         row = []
         for vn, yaw, pitch in ZOOM_VIEWS:
-            img, hm = shot(lk.parts(t, src(w)), yaw, pitch, 0.20, 0.31, 3000)
+            img, hm = shot(parts(t, w), yaw, pitch, 0.20, 0.31, 3000)
             row.append(img)
             holes[(name.split('\n')[0], vn)] = int(hm.sum())
         zc.append(row)
@@ -665,7 +702,7 @@ def sheet(out=OUT, base=CACHE, kit=SHEET_KIT, skate=SHEET_SKATE, pics=None, log=
     for name, t, w in [ROWS[1], ROWS[2], ROWS[3]]:
         row = []
         for pose in rm.SHIN_POSES:
-            img, _ = shot(lk.parts(t, src(w), pose=pose, skel=skel), -135, 20, 0.17, 0.33, 1700)
+            img, _ = shot(parts(t, w, pose=pose, skel=skel), -135, 20, 0.17, 0.33, 1700)
             row.append(img)
         pc.append(row)
         prow.append(name)
@@ -675,6 +712,38 @@ def sheet(out=OUT, base=CACHE, kit=SHEET_KIT, skate=SHEET_SKATE, pics=None, log=
     with open(os.path.join(pics, 'holes.json'), 'w', encoding='utf-8') as f:
         json.dump({f'{a} | {b}': v for (a, b), v in holes.items()}, f, ensure_ascii=False, indent=1)
     return res
+
+
+def compare_sheet(old, out=OUT, base=CACHE, kit=SHEET_KIT, skate=SHEET_SKATE, pics=None, ts=(1, 2), lods=(2, 0),
+                  log=print):
+    """Лист «было | стало» у вида без задника: стык сзади крупно (ZOOM_VIEWS, сбоку, сзади), прежний набор old и out
+    (оба — раскладка cache:), рядом — родной EA 3; в подписи — пикселей изнанки. → путь compare.png."""
+    pics = pics or os.path.join(os.path.dirname(out), 'pics')
+    lk = Look(base, kit, skate)
+    views = list(ZOOM_VIEWS) + [('сбоку', -90, 0), ('сзади', 180, 0)]
+    rows, cells = [], []
+    for lod in lods:
+        for t in ts:
+            for tag, src, tt in (('было', old, t), ('стало', out, t)):
+                row, n = [], 0
+                for _, yaw, pitch in views:
+                    img, hm = shot(lk.parts(tt, src, lod=lod), yaw, pitch, 0.20, 0.31, 2600)
+                    row.append(img)
+                    n += int(hm.sum())
+                rows.append(f'T {t}, _{lod}: {tag}\nизнанка: {n} пикс.')
+                cells.append(row)
+        row, n = [], 0
+        for _, yaw, pitch in views:
+            img, hm = shot(lk.parts(3, None, lod=lod), yaw, pitch, 0.20, 0.31, 2600)
+            row.append(img)
+            n += int(hm.sum())
+        rows.append(f'Родной EA 3, _{lod}\nизнанка: {n} пикс.')
+        cells.append(row)
+    path = grid(rows, [v[0] for v in views], cells, os.path.join(pics, 'compare.png'),
+                'Стык гетры и ботинка сзади у видов без задника — было / стало',
+                'Пурпурное — изнанка стенки ботинка (в игре там просвет). Пикселей — на 6 ракурсах вместе, 2600 пикс./м.')
+    log(f'  лист: {path}')
+    return path
 
 
 # ---------------------------------------------------------------- проверка
@@ -728,11 +797,12 @@ def obstacle_into(det, obst, axes, ys=CHECK_YS, na=CHECK_NA):
     return n, round(dm * 1000, 1)
 
 
-def check(out=OUT, base=CACHE, poses=rm.SHIN_POSES, log=print):
+def check(out=OUT, base=CACHE, poses=rm.SHIN_POSES, before=BEFORE, log=print):
     """Проверка сборки out: (1) гетры 1 и 2 против ботинка и шнуровки в позах стопы — что изменилось против гетры 3
     (rw4mesh.relation_changes: проход сквозь деталь глубже 1 мм — ПРОВЕРИТЬ); (2) язык (виды 2 и 0) против гетры 3 —
-    рядом то же у родного языка EA на гетре 2; (3) ботинок и шнуровка в языке в позах — рядом EA 2. LOD _2, _0, _3.
-    → сводка (и check.json в out)."""
+    рядом то же у родного языка EA на гетре 2 (гетра 2 — «до правки», before; нет — архив); (3) ботинок и шнуровка в
+    языке в позах — рядом EA 2. LOD _2, _0, _3. → сводка (и check.json в out)."""
+    before = before if before and os.path.isdir(before) else None
     use_legacy()
     skel = rm.Skeleton.game()
     axes = (rm.LegAxis(skel, 0), rm.LegAxis(skel, 1))
@@ -759,15 +829,15 @@ def check(out=OUT, base=CACHE, poses=rm.SHIN_POSES, log=print):
                         res['socks'].append([t, lod, rm.pose_name(pose), name, {k: [n, round(d * 1000, 1)]
                                                                                for k, (n, d) in ch.items()}])
         k_new = rm.Slicer(get(rm.TONGUE.format(t=2, lod=lod)))
-        k_ea = rm.Slicer(load(base, rm.TONGUE.format(t=2, lod=lod)))
-        s2ea = rm.Slicer(load(base, rm.SOCK.format(t=2, lod=lod)))
+        k_ea = rm.Slicer(rm.Mesh.game(rm.TONGUE.format(t=2, lod=lod)))
+        s2ea = rm.Slicer(load(before, rm.SOCK.format(t=2, lod=lod)))
         new, ea = wall_relation(k_new, rm.Slicer(s3), axes), wall_relation(k_ea, s2ea, axes)
         res['tongue_vs_sock'][f'_{lod}'] = {'new_on_sock3': new, 'ea_on_sock2': ea}
         log(f'  язык _{lod} на гетре 3: {new}\n         EA 2 на гетре 2: {ea}')
         if new['through_max_mm'] > max(1.0, ea['through_max_mm'] + 0.5):
             bad += 1
             log('    ← ПРОВЕРИТЬ: гетра выходит сквозь язык глубже, чем у EA')
-        km, ke = get(rm.TONGUE.format(t=2, lod=lod)), load(base, rm.TONGUE.format(t=2, lod=lod))
+        km, ke = get(rm.TONGUE.format(t=2, lod=lod)), rm.Mesh.game(rm.TONGUE.format(t=2, lod=lod))
         for pose in poses:
             row = {}
             for name, om in obs.items():
@@ -786,15 +856,131 @@ def check(out=OUT, base=CACHE, poses=rm.SHIN_POSES, log=print):
     return res
 
 
+# ---------------------------------------------------------------- установка и откат (раскладка content и старая)
+#
+# Ставит в cache: установки (legacy_paths: content\<часть>\… или cache\guest\…) только при закрытой игре; всё, что лежало
+# под этими именами, — в бэкап рядом с out (раскладка cache:, absent.txt — чего не было); installed.json в out — что,
+# куда и где бэкап. Откат — uninstall (последняя установка) или restore --from БЭКАП (любой прежний бэкап).
+
+def game_running(install_dir=None):
+    """Запущена ли игра этой установки (nhllegacy.exe из её папки; копии-стенды других агентов не в счёт)."""
+    import subprocess
+    exe = os.path.normcase(os.path.join(LP.Install(install_dir).dir, 'nhllegacy.exe'))
+    r = subprocess.run(['powershell', '-NoProfile', '-Command',
+                        '(Get-Process -Name nhllegacy -ErrorAction SilentlyContinue).Path'],
+                       capture_output=True, text=True, errors='replace')
+    return any(os.path.normcase(x.strip()) == exe for x in r.stdout.splitlines() if x.strip())
+
+
+def _dst(inst, rel):
+    """Куда класть rel и что игра берёт сейчас; файл в content\\my или cache\\game перекрыл бы наш — ошибка."""
+    dst = LP.cache_file(inst.cache(), rel)
+    cur = inst.find(rel)
+    if cur and os.path.normcase(os.path.abspath(cur)) != os.path.normcase(os.path.abspath(dst)):
+        raise SystemExit(f'{rel}: игра берёт {cur}, а не {dst} — сначала уберите тот файл')
+    return dst
+
+
+def _recycle(paths, log=print):
+    import subprocess
+    if paths:
+        r = subprocess.run([sys.executable, os.path.join(REPO, 'tools', 'recycle.py'), 'drop', *paths],
+                           capture_output=True, text=True, encoding='utf-8', errors='replace',
+                           env=dict(os.environ, PYTHONIOENCODING='utf-8'))
+        log(r.stdout.strip() or r.stderr.strip())
+
+
+def install(out=OUT, install_dir=None, log=print):
+    """Сборку out — в cache: установки (игра закрыта), с бэкапом заменяемого. → installed.json (словарь)."""
+    import hashlib
+    import time
+    if game_running(install_dir):
+        raise SystemExit('игра этой установки запущена — не ставлю (nhllegacy.exe)')
+    if os.path.exists(os.path.join(out, 'installed.json')):
+        raise SystemExit(f'{out}: уже поставлено (installed.json) — сначала uninstall')
+    man = json.load(open(os.path.join(out, 'manifest.json'), encoding='utf-8'))
+    inst = LP.Install(install_dir)
+    rels = sorted(man['files'])
+    dsts = {rel: _dst(inst, rel) for rel in rels}
+    stamp = time.strftime('%Y%m%d-%H%M%S')
+    bak = os.path.join(os.path.dirname(os.path.abspath(out)), f'backup-{stamp}')
+    absent = []
+    for rel in rels:
+        src = os.path.join(bak, *rel.split('/'))
+        if os.path.exists(dsts[rel]):
+            os.makedirs(os.path.dirname(src), exist_ok=True)
+            open(src, 'wb').write(open(dsts[rel], 'rb').read())
+        else:
+            absent.append(rel)
+    os.makedirs(bak, exist_ok=True)
+    open(os.path.join(bak, 'absent.txt'), 'w', encoding='utf-8', newline='\n').write(''.join(r + '\n' for r in absent))
+    for rel in rels:
+        data = open(os.path.join(out, *rel.split('/')), 'rb').read()
+        os.makedirs(os.path.dirname(dsts[rel]), exist_ok=True)
+        open(dsts[rel], 'wb').write(data)
+        if hashlib.sha1(open(dsts[rel], 'rb').read()).hexdigest() != hashlib.sha1(data).hexdigest():
+            raise SystemExit(f'{dsts[rel]}: после записи не совпадает')
+    rec = {'time': stamp, 'install': inst.dir, 'cache': inst.cache(), 'backup': bak, 'absent': absent,
+           'files': {rel: dsts[rel] for rel in rels}}
+    with open(os.path.join(out, 'installed.json'), 'w', encoding='utf-8', newline='\n') as f:
+        json.dump(rec, f, ensure_ascii=False, indent=1)
+    log(f'поставлено {len(rels)} файлов в {inst.cache()}; заменённое — {bak} ({len(rels) - len(absent)} файлов, '
+        f'не было — {len(absent)}); откат — socktuck.py uninstall --out {out}')
+    return rec
+
+
+def restore(backup, install_dir=None, log=print):
+    """Бэкап (раскладка cache: + absent.txt) — обратно в cache: установки (игра закрыта): файлы бэкапа на место,
+    перечисленные в absent.txt — в Корзину. → (возвращено, убрано)."""
+    if game_running(install_dir):
+        raise SystemExit('игра этой установки запущена — не трогаю (nhllegacy.exe)')
+    inst = LP.Install(install_dir)
+    back = 0
+    for d, _, fs in os.walk(os.path.join(backup, 'rendering')):
+        for fn in fs:
+            p = os.path.join(d, fn)
+            rel = os.path.relpath(p, backup).replace('\\', '/')
+            dst = _dst(inst, rel)
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            open(dst, 'wb').write(open(p, 'rb').read())
+            back += 1
+    drop = []
+    ab = os.path.join(backup, 'absent.txt')
+    for rel in (open(ab, encoding='utf-8').read().split() if os.path.exists(ab) else []):
+        dst = _dst(inst, rel)
+        if os.path.exists(dst):
+            drop.append(dst)
+    _recycle(drop, log)
+    log(f'возвращено из {backup}: {back} файлов в {inst.cache()}; добавленные {len(drop)} — в Корзину')
+    return back, len(drop)
+
+
+def uninstall(out=OUT, log=print):
+    """Откат последней установки из out (installed.json → её бэкап)."""
+    import time
+    p = os.path.join(out, 'installed.json')
+    if not os.path.exists(p):
+        raise SystemExit(f'{out}: не поставлено (нет installed.json)')
+    rec = json.load(open(p, encoding='utf-8'))
+    restore(rec['backup'], rec['install'], log)
+    os.replace(p, os.path.join(rec['backup'], f'uninstalled-{time.strftime("%Y%m%d-%H%M%S")}.json'))
+
+
 # ---------------------------------------------------------------- команды
 
 def main(argv=None):
     import argparse
     ap = argparse.ArgumentParser(prog='socktuck.py', description=__doc__.split('\n\n')[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
-    ap.add_argument('cmd', choices=('build', 'check', 'sheet', 'fit'))
-    ap.add_argument('--base', default=CACHE, help='нынешние файлы (раскладка cache:), по умолчанию cache: пользователя')
-    ap.add_argument('--out', default=OUT, help='куда собирать / что проверять')
+    ap.add_argument('cmd', choices=('build', 'check', 'sheet', 'compare', 'fit', 'install', 'uninstall', 'restore'))
+    ap.add_argument('--base', default=CACHE, help='нынешние файлы: cache: установки (content или cache\\guest) или '
+                                                  'папка в раскладке cache:; по умолчанию — установка на этом ПК')
+    ap.add_argument('--out', default=OUT, help='куда собирать / что проверять / что ставить')
+    ap.add_argument('--before', default=BEFORE, help='файлы «до правки» (раскладка cache:) для сравнения с EA')
+    ap.add_argument('--old', help='compare: прежний набор (раскладка cache:)')
+    ap.add_argument('--install', default=None, help='install/uninstall/restore: папка игры (nhllegacy.exe), '
+                                                    'по умолчанию ' + LP.DEFAULT_INSTALL)
+    ap.add_argument('--from', dest='src', help='restore: бэкап в раскладке cache: (с absent.txt)')
     ap.add_argument('--no-fill', action='store_true', help='у видов без задника гетру у ботинка не подтягивать')
     ap.add_argument('--kit', default=SHEET_KIT, help='форма для картинок (S_A_V), по умолчанию ' + SHEET_KIT)
     ap.add_argument('--skate', type=int, default=SHEET_SKATE, help='конёк для картинок (texlib_N)')
@@ -802,14 +988,27 @@ def main(argv=None):
     if a.cmd == 'build':
         build(a.base, a.out, fill=not a.no_fill)
     elif a.cmd == 'check':
-        check(a.out, a.base)
+        check(a.out, a.base, before=a.before)
     elif a.cmd == 'sheet':
-        sheet(a.out, a.base, a.kit, a.skate)
+        sheet(a.out, a.base, a.kit, a.skate, before=a.before)
+    elif a.cmd == 'compare':
+        if not a.old:
+            ap.error('compare: нужен --old DIR (прежний набор)')
+        compare_sheet(a.old, a.out, a.base, a.kit, a.skate)
+    elif a.cmd == 'install':
+        install(a.out, a.install)
+    elif a.cmd == 'uninstall':
+        uninstall(a.out)
+    elif a.cmd == 'restore':
+        if not a.src:
+            ap.error('restore: нужен --from DIR (бэкап)')
+        restore(a.src, a.install)
     else:
         use_legacy()
         skel = rm.Skeleton.game()
         axes = (rm.LegAxis(skel, 0), rm.LegAxis(skel, 1))
-        fit_tongue(load(a.base, rm.TONGUE.format(t=2, lod=2)), rm.Slicer(load(a.base, rm.SOCK.format(t=2, lod=2))),
+        before = a.before if a.before and os.path.isdir(a.before) else None
+        fit_tongue(rm.Mesh.game(rm.TONGUE.format(t=2, lod=2)), rm.Slicer(load(before, rm.SOCK.format(t=2, lod=2))),
                    rm.Slicer(load(a.base, rm.SOCK.format(t=SRC_T, lod=2))), axes)
 
 
