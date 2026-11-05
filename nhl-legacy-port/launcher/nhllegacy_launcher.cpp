@@ -578,6 +578,8 @@ const COLORREF kColHintBg = RGB(243, 246, 250);
 const COLORREF kColHintBorder = RGB(222, 228, 236);
 const COLORREF kColGrayText = RGB(110, 110, 110);
 
+constexpr UINT_PTR kTimerGame = 7;  // ожидание окна игры после «Играть»
+
 struct App {
   HINSTANCE inst = nullptr;
   HWND wnd = nullptr;
@@ -596,6 +598,9 @@ struct App {
   SYSTEMTIME exe_time{};  // время изменения nhllegacy.exe, местное
   State state;
   bool shot = false;
+  HANDLE game = nullptr;    // запущенная игра: лаунчер ждёт её окна (WaitGameWindow)
+  DWORD game_pid = 0;
+  ULONGLONG game_start = 0;
 } g;
 
 int S(int v) { return MulDiv(v, static_cast<int>(g.dpi), 96); }
@@ -1047,7 +1052,46 @@ void Play() {
     return;
   }
   CloseHandle(pi.hThread);
-  CloseHandle(pi.hProcess);
+  // Передний план (05.11.2026, жалоба: «окно разворачивается на весь экран, но поверх него остаются окна»). Лаунчер
+  // закрывался сразу, передний план уходил другому окну раньше, чем появлялось окно игры, и Windows не пускала её вперёд.
+  // Теперь игра получает право на передний план, а окно лаунчера закрывается, когда появится окно игры (или игра выйдет,
+  // или пройдёт 30 с).
+  AllowSetForegroundWindow(pi.dwProcessId);
+  g.game = pi.hProcess;
+  g.game_pid = pi.dwProcessId;
+  g.game_start = GetTickCount64();
+  EnableWindow(g.wnd, FALSE);
+  SetTimer(g.wnd, kTimerGame, 100, nullptr);
+}
+
+// Окно игры (SDL, видимое) у процесса pid.
+bool GameWindowShown(DWORD pid) {
+  struct Ctx {
+    DWORD pid;
+    bool found;
+  } ctx{pid, false};
+  EnumWindows(
+      [](HWND h, LPARAM lp) -> BOOL {
+        auto* c = reinterpret_cast<Ctx*>(lp);
+        DWORD p = 0;
+        GetWindowThreadProcessId(h, &p);
+        wchar_t cls[32] = {};
+        if (p == c->pid && IsWindowVisible(h) && GetClassNameW(h, cls, 32) && wcscmp(cls, L"SDL_app") == 0) {
+          c->found = true;
+          return FALSE;
+        }
+        return TRUE;
+      },
+      reinterpret_cast<LPARAM>(&ctx));
+  return ctx.found;
+}
+
+void WaitGameWindow() {
+  const bool exited = WaitForSingleObject(g.game, 0) == WAIT_OBJECT_0;
+  if (!exited && !GameWindowShown(g.game_pid) && GetTickCount64() - g.game_start < 30000) return;
+  KillTimer(g.wnd, kTimerGame);
+  CloseHandle(g.game);
+  g.game = nullptr;
   DestroyWindow(g.wnd);
 }
 
@@ -1429,6 +1473,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
       SetFocus(Item(kIdLang));
       return 0;
     }
+    case WM_TIMER:
+      if (wp == kTimerGame && g.game) {
+        WaitGameWindow();
+        return 0;
+      }
+      break;
     case WM_CLOSE:
       if (!g.shot) {
         // Закрытие крестиком тоже сохраняет выбранное (неверные финансы — молча не сохранять).
