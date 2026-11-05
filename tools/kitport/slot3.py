@@ -140,20 +140,17 @@ def move_files(root, todo):
 
 # ---------------------------------------------------------------- сейвы, база
 
-def saves_dir(cache):
-    root = os.path.dirname(os.path.dirname(os.path.abspath(cache)))
-    for x in sorted(os.listdir(root)):
-        p = os.path.join(root, x, "454109EC", "00000001")
-        if os.path.isdir(p):
-            return p
-    sys.exit(f"в {root} нет сейвов")
-
-
 def rosters(cache):
-    """Файлы ROSTER: от старых к новым, имя сейва — время записи."""
-    d = saves_dir(cache)
-    names = sorted((n for n in os.listdir(d) if SAVE_DIR.fullmatch(n)), key=lambda n: n[7:21])
-    return [os.path.join(d, n, n) for n in names]
+    """Файлы ROSTER: от старых к новым, имя сейва — время записи. cache — userdata/cache/guest; сейвы — в saves рядом
+    с userdata (0.17.0+) или в userdata/<xuid>/454109EC/00000001 (tools/legacy_saves.py)."""
+    if core.TOOLS not in sys.path:
+        sys.path.insert(0, core.TOOLS)
+    from legacy_saves import Saves
+    s = Saves.of_userdata(os.path.dirname(os.path.dirname(os.path.abspath(cache))))
+    refs = [r for r in s.list("ROSTER") if SAVE_DIR.fullmatch(r.name)]
+    if not refs:
+        sys.exit(f"нет сейвов ROSTER в {s.where()}")
+    return [r.file for r in refs]
 
 
 def open_base(cache=None):

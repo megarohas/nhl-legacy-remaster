@@ -164,7 +164,15 @@ def api_rosters(refresh, log):
 
 
 # --- новейший ROSTER ---------------------------------------------------------------------------------------------------
-def newest_roster(saves=SAVES):
+def newest_roster(saves=None):
+    """Файл новейшего ROSTER. Без saves — установка на этом ПК в любой раскладке (saves\\rosters с 0.17.0 или
+    userdata\\<xuid>\\454109EC\\00000001, tools/legacy_saves.py); saves — папка со старыми ROSTER <время>."""
+    if saves is None:
+        from legacy_saves import Saves
+        try:
+            return Saves.of_install().latest('ROSTER').file
+        except FileNotFoundError as e:
+            raise SpecError(f'{e} — укажите --save')
     best = None
     for d in glob.glob(os.path.join(glob.escape(saves), 'ROSTER *')):
         m = re.fullmatch(r'ROSTER (\d{14})', os.path.basename(d))

@@ -29,6 +29,7 @@ from tdb_read import load_meta
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REAL_USERDATA = os.path.normcase(os.path.join(REPO, 'nhl-legacy-port', 'userdata'))
+REAL_SAVES = os.path.normcase(os.path.join(REPO, 'nhl-legacy-port', 'out', 'build', 'win-amd64-release', 'saves'))
 XUID, TITLE = 'B13EBABEBABEBABE', '454109EC'
 JERSEYS, VISORS = 'stockteamjerseys', 'stockplayervisorexempttable'
 MARKED = 'Crosby'
@@ -151,9 +152,11 @@ def cmd_plant(a):
     ud = os.path.abspath(a.userdata)
     if os.path.normcase(ud) == REAL_USERDATA:
         sys.exit('это настоящие сейвы пользователя: образцы — только в копию')
-    root = os.path.join(ud, XUID, TITLE)
-    saves = os.path.join(root, '00000001')
-    names = [n for n in os.listdir(saves) if re.fullmatch(r'ROSTER \d{14}A?', n)]
+    from legacy_saves import Saves
+    place = Saves.of_userdata(ud)
+    if place.saves_root and os.path.normcase(os.path.abspath(place.saves_root)) == REAL_SAVES:
+        sys.exit('это настоящие сейвы пользователя: образцы — только в копию')
+    names = [r.name for r in place.list('ROSTER') if re.fullmatch(r'ROSTER \d{14}A?', r.name)]
     if a.name:
         folder = a.name
     else:
@@ -162,9 +165,11 @@ def cmd_plant(a):
         folder = 'ROSTER ' + t.strftime('%Y%m%d%H%M%S')
     if not os.path.isfile(a.sample):
         sys.exit(f'нет файла {a.sample}')
-    os.makedirs(os.path.join(saves, folder))
-    shutil.copyfile(a.sample, os.path.join(saves, folder, folder))
-    open(os.path.join(root, 'Headers', '00000001', folder + '.header'), 'wb').write(header(folder))
+    save_dir, header_path = place.place_for(folder)   # saves\\rosters (0.17.0+) или userdata\\<xuid>\\…\\00000001
+    os.makedirs(save_dir)
+    shutil.copyfile(a.sample, os.path.join(save_dir, folder))
+    os.makedirs(os.path.dirname(header_path), exist_ok=True)
+    open(header_path, 'wb').write(header(folder))
     print(folder)
 
 
