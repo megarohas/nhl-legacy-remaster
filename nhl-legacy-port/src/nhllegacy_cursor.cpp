@@ -14,8 +14,11 @@
 // дисплей (Win+M+1 / Win+M+2), полноэкранное окно игры закрывает весь рабочий стол, поэтому курсор при выходе всегда над
 // ним. Теперь:
 // - перед закрытием (крестик, Alt+F4, EXIT в меню — всё идёт через запрос закрытия) и при падении:
-//   NhlLegacyReleaseCursor — курсор виден, не зажат (ClipCursor(NULL)), захват мыши снят, стрелка, окно спрятано
-//   (ShowWindow SW_HIDE: Windows сама выбирает окно под курсором и шлёт ему WM_SETCURSOR, пока процесс ещё жив);
+//   NhlLegacyReleaseCursor — курсор виден, не зажат (ClipCursor(NULL)), захват мыши снят, стрелка. Окно НЕ прячется:
+//   в 0.17.0–0.18.x тут был ShowWindow(SW_HIDE), и с фокусом на окне игры потеря фокуса внутри обработчика закрытия
+//   обрывала закрытие — процесс оставался жить без окна, с музыкой (жалоба пользователя 05.11.2026);
+// - страховка выхода (NhlLegacyExitWatchdog): если через nhl_exit_watchdog_sec после запроса закрытия процесс ещё жив,
+//   он завершается сам;
 // - без фокуса и свёрнутым курсор не прячется;
 // - смена дисплеев (WM_DISPLAYCHANGE / новая геометрия рабочего стола): курсор на один шаг таймера виден и не зажат,
 //   дальше — по общим правилам.
@@ -25,7 +28,11 @@
 #endif
 
 #include <atomic>
+#include <chrono>
+#include <cstdlib>
+#include <cstring>
 #include <cwchar>
+#include <thread>
 
 #include <rex/cvar.h>
 #include <rex/logging.h>
@@ -38,6 +45,14 @@ REXCVAR_DEFINE_BOOL(nhl_hide_cursor, true, "NHLLegacy",
                     "box) is open");
 REXCVAR_DEFINE_BOOL(nhl_hide_cursor_unfocused, false, "NHLLegacy",
                     "Test stand only: hide the cursor over the game window even without focus (as before 0.17.0)");
+REXCVAR_DEFINE_INT32(nhl_exit_watchdog_sec, 5, "NHLLegacy",
+                     "After the window is asked to close, end the process if it is still alive this many seconds later "
+                     "(0 = off)");
+REXCVAR_DEFINE_BOOL(nhl_exit_test_veto, false, "NHLLegacy",
+                    "Test stand only: refuse the window close request, so that only the exit watchdog ends the process");
+REXCVAR_DEFINE_BOOL(nhl_foreground, true, "NHLLegacy",
+                    "Bring the game window to the front when it opens (skipped when SDL_WINDOW_ACTIVATE_WHEN_SHOWN=0, "
+                    "as on the test stands)");
 
 namespace {
 
@@ -79,6 +94,8 @@ DesktopGeometry Geometry() {
 }
 
 DesktopGeometry g_geometry;
+std::chrono::steady_clock::time_point g_opened;  // окно открыто: первые 3 с — выводить его вперёд
+bool g_front_done = false;
 bool g_display_changed = false;  // один шаг таймера после смены дисплеев курсор виден
 std::atomic<bool> g_display_message{false};  // пришёл WM_DISPLAYCHANGE
 HHOOK g_hook = nullptr;
@@ -147,7 +164,42 @@ void UpdateCursor() {
 constexpr UINT kPollMs = 200;
 UINT_PTR g_timer = 0;
 
+// Передний план при запуске (05.11.2026, жалоба: «окно разворачивается на весь экран, но поверх него остаются окна,
+// нужно кликать на иконку»). Лаунчер закрывался сразу после CreateProcess, передний план уходил другому окну, и Windows
+// не давала окну игры выйти вперёд. Лаунчер теперь ждёт окна игры и даёт ей AllowSetForegroundWindow; здесь — то же для
+// запуска exe напрямую: первые 3 с после открытия окна просим передний план, пока не получим. Стенды gameshot.ps1
+// запускают игру с SDL_WINDOW_ACTIVATE_WHEN_SHOWN=0 — у них окно вперёд не выводится никогда.
+bool ForegroundWanted() {
+  if (!REXCVAR_GET(nhl_foreground)) return false;
+  const char* env = std::getenv("SDL_WINDOW_ACTIVATE_WHEN_SHOWN");
+  return !(env && std::strcmp(env, "0") == 0);
+}
+
+void BringToFront() {
+  if (g_front_done) return;
+  HWND hwnd = Hwnd();
+  if (!hwnd || !IsWindowVisible(hwnd)) return;
+  if (!ForegroundWanted()) {
+    g_front_done = true;
+    return;
+  }
+  const double sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - g_opened).count();
+  if (GetForegroundWindow() == hwnd) {
+    g_front_done = true;
+    REXLOG_INFO("[nhllegacy] window: in front ({:.1f} s after it opened)", sec);
+    return;
+  }
+  if (sec > 3.0) {
+    g_front_done = true;
+    REXLOG_WARN("[nhllegacy] window: Windows did not let it to the front in 3 s");
+    return;
+  }
+  SetForegroundWindow(hwnd);
+  BringWindowToTop(hwnd);
+}
+
 void CALLBACK OnCursorTimer(HWND, UINT, UINT_PTR, DWORD) {
+  BringToFront();
   UpdateCursor();
 }
 #endif
@@ -160,6 +212,8 @@ void NhlLegacyStartCursorHide(rex::ui::Window* window, rex::ui::ImGuiDrawer* dra
 #if defined(_WIN32)
   g_geometry = Geometry();
   g_hook = SetWindowsHookExW(WH_CALLWNDPROC, OnCallWndProc, nullptr, GetCurrentThreadId());
+  g_opened = std::chrono::steady_clock::now();
+  BringToFront();
 #endif
   UpdateCursor();
 #if defined(_WIN32)
@@ -215,16 +269,31 @@ void NhlLegacyReleaseCursor(const char* reason, bool ui_thread) {
     ReleaseCapture();
     SetCursor(LoadCursor(nullptr, IDC_ARROW));
   }
-  if (HWND hwnd = Hwnd()) {
-    // Окно под курсором меняется, пока процесс жив: Windows шлёт WM_SETCURSOR окну, которое теперь под курсором.
-    if (ui_thread) {
-      ShowWindow(hwnd, SW_HIDE);
-    } else {
-      ShowWindowAsync(hwnd, SW_HIDE);
-    }
-  }
 #endif
   if (ui_thread) {
-    REXLOG_INFO("[nhllegacy] cursor released ({}): visible, not clipped, game window hidden", reason);
+    REXLOG_INFO("[nhllegacy] cursor released ({}): visible, not clipped", reason);
   }
+}
+
+// Запрос закрытия окна (поток UI): true — закрывать. Страховка выхода стартует здесь же.
+bool NhlLegacyCloseRequested() {
+  NhlLegacyReleaseCursor("window close", true);
+  const int sec = REXCVAR_GET(nhl_exit_watchdog_sec);
+  static std::atomic<bool> started{false};
+  if (sec > 0 && !started.exchange(true)) {
+    std::thread([sec] {
+      std::this_thread::sleep_for(std::chrono::seconds(sec));
+      REXLOG_WARN("[nhllegacy] exit: the process is still alive {} s after the window close request, ending it", sec);
+      rex::FlushLogging();
+#if defined(_WIN32)
+      TerminateProcess(GetCurrentProcess(), 0);
+#endif
+      std::_Exit(0);
+    }).detach();
+  }
+  if (REXCVAR_GET(nhl_exit_test_veto)) {
+    REXLOG_INFO("[nhllegacy] exit: close request refused (nhl_exit_test_veto), waiting for the watchdog");
+    return false;
+  }
+  return true;
 }

@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <cstdlib>
 #include <filesystem>
 #include <memory>
 #include <system_error>
@@ -13,6 +14,7 @@
 #include <rex/logging.h>
 #include <rex/rex_app.h>
 #include <rex/runtime.h>
+#include <rex/system/kernel_state.h>
 #include <rex/ui/overlay/achievement_notification.h>
 
 void NhlLegacyInstallCrashReporter();  // nhllegacy_crash.cpp
@@ -21,6 +23,7 @@ void NhlLegacyStopCursorHide();
 void NhlLegacyCursorFocus(bool focused);
 void NhlLegacyCursorMinimized(bool minimized);
 void NhlLegacyReleaseCursor(const char* reason, bool ui_thread);
+bool NhlLegacyCloseRequested();
 void NhlLegacyConfigureSaves(const std::filesystem::path& exe_dir,
                              const std::filesystem::path& user_data_root);  // nhllegacy_saves.cpp
 void NhlLegacyLogSaves();
@@ -122,11 +125,22 @@ class NhlLegacyApp : public rex::ReXApp {
     NhlLegacyReleaseCursor("shutdown", true);
   }
 
-  // Крестик, Alt+F4 и EXIT в меню (WM_CLOSE) идут через запрос закрытия. После него ReXApp::OnClosing выходит
-  // std::_Exit, ничего не восстанавливая, поэтому курсор возвращаем здесь (nhllegacy_cursor.cpp).
+  // Крестик, Alt+F4 и EXIT в меню (WM_CLOSE) идут через запрос закрытия. Выходим прямо здесь, тем же, чем выходит
+  // ReXApp::OnClosing (TerminateTitle и std::_Exit), но без штатной разборки окна перед ним: потеря фокуса, отключение
+  // ввода SDL и mnk. В ней закрытие иногда зависало — процесс оставался жить без окна, с музыкой (05.11.2026, у
+  // пользователя и на стенде с фокусом на окне игры; «Window closing» в журнал так и не попадал). Перед выходом —
+  // курсор Windows и страховка: процесс завершится сам, если и здесь что-то повиснет (nhllegacy_cursor.cpp).
   bool OnWindowCloseRequested() override {
-    NhlLegacyReleaseCursor("window close", true);
-    return true;
+    if (!NhlLegacyCloseRequested()) {
+      return false;
+    }
+    REXLOG_INFO("[nhllegacy] exit: window close request, terminating the title");
+    if (runtime() && runtime()->kernel_state()) {
+      runtime()->kernel_state()->TerminateTitle();
+    }
+    REXLOG_INFO("[nhllegacy] exit: title terminated; exiting the process");
+    rex::FlushLogging();
+    std::_Exit(0);
   }
 
   void OnWindowFocusChanged(bool focused) override { NhlLegacyCursorFocus(focused); }
