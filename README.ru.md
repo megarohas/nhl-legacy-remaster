@@ -36,11 +36,15 @@
 2. **Лаунчер.** `nhllegacy_launcher.exe` открывает окно настроек перед запуском. Там выбираются рендер
    (D3D12 или Vulkan), разрешение, FSR 1 / CAS, сезон и финансы франшизы. НХЛ и АХЛ на 32 и исправления включены
    всегда ([docs/launcher.md](docs/launcher.md)). Без лаунчера `nhllegacy.exe` берёт настройки из `nhllegacy.toml`.
+   **Редактор.** `nhllegacy_editor.exe` (кнопка «Редактор…» в лаунчере) показывает ассеты игры по разделам — формы,
+   логотипы, фото, головы, экипировка, арены, меню, музыка, модели, — выгружает их в PNG / OBJ / MP3 и загружает
+   поправленную версию обратно в `content\my`. Там же правятся составы (карточка игрока, переводы, новые игроки) и
+   пишутся новым ростером ([docs/editor.md](docs/editor.md)).
 3. **Папки** (с 0.17.0, [docs/legacy-port.md](docs/legacy-port.md), разделы «Папка saves» и «Папка content»):
 
    ```
    NHL Legacy Remaster\
-   ├─ nhllegacy_launcher.exe, nhllegacy.exe, DLL, nhllegacy.toml
+   ├─ nhllegacy_launcher.exe, nhllegacy_editor.exe, nhllegacy.exe, DLL, nhllegacy.toml
    ├─ game\         свои файлы игры (default.xex, *.big)
    ├─ content\      моды-данные по темам: database, menus, photos, logos, uniforms, heads, equipment, arenas,
    │                music, my (свои правки, главнее всего)
@@ -73,7 +77,8 @@
   (ночной SDK, с символами). Первая сборка сама запускает кодоген ReXGlue (15–20 минут), потом идёт компиляция.
   Результат — `nhl-legacy-port/out/build/<пресет>/nhllegacy.exe` ([docs/legacy-port.md](docs/legacy-port.md), раздел
   «Сборка»).
-- **Лаунчер:** `nhl-legacy-port\launcher\build.cmd` (результат — в `nhl-legacy-port/out/launcher/`). **Папка для игры:**
+- **Лаунчер:** `nhl-legacy-port\launcher\build.cmd` (результат — в `nhl-legacy-port/out/launcher/`). **Редактор:**
+  `bash tools/editor/build.sh` (один exe с Python и Pillow, результат — в `nhl-legacy-port/out/editor/`). **Папка для игры:**
   `bash nhl-legacy-port/scripts/make_dist.sh [--mods]`; полная папка для другого своего ПК —
   `bash tools/device_release.sh [--no-saves] --check` ([docs/device-release.md](docs/device-release.md)).
 - **Моды-данные:** `bash tools/legacy_data/build-all.sh [ЭТАП…] [--ahl32]` собирает набор в
@@ -90,6 +95,7 @@
 |---|---|
 | [nhl-legacy-port/](nhl-legacy-port/) | порт NHL Legacy: `src/` (врезки и исправления), `nhllegacy_*.toml` (манифест, функции, врезки), `scripts/` (кодоген, папка для игры, патчи SDK), `dist-template/`; сгенерированный код и сборка — вне git |
 | [nhl-legacy-port/launcher/](nhl-legacy-port/launcher/) | лаунчер `nhllegacy_launcher.exe` (C++/Win32, один файл) |
+| [tools/editor/](tools/editor/) | редактор игры `nhllegacy_editor.exe`: ассеты и составы, выгрузка и загрузка ([docs/editor.md](docs/editor.md)) |
 | [tools/legacy_data/](tools/legacy_data/) | конвейер модов-данных Legacy: `build-all.sh`, установщик, этапы |
 | [tools/roster/](tools/roster/) | составы 2026/27: API НХЛ, рейтинги, звенья, запись в базу |
 | [tools/fb/](tools/fb/) | разбор Frostbite NHL 24 и NHL 27: формы, лица, портреты, лёд, наклейки на шлем (только для личного использования) |

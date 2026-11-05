@@ -9,6 +9,13 @@
 - На входе — своя копия игры в `game/` (вне git), на выходе — `game/work/…`. В `cache:` порта и в сейвы пишут только установщики и команды с явным `--write`, и только при закрытой игре.
 - Почти всё написано на стандартной библиотеке Python 3. numpy и Pillow (местами scipy и opencv) нужны `fb/`, `logos/`, `utah/`, `photos24.py`, `heads24.py`, `scans24.py`, `fepose.py`, `menu12_legacy.py`, `menuplayers.py`, `stadium.py` и `kitpicker/`. Для отрисовки SVG `teamart.py` запускает Chrome или Edge без окна, `music.py` нужен ffmpeg.
 
+## Редактор игры: `editor/`
+
+`nhllegacy_editor.exe` — все ассеты и составы в одном окне: просмотр, выгрузка в PNG/OBJ/MP3, импорт в `content\my`,
+правка ростера с записью новым ростером ([docs/editor.md](../docs/editor.md)). Запуск из репозитория —
+`python tools/editor [--install ПАПКА_ИГРЫ]`, сборка exe — `bash tools/editor/build.sh`. Использует модули ниже
+(`teamart`, `playerhead`, `rw4mesh`, `big`, `tdb`, `music`, `roster/`, `legacy_data/roster_merge.py`) как библиотеки.
+
 ## Форматы файлов Xbox 360 и EA
 
 - `svod.py` — контейнеры SVOD (установка с диска, Games on Demand): проверка и распаковка

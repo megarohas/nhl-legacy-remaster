@@ -37,12 +37,16 @@ section) or get a ready-made `NHL Legacy` folder from someone in person.
    (D3D12 or Vulkan), resolution, FSR 1 / CAS, season and franchise finances there. The 32-club NHL and AHL and the
    fixes are always on ([docs/launcher.md](docs/launcher.md)). Started without the launcher, `nhllegacy.exe` reads
    `nhllegacy.toml`.
+   **Editor.** `nhllegacy_editor.exe` (the launcher's «Editor…» button) shows the game's assets by section — uniforms,
+   logos, photos, heads, equipment, arenas, menus, music, models — exports them to PNG / OBJ / MP3 and imports your
+   edited version back into `content\my`. It also edits rosters (player card, transfers, new players) and saves them as
+   a new roster ([docs/editor.md](docs/editor.md)).
 3. **Folder layout** (since 0.17.0, [docs/legacy-port.md](docs/legacy-port.md), sections «Папка saves» and
    «Папка content»):
 
    ```
    NHL Legacy Remaster\
-   ├─ nhllegacy_launcher.exe, nhllegacy.exe, DLLs, nhllegacy.toml
+   ├─ nhllegacy_launcher.exe, nhllegacy_editor.exe, nhllegacy.exe, DLLs, nhllegacy.toml
    ├─ game\         your game files (default.xex, *.big)
    ├─ content\      data mods by topic: database, menus, photos, logos, uniforms, heads, equipment, arenas,
    │                music, my (your own changes, they win over everything)
@@ -74,7 +78,8 @@ section) or get a ready-made `NHL Legacy` folder from someone in person.
 - **Building the port:** `nhl-legacy-port\build.cmd` (Release, our SDK) or `nhl-legacy-port\build.cmd win-amd64-relwithdebinfo`
   (nightly SDK, with symbols). The first build runs ReXGlue codegen by itself (15–20 minutes), then compiles. Output:
   `nhl-legacy-port/out/build/<preset>/nhllegacy.exe` ([docs/legacy-port.md](docs/legacy-port.md), section «Сборка»).
-- **Launcher:** `nhl-legacy-port\launcher\build.cmd` (output in `nhl-legacy-port/out/launcher/`). **Player folder:**
+- **Launcher:** `nhl-legacy-port\launcher\build.cmd` (output in `nhl-legacy-port/out/launcher/`). **Editor:**
+  `bash tools/editor/build.sh` (one exe with Python and Pillow, output in `nhl-legacy-port/out/editor/`). **Player folder:**
   `bash nhl-legacy-port/scripts/make_dist.sh [--mods]`; a full folder for another PC of your own:
   `bash tools/device_release.sh [--no-saves] --check` ([docs/device-release.md](docs/device-release.md)).
 - **Data mods:** `bash tools/legacy_data/build-all.sh [STAGE…] [--ahl32]` builds the set into
@@ -92,6 +97,7 @@ section) or get a ready-made `NHL Legacy` folder from someone in person.
 |---|---|
 | [nhl-legacy-port/](nhl-legacy-port/) | the NHL Legacy port: `src/` (hooks and fixes), `nhllegacy_*.toml` (manifest, functions, hooks), `scripts/` (codegen, player folder, SDK patches), `dist-template/`; generated code and builds stay out of git |
 | [nhl-legacy-port/launcher/](nhl-legacy-port/launcher/) | the `nhllegacy_launcher.exe` launcher (C++/Win32, a single file) |
+| [tools/editor/](tools/editor/) | the `nhllegacy_editor.exe` game editor: assets and rosters, export and import ([docs/editor.md](docs/editor.md)) |
 | [tools/legacy_data/](tools/legacy_data/) | the Legacy data-mod pipeline: `build-all.sh`, installer, stages |
 | [tools/roster/](tools/roster/) | 2026/27 rosters: NHL API, ratings, lines, writing the database |
 | [tools/fb/](tools/fb/) | Frostbite (NHL 24, NHL 27) readers: uniforms, faces, portraits, ice, helmet decals (personal use only) |

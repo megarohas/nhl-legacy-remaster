@@ -5,7 +5,7 @@
 порте NHL 13 (`nhl-13-port/`) и больше не обновляется. Для NHL Legacy верно то, что написано в остальных разделах.
 
 С чего начать:
-- игроку — [legacy-port.md](legacy-port.md), раздел «Для друзей», и [launcher.md](launcher.md);
+- игроку — [legacy-port.md](legacy-port.md), раздел «Для друзей», и [launcher.md](launcher.md); поменять форму, фото, музыку или состав без инструментов — [editor.md](editor.md);
 - моддеру — [legacy-data.md](legacy-data.md);
 - разработчику порта — [legacy-port.md](legacy-port.md), раздел «Сборка», и [sdk-build.md](sdk-build.md).
 
@@ -14,7 +14,8 @@
 ## Порт NHL Legacy
 
 - [legacy-port.md](legacy-port.md) — свой порт NHL Legacy (`nhl-legacy-port/`): что работает, устройство, сборка, запуск, папка для друзей, год, франшиза на 32 клуба и разбор её падений, закрытое (предзаказ, маски, бусты — `nhl_unlock_*`)
-- [launcher.md](launcher.md) — лаунчер `nhllegacy_launcher.exe`: перед запуском настраиваются графика, переключатели `nhl_*` и имя игрока, кнопка «Обновить ростеры» переносит ростер с другого ПК
+- [launcher.md](launcher.md) — лаунчер `nhllegacy_launcher.exe`: перед запуском настраиваются графика, переключатели `nhl_*` и имя игрока, кнопка «Обновить ростеры» переносит ростер с другого ПК, кнопка «Редактор» открывает редактор
+- [editor.md](editor.md) — **редактор игры `nhllegacy_editor.exe`** (`tools/editor`): формы, логотипы, фото, головы, экипировка, арены, меню, музыка, модели — просмотр, выгрузка в PNG/OBJ/MP3 и импорт своей версии в `content\my`; составы — карточка игрока, переводы, новые игроки, запись новым ростером
 - [graphics-settings.md](graphics-settings.md) — графика порта: cvar'ы SDK, апскейл, ROV/RTV, задержка ввода, источники настроек и их приоритет
 - [sdk-build.md](sdk-build.md) — своя сборка ReXGlue SDK (Vulkan, FSR 1 / CAS): скрипты `nhl-legacy-port/scripts/sdk_*`, патчи, восстановление с нуля
 - [device-release.md](device-release.md) — релиз для другого устройства: полная свежая папка одной командой, `tools/device_release.sh`
