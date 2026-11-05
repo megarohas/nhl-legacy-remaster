@@ -40,7 +40,7 @@
 - [kit-catalog27.md](kit-catalog27.md) — каталог форм NHL 27: одна локальная страница, какие формы уже в порте и каких нет, галочки и «Скопировать выбор» (`tools/kitpicker/catalog27.py`)
 - [nhl24-uniforms.md](nhl24-uniforms.md) — формы NHL 24 → Legacy: модели свитеров, воротники, текстуры, правила переноса; журнал установок (§15.1)
 - [nhl24-textures.md](nhl24-textures.md) — перенос текстур NHL 24 в Legacy: план по категориям
-- [player-models.md](player-models.md) — 3D-модели игроков: формат RW4, гетры и голень, обмотка до носка крюка, нижний край свитера как в NHL 10
+- [player-models.md](player-models.md) — 3D-модели игроков: формат RW4, гетры и голень, обмотка до носка крюка, нижний край свитера как в NHL 10; четыре вида заправки гетр из одной гетры (§6б, `tools/socktuck.py`)
 - [sticks.md](sticks.md) — клюшки из NHL 27 в слоты каталога Legacy (`tools/fb/sticks.py`, план `fb/stick_slots.toml`): перенос по модели, имена в редакторе, белая CCM в слоте D
 - [goalie-masks.md](goalie-masks.md) — маски вратарей NHL 27 на маску Legacy (`tools/fb/masks.py`, план `fb/mask_slots.toml`): перенос по 3D в свободные номера, ставит этап goaliegear (UTA, SEA, VGK, 16 клубов АХЛ); базовые цвета клубов из NHL 27 — `tools/legacy_data/team_colors27.py` ([legacy-data.md](legacy-data.md))
 - [skates.md](skates.md) — коньки из NHL 27 в 11 слотов каталога Legacy (`tools/fb/skates.py`, план `fb/skate_slots.toml`): перенос по 3D, рельеф и блик NHL 27, имена и превью в редакторе
