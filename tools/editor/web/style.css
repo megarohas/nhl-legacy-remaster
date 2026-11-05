@@ -67,3 +67,17 @@ table.list td button { margin-left: 6px; }
 canvas.v3d { width: 100%; height: 440px; display: block; background: #0d0f12; border-radius: 6px; cursor: grab; }
 .meshbar { display: flex; gap: 8px; align-items: center; margin: 8px 0; flex-wrap: wrap; }
 audio { width: 100%; max-width: 640px; }
+select, input[type=text], input[type=number] { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; font: inherit; font-size: 13px; }
+.rcols { display: flex; gap: 16px; align-items: flex-start; }
+.rleft { width: 520px; min-width: 420px; } .rright { flex: 1; min-width: 420px; }
+table.plist tr { cursor: pointer; } table.plist tr:hover td { background: var(--panel2); } table.plist tr.sel td { background: #22406b; }
+table.plist th { text-align: left; color: var(--muted); font-weight: 500; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+.phead { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; } .phead h3 { margin: 0; font-size: 18px; }
+.ovr { background: #22406b; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+details.psec { background: var(--panel); border: 1px solid var(--line); border-radius: 7px; margin: 0 0 10px; padding: 6px 10px; }
+details.psec summary { cursor: pointer; font-weight: 600; padding: 2px 0; }
+.fgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 6px 16px; margin: 8px 0 4px; }
+.fld { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.fld span { color: #c8cfd9; font-size: 13px; } .fld input[type=text] { width: 170px; } .fld input[type=number] { width: 90px; } .fld select { max-width: 190px; }
+.fld.rating { display: grid; grid-template-columns: 1fr 120px 64px; } .rbar { width: 120px; }
+#rchanges { margin: -6px 0 10px; }

@@ -38,11 +38,11 @@ cd "$WORK"
 "$PY" -m PyInstaller --noconfirm --clean --onefile --windowed --name nhllegacy_editor \
   --icon "$(W "$ICO")" --version-file "$(W "$WORK/version.txt")" \
   --distpath "$(W "$OUT")" --workpath "$(W "$WORK/pyi")" --specpath "$(W "$WORK")" \
-  --paths "$(W "$R/tools")" --paths "$(W "$R/tools/editor")" \
+  --paths "$(W "$R/tools")" --paths "$(W "$R/tools/editor")" --paths "$(W "$R/tools/legacy_data")" \
   --add-data "$(W "$R/tools/editor/web");web" --add-data "$(W "$R/VERSION");." --add-data "$(W "$ICO");." \
   --hidden-import rosters --hidden-import audio --hidden-import meshes \
   --hidden-import roster.ovrformula --hidden-import roster.lines --hidden-import roster.dbview \
   --hidden-import big --hidden-import unchunk --hidden-import lzx --hidden-import rw4mesh --hidden-import kitpaint \
-  --hidden-import music --exclude-module numpy --exclude-module scipy --exclude-module tkinter \
+  --hidden-import music --hidden-import roster_merge --exclude-module numpy --exclude-module scipy --exclude-module tkinter \
   "$(W "$R/tools/editor/__main__.py")"
 ls -la "$OUT/nhllegacy_editor.exe"

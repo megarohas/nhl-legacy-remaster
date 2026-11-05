@@ -333,7 +333,7 @@ async function refreshInfo() {
   if (STATE.info && STATE.info.lang && !new URLSearchParams(location.search).get('lang')) { LANG = STATE.info.lang; applyLang(); }
   await loadTree($('#tree'), 'root', 0);
   welcome();
-  const m = location.hash.match(/^#open=(.+)$/);
+  const m = location.hash.match(/^#open=([^&]+)/);
   if (m) await openPath(decodeURIComponent(m[1]));
   if (STATE.info && STATE.info.ea_files === null) setTimeout(async () => { await refreshInfo(); if (!STATE.current) welcome(); }, 2500);
 })();
