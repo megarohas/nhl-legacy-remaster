@@ -29,6 +29,8 @@
 void NhlLegacyStartWatcher();  // nhllegacy_watch.cpp
 void NhlLegacyAsTraceDump(FILE* f);  // nhllegacy_astrace.cpp
 
+
+void NhlLegacyReleaseCursor(const char* reason, bool ui_thread);  // nhllegacy_cursor.cpp
 namespace {
 
 std::mutex g_dbghelp_mutex;  // dbghelp не потокобезопасен
@@ -163,6 +165,8 @@ LONG WINAPI CrashFilter(EXCEPTION_POINTERS* info) {
   if (InterlockedExchange(&once, 1)) {
     return EXCEPTION_CONTINUE_SEARCH;
   }
+  // Курсор Windows — видимый и не зажатый, окно спрятано (nhllegacy_cursor.cpp): процесс сейчас умрёт.
+  NhlLegacyReleaseCursor("crash", false);
   FILE* f = _wfopen((ExeDir() + L"nhllegacy_crash.txt").c_str(), L"w");
   if (!f) {
     return EXCEPTION_CONTINUE_SEARCH;
