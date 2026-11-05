@@ -449,9 +449,9 @@ const Hint kHintsEn[kHintCount] = {
      L"Save the settings to nhllegacy_launcher.toml and start the game. nhllegacy.toml is not changed."},
     {L"Language", L"Launcher language: English or Russian. The game itself is not affected."},
     {L"Update rosters",
-     L"Add a roster made on another PC: pick the file from ...\\454109EC\\00000001\\ROSTER <date>. The launcher "
+     L"Add a roster made on another PC: pick the file from its saves\\rosters\\ROSTER <date>. The launcher "
      L"checks it against this game's data and adds it, the game loads it on the next start. Your earlier rosters and "
-     L"profile stay. Close the game first."},
+     L"profile stay in saves. Close the game first."},
 };
 
 const Hint kHintsRu[kHintCount] = {
@@ -495,9 +495,9 @@ const Hint kHintsRu[kHintCount] = {
      L"Сохранить настройки в nhllegacy_launcher.toml и запустить игру. nhllegacy.toml не меняется."},
     {L"Язык", L"Язык лаунчера: английский или русский. На саму игру не влияет."},
     {L"Обновить ростеры",
-     L"Добавить ростер, сделанный на другом ПК: выберите файл из ...\\454109EC\\00000001\\ROSTER <дата>. Лаунчер "
+     L"Добавить ростер, сделанный на другом ПК: выберите файл из его saves\\rosters\\ROSTER <дата>. Лаунчер "
      L"сверит его с данными этой игры и добавит, игра загрузит его при следующем запуске. Прежние ростеры и профиль "
-     L"остаются. Сначала закройте игру."},
+     L"остаются в saves. Сначала закройте игру."},
 };
 
 const Hint& HintAt(int i) { return (g_lang == 1 ? kHintsRu : kHintsEn)[i]; }
@@ -578,6 +578,7 @@ struct App {
   int hint = kHintNone;
   HWND last_focus = nullptr;
   std::wstring dir, exe, toml, launcher_toml, exe_info;
+  std::wstring saves;  // папка saves (всё личное, nhl_saves_root); пусто — старая раскладка
   bool exe_found = false;
   SYSTEMTIME exe_time{};  // время изменения nhllegacy.exe, местное
   State state;
@@ -898,6 +899,38 @@ State BaseState() {
   return FromCvars(c);
 }
 
+// Путь из настроек: «/» → «\», без хвостовых «\», относительный — от папки лаунчера.
+std::wstring DirFromSetting(std::wstring dir) {
+  std::replace(dir.begin(), dir.end(), L'/', L'\\');
+  const bool absolute = dir.rfind(L"\\\\", 0) == 0 || (dir.size() > 1 && dir[1] == L':');
+  while (dir.size() > 3 && dir.back() == L'\\') dir.pop_back();
+  return absolute ? dir : g.dir + L"\\" + dir;
+}
+
+// Папка saves: как у порта (nhllegacy_saves.cpp) — nhl_saves_root из nhllegacy.toml, по умолчанию saves рядом с exe;
+// пустое значение — старая раскладка (userdata\<xuid>\454109EC\00000001). Файл лаунчера ключ не задаёт: он сам в saves.
+std::wstring SavesDir() {
+  Cvars c;
+  ParseToml(g.toml, c);
+  const auto it = c.find("nhl_saves_root");
+  const std::wstring dir = it == c.end() ? L"saves" : Widen(it->second);
+  return dir.empty() ? std::wstring() : DirFromSetting(dir);
+}
+
+// Выбор в лаунчере — личный, поэтому лежит в saves\settings: замена папки игры новой версией его не сбрасывает
+// (05.11.2026). Прежний файл рядом с лаунчером (до 0.17.0) один раз копируется туда, сам он остаётся на месте.
+std::wstring LauncherTomlPath() {
+  const std::wstring old_path = g.dir + L"\\nhllegacy_launcher.toml";
+  if (g.saves.empty()) return old_path;
+  const std::wstring dir = g.saves + L"\\settings", path = dir + L"\\nhllegacy_launcher.toml";
+  if (!g.shot && GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES &&
+      GetFileAttributesW(old_path.c_str()) != INVALID_FILE_ATTRIBUTES) {
+    roster::MakeDirs(dir);
+    CopyFileW(old_path.c_str(), path.c_str(), TRUE);
+  }
+  return path;
+}
+
 void LoadState() {
   Cvars c;
   ParseToml(g.toml, c);
@@ -958,8 +991,8 @@ bool SaveState() {
     return false;
   }
   if (!WriteLauncherToml(g.launcher_toml, ToCvars(g.state))) {
-    ShowError(T(L"Could not write nhllegacy_launcher.toml next to the launcher.",
-                L"Не удалось записать nhllegacy_launcher.toml рядом с лаунчером."));
+    ShowError(T(L"Could not write nhllegacy_launcher.toml (saves\\settings).",
+                L"Не удалось записать nhllegacy_launcher.toml (saves\\settings)."));
     return false;
   }
   return true;
@@ -1009,10 +1042,12 @@ std::wstring UserDataDir() {
   ParseToml(g.launcher_toml, c);
   std::wstring dir = Widen(Get(c, "user_data_root", ""));
   if (dir.empty()) return g.dir + L"\\userdata";
-  std::replace(dir.begin(), dir.end(), L'/', L'\\');
-  const bool absolute = dir.rfind(L"\\\\", 0) == 0 || (dir.size() > 1 && dir[1] == L':');
-  while (dir.size() > 3 && dir.back() == L'\\') dir.pop_back();
-  return absolute ? dir : g.dir + L"\\" + dir;
+  return DirFromSetting(dir);
+}
+
+// Куда кладётся ростер: saves\rosters (заголовок рядом с папкой, как в патче SDK 0007), без saves — старое место.
+roster::SavePlace RosterPlace() {
+  return g.saves.empty() ? roster::OldSavePlace(UserDataDir()) : roster::NewSavePlace(g.saves);
 }
 
 // Проверить файл и, если нужно, добавить его в игру. name — имя новой папки сейва.
@@ -1034,7 +1069,7 @@ roster::Result ImportRoster(const std::wstring& path, bool write, std::wstring* 
     return Fail(kGameRunning, L"The game is running. Close it and try again: it would save its own roster over this one.",
                 L"Игра запущена. Закройте её и повторите: она запишет свой ростер поверх этого.");
   }
-  return AddRoster(file, userdata, DisplayNameFor(path), name);
+  return AddRoster(file, RosterPlace(), DisplayNameFor(path), name);
 }
 
 void UpdateRosters() {
@@ -1431,7 +1466,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
   g.dir.erase(g.dir.find_last_of(L"\\/"));
   g.exe = g.dir + L"\\nhllegacy.exe";
   g.toml = g.dir + L"\\nhllegacy.toml";
-  g.launcher_toml = g.dir + L"\\nhllegacy_launcher.toml";
+  g.saves = SavesDir();
+  g.launcher_toml = LauncherTomlPath();
   WIN32_FILE_ATTRIBUTE_DATA fa{};
   g.exe_found = GetFileAttributesExW(g.exe.c_str(), GetFileExInfoStandard, &fa) != 0;
   if (g.exe_found) {

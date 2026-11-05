@@ -557,8 +557,8 @@ inline Result Damaged(const std::wstring& en, const std::wstring& ru) {
 
 // Проверка файла. file — содержимое, base_dir — папка с nhlng.db (cache\guest\db). ok_info — короткая сводка.
 inline Result Check(const std::vector<uint8_t>& file, const std::wstring& base_dir, std::wstring* summary) {
-  const std::wstring pick_en = L" Pick the file from a ROSTER folder: ...\\00000001\\ROSTER <date>\\ROSTER <date>.";
-  const std::wstring pick_ru = L" Выберите файл из папки ROSTER: ...\\00000001\\ROSTER <дата>\\ROSTER <дата>.";
+  const std::wstring pick_en = L" Pick the file from a ROSTER folder: saves\\rosters\\ROSTER <date>\\ROSTER <date>.";
+  const std::wstring pick_ru = L" Выберите файл из папки ROSTER: saves\\rosters\\ROSTER <дата>\\ROSTER <дата>.";
   if (file.size() < 4) {
     return Fail(kNotASave, L"This is not an NHL Legacy save file." + pick_en,
                 L"Это не файл сейва NHL Legacy." + pick_ru);
@@ -718,8 +718,36 @@ inline Result Check(const std::vector<uint8_t>& file, const std::wstring& base_d
 
 // ─── Добавление ────────────────────────────────────────────────────────────────────────────
 
-// Сейвы лежат по XUID профиля SDK (он один на всех ПК) и игре 454109EC: тип 00000001 — сохранённые игры.
+// Куда пишется ростер.
+// - С 0.17.0 сейвы — в папке saves рядом с exe, по виду (патч SDK 0007, nhllegacy_saves.cpp): ростер —
+//   saves\rosters\ROSTER <время>\ROSTER <время>, заголовок — saves\rosters\ROSTER <время>.header; временная папка —
+//   saves\import.tmp (игра смотрит только в папки видов).
+// - Старая раскладка (nhl_saves_root = ""): по XUID профиля SDK (он один на всех ПК) и игре 454109EC, тип 00000001 —
+//   сохранённые игры, заголовки — Headers\00000001, временная папка рядом с 00000001.
+struct SavePlace {
+  std::wstring saves;    // папка, где появится ROSTER <время>
+  std::wstring headers;  // папка заголовка
+  std::wstring tmp;      // временная папка, игре не видна
+  std::vector<std::wstring> scan;  // где искать уже имеющиеся ROSTER * (имя новее всех)
+};
+
 inline std::wstring SaveRoot(const std::wstring& userdata) { return userdata + L"\\B13EBABEBABEBABE\\454109EC"; }
+
+inline SavePlace OldSavePlace(const std::wstring& userdata) {
+  const std::wstring root = SaveRoot(userdata);
+  return {root + L"\\00000001", root + L"\\Headers\\00000001", root + L"\\import.tmp", {root + L"\\00000001"}};
+}
+
+// Папки видов сейвов в saves — как kFolders в nhllegacy_saves.cpp: ростер, положенный руками не туда, тоже учитывается.
+inline SavePlace NewSavePlace(const std::wstring& saves) {
+  SavePlace p{saves + L"\\rosters", saves + L"\\rosters", saves + L"\\import.tmp", {}};
+  for (const wchar_t* d : {L"rosters", L"profiles", L"franchises", L"be-a-pro", L"seasons", L"playoffs", L"tournaments",
+                           L"hockey-cards", L"build-your-ai", L"scenarios", L"dynamic-ratings", L"rivalry-games",
+                           L"online-rosters", L"videos", L"screenshots", L"other"}) {
+    p.scan.push_back(saves + L"\\" + d);
+  }
+  return p;
+}
 
 constexpr uint64_t kXuid = 0xB13EBABEBABEBABEull;
 constexpr uint32_t kTitle = 0x454109ECu;
@@ -751,7 +779,7 @@ inline std::wstring DisplayNameFor(const std::wstring& path) {
 }
 
 // Имя папки: как у игры, «ROSTER» и время UTC. Новее всех, что уже есть: выигрывает самый свежий.
-inline std::wstring NewName(const std::wstring& dir) {
+inline std::wstring NewName(const std::vector<std::wstring>& dirs) {
   SYSTEMTIME now;
   GetSystemTime(&now);
   now.wMilliseconds = 0;  // в имени только секунды: иначе второй ростер в ту же секунду совпал бы с первым
@@ -760,6 +788,7 @@ inline std::wstring NewName(const std::wstring& dir) {
   ULARGE_INTEGER t;
   t.LowPart = ft.dwLowDateTime;
   t.HighPart = ft.dwHighDateTime;
+  for (const std::wstring& dir : dirs) {
   WIN32_FIND_DATAW fd;
   HANDLE h = FindFirstFileW((dir + L"\\ROSTER *").c_str(), &fd);
   if (h != INVALID_HANDLE_VALUE) {
@@ -781,6 +810,7 @@ inline std::wstring NewName(const std::wstring& dir) {
       if (o.QuadPart >= t.QuadPart) t.QuadPart = o.QuadPart + 10000000ull;  // на секунду новее
     } while (FindNextFileW(h, &fd));
     FindClose(h);
+  }
   }
   ft.dwLowDateTime = t.LowPart;
   ft.dwHighDateTime = t.HighPart;
@@ -849,19 +879,20 @@ inline void ClearDir(const std::wstring& dir) {
 
 // Добавить проверенный файл. Порядок такой, что при сбое в любом месте игра прежних ростеров не потеряет и не увидит
 // половины нового: файл и заголовок во временных именах, потом заголовок, последним — папка (SDK перечисляет папки).
-// Временная папка лежит рядом с типом 00000001, а не в нём, иначе брошенную после сбоя игра показала бы как сейв.
-inline Result AddRoster(const std::vector<uint8_t>& file, const std::wstring& userdata, const std::wstring& display,
+// Временная папка лежит вне папок сейвов, иначе брошенную после сбоя игра показала бы как сейв. Прежние ростеры и
+// другие сейвы не трогаются: новый ростер добавляется рядом.
+inline Result AddRoster(const std::vector<uint8_t>& file, const SavePlace& place, const std::wstring& display,
                         std::wstring* name_out) {
-  const std::wstring root = SaveRoot(userdata);
-  const std::wstring saves = root + L"\\00000001", headers = root + L"\\Headers\\00000001";
+  const std::wstring& saves = place.saves;
+  const std::wstring& headers = place.headers;
   const auto failed = [&saves]() {
     const std::wstring code = std::to_wstring(GetLastError());
     return Fail(kWriteFailed, L"Could not write to " + saves + L" (error " + code + L"). Nothing was changed.",
                 L"Не удалось записать в " + saves + L" (ошибка " + code + L"). Ничего не изменено.");
   };
   if (!MakeDirs(saves) || !MakeDirs(headers)) return failed();
-  const std::wstring name = NewName(saves);
-  const std::wstring tmp = root + L"\\import.tmp";
+  const std::wstring name = NewName(place.scan);
+  const std::wstring tmp = place.tmp;
   const std::wstring tmp_file = tmp + L"\\" + name, final_dir = saves + L"\\" + name;
   const std::wstring header = headers + L"\\" + name + L".header", tmp_header = header + L".tmp";
   ClearDir(tmp);  // остаток прошлого сбоя
