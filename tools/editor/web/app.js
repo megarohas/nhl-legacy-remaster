@@ -124,6 +124,8 @@ async function openNode(id) {
   if (id === 'my') return showMy();
   if (id === 'rosters') return window.Rosters ? Rosters.open($('#view')) : null;
   if (id === 'music:tracks') return showMusic();
+  if (id === 'menus:texts') return showTexts();
+  if (id === 'menus:fonts') return showFonts();
   const v = $('#view');
   v.innerHTML = '';
   v.append(el('div', { class: 'loading' }, t('working')));
@@ -144,6 +146,13 @@ function renderAsset(a) {
     (a.player && !a.hasportrait) ? el('button', { class: 'w', onclick: async () => {
       const r = await busy(t('working'), () => api('/api/x/rosters/update', { gid: a.player, team: '', values: { 'exhibitionplayerbiotable.hasportrait': 1 } }));
       if (r) toast(T('В правках ростера: hasportrait = 1. Запишите ростер в разделе «Составы»', 'Roster edit: hasportrait = 1. Save the roster in «Rosters»')); } }, T('Включить фото в ростере', 'Enable photo in roster')) : null,
+    a.id.startsWith('kit:') ? el('button', { class: 'w ghost', onclick: async () => { const j = await busy(t('working'), () => api('/api/fe_rebuild', { id: a.id })); if (j) { toast(j.notes.join('; ')); openNode(a.id); } } }, T('Пересобрать превью в меню по свитеру', 'Rebuild menu preview from jersey')) : null,
+    a.id.startsWith('kit:') ? el('button', { class: 'w ghost', title: T('Копия этой формы под новым номером: файлы в content\my, строка формы в базе и новом ростере', 'A copy of this kit under a new number: files in content\my, a kit row in the database and a new roster'), onclick: async () => {
+      const kind = prompt(T('Новая форма: 2 — третья, 6 — винтаж, 0 — дом, 1 — выезд', 'New kit: 2 — third, 6 — vintage, 0 — home, 1 — away'), '2'); if (kind === null) return;
+      const label = Number(kind) === 6 ? prompt(T('Подпись винтажной формы в меню', 'Vintage kit label in menus'), '') : null;
+      const j = await busy(t('working'), () => api('/api/kit_new', { id: a.id, loc: Number(kind) || 0, label }));
+      if (j) { toast(j.notes.join('; ')); $('#tree').innerHTML = ''; await loadTree($('#tree'), 'root', 0).catch(() => {}); openPath(j.kit); } } }, T('Новая форма на основе этой…', 'New kit based on this…')) : null,
+    a.id.startsWith('kit:') ? el('label', { class: 'muted', style: 'display:flex;gap:6px;align-items:center' }, (() => { const c = el('input', { type: 'checkbox' }); c.checked = !STATE.info || STATE.info.auto_fe !== false; c.addEventListener('change', () => api('/api/auto_fe', { on: c.checked }).then(refreshInfo)); return c; })(), T('пересобирать превью при импорте свитера', 'rebuild the preview on jersey import')) : null,
     anyMy(a) ? el('button', { class: 'w danger', onclick: () => doRevert(a, a.files.filter(f => f.in_my).map(f => f.rel), t('confirm_revert_all')) }, t('revert_all')) : null);
   v.append(el('div', { class: 'ahead' }, el('h2', {}, a.title), a.note ? el('div', { class: 'note' }, a.note) : null, bar));
   for (const f of a.files) v.append(renderFile(a, f));
@@ -345,6 +354,12 @@ async function showMusic() {
     el('div', { class: 'toolbar' }, player, j.in_my ? el('button', { class: 'w danger', onclick: async () => {
       if (!confirm(t('confirm_revert_all'))) return;
       const r = await busy(t('working'), () => api('/api/x/audio/revert', {})); if (r) { toast(t('reverted')); showMusic(); } } }, t('revert_all')) : null)));
+  const nart = el('input', { type: 'text', placeholder: T('исполнитель', 'artist'), style: 'width:180px' });
+  const ntit = el('input', { type: 'text', placeholder: T('название', 'title'), style: 'width:220px' });
+  v.append(el('div', { class: 'toolbar' }, el('span', { class: 'muted' }, T('Новая песня в меню (следующий слот EA Trax, до trax21):', 'New menu song (next EA Trax slot, up to trax21):')), nart, ntit,
+    el('button', { class: 'w', onclick: async () => {
+      const r = await busy(T('Пишу банк музыки…', 'Writing the music bank…'), () => api('/api/x/audio/replace', { sid: -1, artist: nart.value, title: ntit.value }));
+      if (r && !r.cancelled) { done(r, null); showMusic(); } } }, T('Добавить песню…', 'Add song…'))));
   const tb = el('table', { class: 'list' }, el('tr', {}, ...['', T('Слот', 'Slot'), T('Исполнитель', 'Artist'), T('Название / категория', 'Title / category'), T('Длина', 'Length'), ''].map(h => el('th', {}, h))));
   const rows = j.tracks.slice().sort((a, b) => ((a.slot ?? 999) - (b.slot ?? 999)) || a.sid - b.sid);
   for (const tr of rows) {
@@ -364,6 +379,70 @@ async function showMusic() {
           if (r && !r.cancelled) { done(r, null); showMusic(); } } }, T('Заменить…', 'Replace…')))));
   }
   v.append(tb);
+}
+const TX = { lang: 'nhl_eng_us', q: '', offset: 0, edits: {} };
+async function showTexts() {
+  const v = $('#view');
+  v.innerHTML = '';
+  const langs = (await api('/api/x/texts/langs').catch(() => ({ langs: ['nhl_eng_us'] }))).langs;
+  const lsel = el('select', {}, ...langs.map(l => el('option', { value: l, selected: l === TX.lang }, l)));
+  const q = el('input', { type: 'search', value: TX.q, placeholder: T('ключ или текст, например PLAY NOW', 'key or text, e.g. PLAY NOW'), style: 'width:340px' });
+  const save = el('button', { class: 'w', disabled: true }, T('Записать правки', 'Save edits'));
+  const info = el('span', { class: 'muted' });
+  const tb = el('table', { class: 'list' });
+  const more = el('button', { class: 'ghost' }, T('Ещё', 'More'));
+  v.append(el('div', { class: 'ahead' }, el('h2', {}, T('Тексты меню', 'Menu texts')),
+    el('div', { class: 'note' }, T('Строки локализации игры (fe/loc). Правка влезает в прежнее место — пишется на место, длиннее — новой строкой; символ, которого нет в строках игры, не записать. Файл — в content\\my\\fe\\loc, «Вернуть как было» — убрать его.',
+      'Game localization strings (fe/loc). An edit that fits goes in place, a longer one as a new string; a character the game strings do not have cannot be written. The file goes to content\\my\\fe\\loc, «Revert» removes it.')),
+    el('div', { class: 'toolbar' }, lsel, q, save, el('button', { class: 'ghost w danger', onclick: async () => {
+      if (!confirm(t('confirm_revert'))) return; const j = await busy(t('working'), () => api('/api/x/texts/revert', { lang: TX.lang })); if (j) { toast(t('reverted')); TX.edits = {}; load(true); } } }, t('revert')), info)));
+  v.append(tb, more);
+  const mark = () => { save.disabled = !Object.keys(TX.edits).length; };
+  async function load(reset) {
+    if (reset) { TX.offset = 0; tb.innerHTML = ''; }
+    const j = await api(`/api/x/texts/search?lang=${TX.lang}&q=${encodeURIComponent(TX.q)}&offset=${TX.offset}`).catch(e => { toast(e.message, 'err'); return null; });
+    if (!j) return;
+    info.textContent = `${j.total} ${T('строк', 'strings')} · ${j.rel} · ${j.in_my ? t('src_my') : (j.source || '')}`;
+    for (const r of j.rows) {
+      const inp = el('input', { type: 'text', value: TX.edits[r.key] ?? r.text, style: 'width:100%' });
+      inp.addEventListener('input', () => { if (inp.value === r.text) delete TX.edits[r.key]; else TX.edits[r.key] = inp.value; mark(); });
+      tb.append(el('tr', {}, el('td', { style: 'width:32%' }, el('code', {}, r.key)), el('td', {}, inp)));
+    }
+    TX.offset += j.rows.length;
+    more.style.display = TX.offset < j.total ? '' : 'none';
+  }
+  lsel.addEventListener('change', () => { TX.lang = lsel.value; TX.edits = {}; mark(); load(true); });
+  let timer = null;
+  q.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => { TX.q = q.value; load(true); }, 300); });
+  more.addEventListener('click', () => load(false));
+  save.addEventListener('click', async () => {
+    const j = await busy(t('working'), () => api('/api/x/texts/save', { lang: TX.lang, edits: TX.edits }));
+    if (j) { toast(`${t('saved')}: ${j.count} ${T('строк', 'strings')}${j.notes.length ? ' · ' + j.notes.join('; ') : ''}`); TX.edits = {}; mark(); load(true); }
+  });
+  load(true);
+}
+async function showFonts() {
+  const v = $('#view');
+  v.innerHTML = '';
+  const j = await api('/api/x/texts/fonts').catch(e => { toast(e.message, 'err'); return { fonts: [] }; });
+  v.append(el('div', { class: 'ahead' }, el('h2', {}, T('Шрифты меню', 'Menu fonts')),
+    el('div', { class: 'note' }, T('Шрифты интерфейса — TrueType, игра рисует буквы из них на лету (атласа букв нет). Ниже — образец. Замена: свой TTF/OTF через tools/fefont.py — «под метрики игры» (высота букв и строки как у оригинала EA) или «как есть» (TrueType того же размера em). Номера и фамилии на свитере — это текстура «Шрифт номеров» в разделе «Формы».',
+      'UI fonts are TrueType, the game draws letters from them on the fly (no glyph atlas). A sample is below. Replace: your TTF/OTF through tools/fefont.py — «fit to game metrics» (cap height and line metrics as the EA original) or «as is» (TrueType with the same em). Jersey numbers and names are the «Number font» texture in «Uniforms».'))));
+  for (const f of j.fonts) {
+    const box = el('div', { class: 'file' }, el('div', { class: 'fhead' }, el('b', {}, f.rel.split('/').pop()), el('code', {}, f.rel),
+      el('span', { class: 'badge ' + (f.in_my ? 'my' : 'part') }, f.in_my ? t('src_my') : (f.source || '')),
+      el('span', { class: 'fbtn' },
+        el('button', { class: 'ghost', onclick: () => doRaw('export_raw', f) }, T('Выгрузить TTF', 'Export TTF')),
+        f.key ? el('button', { class: 'w', onclick: () => fontAct(f, false) }, T('Заменить своим (под метрики игры)…', 'Replace (fit to game)…')) : null,
+        f.key ? el('button', { class: 'w ghost', onclick: () => fontAct(f, true) }, T('Заменить как есть…', 'Replace as is…')) : null,
+        f.in_my ? el('button', { class: 'ghost w danger', onclick: async () => { if (!confirm(t('confirm_revert'))) return; await busy(t('working'), () => api('/api/revert', { rels: [f.rel] })); showFonts(); } }, t('revert')) : null)),
+      el('img', { src: `/api/x/texts/sample?rel=${encodeURIComponent(f.rel)}&s=${Date.now()}`, style: 'max-width:100%;margin-top:8px;border-radius:6px' }));
+    v.append(box);
+  }
+}
+async function fontAct(f, keep) {
+  const j = await busy(T('Собираю шрифт…', 'Building the font…'), () => api('/api/x/texts/font_replace', { rel: f.rel, keep }));
+  if (j && !j.cancelled) { toast(`${t('saved')}: ${j.written[0]}`); showFonts(); }
 }
 async function refreshInfo() {
   try { STATE.info = await api('/api/info'); setGame(STATE.info.running); } catch (e) { /* */ }

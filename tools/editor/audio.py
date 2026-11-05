@@ -137,6 +137,18 @@ def replace(ed, sid, artist=None, title=None, path=None):
         raise EditorError('audio', f'Файл не подошёл: {e}{hint}', f'The file did not fit: {e}{hint}')
     gamefs.check_game_closed()
     b = bank(ed)
+    if sid < 0:                                          # новый слот EA Trax (music.py Bank.add_trax): trax10…trax21
+        trax = b.mbx.trax()
+        k = max(trax) + 1 if trax else 0
+        top = m.MUSIC['legacy']['max_trax']
+        if k >= top:
+            raise EditorError('trax_full', f'Слоты EA Trax заняты: trax0…trax{top - 1} (больше игра не знает)',
+                              f'EA Trax slots are full: trax0…trax{top - 1}')
+        try:
+            sid = b.add_trax(k)
+        except SystemExit as e:
+            raise EditorError('trax', f'Новый слот не добавить: {e}', f'Cannot add a slot: {e}')
+        how = f'{how}; ' + ed.t(f'новый слот trax{k} (id {sid})', f'new slot trax{k} (id {sid})')
     if artist is not None and artist != '':
         b.mbx.set_tag(sid, 'Artist', artist)
     if title is not None and title != '':

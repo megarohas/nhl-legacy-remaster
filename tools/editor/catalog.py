@@ -206,6 +206,10 @@ class Catalog:
                 en=f'{a["name"]} · {a["city"]}', leaf=True) for a in sorted(db.arenas.values(), key=lambda a: a['name'])
                 if a['name']]
         if sec in GROUPS and len(parts) == 1:
+            if sec == 'menus':
+                return [dict(id='menus:texts', ru='Тексты меню (строки)', en='Menu texts (strings)', leaf=True),
+                        dict(id='menus:fonts', ru='Шрифты меню (образец, замена своим)', en='Menu fonts (sample, '
+                             'replace with yours)', leaf=True)] + self.groups_of(sec)
             if sec == 'music':
                 return [dict(id='music:tracks', ru='Песни и звуки банка', en='Songs and bank sounds', leaf=True)] + self.groups_of(sec)
             return self.groups_of(sec)

@@ -40,7 +40,8 @@ cd "$WORK"
   --distpath "$(W "$OUT")" --workpath "$(W "$WORK/pyi")" --specpath "$(W "$WORK")" \
   --paths "$(W "$R/tools")" --paths "$(W "$R/tools/editor")" --paths "$(W "$R/tools/legacy_data")" \
   --add-data "$(W "$R/tools/editor/web");web" --add-data "$(W "$R/VERSION");." --add-data "$(W "$ICO");." \
-  --hidden-import rosters --hidden-import audio --hidden-import meshes \
+  --hidden-import rosters --hidden-import audio --hidden-import meshes --hidden-import texts --hidden-import gamecat --hidden-import fepreview \
+  --hidden-import fefont --hidden-import locdb --hidden-import xex --hidden-import unlockables --hidden-import draft_roster --hidden-import roster.codes \
   --hidden-import roster.ovrformula --hidden-import roster.lines --hidden-import roster.dbview \
   --hidden-import big --hidden-import unchunk --hidden-import lzx --hidden-import rw4mesh --hidden-import kitpaint \
   --hidden-import music --hidden-import roster_merge --exclude-module numpy --exclude-module scipy --exclude-module tkinter \
