@@ -33,5 +33,11 @@
   - Тесты под замком `game.lock`.
   - Игра, запущенная без замка, — это пользователь: поверх неё не запускать и не тестировать.
   - Клавиши — только в своё окно.
-  - Сейвы пользователя не трогать, тесты — на копиях userdata.
+  - Сейвы пользователя не трогать, тесты — на копиях.
+  - Где что у пользователя (с 05.11.2026, раскладка 0.17.0, [docs/legacy-port.md](docs/legacy-port.md), «Папка saves» и
+    «Папка content»): установка `nhl-legacy-port/out/build/win-amd64-release/`. Наш контент (`cache:`) — её `content\<часть>\`,
+    сейвы — `saves\<вид>\`, настройки лаунчера — `saves\settings`, кэш игры и шейдеров — `cache\`. `nhl-legacy-port/userdata`
+    игра больше не читает: туда не писать. Пути в коде — через `tools/legacy_paths.py` (контент) и `tools/legacy_saves.py`
+    (сейвы). Копия для проверок — exe, DLL, `content`, `cache`, `saves` и toml со своими путями, без
+    `nhl-legacy-port/userdata`.
   - «Подготовь релиз для другого устройства» — [docs/device-release.md](docs/device-release.md).

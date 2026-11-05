@@ -116,6 +116,19 @@ CMake остался от старого пути `legacy-port`, `build.cmd` т�
 
 ## Запуск
 
+**С 05.11.2026 установка пользователя переведена на раскладку 0.17.0** (его «да»). Папка
+`nhl-legacy-port/out/build/win-amd64-release/`:
+
+- `content\<часть>\` — наш контент, игра видит его как `cache:`;
+- `saves\<вид>\` — его сейвы, `saves\settings` — выбор в лаунчере, `saves\highlights` — повторы;
+- `cache\game` — что пишет игра, `cache\shaders\shareable` — список шейдеров.
+
+`nhl-legacy-port/userdata\cache\guest` и `userdata\B13EBABEBABEBABE` — старые копии, игра их больше не читает. Они ждут его
+проверки в игре, потом уйдут в Корзину. Полная копия userdata до перевода — `nhl-legacy-port/userdata-backup-20261105`.
+Прежние exe, DLL, лаунчер и оба toml — `backup-20261105-f112cab4/`. Откат (игра закрыта): вернуть файлы из
+`backup-20261105-f112cab4/`, папки `content`, `cache`, `saves` переименовать. Старый exe снова читает `userdata`, а
+сейвы, сделанные после перевода, остаются в `saves`.
+
 - **У себя:** ярлык «NHL Legacy» на рабочем столе → `nhl-legacy-port/out/build/win-amd64-release/nhllegacy.exe`
   (Release, свой SDK). Настройки — `nhllegacy.toml` рядом с exe (шаблон `nhllegacy.example.toml`;
   `build.cmd` кладёт его, если своего нет): игра — `game/other/legacy/disc`, сейвы и `cache:` —

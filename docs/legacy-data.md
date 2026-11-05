@@ -5,6 +5,12 @@
 `454109EC`) и проверено в своём порту Legacy (`nhl-legacy-port/`, агент legacy-port, D3D12 ROV). Оценка и
 план — [legacy-port-feasibility.md](legacy-port-feasibility.md); порт — [legacy-port.md](legacy-port.md).
 
+**Куда ставится (с 05.11.2026, 0.17.0).** У пользователя `cache:` — папка `content\<часть>\` рядом с exe
+(`nhl-legacy-port/out/build/win-amd64-release/content`, [legacy-port.md](legacy-port.md), «Папка content»). Пути
+`userdata/cache/guest/…` ниже — старая раскладка: тот же путь игры теперь лежит в своей части (`python tools/legacy_paths.py
+part REL`). Установщики (`install_legacy_data.py`, `kitport`) и остальные инструменты находят место сами
+(`tools/legacy_paths.py`).
+
 ## Коротко
 
 | Мод | Чем собран | В игре Legacy |
