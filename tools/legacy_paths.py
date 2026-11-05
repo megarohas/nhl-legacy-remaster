@@ -114,6 +114,17 @@ def cache_file(cache, rel):
     return os.path.join(cache, *parts)
 
 
+def legacy_cache(install=None):
+    """cache: установки для инструментов: папка content (новая раскладка) или cache\\guest (старая)."""
+    return Install(install).cache()
+
+
+def legacy_file(rel, install=None):
+    """Файл rel в cache: установки: тот, что возьмёт игра (если есть), иначе — куда его класть."""
+    inst = Install(install)
+    return inst.find(rel) or cache_file(inst.cache(), rel)
+
+
 def _toml_value(path, key):
     try:
         text = open(path, encoding='utf-8-sig').read()

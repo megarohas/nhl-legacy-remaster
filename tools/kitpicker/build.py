@@ -26,7 +26,8 @@ import kitpaint as kp  # noqa: E402
 import fepose  # noqa: E402
 from tdb import Tdb, load_meta  # noqa: E402
 
-CACHE = os.path.join(ROOT, 'nhl-legacy-port', 'userdata', 'cache', 'guest')
+import legacy_paths as LP  # noqa: E402 (cache: в обеих раскладках, docs/legacy-port.md «Папка content»)
+CACHE = LP.legacy_cache()
 GALLERY = os.path.join(ROOT, 'game', 'work', 'nhl24', 'gallery')
 OUT = os.path.join(ROOT, 'game', 'work', 'kit-picker')
 
@@ -39,7 +40,7 @@ CODES = nhl24.CODES[:22] + ['UTA'] + nhl24.CODES[23:] + ['SEA', 'VGK']
 
 def preview(style, art, fev):
     rel = f'fe/ion/artassets/jerseys/jersey_{style}_{art}_{fev}.big'
-    p = os.path.join(CACHE, *rel.split('/'))
+    p = LP.cache_file(CACHE, rel)
     data = kp._unchunk(open(p, 'rb').read()) if os.path.isfile(p) else fepose.source(rel, 'legacy')
     if data is None:
         return None, None
@@ -64,8 +65,8 @@ def gallery_kits():
 
 
 def main():
-    db = Tdb(open(os.path.join(CACHE, 'db', 'nhlng.db'), 'rb').read(), load_meta(os.path.join(CACHE, 'db', 'nhlng-meta.xml')))
-    loc = locdb.LocDb(open(os.path.join(CACHE, *nhl24.LOC.split('/')), 'rb').read(), load_meta(nhl24.LOC_META))
+    db = Tdb(open(LP.cache_file(CACHE, 'db/nhlng.db'), 'rb').read(), load_meta(LP.cache_file(CACHE, 'db/nhlng-meta.xml')))
+    loc = locdb.LocDb(open(LP.cache_file(CACHE, nhl24.LOC), 'rb').read(), load_meta(nhl24.LOC_META))
     texts = {sid.lower(): loc.text(off) for _, sid, off in loc.rows()}   # игра ищет ключ без учёта регистра
     rows = nhl24.rows_of(db)
     gal = gallery_kits()

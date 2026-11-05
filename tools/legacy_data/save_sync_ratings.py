@@ -17,7 +17,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 sys.path.insert(0, os.path.join(ROOT, 'tools'))
 from tdb import SaveFile, Tdb, load_meta  # noqa: E402
 
-CACHE_DB = os.path.join(ROOT, 'nhl-legacy-port', 'userdata', 'cache', 'guest', 'db')
+import legacy_paths as LP  # noqa: E402 (cache: в обеих раскладках, docs/legacy-port.md «Папка content»)
+CACHE_DB = os.path.dirname(LP.legacy_file('db/nhlng.db'))
 TABLES = ('exhibitionskaterai', 'exhibitiongoalieai', 'exhibitionplayerbiotable')
 BIO_FIELDS = ('hasportrait', 'artid')  # портрет fe: p<artid>, показывается при hasportrait = 1
 

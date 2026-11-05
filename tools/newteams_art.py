@@ -68,7 +68,8 @@ def main():
         if P.name == 'nhl13':
             a.db = DEFAULT_DB
         elif P.install:
-            a.db = os.path.join(P.install, 'db', 'nhlng.db')
+            import legacy_paths
+            a.db = legacy_paths.cache_file(P.install, 'db/nhlng.db')
         else:
             sys.exit(f'{P.title}: папка cache: порта не известна — укажите DB')
     meta_path = a.meta or os.path.join(os.path.dirname(os.path.abspath(a.db)), 'nhlng-meta.xml')

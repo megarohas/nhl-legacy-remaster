@@ -1422,7 +1422,8 @@ def cmd_roster(paths, a):
         meta_path = a.meta or os.path.join(paths.game, 'userdata', 'cache', 'guest', 'db', 'nhlng-meta.xml')
     else:       # Legacy: схема, поставленная в cache: порта (или собранная в out/), сейв — ZlibV4 (tdb.SaveFile)
         inst = common.GAME.install
-        meta_path = a.meta or next((p for p in (os.path.join(inst, 'db', 'nhlng-meta.xml') if inst else '',
+        import legacy_paths
+        meta_path = a.meta or next((p for p in (legacy_paths.cache_file(inst, 'db/nhlng-meta.xml') if inst else '',
                                                 os.path.join(common.GAME.out, 'db', 'nhlng-meta.xml')) if p and os.path.exists(p)), '')
     if not os.path.exists(meta_path):
         meta_path = ref_meta()

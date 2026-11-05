@@ -65,7 +65,8 @@ from roster.dbview import FLAGS, fld  # noqa: E402
 
 W = os.environ.get('LEGACY_DATA_WORK', os.path.join(ROOT, 'game', 'work', 'legacy-data'))
 SCREENS = os.environ.get('CONTRACTS_SCREENS', os.path.join(ROOT, 'game', 'work', 'contracts', 'screens'))
-CACHE_META = os.path.join(ROOT, 'nhl-legacy-port', 'userdata', 'cache', 'guest', 'db', 'nhlng-meta.xml')
+import legacy_paths as LP  # noqa: E402 (cache: в обеих раскладках, docs/legacy-port.md «Папка content»)
+CACHE_META = LP.legacy_file('db/nhlng-meta.xml')
 B, P, R, F = 'exhibitionplayerbiotable', 'exhibitionplayers', 'exhibitionrostertable', 'exhibitionfreeagents'
 T, SAI, GAI = 'exhibitionteams', 'exhibitionskaterai', 'exhibitiongoalieai'
 MAX_PER_TEAM = 40                # записей состава у клуба (roster/write.py): key = клуб × 40 + номер

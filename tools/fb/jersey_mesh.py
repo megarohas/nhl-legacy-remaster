@@ -59,11 +59,12 @@ def goalie_rel(h, lod, style):
 
 # Установленные сетки пользователя (cache:) главнее архива: у свитеров стоит мод весов края спины NHL 10
 # (docs/player-models.md, «jersey10») — кости и веса берём с них, чтобы край висел так же.
-CACHE = os.path.join(REPO, "nhl-legacy-port", "userdata", "cache", "guest")
+import legacy_paths as LP  # noqa: E402 (cache: в обеих раскладках, docs/legacy-port.md «Папка content»)
+CACHE = LP.legacy_cache()
 
 
 def legacy(rel, installed=True):
-    p = os.path.join(CACHE, *rel.split("/"))
+    p = LP.cache_file(CACHE, rel)
     m = rw.Mesh.load(p) if installed and os.path.exists(p) else rw.Mesh.game(rel)
     d = {"pos": np.array([p[:3] for p in m.pos], dtype=np.float64), "uv": np.array(m.uv, dtype=np.float64),
          "tri": np.array(m.tris, dtype=np.int64), "nrm": kit3d._unit(np.array(m.nrm, dtype=np.float64)),
@@ -598,11 +599,11 @@ def unpack_kit(kit, outdir):
     code = (
         "import os, sys\n"
         f"sys.path.insert(0, {os.path.join(REPO, 'tools')!r})\n"
-        "import teamart as ta, kitpaint as kp\n"
+        "import teamart as ta, kitpaint as kp, legacy_paths\n"
         "ta.set_game('legacy')\n"
         "orig = kp.profile_source\n"
         "def src(rel, prof=None):\n"
-        f"    p = os.path.join({CACHE!r}, *rel.split('/'))\n"
+        f"    p = legacy_paths.cache_file({CACHE!r}, rel)\n"
         "    return kp._unchunk(open(p, 'rb').read()) if os.path.exists(p) else orig(rel, prof)\n"
         "kp.profile_source = src\n"
         f"kp.unpack(kp.Kit.parse({kit!r}), {outdir!r})\n")
@@ -1336,7 +1337,7 @@ def helmet_copy(src_tag_art, src_v, art, v, dst_root, style=0):
     if len(a) != len(b):
         return None
     for root in (CACHE, os.path.join(REPO, "game", "other", "legacy", "big", "cacherender")):
-        p = os.path.join(root, *src.split("/"))
+        p = LP.cache_file(root, src)
         if os.path.exists(p):
             data = open(p, "rb").read()
             if data[:8] in (b"chunklzx", b"chunkzip"):

@@ -803,7 +803,7 @@ def write_report(path, sp, db, teams, extra):
 
 
 def install_text(roster_file, dbdir):
-    db = os.path.join(RU.USERDATA, 'cache', 'guest', 'db')
+    db = RU.CACHE_DB
     exe = RU.LAUNCHERS[1]
     keep = os.path.join(os.path.dirname(dbdir), 'before-install')
     return f'''

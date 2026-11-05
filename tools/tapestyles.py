@@ -245,8 +245,8 @@ def preview(out, stick_n=None):
     views = [('сбоку', cams['сбоку']), ('обратная сторона', cams['сбоку, обратная сторона']),
              ('сверху', cams['сверху'])]
     n = stick_n or PREVIEW_STICKS[0]
-    cached = os.path.join(rm.game_dir(), '..', 'nhl-legacy-port', 'userdata', 'cache', 'guest', 'rendering', 'playerstick',
-                          f'texlib_{n}.rx2')
+    import legacy_paths as LP
+    cached = LP.legacy_file(f'rendering/playerstick/texlib_{n}.rx2')
     if stick_n and os.path.exists(cached):                # поставленная клюшка (клюшки NHL 27 — в cache: порта)
         srw = ta.Rw4(open(cached, 'rb').read(), cached)
         stick_tex = kp.Img(*kp.tex_decode(srw, [t for t in srw.textures if f'playerstick_{n}_cm' in t.name][0], 0))

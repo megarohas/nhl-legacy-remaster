@@ -32,7 +32,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import rw4mesh as rm  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CACHE = os.path.join(REPO, 'nhl-legacy-port', 'userdata', 'cache', 'guest')
+import legacy_paths as LP  # noqa: E402 (cache: в обеих раскладках, docs/legacy-port.md «Папка content»)
+CACHE = LP.legacy_cache()
 OUT = os.path.join(REPO, 'game', 'work', 'models-check', 'tuck4', 'out')     # эксперимент: не в legacy-data
 LODS = (2, 0, 3)
 SRC_T = 3                          # гетра-образец: её толщину пользователь хочет у всех четырёх видов
@@ -47,7 +48,7 @@ def use_legacy():
 
 def base_file(base, rel):
     """Путь файла rel в base (раскладка cache:) или None."""
-    p = os.path.join(base, *rel.split('/'))
+    p = LP.cache_file(base, rel)
     return p if os.path.exists(p) else None
 
 

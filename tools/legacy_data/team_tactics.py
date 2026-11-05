@@ -35,7 +35,8 @@ sys.path.insert(0, os.path.join(ROOT, 'tools'))
 from tdb import SaveFile, Tdb, load_meta  # noqa: E402
 
 SPEC = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'team_tactics.json')
-CACHE_DB = os.path.join(ROOT, 'nhl-legacy-port', 'userdata', 'cache', 'guest', 'db', 'nhlng.db')
+import legacy_paths as LP  # noqa: E402 (cache: в обеих раскладках, docs/legacy-port.md «Папка content»)
+CACHE_DB = LP.legacy_file('db/nhlng.db')
 CACHE_META = os.path.join(os.path.dirname(CACHE_DB), 'nhlng-meta.xml')
 NHL27_DB = os.path.join(ROOT, 'game', 'work', 'nhl27', 'db', 'nhl_game.db')
 T, S = 'exhibitionteams', 'exhibitionteamstrategies'

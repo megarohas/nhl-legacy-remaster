@@ -292,8 +292,8 @@ def apply_table(db, table, rows, resize):
 
 
 def cache_meta():
-    from install_legacy_data import cache_dir  # noqa: E402 (рядом, тяжёлый импорт только здесь)
-    return os.path.join(cache_dir(), 'db', 'nhlng-meta.xml')
+    from install_legacy_data import cache_dir, cache_file  # noqa: E402 (рядом, тяжёлый импорт только здесь)
+    return cache_file(cache_dir(), 'db/nhlng-meta.xml')
 
 
 def targets(a):

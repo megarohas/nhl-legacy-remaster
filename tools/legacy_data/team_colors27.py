@@ -26,7 +26,8 @@ from tdb import SaveFile, Tdb, load_meta  # noqa: E402
 
 SPEC = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'team_colors27.json')
 NHL27_DB = os.path.join(ROOT, 'game', 'work', 'nhl27', 'db', 'nhl_game.db')
-CACHE_META = os.path.join(ROOT, 'nhl-legacy-port', 'userdata', 'cache', 'guest', 'db', 'nhlng-meta.xml')
+import legacy_paths as LP  # noqa: E402 (cache: в обеих раскладках, docs/legacy-port.md «Папка content»)
+CACHE_META = LP.legacy_file('db/nhlng-meta.xml')
 T = 'exhibitionteams'
 FIELDS = {'primarycolor': 'feprimarycolor', 'secondarycolor': 'fesecondarycolor'}
 
@@ -148,7 +149,7 @@ def main(argv):
     elif argv[0] == 'save':
         cmd_save(paths[0], '--write' in rest, names)
     else:
-        db = Tdb(open(os.path.join(ROOT, 'nhl-legacy-port', 'userdata', 'cache', 'guest', 'db', 'nhlng.db'), 'rb').read(),
+        db = Tdb(open(LP.legacy_file('db/nhlng.db'), 'rb').read(),
                  load_meta(CACHE_META))
         pl = plan(db, names)
         show(pl)

@@ -64,7 +64,8 @@ WORK = os.path.join(ROOT, 'game', 'work', 'roster-update')
 CACHE = os.path.join(ROOT, 'game', 'work', 'roster-cache')
 USERDATA = os.path.join(ROOT, 'nhl-legacy-port', 'userdata')
 SAVES = os.path.join(USERDATA, 'B13EBABEBABEBABE', '454109EC', '00000001')
-CACHE_DB = os.path.join(USERDATA, 'cache', 'guest', 'db')
+import legacy_paths as LP  # noqa: E402 (cache: в обеих раскладках, docs/legacy-port.md «Папка content»)
+CACHE_DB = os.path.dirname(LP.legacy_file('db/nhlng.db'))
 AHL_PLAYERS = os.path.join(ROOT, 'game', 'work', 'legacy-data', 'ahl-2026', 'out-ahl32', 'players.json')
 EXAMPLE = os.path.join(HERE, 'roster_update.example.txt')
 LAUNCHERS = (os.path.join(ROOT, 'nhl-legacy-port', 'out', 'launcher', 'nhllegacy_launcher.exe'),
@@ -1053,7 +1054,7 @@ def write_report(path, rep):
 
 def install_text(roster_file, dbdir, launcher):
     """Команды установки для отчёта: сам инструмент у пользователя ничего не ставит."""
-    db = os.path.join(USERDATA, 'cache', 'guest', 'db')
+    db = CACHE_DB
     exe = LAUNCHERS[1]
     keep = os.path.join(os.path.dirname(dbdir), 'before-install')
     return f'''

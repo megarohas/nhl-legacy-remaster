@@ -1192,9 +1192,10 @@ def cmd_save(args):
     if not args:
         sys.exit(__doc__)
     from install_legacy_data import cache_dir
+    from install_legacy_data import cache_file
     cache = cache_dir()
-    meta = load_meta(os.path.join(cache, 'db', 'nhlng-meta.xml'))
-    db = Tdb(open(os.path.join(cache, 'db', 'nhlng.db'), 'rb').read(), meta)
+    meta = load_meta(cache_file(cache, 'db/nhlng-meta.xml'))
+    db = Tdb(open(cache_file(cache, 'db/nhlng.db'), 'rb').read(), meta)
     sync_save(os.path.abspath(args[0]), db, meta, write)
 
 

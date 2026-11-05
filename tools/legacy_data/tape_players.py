@@ -29,7 +29,8 @@ from tdb import SaveFile, Tdb, load_meta  # noqa: E402
 SPEC = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tape_players.json')
 W = os.environ.get('LEGACY_DATA_WORK', os.path.join(ROOT, 'game', 'work', 'legacy-data'))
 LOC_META = os.path.join(ROOT, 'game', 'other', 'legacy', 'big', 'cacheboot', 'fe', 'loc', 'nhl_eng_us-meta.xml')
-CACHE_META = os.path.join(ROOT, 'nhl-legacy-port', 'userdata', 'cache', 'guest', 'db', 'nhlng-meta.xml')
+import legacy_paths as LP  # noqa: E402 (cache: в обеих раскладках, docs/legacy-port.md «Папка content»)
+CACHE_META = LP.legacy_file('db/nhlng-meta.xml')
 BIO = 'exhibitionplayerbiotable'
 FIELD = 'sticktapecolor'
 

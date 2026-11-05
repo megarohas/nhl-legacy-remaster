@@ -73,15 +73,15 @@ def cache_source():
     env = os.environ.get('CACHE')
     if env:
         return os.path.normpath(env), 'переменная CACHE'
+    inst = _install()
+    if inst.new:                                    # exe 0.17.0+ с папкой content: cache: — её части
+        return inst.content, 'папка content установки'
     st = os.path.join(GAME, 'work', 'status', 'legacy-port.md')
     if os.path.exists(st):
         for line in open(st, encoding='utf-8', errors='replace'):
             m = re.match(r'CACHE:\s*(\S+)', line)
             if m:
                 return os.path.normpath(m.group(1)), 'game/work/status/legacy-port.md'
-    inst = _install()
-    if inst.new:                                    # exe 0.17.0+ с папкой content: cache: — её части
-        return inst.content, 'папка content установки'
     root = _toml_root(PORT_EXE)
     if root:
         return os.path.join(root, 'cache', 'guest'), 'nhllegacy.toml рядом с exe порта'

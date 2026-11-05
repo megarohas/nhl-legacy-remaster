@@ -116,6 +116,10 @@ class Profile:
         env = os.environ.get('NHL_LEGACY_CACHE')
         if env:
             return env
+        import legacy_paths                       # установка 0.17.0+ с папкой content: cache: — её части
+        inst = legacy_paths.Install()
+        if inst.new:
+            return inst.content
         status = self._g('work', 'status', 'legacy-port.md')
         if os.path.exists(status):
             for line in open(status, encoding='utf-8', errors='replace'):

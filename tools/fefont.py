@@ -2434,8 +2434,9 @@ def used_chars(game=None, all_loc=False, extra_db=()):
     langs = sorted(f[:-3] for f in os.listdir(locdir) if f.endswith('.db')) if os.path.isdir(locdir) else []
     for lang in langs if all_loc else [x for x in langs if x == 'nhl_eng_us']:
         meta = os.path.join(locdir, lang + '-meta.xml')
-        path = next((p for p in [x for c in caches for x in (os.path.join(c, 'fe', 'loc', lang.upper() + '.db'),
-                                                              os.path.join(c, 'fe', 'loc', lang + '.db'))]
+        import legacy_paths
+        path = next((p for p in [x for c in caches for x in (legacy_paths.cache_file(c, f'fe/loc/{lang.upper()}.db'),
+                                                              legacy_paths.cache_file(c, f'fe/loc/{lang}.db'))]
                      + [os.path.join(locdir, lang + '.db')] if os.path.exists(p)), None)
         if not path or not os.path.exists(meta):
             continue

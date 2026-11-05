@@ -96,7 +96,8 @@ from tdb import SaveFile, Tdb, load_meta  # noqa: E402
 W_DIR = os.path.abspath(os.environ.get('LEGACY_DATA_WORK') or os.path.join(REPO, 'game', 'work', 'legacy-data'))
 WORK = os.path.join(W_DIR, 'equipment27')                        # отчёты, копии баз
 MAP_CACHE = os.path.join(REPO, 'game', 'work', 'equipment27', 'mappings27.json')
-CACHE_META = os.path.join(REPO, 'nhl-legacy-port', 'userdata', 'cache', 'guest', 'db', 'nhlng-meta.xml')
+import legacy_paths as LP  # noqa: E402 (cache: в обеих раскладках, docs/legacy-port.md «Папка content»)
+CACHE_META = LP.legacy_file('db/nhlng-meta.xml')
 STICK_PLAN = os.path.join(TOOLS, 'fb', 'stick_slots.toml')
 SKATE_PLAN = os.path.join(TOOLS, 'fb', 'skate_slots.toml')
 TAPE_SPEC = os.path.join(HERE, 'tape_players.json')
