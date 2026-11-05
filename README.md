@@ -37,16 +37,18 @@ section) or get a ready-made `NHL Legacy` folder from someone in person.
    (D3D12 or Vulkan), resolution, FSR 1 / CAS, season and franchise finances there. The 32-club NHL and AHL and the
    fixes are always on ([docs/launcher.md](docs/launcher.md)). Started without the launcher, `nhllegacy.exe` reads
    `nhllegacy.toml`.
-   **Editor.** `nhllegacy_editor.exe` (the launcher's «Editor…» button) shows the game's assets by section — uniforms,
+   **Editor.** `editor\NHL Legacy Editor.exe` (its own window; the launcher's «Editor…» button) shows the game's assets by section — uniforms,
    logos, photos, heads, equipment, arenas, menus, music, models — exports them to PNG / OBJ / MP3 and imports your
    edited version back into `content\my`. It also edits rosters (player card, transfers, new players) and saves them as
-   a new roster ([docs/editor.md](docs/editor.md)).
+   a new roster; appearance and equipment are picked from tiles with the game's own previews
+   ([docs/editor.md](docs/editor.md)).
 3. **Folder layout** (since 0.17.0, [docs/legacy-port.md](docs/legacy-port.md), sections «Папка saves» and
    «Папка content»):
 
    ```
    NHL Legacy Remaster\
-   ├─ nhllegacy_launcher.exe, nhllegacy_editor.exe, nhllegacy.exe, DLLs, nhllegacy.toml
+   ├─ nhllegacy_launcher.exe, nhllegacy.exe, DLLs, nhllegacy.toml
+   ├─ editor\       the editor app (NHL Legacy Editor.exe, Electron + editor server)
    ├─ game\         your game files (default.xex, *.big)
    ├─ content\      data mods by topic: database, menus, photos, logos, uniforms, heads, equipment, arenas,
    │                music, my (your own changes, they win over everything)
@@ -97,7 +99,7 @@ section) or get a ready-made `NHL Legacy` folder from someone in person.
 |---|---|
 | [nhl-legacy-port/](nhl-legacy-port/) | the NHL Legacy port: `src/` (hooks and fixes), `nhllegacy_*.toml` (manifest, functions, hooks), `scripts/` (codegen, player folder, SDK patches), `dist-template/`; generated code and builds stay out of git |
 | [nhl-legacy-port/launcher/](nhl-legacy-port/launcher/) | the `nhllegacy_launcher.exe` launcher (C++/Win32, a single file) |
-| [tools/editor/](tools/editor/) | the `nhllegacy_editor.exe` game editor: assets and rosters, export and import ([docs/editor.md](docs/editor.md)) |
+| [tools/editor/](tools/editor/) | the game editor (`editor\NHL Legacy Editor.exe`: Electron window + Python server): assets and rosters, export and import ([docs/editor.md](docs/editor.md)) |
 | [tools/legacy_data/](tools/legacy_data/) | the Legacy data-mod pipeline: `build-all.sh`, installer, stages |
 | [tools/roster/](tools/roster/) | 2026/27 rosters: NHL API, ratings, lines, writing the database |
 | [tools/fb/](tools/fb/) | Frostbite (NHL 24, NHL 27) readers: uniforms, faces, portraits, ice, helmet decals (personal use only) |

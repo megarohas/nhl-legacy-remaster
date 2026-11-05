@@ -11,9 +11,9 @@
 
 ## Редактор игры: `editor/`
 
-`nhllegacy_editor.exe` — все ассеты и составы в одном окне: просмотр, выгрузка в PNG/OBJ/MP3, импорт в `content\my`,
+`editor\NHL Legacy Editor.exe` (своё окно на Electron, сервер — Python) — все ассеты и составы в одном окне: просмотр, выгрузка в PNG/OBJ/MP3, импорт в `content\my`,
 правка ростера с записью новым ростером ([docs/editor.md](../docs/editor.md)). Запуск из репозитория —
-`python tools/editor [--install ПАПКА_ИГРЫ]`, сборка exe — `bash tools/editor/build.sh`. Использует модули ниже
+`python tools/editor [--install ПАПКА_ИГРЫ]`, сборка папки `editor` — `bash tools/editor/build.sh`. Использует модули ниже
 (`teamart`, `playerhead`, `rw4mesh`, `big`, `tdb`, `music`, `roster/`, `legacy_data/roster_merge.py`) как библиотеки.
 
 ## Форматы файлов Xbox 360 и EA

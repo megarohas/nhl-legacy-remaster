@@ -36,15 +36,17 @@
 2. **Лаунчер.** `nhllegacy_launcher.exe` открывает окно настроек перед запуском. Там выбираются рендер
    (D3D12 или Vulkan), разрешение, FSR 1 / CAS, сезон и финансы франшизы. НХЛ и АХЛ на 32 и исправления включены
    всегда ([docs/launcher.md](docs/launcher.md)). Без лаунчера `nhllegacy.exe` берёт настройки из `nhllegacy.toml`.
-   **Редактор.** `nhllegacy_editor.exe` (кнопка «Редактор…» в лаунчере) показывает ассеты игры по разделам — формы,
+   **Редактор.** `editor\NHL Legacy Editor.exe` (своё окно; кнопка «Редактор…» в лаунчере) показывает ассеты игры по разделам — формы,
    логотипы, фото, головы, экипировка, арены, меню, музыка, модели, — выгружает их в PNG / OBJ / MP3 и загружает
    поправленную версию обратно в `content\my`. Там же правятся составы (карточка игрока, переводы, новые игроки) и
-   пишутся новым ростером ([docs/editor.md](docs/editor.md)).
+   пишутся новым ростером; внешность и экипировка выбираются плитками с превью самой игры
+   ([docs/editor.md](docs/editor.md)).
 3. **Папки** (с 0.17.0, [docs/legacy-port.md](docs/legacy-port.md), разделы «Папка saves» и «Папка content»):
 
    ```
    NHL Legacy Remaster\
-   ├─ nhllegacy_launcher.exe, nhllegacy_editor.exe, nhllegacy.exe, DLL, nhllegacy.toml
+   ├─ nhllegacy_launcher.exe, nhllegacy.exe, DLL, nhllegacy.toml
+   ├─ editor\       редактор (NHL Legacy Editor.exe: Electron и сервер редактора)
    ├─ game\         свои файлы игры (default.xex, *.big)
    ├─ content\      моды-данные по темам: database, menus, photos, logos, uniforms, heads, equipment, arenas,
    │                music, my (свои правки, главнее всего)
@@ -95,7 +97,7 @@
 |---|---|
 | [nhl-legacy-port/](nhl-legacy-port/) | порт NHL Legacy: `src/` (врезки и исправления), `nhllegacy_*.toml` (манифест, функции, врезки), `scripts/` (кодоген, папка для игры, патчи SDK), `dist-template/`; сгенерированный код и сборка — вне git |
 | [nhl-legacy-port/launcher/](nhl-legacy-port/launcher/) | лаунчер `nhllegacy_launcher.exe` (C++/Win32, один файл) |
-| [tools/editor/](tools/editor/) | редактор игры `nhllegacy_editor.exe`: ассеты и составы, выгрузка и загрузка ([docs/editor.md](docs/editor.md)) |
+| [tools/editor/](tools/editor/) | редактор игры (`editor\NHL Legacy Editor.exe`: окно Electron + сервер на Python): ассеты и составы, выгрузка и загрузка ([docs/editor.md](docs/editor.md)) |
 | [tools/legacy_data/](tools/legacy_data/) | конвейер модов-данных Legacy: `build-all.sh`, установщик, этапы |
 | [tools/roster/](tools/roster/) | составы 2026/27: API НХЛ, рейтинги, звенья, запись в базу |
 | [tools/fb/](tools/fb/) | разбор Frostbite NHL 24 и NHL 27: формы, лица, портреты, лёд, наклейки на шлем (только для личного использования) |
