@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>NHL Legacy Remaster Editor</title>
+<link rel="icon" href="/static/icon.png">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div class="brand"><img src="/static/icon.png" alt=""><span id="title">NHL Legacy Remaster — Редактор</span></div>
+  <div class="status">
+    <span id="game" class="chip">…</span>
+    <button id="btn-my" class="ghost" data-t="my">Мои правки</button>
+    <span class="lang"><button data-lang="ru">RU</button><button data-lang="en">EN</button></span>
+  </div>
+</header>
+<main>
+  <nav id="side">
+    <input id="filter" type="search" placeholder="Поиск" data-tp="search">
+    <div id="tree"></div>
+  </nav>
+  <section id="view">
+    <div id="welcome" class="welcome"></div>
+  </section>
+</main>
+<div id="viewer" class="viewer hidden">
+  <div class="vbar"><span id="vtitle"></span>
+    <span class="vtools">
+      <label class="hidden" id="vcmp"><input type="checkbox" id="vbelow"> <span data-t="as_was">как было</span></label>
+      <button data-bg="check">▦</button><button data-bg="dark">■</button><button data-bg="light">□</button>
+      <button id="vfit" data-t="fit">По размеру</button><button id="v100">100%</button><button id="vclose">✕</button>
+    </span></div>
+  <div id="vstage" class="vstage check"><img id="vimg" alt=""></div>
+</div>
+<div id="toasts"></div>
+<div id="busy" class="busy hidden"><div class="spin"></div><span id="busytext"></span></div>
+<script src="/static/i18n.js"></script>
+<script src="/static/view3d.js"></script>
+<script src="/static/app.js"></script>
+<script src="/static/rosters.js"></script>
+</body>
+</html>
