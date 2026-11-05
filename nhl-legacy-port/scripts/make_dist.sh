@@ -6,6 +6,9 @@
 # (app-local, из VC Redist BuildTools), шаблоны dist-template/ (nhllegacy.toml — пути пустые:
 # game\ и userdata\ рядом с exe; README.txt). С --mods — ещё моды-данные из
 # nhl-legacy-port/userdata/cache/guest (только файлы игры-модов: без кэша, который пишет сама игра).
+# Личное (сейвы, настройки лаунчера) — в saves\ (с 0.17.0, docs/legacy-port.md, «Папка saves»): в папке релиза она
+# пустая, стартовые PROFILE и ROSTER лежат в start-saves\ — exe копирует их в saves\, только если там нет сейва
+# этого вида. Поэтому копия нового релиза поверх старой папки (даже вместе с saves\) сейвы не трогает.
 set -euo pipefail
 P=$(cd "$(dirname "$0")/.." && pwd)
 B="${BUILD:-$P/out/build/win-amd64-release}"   # BUILD=папка сборки (по умолчанию — рабочая)
@@ -16,7 +19,7 @@ CRT="/c/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Redist/MS
 [ -f "$B/nhllegacy.exe" ] || { echo "нет сборки $B/nhllegacy.exe — build.cmd"; exit 1; }
 # та же версия уже собиралась — прежнюю папку отодвигаем рядом (не удаляем)
 [ -e "$D" ] && mv "$D" "$D.prev-$(date +%Y%m%d-%H%M)"
-mkdir -p "$D/game" "$D/userdata/cache/guest"
+mkdir -p "$D/game" "$D/userdata/cache/guest" "$D/saves"
 cp "$B/nhllegacy.exe" "$B/nhllegacy_snap.exe" "$B/rexruntime.dll" "$B/rexgpu-xenos.dll" "$D/"
 L="$P/out/launcher/nhllegacy_launcher.exe"; [ -f "$L" ] || L="$B/nhllegacy_launcher.exe"  # свежая сборка лаунчера
 [ -f "$L" ] && cp "$L" "$D/" || echo "нет лаунчера — nhl-legacy-port/launcher/build.cmd"
@@ -51,20 +54,24 @@ if [ "${1:-}" = "--mods" ]; then
     mkdir -p "$D/userdata/cache/shaders/shareable"
     cp "$P/userdata/cache/shaders/shareable/"* "$D/userdata/cache/shaders/shareable/"
   fi
-  # Сейвы пользователя по умолчанию (SAVES=0 — без них): последний PROFILE (настройки игры, правила, слайдеры
-  # геймплея, звук, видео, управление) и последний ROSTER (составы с правками). Профиль порта один на всех ПК
-  # (XUID B13EBABEBABEBABE, имя «User» — SDK, xam/user_profile.cpp), так что игра друга подхватит их как свои.
-  # Карьеры (DYNASTY, BEAPRO…) не переносим.
+  # Стартовые сейвы (SAVES=0 — без них): последний PROFILE (настройки игры, правила, слайдеры геймплея, звук, видео,
+  # управление) и последний ROSTER (составы с правками) установки BUILD — в start-saves\profiles, start-saves\rosters.
+  # Профиль порта один на всех ПК (XUID B13EBABEBABEBABE, имя «User» — SDK, xam/user_profile.cpp), так что игра
+  # друга подхватит их как свои, но только при первом запуске: если в saves\ уже есть PROFILE или ROSTER, стартовые
+  # этого вида не копируются (src/nhllegacy_saves.cpp). Карьеры (DYNASTY, BEAPRO…) не переносим. Где сейвы
+  # установки — tools/legacy_saves.py (saves\ с 0.17.0 или старое место userdata\<xuid>\454109EC\00000001).
   if [ "${SAVES:-1}" = "1" ]; then
-    U="B13EBABEBABEBABE/454109EC"
-    S="$P/userdata/$U"
     for kind in PROFILE ROSTER; do
-      last=$(cd "$S/00000001" && ls -d "$kind "* 2>/dev/null | sort | tail -1)
-      [ -n "$last" ] || { echo "нет сейва $kind в $S"; continue; }
-      mkdir -p "$D/userdata/$U/00000001" "$D/userdata/$U/Headers/00000001"
-      cp -r "$S/00000001/$last" "$D/userdata/$U/00000001/"
-      cp "$S/Headers/00000001/$last.header" "$D/userdata/$U/Headers/00000001/"
-      echo "сейв: $last"
+      if ! paths=$(PYTHONIOENCODING=utf-8 python "$P/../tools/legacy_saves.py" latest "$kind" --paths --install "$B"); then
+        echo "нет сейва $kind"; continue
+      fi
+      dir=$(printf '%s\n' "$paths" | sed -n 2p | tr -d '\r'); header=$(printf '%s\n' "$paths" | sed -n 3p | tr -d '\r')
+      last=$(basename "$dir")
+      case "$kind" in PROFILE) sub=profiles ;; ROSTER) sub=rosters ;; esac
+      mkdir -p "$D/start-saves/$sub"
+      cp -r "$dir" "$D/start-saves/$sub/"
+      [ -f "$header" ] && cp "$header" "$D/start-saves/$sub/$last.header"
+      echo "стартовый сейв: $sub/$last"
     done
   fi
 fi

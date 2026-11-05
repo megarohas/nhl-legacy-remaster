@@ -7,6 +7,8 @@
 #                                               # пользователя — проверить чистый старт и импорт ростера вручную)
 # Берёт то, что установлено у пользователя: exe, лаунчер, моды, список шейдеров, последние PROFILE и ROSTER
 # (scripts/make_dist.sh --mods), и добавляет файлы игры в game\. Игра должна быть закрыта.
+# С 0.17.0 папка saves\ в релизе пустая, а PROFILE и ROSTER лежат в start-saves\: игра копирует их в saves\, только
+# если там нет сейва этого вида. Обновление на устройстве = скопировать новую папку поверх, сейвы не трогаются.
 set -euo pipefail
 
 CHECK=0
@@ -108,6 +110,8 @@ if [ -n "$game_from" ]; then
 else
   cp -r "$DISC" "$D/game"
 fi
+# Личное устройства не перезаписывается: в saves\ релиза ничего нет (стартовые сейвы — в start-saves\).
+[ -d "$D/saves" ] && [ -z "$(ls -A "$D/saves")" ] || { echo "в $D/saves что-то есть — релиз не должен класть сейвы туда"; exit 1; }
 for f in "$DISC"/*; do
   [ "$(stat -c %s "$f")" = "$(stat -c %s "$D/game/$(basename "$f")")" ] || { echo "не совпал $(basename "$f")"; exit 1; }
 done
@@ -118,7 +122,8 @@ done
   echo "коммит $(git -C "$R" rev-parse --short HEAD)"
   echo "exe $(md5sum "$D/nhllegacy.exe" | cut -c1-8)"
   echo "лаунчер $(md5sum "$D/nhllegacy_launcher.exe" | cut -c1-8)"
-  [ "$SAVES" = 1 ] && echo "сейвы: последние PROFILE и ROSTER" || echo "сейвы: нет (старт с нуля)"
+  [ "$SAVES" = 1 ] && echo "сейвы: стартовые PROFILE и ROSTER в start-saves (в saves, только если там пусто)" ||
+    echo "сейвы: нет (старт с нуля)"
 } > "$D/release.txt"
 
 # Основа будущих обновлений частями: у следующей версии будет с чем сравнить.
