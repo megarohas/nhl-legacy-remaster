@@ -588,8 +588,9 @@ def grid(rows, cols, cells, path, title='', note=''):
     f1, f2, f3 = (ImageFont.truetype(FONT, s) for s in (22, 17, 15))
     cw = [max(cells[r][c].shape[1] for r in range(len(rows))) for c in range(len(cols))]
     rh = [max(cells[r][c].shape[0] for c in range(len(cols))) for r in range(len(rows))]
-    lw, top, gap = 210, 64 + (22 if note else 0), 8
-    W = lw + sum(cw) + gap * (len(cols) + 1)
+    lw = int(24 + max(max((f2 if k == 0 else f3).getlength(ln) for k, ln in enumerate(r.split('\n'))) for r in rows))
+    top, gap = 64 + (22 if note else 0), 8
+    W = max(lw + sum(cw) + gap * (len(cols) + 1), int(24 + max(f1.getlength(title), f3.getlength(note))))
     H = top + sum(rh) + gap * (len(rows) + 1)
     im = Image.new('RGB', (W, H), (38, 39, 44))
     d = ImageDraw.Draw(im)
