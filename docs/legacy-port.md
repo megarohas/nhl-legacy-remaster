@@ -44,6 +44,10 @@ ReXGlue SDK 0.10.0.24 (ночной и своя сборка `ref/rexglue-sdk-cu
 | Заставка при запуске вместо чёрного окна: каток, шайба по кругу, «Loading» (`nhl_splash`, по умолчанию вкл.) | 03.11 (`src/nhllegacy_splash.cpp`), проверено на копии (раздел «Заставка загрузки»), пользователю не поставлено |
 | Свои маски вратаря в редакторе из файла `cache/guest/nhllegacy_masks.txt` (`nhl_extra_masks`, по умолчанию вкл.; без файла — как у EA) | 03.11 (`src/nhllegacy_masks.cpp`), проверено на копии (раздел «Каталог масок вратаря»), пользователю не поставлено |
 | Монеты растут дальше 2 500 (`nhl_coins_no_cap`, по умолчанию вкл.) | 02.11 (`src/nhllegacy_coins.cpp`), проверено на копии: матч Play Now, 2 500 → 2 510 ([coins.md](coins.md)) |
+| Сейвы, ачивки и настройки лаунчера — в `saves\` рядом с exe по видам (`nhl_saves_root`), старые переносятся копией | 05.11 (0.17.0, `src/nhllegacy_saves.cpp` + патч SDK 0007), проверено на копии (раздел «Папка saves»), пользователю не поставлено |
+| Наш контент по частям в `content\` (database, menus, photos, logos, uniforms, heads, equipment, arenas, music, my), exe склеивает их в один cache: (`nhl_content_root`) | 05.11 (0.17.0, `src/nhllegacy_content.cpp`, `tools/legacy_paths.py`), проверено на копии (раздел «Папка content»), установка пользователя не переведена |
+| Курсор возвращается при выходе, без фокуса и при смене дисплеев не прячется | 05.11 (0.17.0, раздел «Курсор над окном игры»), проверено на копии |
+| Журнал выбора камеры матча (`nhl_camera_trace`, по умолчанию вкл.) | 05.11 (0.17.0, раздел «Камера матча») |
 | Своё имя игрока вместо `User` (`nhl_user_name`, по умолчанию пусто) | сделано 02.11 (`src/nhllegacy_user.cpp`), проверено на копии; с 03.11 поля в лаунчере нет, имя всегда `User`, cvar — только для `nhllegacy.toml` (раздел «Имя пользователя») |
 
 ## Устройство
@@ -62,7 +66,10 @@ ReXGlue SDK 0.10.0.24 (ночной и своя сборка `ref/rexglue-sdk-cu
 | `src/nhllegacy_crash.cpp`, `_watch.cpp`, `_snap.cpp`, `_debug.h` | отчёт о падении `nhllegacy_crash.txt`, слепки `dumps\`, стеки по флагу, сторож памяти — как в NHL 13 |
 | `src/nhllegacy_input_lock.cpp` | обход гонки InputSystem SDK (XamInput* под мьютексом) |
 | `src/nhllegacy_imports.cpp` | заглушки XUsbcam |
-| `src/nhllegacy_cursor.cpp` | курсор над окном игры скрыт, в окнах SDK виден (`nhl_hide_cursor`) |
+| `src/nhllegacy_cursor.cpp` | курсор над окном игры скрыт, в окнах SDK, без фокуса и свёрнутым виден, при выходе возвращается (`nhl_hide_cursor`) |
+| `src/nhllegacy_saves.cpp` | папка `saves` (`nhl_saves_root`): cvar патча SDK 0007, перенос старых сейвов, стартовые сейвы |
+| `src/nhllegacy_content.cpp` | папка `content` (`nhl_content_root`): cache: из частей, кэш игры — `cache\game` |
+| `src/nhllegacy_camera.cpp` | журнал выбора камеры матча (`nhl_camera_trace`) |
 | `src/nhllegacy_shaderstatus.cpp` | надпись «Compiling shaders» со спиннером своим окном поверх игры (`nhl_shader_status`) |
 | `src/nhllegacy_splash.cpp` | заставка первой загрузки до первого экрана игры (`nhl_splash`), рисует поток надписи о шейдерах |
 | `src/nhllegacy_masks.cpp` | каталог масок редактора длиннее: 86 масок EA + из `nhllegacy_masks.txt` (`nhl_extra_masks`) |
@@ -307,6 +314,7 @@ FSR 1 / CAS ([sdk-build.md](sdk-build.md), «Патчи к SDK»; исходна
 | `0001`…`0004` | см. [sdk-build.md](sdk-build.md) | FSR 1 / CAS без FidelityFX SDK, установка без реестра пакетов CMake, cvar `gpu_backend`, `exp_adjust` текстур в Vulkan |
 | `0005-d3d12-memexport-trace` | `src/graphics/d3d12/command_processor.cpp` | cvar `d3d12_memexport_trace` (по умолчанию выкл.): журнал рисований с memexport |
 | `0006-texture-load-race` | `include/rex/graphics/shared_memory.h`, `src/graphics/shared_memory.cpp`, `src/graphics/pipeline/texture/cache.cpp` | журнал и исправление гонки загрузки текстур (выше) |
+| `0007-saved-game-layout` | `src/system/xam/content_manager.cpp`, `src/system/kernel_state.cpp` | cvar `saved_game_root`, `saved_game_folders`: сейвы своей игры по папкам видов, ачивки рядом (раздел «Папка saves»); только `rexruntime.dll` — `scripts/sdk_runtime_build.cmd` |
 
 SDK с нуля — `nhl-legacy-port\scripts\sdk_build.cmd`: клон `bd833a2` в `ref/rexglue-sdk-custom/src`, все шесть патчей
 по порядку (`sdk_fetch.ps1`; проверено 15.10.2026 — 0001…0006 ложатся на `bd833a2` чисто), configure, сборка, установка
@@ -1479,6 +1487,34 @@ toque…) — наследство NHL 13: в каталогах Legacy их н�
 - появление курсора в окнах F4 и сообщений: F4 нужна клавиша, а окно стенда без фокуса;
 - полный экран: стенд работал в окне.
 
+**Курсор после выхода из игры (05.11.2026).** Жалоба: после выхода курсора нет, пока не откроешь какую-нибудь программу,
+«может быть, при переключении мониторов». Почему так получалось:
+
+- SDK выходит из игры `std::_Exit` прямо из обработчика закрытия окна (`ReXApp::OnClosing`, `rex_app.cpp`). SDL при этом
+  ничего не восстанавливает: курсор остаётся пустым (`SDL_HideCursor` → `SetCursor(NULL)`), а окно уничтожает уже система;
+- у пользователя всегда включён один дисплей (Win+M+1 / Win+M+2, `toolbox\display-hotkeys`), поэтому полноэкранное окно
+  игры закрывает весь рабочий стол, и курсор при выходе всегда над ним;
+- курсор прятался и без фокуса, и в свёрнутом окне.
+
+В простом выходе на стенде (окно без фокуса под курсором, WM_CLOSE) старый exe стрелку тоже возвращал. Сценарий пользователя
+со сменой дисплеев во время игры без переключения дисплеев не воспроизвести, поэтому исправлено всё, что держало курсор:
+
+- перед закрытием (крестик, Alt+F4 и EXIT в меню идут через `OnWindowCloseRequested`) и в обработчике падения
+  `NhlLegacyReleaseCursor`: курсор виден, `ClipCursor(NULL)`, захват мыши снят, стрелка, окно спрятано (`SW_HIDE`: Windows
+  сама шлёт `WM_SETCURSOR` окну, которое теперь под курсором, пока процесс ещё жив). В журнале
+  `cursor released (window close)`;
+- без фокуса и свёрнутым курсор не прячется;
+- смена дисплеев (`WM_DISPLAYCHANGE` через хук `WH_CALLWNDPROC` потока UI или новая геометрия рабочего стола и основной монитор
+  при опросе раз в 200 мс): курсор на один шаг виден, рамка зажима снята;
+- причина видимости пишется в журнал: `visible (no focus)`, `(minimized)`, `(display change)`, `(SDK dialog)`.
+
+Для стенда без фокуса — `nhl_hide_cursor_unfocused = true` (прятать, как до 0.17.0).
+
+Проверено 05.11.2026 (`game/work/port-check/cursor_test.ps1`: окно стенда без фокуса ставится под курсор, курсор не двигается,
+`GetCursorInfo`). Над окном курсор скрыт. После `WM_DISPLAYCHANGE` — стрелка, через 0,2 с снова скрыт. Свёрнуто — стрелка,
+восстановлено — скрыт. `WM_CLOSE` — `cursor released`, после выхода стрелка. Без `nhl_hide_cursor_unfocused` над окном без
+фокуса — стрелка. Настоящее переключение дисплеев не проверялось: живые переключения — только с «да» пользователя.
+
 ## Имя пользователя (02.11.2026)
 
 Игра звала игрока `User`: `UserProfile::UserProfile` в SDK ставит `name_ = "User"`, cvar и сеттера у SDK нет. Теперь имя задаёт
@@ -1645,3 +1681,148 @@ black», «shown again», «hidden», «main menu», «done».
 просились `mask200.big`, `mask201.big`, пока номер был 200 + порядковый).
 
 **Проверка** — [goalie-masks.md](goalie-masks.md), «Свои маски в редакторе».
+
+## Папка saves (05.11.2026)
+
+Пользователь: новую версию игры он копирует поверх старой или рядом, а сейвы и настройки трогаться не должны. Обновление
+частями — перетащить нужные папки, кроме `saves\`. Раскладку он одобрил 05.11.2026
+(`game/work/status/layout-proposal.md`).
+
+Всё личное лежит в `saves\` рядом с exe (`nhl_saves_root`, по умолчанию `saves`; пусто — старая раскладка):
+
+| Папка | Что |
+|---|---|
+| `profiles\`, `rosters\`, `franchises\`, `be-a-pro\`, `seasons\`, `playoffs\`, `tournaments\`, `hockey-cards\`, `build-your-ai\`, `scenarios\`, `dynamic-ratings\`, `rivalry-games\`, `online-rosters\`, `videos\`, `screenshots\`, `other\` | сейвы игры по префиксу имени: `PROFILE` → `profiles`, `ROSTER` → `rosters`, `DYNASTY` → `franchises`, `BEAPRO` → `be-a-pro` и т. д. (таблица групп сейвов игры 0x8208BBA4) |
+| `<вид>\<имя>\<имя>` и `<вид>\<имя>.header` | сейв и его заголовок (имя в меню) |
+| `achievements\454109EC.toml` | ачивки |
+| `xbox-profile\` | настройки профиля Xbox по игре (у NHL пусто) |
+| `settings\nhllegacy_launcher.toml` | выбор в лаунчере ([launcher.md](launcher.md)) |
+| `highlights\highlights.sav` | сохранённые повторы, если включена папка content (ниже) |
+| `migrated-from-userdata.txt` | какие старые сейвы уже перенесены |
+
+**Как устроено.** Пути сейвов строит `ContentManager` в `rexruntime.dll`. Патч SDK `0007-saved-game-layout` добавляет два cvar:
+`saved_game_root` и `saved_game_folders` (`PREFIX=папка;…;*=other`). С ними сейвы своей игры лежат в
+`saved_game_root\<папка>\<имя>\`, заголовок — рядом с папкой. Открытие, перечисление и удаление смотрят во все папки видов,
+поэтому сейв, положенный не в ту папку, тоже находится. Новый сейв идёт в папку своего вида. Туда же переезжают ачивки
+(`kernel_state.cpp`). Без `saved_game_root` всё как в SDK. Порт ставит оба cvar в `OnConfigurePaths`
+(`src/nhllegacy_saves.cpp`). Старая `rexruntime.dll` без патча: в журнале строка об этом, сейвы остаются на старом месте.
+
+Пересобрать только `rexruntime.dll` — `nhl-legacy-port\scripts\sdk_runtime_build.cmd`, 4 шага, около минуты. С 05.11.2026 DLL
+3f7f5779 стоит в `ref/rexglue-sdk-custom/install/win-amd64/bin`, прежняя — рядом, `rexruntime.dll.bc66c205-before-0007`. Новых
+экспортов нет, поэтому exe перелинковывать не нужно.
+
+**Перенос старых сейвов** — при каждом запуске, до игры:
+
+- из `userdata\<xuid>\454109EC\00000001` копируется сейв, которого нет в `saves` ни в одной папке и которого нет в
+  `migrated-from-userdata.txt`. Удалённый в игре сейв поэтому не вернётся;
+- старые копии остаются на месте. В журнале одна строка: сколько скопировано и куда;
+- так же подхватывается `userdata\B13EBABEBABEBABE`, положенная в новую папку от старой версии;
+- ачивки и `xbox-profile` копируются, если их ещё нет;
+- стартовые сейвы релиза `start-saves\<вид>\` копируются, только если в `saves` нет ни одного сейва этого вида.
+
+Поверх существующего в `saves` ничего не пишется никогда.
+
+Инструментам: `tools/legacy_saves.py`, обе раскладки, `where`, `list`, `latest KIND [--paths]`, из кода — `Saves.of_install()`.
+Через него новейший ROSTER ищут `roster_update.py`, `kitport/slot3.py` и `roster_samples.py`.
+
+**Проверено на копии** (05.11.2026, `game/work/port-check/stand`: копия userdata пользователя, новый exe и `rexruntime.dll`):
+
+| Что | Результат |
+|---|---|
+| первый запуск | 30 старых сейвов скопированы по видам: profiles 1, rosters 14, franchises 9, be-a-pro 4, hockey-cards 1, build-your-ai 1, плюс ачивки; старые на месте |
+| загрузка | игра открыла PROFILE и новейший ROSTER из `saves`, главное меню, монеты 2 875 |
+| LOAD → Be a GM | все 9 франшиз с именами из заголовков (min, van, BE A GM1–5, AUTOSAVE1/2), «min» загрузилась, хаб Миннесоты |
+| запись и удаление | новый BUILDYOURAI и PROFILE игра записала в `saves\build-your-ai` и `saves\profiles`, прежний удалила там же; из `userdata` они не вернулись |
+| лаунчер | свой toml скопировал в `saves\settings`; `--import-roster` добавил ROSTER в `saves\rosters`: +2 файла, остальные 63 без изменений |
+| новая версия поверх старой | exe, DLL и лаунчер скопированы поверх: в `saves` 0 изменений по md5, игра загрузила PROFILE и добавленный ROSTER |
+| стартовые сейвы | в пустую `saves` скопированы 2, при втором запуске — 0 |
+| EXIT в меню | выход как раньше |
+
+## Папка content (05.11.2026)
+
+Раньше весь наш контент лежал в одной папке `userdata\cache\guest`: 2 ГБ, около 12 тысяч файлов, вперемешку с тем, что пишет
+сама игра. Теперь его можно разложить по частям в `content\` рядом с exe (`nhl_content_root`, по умолчанию `content`). Без этой
+папки exe работает по-старому. Раскладку одобрил пользователь 05.11.2026, мельче не делить.
+
+| Часть | Пути игры внутри |
+|---|---|
+| `database` | `db\` |
+| `menus` | `fe\ion\game`, `fe\ion\main.big`, `fe\ion\fonts`, `fe\ion\artassets\backgrounds`, `fe\loc`, `fe\resource_kernel` |
+| `photos` | `fe\ion\artassets\playerheads*`, `playerbackgrounds`, `playermenubackgrounds` |
+| `logos` | `fe\ion\artassets\teamlogos*`, `twittericonsteam`, `rendering\logo` |
+| `uniforms` | `rendering\jersey`, `pant`, `sock`; `fe\ion\artassets\jerseys`, `teamnumbers*` |
+| `heads` | `rendering\player` |
+| `equipment` | `rendering\playerstick`, `goaliestick`, `skate`, `goaliehelmet`, `puck`; `fe\ion\artassets\createplayer`; `nhllegacy_masks.txt` |
+| `arenas` | `rendering\stadium`, `icesurface`, `banner`, `jumbotron`, `crowddata`, `enviro`, `spotlight`, `prop`, `particle` |
+| `music` | `audio\music`, `fe\ion\artassets\eatrax*` |
+| `my` | своё поверх всего; сюда же — всё, чего нет в таблице |
+
+Внутри каждой части пути те же, что у игры, поэтому мод из сообщества кладётся как есть, например `content\my\rendering\jersey\…`.
+Таблица — `RULES` в `tools/legacy_paths.py`.
+
+**Как exe склеивает части** (`src/nhllegacy_content.cpp`). Диск `cache:` остаётся один, но собирается из нескольких папок.
+Первая найденная главнее:
+
+1. `saves\highlights`: только `highlights.sav`;
+2. `cache\game`: всё остальное, что пишет игра (`809284.ver`, `admanager_cache_images`). Игра пишет только сюда;
+3. `content\my`;
+4. остальные части в порядке `content\order.txt`, а не перечисленные там — по алфавиту.
+
+В `content` игра не пишет:
+
+- файл части, открытый на запись, открывается на чтение;
+- перезапись создаёт копию в `cache\game`;
+- удаление прячет файл до конца сеанса.
+
+Если один путь есть в двух частях, берётся первая, в журнале строка `content: … in A and B, using A` (до 20 и итог). Дерево
+собирается при запуске: каталоги — свои узлы с детьми из всех частей, файлы — со своим путём на диске. Файл, появившийся после
+запуска, находится при первом обращении. С `content` кэш игры и шейдеров — `cache\` рядом с exe (`cache\game`, `cache\shaders`).
+
+**Перенос.** `python tools/legacy_paths.py migrate [--install DIR] [--write]` копирует `cache\guest` по частям. Написанное игрой
+идёт в `cache\game`, `highlights.sav` — в `saves\highlights`, список шейдеров — в `cache\shaders`. Старое не трогается. Без
+`--write` команда только показывает план. `--content-only` — только наш контент, так собирает папку релиза `make_dist.sh`.
+Установку пользователя переводят только с его «да».
+
+**Инструменты.** Установщики (`install_legacy_data.py`, `kitport`: put, restore, diff, slot3) обращаются к файлам cache: через
+`legacy_paths.cache_file(cache, rel)`. В старой раскладке это прежний `cache\guest\rel`, в новой — `content\<часть>\rel`, а
+`cache_dir()` возвращает папку `content`. Остальные инструменты (`music.py`, `fefont.py`, `socktuck.py`, `equipment27.py`,
+`roster_update.py` с базой, `newteams_art.py`, `capdefs.py`) пока знают только `cache\guest`. Перед переводом установки
+пользователя их надо перевести так же.
+
+**Проверено на копии** (05.11.2026, стенд выше):
+
+- `migrate --write`: 12 179 файлов. uniforms 910 МБ, music 289, heads 236, arenas 206, photos 173, logos 46, equipment 22,
+  menus 15, database 4,7, в my ничего. В `cache\game` — 1 файл, `highlights.sav` — в `saves\highlights`, конфликтов 0;
+- запуск: cache: собран за 0,95 с, конфликтов 0;
+- главное меню наше: пункты, фото Марнера в VGK, EATrax «Best of NHL»;
+- Play Now SJ–MIN: формы и лёд Grand Casino Arena на месте;
+- за игру в `content` не записано ни одного файла. Игра писала только в `cache\game\809284.ver` и
+  `saves\highlights\highlights.sav` (81 МБ).
+
+## Камера матча (05.11.2026)
+
+Жалоба пользователя: камера в матче всё время сбрасывается на Action, нужна Ice («Лёд»), выбор в настройках должен
+сохраняться.
+
+- Значения настройки Camera (ID 105): 0 Action, 1 Ice, 2 Classic, 3 Overhead, 4 Broadcast, 5 True Broadcast, 6–10 Custom.
+  Подписи — 839DD52C, описание — таблица меню 82050FB0.
+- Умолчание у игры уже Ice: при загрузке 82E28C48 ставит Camera = 1. Цифра 0 в таблице меню не используется.
+- В сейвах пользователя (PROFILE, последние DYNASTY, BEAPRO) записано Camera = 1, то есть Ice.
+- Директор камер `*(0x83B6DD00)`: старт матча зовёт 834633B0, он берёт тип из Camera (1 → тип 2, Ice). Особые ветки берут не
+  Camera, а GoalieCamera (режим вратаря, в нём Ice и Classic дают Action3D), BapCamera (Be a Pro) или OnlineSkaterCamera.
+
+На копии сейвов пользователя Action не воспроизвёлся:
+
+- Play Now и матч франшизы «min» за Миннесоту — директор выбрал тип 2, Ice;
+- в меню паузы Camera = Ice;
+- Settings → Visual → Camera = Action: профиль записан с Camera 0; обратно на Ice — записан с 1;
+- после перезапуска игра загрузила профиль с Ice.
+
+Журнал `nhl_camera_trace` (по умолчанию включён, `src/nhllegacy_camera.cpp`) пишет при старте матча значения камер в глобальных
+опциях и в копиях настроек, ветку директора и тип камеры. При каждой правке он пишет, кто и что поменял (`lr`). Когда
+пользователь снова увидит Action, причина будет в `game.log`: строки `camera director` и `camera setting`.
+
+Подозрения из разбора, не подтверждены:
+
+- залипший режим вратаря: GoalieMode в действующих настройках держится до выхода в главное меню;
+- камера Be a Pro (BapCamera = 2, «New») похожа на Action.

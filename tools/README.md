@@ -23,6 +23,8 @@
 - `gameprofile.py` — профиль игры для всех инструментов: пути, схема базы, номера строк лиг и арта
 - `legacy_settings.py` — блок настроек в сейвах Legacy: разбор, сравнение, перенос слайдеров
 - `legacy_coins.py` — монеты и доигранные матчи в профиле Legacy: просмотр, потолок ([docs/coins.md](../docs/coins.md))
+- `legacy_saves.py` — где лежат сейвы Legacy в обеих раскладках (`saves\<вид>` с 0.17.0 или `userdata\…\00000001`): `where`, `list`, `latest` ([docs/legacy-port.md](../docs/legacy-port.md), «Папка saves»)
+- `legacy_paths.py` — части `content\` и путь файла cache: в обеих раскладках, перенос `cache\guest` в `content\` копией (`migrate`) ([docs/legacy-port.md](../docs/legacy-port.md), «Папка content»)
 - `roster_samples.py` — образцы файлов ROSTER, хорошие и испорченные, для проверки лаунчера и реакции игры ([docs/launcher.md](../docs/launcher.md))
 - `rw4mesh.py` — сетки RenderWare 4 (`.rx2`) ⇄ OBJ: правка голени, проверки, превью
 - `stadium.py` — арены NHL Legacy: модель чаши `stadium_<N>` (слои, материалы, текстуры, картинки), кресла `crowd_<N>.cwd` и перекраска их цвета по рецептам `arena_seats.toml` (по умолчанию `--game legacy`)
