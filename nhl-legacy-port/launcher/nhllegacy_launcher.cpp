@@ -404,6 +404,7 @@ enum HintId {
   kHintPlay,
   kHintLanguage,
   kHintRosters,
+  kHintEditor,
   kHintCount
 };
 
@@ -452,6 +453,10 @@ const Hint kHintsEn[kHintCount] = {
      L"Add a roster made on another PC: pick the file from its saves\\rosters\\ROSTER <date>. The launcher "
      L"checks it against this game's data and adds it, the game loads it on the next start. Your earlier rosters and "
      L"profile stay in saves. Close the game first."},
+    {L"Editor",
+     L"Open the game editor (nhllegacy_editor.exe): kits, logos, photos, heads, equipment, arenas, menus, music, "
+     L"models and rosters — view, export to PNG/OBJ/MP3 and import your version back. Edits go to content\\my, "
+     L"rosters — as a new roster in saves. Nothing is written while the game is running."},
 };
 
 const Hint kHintsRu[kHintCount] = {
@@ -498,9 +503,16 @@ const Hint kHintsRu[kHintCount] = {
      L"Добавить ростер, сделанный на другом ПК: выберите файл из его saves\\rosters\\ROSTER <дата>. Лаунчер "
      L"сверит его с данными этой игры и добавит, игра загрузит его при следующем запуске. Прежние ростеры и профиль "
      L"остаются в saves. Сначала закройте игру."},
+    {L"Редактор",
+     L"Открыть редактор игры (nhllegacy_editor.exe): формы, логотипы, фото, головы, экипировка, арены, меню, музыка, "
+     L"модели и составы — просмотр, выгрузка в PNG/OBJ/MP3 и загрузка своей версии обратно. Правки — в content\\my, "
+     L"составы — новым ростером в saves. Пока игра запущена, редактор ничего не записывает."},
 };
 
 const Hint& HintAt(int i) { return (g_lang == 1 ? kHintsRu : kHintsEn)[i]; }
+
+std::wstring EditorExe();  // редактор игры (ниже, у ростеров)
+void OpenEditor();
 
 const wchar_t* DefaultHintTitle() { return T(L"Tip", L"Подсказка"); }
 const wchar_t* DefaultHintText() {
@@ -532,6 +544,7 @@ enum ControlId {
   kIdNote,
   kIdLang,
   kIdRosters,
+  kIdEditor,
 };
 
 // Смена языка: элементы пересоздаются после возврата из уведомления списка (не внутри него).
@@ -758,6 +771,11 @@ void CreateControls() {
   g.hint_of[play] = kHintPlay;
   AddZone(704, 568, 160, 34, kHintPlay);
   EnableWindow(play, g.exe_found);
+  // Редактор (05.11.2026): свой exe рядом с лаунчером; нет его — кнопка неактивна.
+  HWND editor = Add(L"BUTTON", T(L"Editor…", L"Редактор…"), BS_PUSHBUTTON | WS_TABSTOP, 148, 568, 140, 34, kIdEditor);
+  g.hint_of[editor] = kHintEditor;
+  AddZone(148, 568, 140, 34, kHintEditor);
+  EnableWindow(editor, GetFileAttributesW(EditorExe().c_str()) != INVALID_FILE_ATTRIBUTES);
 
   // Язык — в шапке справа (названия языков не переводятся).
   Combo(kIdLang, 734, 12, 130, {L"English", L"Русский"}, kHintLanguage);
@@ -1045,6 +1063,67 @@ std::wstring UserDataDir() {
   return DirFromSetting(dir);
 }
 
+// База, с которой сверяется ростер, — та, что возьмёт игра. С 0.17.0 (папка content, nhl_content_root) — content\my\db,
+// затем части по content\order.txt и остальные по алфавиту (как nhllegacy_content.cpp); иначе userdata\cache\guest\db.
+// До 05.11.2026 лаунчер смотрел только в userdata\cache\guest: на новой раскладке без старой копии был код 8.
+std::wstring RosterDbDir(const std::wstring& userdata) {
+  const std::wstring guest = userdata + L"\\cache\\guest\\db";
+  Cvars c;
+  ParseToml(g.toml, c);
+  const auto it = c.find("nhl_content_root");
+  const std::wstring root = it == c.end() ? L"content" : Widen(it->second);
+  if (root.empty()) return guest;
+  const std::wstring content = DirFromSetting(root);
+  if (GetFileAttributesW(content.c_str()) == INVALID_FILE_ATTRIBUTES) return guest;
+  std::vector<std::wstring> parts{L"my"};
+  FILE* f = nullptr;
+  if (_wfopen_s(&f, (content + L"\\order.txt").c_str(), L"rb") == 0 && f) {
+    char line[512];
+    while (fgets(line, sizeof(line), f)) {
+      std::string v(line);
+      while (!v.empty() && (v.back() == '\n' || v.back() == '\r' || v.back() == ' ')) v.pop_back();
+      if (!v.empty() && v[0] != '#') parts.push_back(Widen(v));
+    }
+    fclose(f);
+  }
+  std::vector<std::wstring> rest;
+  WIN32_FIND_DATAW fd;
+  HANDLE h = FindFirstFileW((content + L"\\*").c_str(), &fd);
+  if (h != INVALID_HANDLE_VALUE) {
+    do {
+      if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && fd.cFileName[0] != L'.') rest.push_back(fd.cFileName);
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+  }
+  std::sort(rest.begin(), rest.end(),
+            [](const std::wstring& a, const std::wstring& b) { return _wcsicmp(a.c_str(), b.c_str()) < 0; });
+  parts.insert(parts.end(), rest.begin(), rest.end());
+  for (const auto& p : parts) {
+    const std::wstring dir = content + L"\\" + p + L"\\db";
+    if (GetFileAttributesW((dir + L"\\nhlng.db").c_str()) != INVALID_FILE_ATTRIBUTES) return dir;
+  }
+  return guest;
+}
+
+// Редактор игры рядом с лаунчером (tools/editor, docs/editor.md), язык — как у лаунчера.
+std::wstring EditorExe() { return g.dir + L"\\nhllegacy_editor.exe"; }
+
+void OpenEditor() {
+  const std::wstring exe = EditorExe();
+  std::wstring cmd = L"\"" + exe + L"\" --lang=" + (g_lang == 1 ? L"ru" : L"en");
+  STARTUPINFOW si{};
+  si.cb = sizeof(si);
+  PROCESS_INFORMATION pi{};
+  std::vector<wchar_t> buf(cmd.begin(), cmd.end());
+  buf.push_back(L'\0');
+  if (!CreateProcessW(exe.c_str(), buf.data(), nullptr, nullptr, FALSE, 0, nullptr, g.dir.c_str(), &si, &pi)) {
+    ShowError(T(L"Could not start nhllegacy_editor.exe.", L"Не удалось запустить nhllegacy_editor.exe."));
+    return;
+  }
+  CloseHandle(pi.hThread);
+  CloseHandle(pi.hProcess);
+}
+
 // Куда кладётся ростер: saves\rosters (заголовок рядом с папкой, как в патче SDK 0007), без saves — старое место.
 roster::SavePlace RosterPlace() {
   return g.saves.empty() ? roster::OldSavePlace(UserDataDir()) : roster::NewSavePlace(g.saves);
@@ -1062,8 +1141,7 @@ roster::Result ImportRoster(const std::wstring& path, bool write, std::wstring* 
     }
     return Fail(kCannotRead, L"Could not read the file " + path, L"Не удалось прочитать файл " + path);
   }
-  const std::wstring userdata = UserDataDir();
-  Result r = roster::Check(file, userdata +L"\\cache\\guest\\db", nullptr);
+  Result r = roster::Check(file, RosterDbDir(UserDataDir()), nullptr);
   if (r.code != kOk || !write) return r;
   if (GameRunning()) {
     return Fail(kGameRunning, L"The game is running. Close it and try again: it would save its own roster over this one.",
@@ -1312,6 +1390,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
       const int code = HIWORD(wp);
       if (id == kIdFullscreen && code == BN_CLICKED) UpdateEnabled();
       if (id == kIdRosters && code == BN_CLICKED) UpdateRosters();
+      if (id == kIdEditor && code == BN_CLICKED) OpenEditor();
       if (id == kIdPresent && code == CBN_SELCHANGE) {
         // У CAS и FSR своя резкость: запомнить ползунок старого режима, показать нового.
         const int sharp = static_cast<int>(SendMessageW(Item(kIdSharp), TBM_GETPOS, 0, 0));
