@@ -24,6 +24,9 @@ mkdir -p "$D/game" "$D/saves"
 cp "$B/nhllegacy.exe" "$B/nhllegacy_snap.exe" "$B/rexruntime.dll" "$B/rexgpu-xenos.dll" "$D/"
 L="$P/out/launcher/nhllegacy_launcher.exe"; [ -f "$L" ] || L="$B/nhllegacy_launcher.exe"  # свежая сборка лаунчера
 [ -f "$L" ] && cp "$L" "$D/" || echo "нет лаунчера — nhl-legacy-port/launcher/build.cmd"
+# редактор игры (docs/editor.md): свежая сборка tools/editor/build.sh, иначе тот, что стоит в BUILD
+E="$P/out/editor/nhllegacy_editor.exe"; [ -f "$E" ] || E="$B/nhllegacy_editor.exe"
+[ -f "$E" ] && cp "$E" "$D/" || echo "нет редактора — bash tools/editor/build.sh"
 ICO="$P/launcher/icon/nhllegacy.ico"
 if [ -f "$ICO" ]; then python "$P/../tools/set_exe_icon.py" "$D/nhllegacy.exe" "$ICO" --no-backup; else
   echo "нет иконки — python tools/make_icon.py"; fi
