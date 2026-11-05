@@ -443,6 +443,10 @@ class Session:
                     allf.append(d)
         sec.append(dict(title=L('Все поля (как в базе)', 'All fields (as in the database)'), fields=allf, advanced=True))
         self._named(sec, lang)
+        import pickers
+        if getattr(self.ed, 'pickers', None) is None:
+            self.ed.pickers = pickers.Pickers(self.ed)
+        self.ed.pickers.apply(self, sec, lang, gid)
         info = self.row(gid, e) if e is not None else self.row(gid, fa=team == 'FA')
         info['team'] = team
         info['clubs'] = [dict(index=x['team'], name=self.teams.get(x['team'], {}).get('name', '?'))
@@ -554,7 +558,7 @@ class Session:
                     raise EditorError('pos', 'Полевого нельзя сделать вратарём и наоборот (другие таблицы атрибутов)',
                                       'A skater cannot become a goalie and vice versa')
             rr = r if t == B else self.ai[gid][1] if t in (S, G) else self.eq[gid][1]
-            self._set(t, f, rr, val, fd['kind'])
+            self._set(t, f, rr, val, fd.get('base_kind', fd['kind']))
             if t in (S, G) and f == 'playerstyle':
                 for x in self.entries:
                     if self.gid_of(x) == gid:

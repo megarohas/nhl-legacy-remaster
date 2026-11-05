@@ -244,6 +244,7 @@ class Catalog:
     def mask_owners(self):
         """Номер маски вратаря → клубы, у которых он стоит (exhibitionteams.goaliemaskN_starter/backup)."""
         out = {}
+        self.db.load()
         src = self.db.src
         T = 'exhibitionteams'
         if T not in src.by_name:

@@ -79,7 +79,9 @@ const Rosters = (() => {
   }
   async function loadPlayers() {
     const box = $('#plist'); box.innerHTML = '';
-    const j = await api('/api/x/rosters/players?team=' + encodeURIComponent(team)).catch(e => { toast(e.message, 'err'); return { players: [] }; });
+    const want = team;
+    const j = await api('/api/x/rosters/players?team=' + encodeURIComponent(want)).catch(e => { toast(e.message, 'err'); return { players: [] }; });
+    if (want !== team) return;              // пока ждали, выбрали другой клуб — его список придёт своим запросом
     const order = { C: 0, LW: 1, RW: 2, D: 3, G: 4 };
     j.players.sort((a, b) => (order[a.pos] - order[b.pos]) || (b.ovr - a.ovr));
     LAST_PLAYERS = j.players;
@@ -124,14 +126,53 @@ const Rosters = (() => {
     }
     for (const s of card.sections) {
       const fs = el('div', { class: 'fgrid' });
-      for (const f of s.fields) fs.append(fieldInput(f));
-      const sec = el('details', { class: 'psec', open: !s.advanced }, el('summary', {}, s.title), fs);
+      const tg = el('div', { class: 'tgrid' });          // поля с картинками — рядом плитками, подпись сверху
+      for (const f of s.fields) (f.kind === 'tiles' ? tg : fs).append(fieldInput(f));
+      const sec = el('details', { class: 'psec', open: !s.advanced }, el('summary', {}, s.title), tg.childNodes.length ? tg : null, fs);
       box.append(sec);
     }
+  }
+  function tileBox(t, small) {
+    // плитка: картинка из ассетов игры (или «нет картинки»), подпись, номер значения мелко
+    return el('div', { class: 'tile' + (small ? ' small' : '') },
+      t[2] ? el('img', { src: t[2], loading: 'lazy', alt: '' }) : el('div', { class: 'noimg' }, '—'),
+      el('div', { class: 'tcap' }, el('span', {}, t[1] || ''), el('small', {}, String(t[0]))));
+  }
+  function pickTile(f, onPick) {
+    const ov = el('div', { class: 'picker' });
+    const grid = el('div', { class: 'pgrid' });
+    const q = el('input', { type: 'search', placeholder: L('поиск по названию или номеру', 'search by name or number'), style: 'width:320px' });
+    for (const t of f.tiles) {
+      const b = tileBox(t);
+      if (t[0] === f.cur) b.classList.add('on');
+      b.addEventListener('click', () => { onPick(t); ov.remove(); });
+      b.dataset.q = (String(t[0]) + ' ' + (t[1] || '')).toLowerCase();
+      grid.append(b);
+    }
+    q.addEventListener('input', () => { const s = q.value.trim().toLowerCase(); grid.childNodes.forEach(n => { n.style.display = !s || n.dataset.q.includes(s) ? '' : 'none'; }); });
+    ov.append(el('div', { class: 'pbox' }, el('div', { class: 'phead2' }, el('b', {}, f.label), q,
+      el('span', { class: 'muted' }, `${f.tiles.length}`), el('button', { class: 'ghost', onclick: () => ov.remove() }, '✕')), grid));
+    ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+    document.body.append(ov);
+    const on = grid.querySelector('.tile.on'); if (on) on.scrollIntoView({ block: 'center' });
   }
   function fieldInput(f) {
     let inp;
     const mark = () => { $('#apply').disabled = !Object.keys(edits).length; };
+    if (f.kind === 'tiles') {
+      f.cur = f.value;
+      const holder = el('div', { class: 'tilefield' });
+      const show = () => {
+        holder.innerHTML = '';
+        const t = f.tiles.find(x => x[0] === f.cur) || [f.cur, '', null];
+        const tb = tileBox(t, true);
+        tb.title = L('Выбрать', 'Pick');
+        tb.addEventListener('click', () => !f.readonly && pickTile(f, x => { f.cur = x[0]; if (f.cur === f.value) delete edits[f.key]; else edits[f.key] = f.cur; mark(); show(); }));
+        holder.append(tb);
+      };
+      show();
+      return el('label', { class: 'fld tiles' }, el('span', {}, f.label), holder);
+    }
     if (f.kind === 'enum') {
       inp = el('select', {});
       for (const [k, v] of f.options) inp.append(el('option', { value: k, selected: k === f.value }, v));

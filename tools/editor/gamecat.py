@@ -97,7 +97,7 @@ class Catalogs:
             st = os.stat(xex)
             hit = self.ed.fs.find('fe/loc/nhl_eng_us.db')
             loc = os.path.getmtime(hit[2]) if hit and hit[2] else 0
-            return f'{st.st_size}:{int(st.st_mtime)}:{int(loc)}'
+            return f'v2:{st.st_size}:{int(st.st_mtime)}:{int(loc)}'
         except OSError:
             return None
 
@@ -122,6 +122,9 @@ class Catalogs:
                         if key and str(num) not in names:
                             names[str(num)] = (loc.get(key.lower()) or key).strip()
                 out[field] = names
+            # маски вратаря: запись — [номер превью, masktype, maskid] (docs/goalie-masks.md, «Превью в редакторе»)
+            n, base, uo, size = cats['маски вратаря']
+            out['masks'] = [list(struct.unpack_from('>3i', img, base + size * i - U.BASE)) for i in range(n)]
             os.makedirs(os.path.dirname(cache), exist_ok=True)
             json.dump(out, open(cache, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
             self.data = out
