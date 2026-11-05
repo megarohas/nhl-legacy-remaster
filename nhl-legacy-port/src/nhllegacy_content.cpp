@@ -17,11 +17,18 @@
 // в журнал строка «content: … in A and B, using A» (до 20 строк и итог).
 //
 // Дерево всех частей строится один раз при запуске (как HostPathDevice строит своё), каталоги — свои узлы
-// OverlayDir с детьми из всех частей, файлы — HostPathEntry со своим путём на диске. Файл, появившийся на диске после
-// запуска, находится при первом обращении (ленивый поиск по частям).
+// OverlayDir с детьми из всех частей, файлы — HostPathEntry со своим путём на диске. Поиск — только в памяти: индекс
+// «путь → запись» и дерево для того, что игра создала сама. На диск поиск не ходит (05.11.2026: промах — файла нет в
+// cache:, игра идёт в архив диска, — проверял все части на диске, до 11 обращений к ФС под общей блокировкой VFS; в
+// матче это ~1 промах в секунду, при загрузке — сотни). Файл, положенный в content при запущенной игре, игра не увидит
+// до перезапуска — как и прежде нельзя ставить моды поверх запущенной игры. Раз в 30 с — счётчики в журнале.
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
+#include <chrono>
+#include <mutex>
+#include <unordered_map>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -142,33 +149,33 @@ class OverlayDevice : public rex::filesystem::HostPathDevice {
   }
 
   Entry* ResolvePath(std::string_view path) override {
-    if (Entry* e = root_->ResolvePath(path)) {
-      return e;
+    Entry* e = nullptr;
+    {
+      std::lock_guard lock(index_mutex_);
+      const auto it = index_.find(Key(path));
+      if (it != index_.end()) e = it->second;
     }
-    // Ленивый поиск: файл или каталог появился на диске после запуска.
-    Entry* cur = root_.get();
-    std::string rel;
-    for (const auto& part : rex::string::utf8_split_path(path)) {
-      if (part.empty()) continue;
-      rel = rel.empty() ? std::string(part) : rel + "\\" + std::string(part);
-      if (Entry* child = cur->GetChild(part)) {
-        cur = child;
-        continue;
-      }
-      if (!(cur->attributes() & rex::filesystem::kFileAttributeDirectory)) return nullptr;
-      Entry* found = nullptr;
-      for (size_t i = 0; i < layers_.size() && !found; ++i) {
-        if (!Visible(i, rel)) continue;
-        const fs::path host = layers_[i].root / rex::to_path(rex::string::utf8_fix_path_separators(rel));
-        FileInfo info;
-        if (rex::filesystem::GetInfo(host, &info)) {
-          found = MakeEntry(i, static_cast<OverlayDir*>(cur), host, info);
-        }
-      }
-      if (!found) return nullptr;
-      cur = found;
+    if (e) {
+      ++hits_;
+    } else if ((e = root_->ResolvePath(path)) != nullptr) {  // создано игрой после запуска (CreateEntry)
+      ++walks_;
+      std::lock_guard lock(index_mutex_);
+      index_[Key(path)] = e;
+    } else {
+      ++misses_;
     }
-    return cur;
+    LogStats();
+    return e;
+  }
+
+  void Forget(const Entry* e) {  // запись удалена из дерева (DeleteEntryInternal): она и всё под ней — из индекса
+    const std::string k = Key(e->path());
+    std::lock_guard lock(index_mutex_);
+    for (auto it = index_.begin(); it != index_.end();) {
+      const bool under = it->first == k || (it->first.size() > k.size() && it->first.compare(0, k.size(), k) == 0 &&
+                                            it->first[k.size()] == '\\');
+      it = under || it->second == e ? index_.erase(it) : std::next(it);
+    }
   }
 
   void Dump(rex::string::StringBuffer* sb) override { root_->Dump(sb, 0); }
@@ -194,13 +201,17 @@ class OverlayDevice : public rex::filesystem::HostPathDevice {
 
   Entry* MakeEntry(size_t layer, OverlayDir* parent, const fs::path& host, const FileInfo& info) {
     const std::string path = rex::string::utf8_join_guest_paths(parent->path(), rex::path_to_utf8(info.name));
+    Entry* e;
     if (info.type == FileInfo::Type::kDirectory) {
-      return parent->Add(std::make_unique<OverlayDir>(this, parent, path));
+      e = parent->Add(std::make_unique<OverlayDir>(this, parent, path));
+    } else if (layers_[layer].writable) {
+      e = parent->Add(std::unique_ptr<Entry>(HostPathEntry::Create(this, parent, host, info)));
+    } else {
+      e = parent->Add(std::make_unique<PackFileEntry>(this, parent, path, host, info));
     }
-    if (layers_[layer].writable) {
-      return parent->Add(std::unique_ptr<Entry>(HostPathEntry::Create(this, parent, host, info)));
-    }
-    return parent->Add(std::make_unique<PackFileEntry>(this, parent, path, host, info));
+    std::lock_guard lock(index_mutex_);
+    index_[Key(path)] = e;
+    return e;
   }
 
  private:
@@ -243,9 +254,40 @@ class OverlayDevice : public rex::filesystem::HostPathDevice {
     }
   }
 
+  // Ключ индекса: путь в нижнем регистре ASCII, разделитель «\\», без ведущих и повторных разделителей.
+  static std::string Key(std::string_view path) {
+    std::string k;
+    k.reserve(path.size());
+    for (char c : path) {
+      if (c == '/' || c == '\\') {
+        if (!k.empty() && k.back() != '\\') k.push_back('\\');
+        continue;
+      }
+      k.push_back(char(std::tolower(static_cast<unsigned char>(c))));
+    }
+    while (!k.empty() && k.back() == '\\') k.pop_back();
+    return k;
+  }
+
+  void LogStats() {
+    const auto now = std::chrono::steady_clock::now();
+    std::lock_guard lock(stats_mutex_);
+    if (now - last_log_ < std::chrono::seconds(30)) return;
+    if (last_log_.time_since_epoch().count() != 0) {
+      REXLOG_INFO("[nhllegacy] content: lookups in 30 s — {} found by index, {} in the tree, {} not in cache: (no disk "
+                  "access)", hits_.exchange(0), walks_.exchange(0), misses_.exchange(0));
+    }
+    last_log_ = now;
+  }
+
   std::vector<Layer> layers_;
   fs::path writable_;
   std::unique_ptr<Entry> root_;
+  std::mutex index_mutex_;
+  std::unordered_map<std::string, Entry*> index_;
+  std::atomic<uint64_t> hits_{0}, walks_{0}, misses_{0};
+  std::mutex stats_mutex_;
+  std::chrono::steady_clock::time_point last_log_{};
   std::map<std::string, size_t> layer_of_;  // путь файла (нижний регистр) → часть, откуда он взят
   int conflicts_ = 0;
 };
@@ -282,6 +324,7 @@ std::unique_ptr<Entry> OverlayDir::CreateEntryInternal(std::string_view name, ui
 
 bool OverlayDir::DeleteEntryInternal(Entry* entry) {
   auto* dev = static_cast<OverlayDevice*>(device_);
+  dev->Forget(entry);
   if (entry->attributes() & rex::filesystem::kFileAttributeDirectory) {
     std::error_code ec;
     fs::remove(dev->WritablePath(entry->path()), ec);  // только пустой каталог cache\game; части не трогаются
