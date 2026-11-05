@@ -123,6 +123,7 @@ async function openNode(id) {
   STATE.current = id;
   if (id === 'my') return showMy();
   if (id === 'rosters') return window.Rosters ? Rosters.open($('#view')) : null;
+  if (id === 'music:tracks') return showMusic();
   const v = $('#view');
   v.innerHTML = '';
   v.append(el('div', { class: 'loading' }, t('working')));
@@ -140,6 +141,9 @@ function renderAsset(a) {
   const bar = el('div', { class: 'toolbar' },
     hasTex ? el('button', { class: 'w', onclick: () => doExportAll(a) }, t('export_all')) : null,
     hasTex ? el('button', { class: 'w', onclick: () => doImportFolder(a) }, t('import_folder')) : null,
+    (a.player && !a.hasportrait) ? el('button', { class: 'w', onclick: async () => {
+      const r = await busy(t('working'), () => api('/api/x/rosters/update', { gid: a.player, team: '', values: { 'exhibitionplayerbiotable.hasportrait': 1 } }));
+      if (r) toast(T('В правках ростера: hasportrait = 1. Запишите ростер в разделе «Составы»', 'Roster edit: hasportrait = 1. Save the roster in «Rosters»')); } }, T('Включить фото в ростере', 'Enable photo in roster')) : null,
     anyMy(a) ? el('button', { class: 'w danger', onclick: () => doRevert(a, a.files.filter(f => f.in_my).map(f => f.rel), t('confirm_revert_all')) }, t('revert_all')) : null);
   v.append(el('div', { class: 'ahead' }, el('h2', {}, a.title), a.note ? el('div', { class: 'note' }, a.note) : null, bar));
   for (const f of a.files) v.append(renderFile(a, f));
@@ -153,6 +157,7 @@ function renderFile(a, f) {
       el('button', { class: 'ghost w', onclick: () => doRaw('import_raw', f) }, t('import_file')),
       f.in_my ? el('button', { class: 'ghost w danger', onclick: () => doRevert(a, [f.rel], t('confirm_revert')) }, t('revert')) : null)));
   if (f.error) box.append(el('div', { class: 'note' }, f.error));
+  if (f.from_template) box.append(el('div', { class: 'note' }, T(`Файла нет — импорт создаст его по образцу ${f.template.split('/').pop()} (на превью — образец)`, `No file yet — import creates it from ${f.template.split('/').pop()} (the preview shows the template)`)));
   if (f.mesh && window.renderMesh) box.append(window.renderMesh(a, f));
   if (f.audio && window.renderAudio) box.append(window.renderAudio(a, f));
   const grid = el('div', { class: 'grid' });
@@ -161,13 +166,14 @@ function renderFile(a, f) {
   return box;
 }
 function texCard(a, f, tx) {
-  const src = `/api/tex?rel=${encodeURIComponent(f.rel)}&i=${tx.index}&side=384&s=${STATE.stamp}`;
+  const prel = f.from_template ? f.template : f.rel;           // нет файла — превью образца, импорт создаст файл
+  const src = `/api/tex?rel=${encodeURIComponent(prel)}&i=${tx.index}&side=384&s=${STATE.stamp}`;
   const img = el('img', { loading: 'lazy', src: tx.ok ? src : '', alt: '' });
   const card = el('div', { class: 'card' },
     el('div', { class: 'thumb check', title: T('Открыть крупно', 'Open large'), onclick: () => tx.ok && openViewer(a, f, tx) }, tx.ok ? img : el('span', { class: 'na' }, t('not_supported'))),
     el('div', { class: 'cap' }, el('b', {}, tx.label || tx.name), el('span', {}, `${tx.w}×${tx.h} ${tx.fmt}${tx.levels > 1 ? ' · ' + tx.levels + ' ' + T('уровней', 'mips') : ''}`)),
     el('div', { class: 'cbtn' },
-      el('button', { disabled: !tx.ok, onclick: () => doExportOne(a, f, tx) }, t('export_png')),
+      el('button', { disabled: !tx.ok || f.from_template, onclick: () => doExportOne(a, f, tx) }, t('export_png')),
       el('button', { class: 'w', disabled: !tx.ok, onclick: () => doImportOne(a, f, tx) }, t('import_img'))));
   card.addEventListener('dragover', e => { e.preventDefault(); card.classList.add('drop'); });
   card.addEventListener('dragleave', () => card.classList.remove('drop'));
@@ -176,7 +182,7 @@ function texCard(a, f, tx) {
     const file = e.dataTransfer.files[0];
     if (!file || !tx.ok) return;
     const b64 = await new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result.split(',')[1]); r.readAsDataURL(file); });
-    const j = await busy(t('working'), () => api('/api/import', { rel: f.rel, i: tx.index, data: b64 }));
+    const j = await busy(t('working'), () => api('/api/import', { rel: f.rel, i: tx.index, data: b64, template: f.from_template ? f.template : null }));
     if (j && !j.cancelled) done(j, a);
   });
   card.title = t('drop_hint');
@@ -190,7 +196,7 @@ function done(j, a) {
   if (j.unknown && j.unknown.length) extra.push(`${t('unknown')}: ${j.unknown.join(', ')}`);
   toast(`${t('saved')}: ${j.written.map(r => r.split('/').pop()).join(', ')}${notes}${extra.length ? ' · ' + extra.join(' · ') : ''}`);
   refreshInfo();
-  if (a) openNode(a.id);
+  if (a && a.id) openNode(a.id);
 }
 async function doExportAll(a) {
   const j = await busy(t('working'), () => api('/api/export', { id: a.id }));
@@ -201,7 +207,7 @@ async function doExportOne(a, f, tx) {
   if (j && !j.cancelled) toast(`${t('exported')}: ${j.written[0]}`, 'ok', el('button', { class: 'link', onclick: () => api('/api/open_folder', { path: j.folder }) }, t('open_folder')));
 }
 async function doImportOne(a, f, tx) {
-  const j = await busy(t('working'), () => api('/api/import', { rel: f.rel, i: tx.index }));
+  const j = await busy(t('working'), () => api('/api/import', { rel: f.rel, i: tx.index, template: f.from_template ? f.template : null }));
   if (j) done(j, a);
 }
 async function doImportFolder(a) {
@@ -323,6 +329,41 @@ async function meshAct(kind, f) {
   if (!j || j.cancelled) return;
   if (kind === 'export') toast(`${t('exported')}: ${j.written.join(', ')}`, 'ok', el('button', { class: 'link', onclick: () => api('/api/open_folder', { path: j.folder }) }, t('open_folder')));
   else done(j, { id: STATE.current });
+}
+async function showMusic() {
+  const v = $('#view');
+  v.innerHTML = '';
+  v.append(el('div', { class: 'loading' }, t('working')));
+  let j;
+  try { j = await api('/api/x/audio/tracks'); } catch (e) { v.innerHTML = ''; toast(e.message, 'err'); return; }
+  v.innerHTML = '';
+  const player = el('audio', { controls: true, preload: 'none' });
+  v.append(el('div', { class: 'ahead' }, el('h2', {}, T('Музыка: песни EA Trax и звуки банка', 'Music: EA Trax songs and bank sounds')),
+    el('div', { class: 'note' }, T('Выгрузка — MP3 без потерь. Замена: MP3 44,1 кГц стерео кладётся как есть, другие файлы перекодируются через ffmpeg',
+      'Export is lossless MP3. Replace: an MP3 44.1 kHz stereo is stored as is, other files are re-encoded with ffmpeg')
+      + (j.ffmpeg ? T(' (ffmpeg найден).', ' (ffmpeg found).') : T(' — ffmpeg не найден: положите ffmpeg.exe рядом с редактором.', ' — ffmpeg not found: put ffmpeg.exe next to the editor.'))),
+    el('div', { class: 'toolbar' }, player, j.in_my ? el('button', { class: 'w danger', onclick: async () => {
+      if (!confirm(t('confirm_revert_all'))) return;
+      const r = await busy(t('working'), () => api('/api/x/audio/revert', {})); if (r) { toast(t('reverted')); showMusic(); } } }, t('revert_all')) : null)));
+  const tb = el('table', { class: 'list' }, el('tr', {}, ...['', T('Слот', 'Slot'), T('Исполнитель', 'Artist'), T('Название / категория', 'Title / category'), T('Длина', 'Length'), ''].map(h => el('th', {}, h))));
+  const rows = j.tracks.slice().sort((a, b) => ((a.slot ?? 999) - (b.slot ?? 999)) || a.sid - b.sid);
+  for (const tr of rows) {
+    const art = el('input', { type: 'text', value: tr.artist, style: 'width:180px' }), tit = el('input', { type: 'text', value: tr.title, style: 'width:220px' });
+    const named = tr.slot !== null && tr.slot !== undefined;
+    tb.append(el('tr', {},
+      el('td', {}, el('button', { class: 'ghost', title: T('Слушать', 'Play'), onclick: () => { player.src = '/api/x/audio/mp3?sid=' + tr.sid; player.play(); } }, '▶')),
+      el('td', {}, named ? 'trax' + tr.slot : 'id ' + tr.sid),
+      el('td', {}, named ? art : el('span', { class: 'muted' }, '')),
+      el('td', {}, named ? tit : el('span', { class: 'muted' }, tr.cat)),
+      el('td', {}, `${Math.floor(tr.sec / 60)}:${String(Math.round(tr.sec % 60)).padStart(2, '0')}`),
+      el('td', {}, el('button', { class: 'ghost', onclick: async () => {
+        const r = await busy(t('working'), () => api('/api/x/audio/export', { sid: tr.sid }));
+        if (r && !r.cancelled) toast(`${t('exported')}: ${r.written[0]}`, 'ok', el('button', { class: 'link', onclick: () => api('/api/open_folder', { path: r.folder }) }, t('open_folder'))); } }, T('Выгрузить MP3', 'Export MP3')),
+        el('button', { class: 'w', onclick: async () => {
+          const r = await busy(T('Пишу банк музыки…', 'Writing the music bank…'), () => api('/api/x/audio/replace', { sid: tr.sid, artist: named ? art.value : null, title: named ? tit.value : null }));
+          if (r && !r.cancelled) { done(r, null); showMusic(); } } }, T('Заменить…', 'Replace…')))));
+  }
+  v.append(tb);
 }
 async function refreshInfo() {
   try { STATE.info = await api('/api/info'); setGame(STATE.info.running); } catch (e) { /* */ }

@@ -145,7 +145,14 @@ class Editor:
         a = self.cat.asset(aid, self.lang)
         if a is None:
             raise EditorError('no_asset', f'Нет ассета {aid}', f'No asset {aid}')
-        a['files'] = [dict(f, **self.file_info(f['rel'])) for f in a['files']]
+        files = []
+        for f in a['files']:
+            info = self.file_info(f['rel'])
+            if not info['exists'] and f.get('template') and self.fs.exists(f['template']):
+                tpl = self.file_info(f['template'])
+                info.update(textures=tpl['textures'], kind=tpl['kind'], from_template=True)
+            files.append(dict(f, **info))
+        a['files'] = files
         return a
 
     def tex_png(self, rel, i, side=None, below=False):
@@ -244,7 +251,7 @@ class Editor:
         im.load()
         return im.convert('RGBA')
 
-    def apply(self, changes, label):
+    def apply(self, changes, label, templates=None):
         """changes — [(rel, номер растра, картинка)] → новые файлы в content\\my. → отчёт."""
         gamefs.check_game_closed()
         by_file = {}
@@ -255,6 +262,8 @@ class Editor:
         with self.lock:
             for rel, items in by_file.items():
                 data = self.fs.read(rel)
+                if data is None and (templates or {}).get(rel):       # нового фото ещё нет — по образцу
+                    data = self.fs.read(templates[rel])
                 if data is None:
                     raise EditorError('no_file', f'Нет файла {rel}', f'No file {rel}')
                 c = tex.load(data, rel)
@@ -274,7 +283,7 @@ class Editor:
         self.log(f'{label}: {", ".join(done)}' + (f' ({"; ".join(notes)})' if notes else ''))
         return dict(written=done, notes=notes, my=[self.fs.my_path(r) for r in done])
 
-    def import_one(self, rel, i, data=None):
+    def import_one(self, rel, i, data=None, template=None):
         if data is None:
             start = self.settings.get('import_dir') or self.settings.get('export_dir')
             p = winui.pick_file(self.t('Картинка для импорта', 'Image to import'), start,
@@ -285,7 +294,7 @@ class Editor:
             self.settings['import_dir'] = os.path.dirname(p)
             self.save_settings()
             data = open(p, 'rb').read()
-        return self.apply([(rel, i, self._load_image(data))], 'импорт картинки')
+        return self.apply([(rel, i, self._load_image(data))], 'импорт картинки', {rel: template} if template else None)
 
     def import_folder(self, aid):
         start = self.settings.get('import_dir') or self.settings.get('export_dir')
@@ -468,7 +477,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, ed.export_asset(a['id'], only) or dict(cancelled=True))
             if p == '/api/import':
                 data = base64.b64decode(a['data']) if a.get('data') else None
-                return self._send(200, ed.import_one(a['rel'], a.get('i', 0), data) or dict(cancelled=True))
+                return self._send(200, ed.import_one(a['rel'], a.get('i', 0), data, a.get('template')) or
+                                  dict(cancelled=True))
             if p == '/api/import_folder':
                 return self._send(200, ed.import_folder(a['id']) or dict(cancelled=True))
             if p == '/api/export_raw':

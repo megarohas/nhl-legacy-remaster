@@ -69,6 +69,66 @@ RASTER_LABELS = [
 ]
 
 
+# Разделы из папок игры: ключ, подписи, папки (content и архивы вместе), отбор имён (regex) — docs/editor.md.
+GROUPS = {
+    'equipment': [
+        ('sticks', 'Клюшки', 'Sticks', ['rendering/playerstick', 'rendering/goaliestick',
+                                        'fe/ion/artassets/createplayer/sticks'], None),
+        ('skates', 'Коньки', 'Skates', ['rendering/skate', 'fe/ion/artassets/createplayer/skates'], None),
+        ('masks', 'Маски вратарей', 'Goalie masks', ['rendering/goaliehelmet', 'fe/ion/artassets/createplayer/mask'],
+         None),
+        ('helmets', 'Шлемы', 'Helmets', ['rendering/helmet'], None),
+        ('gloves', 'Краги', 'Gloves', ['rendering/glove'], None),
+        ('goalie', 'Вратарская экипировка', 'Goalie gear', ['rendering/goaliepad', 'rendering/blocker',
+                                                           'rendering/trapper'], None),
+        ('pucks', 'Шайбы', 'Pucks', ['rendering/puck'], None),
+        ('catalog', 'Каталог экипировки в меню', 'Equipment catalog (menus)', ['fe/ion/artassets/createplayer'], None),
+    ],
+    'arenas': [
+        ('ice', 'Лёд и центр льда', 'Ice and center ice', ['rendering/icesurface', 'rendering/ice'], None),
+        ('banners', 'Баннеры', 'Banners', ['rendering/banner'], None),
+        ('jumbotron', 'Куб над льдом', 'Jumbotron', ['rendering/jumbotron'], None),
+        ('spotlight', 'Прожекторы', 'Spotlights', ['rendering/spotlight'], None),
+        ('stadium', 'Модели арен', 'Arena models', ['rendering/stadium'], None),
+        ('crowd', 'Зрители', 'Crowd', ['rendering/crowd'], None),
+        ('enviro', 'Окружение и отражения', 'Environment', ['rendering/enviro'], None),
+        ('boards', 'Борта, сетка, реквизит', 'Boards, nets, props', ['rendering/adboard', 'rendering/board',
+                                                                    'rendering/net', 'rendering/prop'], None),
+    ],
+    'menus': [
+        ('backgrounds', 'Фоны главного меню', 'Main menu backgrounds', ['fe/ion/artassets/backgrounds'], None),
+        ('artassets', 'Картинки меню', 'Menu images', ['fe/ion/artassets/leaguelogos', 'fe/ion/artassets/leaguelogosbig',
+                                                     'fe/ion/artassets/divisionlogos', 'fe/ion/artassets/trophies',
+                                                     'fe/ion/artassets/awards', 'fe/ion/artassets/flagswide',
+                                                     'fe/ion/artassets/flagssmall', 'fe/ion/artassets/pressstart',
+                                                     'fe/ion/artassets/playerbackgrounds',
+                                                     'fe/ion/artassets/mainmenuwallimages', 'fe/ion/artassets/seasons',
+                                                     'fe/ion/artassets/strategies', 'fe/ion/artassets/teamnumbers',
+                                                     'fe/ion/artassets/teamnumbersflat'], None),
+        ('screens', 'Экраны меню (ролики Apt)', 'Menu screens (Apt movies)', ['fe/ion/game'], r'\.big$'),
+        ('fonts', 'Шрифты', 'Fonts', ['fe/ion/fonts'], None),
+        ('loc', 'Тексты (локализация)', 'Texts (localization)', ['fe/loc'], None),
+    ],
+    'music': [
+        ('covers', 'Обложки EA Trax', 'EA Trax covers', ['fe/ion/artassets/eatrax', 'fe/ion/artassets/eatrax_thumbs'],
+         None),
+        ('bank', 'Файлы банка', 'Bank files', ['audio/music'], None),
+    ],
+    'models': [
+        ('jersey', 'Свитеры', 'Jerseys', ['rendering/jersey'], r'/(jersey|jerseytie|shirt)_[\d_]+\.rx2$'),
+        ('pant', 'Шорты', 'Pants', ['rendering/pant'], r'/pant_[\d_]+\.rx2$'),
+        ('sock', 'Гетры', 'Socks', ['rendering/sock'], r'/playersock_\d+_\d+\.rx2$'),
+        ('skate', 'Коньки', 'Skates', ['rendering/skate'], r'/(playerskate|skatelace|skatetongue)_[\d_]+\.rx2$'),
+        ('stick', 'Клюшки', 'Sticks', ['rendering/playerstick', 'rendering/goaliestick'], r'stick(tape)?_[\d_]+\.rx2$'),
+        ('head', 'Головы', 'Heads', ['rendering/player'], r'/player_\d+\.rx2$'),
+        ('helmet', 'Шлемы и маски', 'Helmets and masks', ['rendering/helmet', 'rendering/goaliehelmet'],
+         r'/(helmet|cage)_[\d_]+\.rx2$'),
+        ('glove', 'Краги', 'Gloves', ['rendering/glove'], r'/glove_[\d_]+\.rx2$'),
+        ('prop', 'Реквизит', 'Props', ['rendering/prop'], r'\.rx2$'),
+    ],
+}
+
+
 def raster_label(name, lang='ru'):
     base = name.split('.')[0]
     for rx, ru, en in RASTER_LABELS:
@@ -133,7 +193,67 @@ class Catalog:
                          en=f'{p["last"]} {p["first"]} · {p["pos"]} #{p["jersey"]}', leaf=True) for p in pl]
         if sec == 'files':
             return self.files_children(node[len('files'):].lstrip(':'))
+        if sec == 'arenas' and len(parts) == 1:
+            out = [dict(id='arenas:list', ru='Арены клубов', en='Club arenas', leaf=False, count=len(db.arenas))]
+            return out + self.groups_of('arenas')
+        if node == 'arenas:list':
+            homes = {}
+            for t in db.teams.values():
+                if t['active'] and t['table'] != 1:
+                    homes.setdefault(t['arena'], []).append(t['abbr'])
+            return [dict(id=f'arena:{a["index"]}', ru=f'{a["name"]} · {a["city"]}' + (
+                f' ({", ".join(homes[a["index"]][:3])})' if a['index'] in homes else ''),
+                en=f'{a["name"]} · {a["city"]}', leaf=True) for a in sorted(db.arenas.values(), key=lambda a: a['name'])
+                if a['name']]
+        if sec in GROUPS and len(parts) == 1:
+            if sec == 'music':
+                return [dict(id='music:tracks', ru='Песни и звуки банка', en='Songs and bank sounds', leaf=True)] + self.groups_of(sec)
+            return self.groups_of(sec)
+        if sec in GROUPS and len(parts) >= 2 and parts[1].startswith('G'):
+            return self.group_children(sec, parts[1][1:], parts[2] if len(parts) > 2 else None, lang)
         return []
+
+    # ------------------------------------------------------------ группы файлов (экипировка, арены, меню, модели)
+    def groups_of(self, sec):
+        return [dict(id=f'{sec}:G{key}', ru=ru, en=en, leaf=False) for key, ru, en, _f, _rx in GROUPS[sec]]
+
+    def group_children(self, sec, key, sub, lang):
+        g = next((x for x in GROUPS[sec] if x[0] == key), None)
+        if g is None:
+            return []
+        _, ru, en, folders, rx = g
+        if len(folders) > 1 and sub is None:
+            return [dict(id=f'{sec}:G{key}:{i}', ru=f, en=f, leaf=False) for i, f in enumerate(folders)]
+        folder = folders[int(sub) if sub is not None else 0]
+        files = self.fs.list_dir(folder, rx)
+        masks = self.mask_owners() if key == 'masks' else {}
+        out = []
+        for rel in files:
+            name = rel[len(folder):].lstrip('/')
+            label = name
+            m = re.match(r'goaliehelmet_(\d+)_(\d+)_cm\.rx2$', name)
+            if m and masks.get(int(m.group(2))):
+                label += ' — ' + ', '.join(masks[int(m.group(2))][:4])
+            out.append(dict(id=f'file:{rel}', ru=label, en=label, leaf=True))
+        return out
+
+    def mask_owners(self):
+        """Номер маски вратаря → клубы, у которых он стоит (exhibitionteams.goaliemaskN_starter/backup)."""
+        out = {}
+        src = self.db.src
+        T = 'exhibitionteams'
+        if T not in src.by_name:
+            return out
+        fields = [f for f in src.by_name[T]['fields'] if f.startswith('goaliemask')]
+        for r in src.live_rows(T):
+            abbr = src.get_string(T, 'abbrname', r)
+            if not abbr or src.get(T, 'table', r) == 1:
+                continue
+            for f in fields:
+                v = src.value(T, f, r)
+                if v > 0 and abbr not in out.setdefault(v, []):
+                    out[v].append(abbr)
+        return out
 
     def files_children(self, folder):
         """«Все файлы игры»: папки и файлы под folder (content и архивы EA вместе)."""
@@ -207,13 +327,19 @@ class Catalog:
             n = p.get('artid', 0)
             folder = 'p0_4000' if n <= 4000 else 'p4001_8000' if n <= 8000 else 'p8001_12000' if n <= 12000 else \
                 'silhouettes'
-            files = [dict(rel=f'fe/ion/artassets/playerheads/{folder}/p{n}.big', ru='Портрет', en='Portrait'),
+            # нет файла — создаётся по образцу p1 (как tools/playerhead.py compose, default_template)
+            files = [dict(rel=f'fe/ion/artassets/playerheads/{folder}/p{n}.big', ru='Портрет', en='Portrait',
+                          template='fe/ion/artassets/playerheads/p0_4000/p1.big'),
                      dict(rel=f'fe/ion/artassets/playerheadssmall/{folder}/p{n}.big', ru='Малый портрет',
-                          en='Small portrait')]
-            note = None if p.get('portrait') else ('У игрока в базе hasportrait = 0 — в игре силуэт' if lang == 'ru'
-                                                   else 'hasportrait = 0 in the roster — the game shows a silhouette')
+                          en='Small portrait', template='fe/ion/artassets/playerheadssmall/p0_4000/p1.big')]
+            note = None if p.get('portrait') else (
+                'У игрока в ростере hasportrait = 0 — игра покажет силуэт. Кнопка «Включить фото в ростере» ставит 1 '
+                '(запишется с правками составов)' if lang == 'ru' else
+                'hasportrait = 0 in the roster — the game shows a silhouette. «Enable photo in roster» sets 1 '
+                '(written with the roster edits)')
             return dict(id=aid, title=f'{db.player_name(int(rest))} — фото (art {n})', files=files, note=note,
-                        export_name=f'{p.get("last", rest)} {p.get("first", "")} photo')
+                        export_name=f'{p.get("last", rest)} {p.get("first", "")} photo',
+                        player=int(rest), hasportrait=bool(p.get('portrait')))
         if kind == 'head':
             p = db.players.get(int(rest)) or {}
             h = p.get('headid', 0)
@@ -223,6 +349,18 @@ class Catalog:
                     'Generic head: other players use it too') if 60000 <= h <= 60210 else None
             return dict(id=aid, title=f'{db.player_name(int(rest))} — голова {h}', files=files, note=note,
                         export_name=f'head {h}')
+        if kind == 'arena':
+            ar = db.arenas.get(int(rest)) or {}
+            n = ar.get('art', rest)
+            files = [dict(rel=f'rendering/stadium/stadium_{n}_container_0.rx2', ru='Чаша арены', en='Arena bowl'),
+                     dict(rel=f'rendering/jumbotron/texlib_{n}.rx2', ru='Куб над льдом', en='Jumbotron'),
+                     dict(rel=f'rendering/enviro/helmet_{n}.rx2', ru='Отражения', en='Reflections')]
+            for t in db.teams.values():
+                if t['arena'] == int(rest) and t['active'] and t['table'] != 1:
+                    files.append(dict(rel=f'rendering/icesurface/centerlogo_{t["artid"]}_cm.rx2',
+                                      ru=f'Центр льда: {t["name"]}', en=f'Center ice: {t["name"]}'))
+            return dict(id=aid, title=f'{ar.get("name", rest)} — {ar.get("city", "")} (модель {n})', files=files,
+                        export_name=f'arena {n}')
         if kind == 'file':
             return dict(id=aid, title=rest, files=[dict(rel=rest, ru='Файл', en='File')],
                         export_name=rest.split('/')[-1].rsplit('.', 1)[0])
