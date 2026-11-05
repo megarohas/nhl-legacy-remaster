@@ -2,6 +2,7 @@
 'use strict';
 const Rosters = (() => {
   let root = null, team = null, gid = null, data = null, card = null, edits = {};
+  let LAST_PLAYERS = [];
   const L = (ru, en) => T(ru, en);
   async function open(v) {
     root = v; v.innerHTML = '';
@@ -16,21 +17,24 @@ const Rosters = (() => {
     root.innerHTML = '';
     const head = el('div', { class: 'ahead' },
       el('h2', {}, L('Составы', 'Rosters')),
-      el('div', { class: 'muted' }, L('Игра грузит новейший ростер поверх базы. Правки копятся здесь и пишутся новым ростером — прежние остаются.',
-        'The game loads the newest roster over the database. Edits pile up here and are written as a new roster — older ones stay.')));
+      data.is_db
+        ? el('div', { class: 'note' }, L('Правите БАЗУ игры (content\\…\\db\\nhlng.db): её берут новая франшиза, новый профиль и SET DEFAULT ROSTERS. Сохранённые ростеры — то, что игра грузит при запуске, — не меняются: чтобы правка была в игре сразу, правьте ростер. Запись — в content\\my\\db (прежняя — копией в cache\\editor\\backup), затем новейший ростер сверяется с новой базой.',
+          'You are editing the game DATABASE (content\\…\\db\\nhlng.db): new franchises, new profiles and SET DEFAULT ROSTERS take it. Saved rosters — what the game loads on start — do not change: edit the roster to see the edit right away. Written to content\\my\\db (the previous one is copied to cache\\editor\\backup), then the newest roster is checked against the new database.'))
+        : el('div', { class: 'muted' }, L('Правите РОСТЕР — его игра грузит при запуске поверх базы. Правки копятся здесь и пишутся новым ростером — прежние остаются. Основа для новых франшиз и профилей — база (последний пункт списка).',
+          'You are editing a ROSTER — the game loads it on start over the database. Edits pile up here and are written as a new roster — older ones stay. The base for new franchises and profiles is the database (last item in the list).')));
     const sel = el('select', { id: 'rsel' });
-    const bar = el('div', { class: 'toolbar' }, el('span', { class: 'muted' }, L('Ростер:', 'Roster:')), sel,
-      el('button', { class: 'ghost', onclick: () => doExport() }, L('Выгрузить файл ростера', 'Export roster file')),
+    const bar = el('div', { class: 'toolbar' }, el('span', { class: 'muted' }, L('Что правим:', 'Editing:')), sel,
+      el('button', { class: 'ghost', onclick: () => doExport() }, data.is_db ? L('Выгрузить базу', 'Export database') : L('Выгрузить файл ростера', 'Export roster file')),
       el('button', { class: 'ghost w', onclick: () => doImport() }, L('Загрузить файл ростера…', 'Add roster file…')),
       el('span', { style: 'flex:1' }),
-      el('button', { class: 'w', id: 'rsave', disabled: !data.dirty, onclick: () => doSave() }, L('Сохранить новым ростером', 'Save as new roster')),
+      el('button', { class: 'w', id: 'rsave', disabled: !data.dirty, onclick: () => doSave() }, data.is_db ? L('Сохранить базу', 'Save database') : L('Сохранить новым ростером', 'Save as new roster')),
       el('button', { class: 'ghost', id: 'rdiscard', disabled: !data.dirty, onclick: () => doDiscard() }, L('Отменить правки', 'Discard edits')));
     head.append(bar);
     const ch = el('div', { id: 'rchanges', class: 'muted' }, changesText(data.changes));
     head.append(ch);
     root.append(head);
     listRosters().then(j => {
-      for (const r of j.rosters) sel.append(el('option', { value: r.name, selected: r.name === data.roster }, `${r.display || r.name}  ·  ${r.name.slice(7)}`));
+      for (const r of j.rosters) sel.append(el('option', { value: r.name, selected: r.name === data.roster }, r.name === '@db' ? r.display : `${L('Ростер', 'Roster')} ${r.display || r.name}  ·  ${r.name.slice(7)}`));
     });
     sel.addEventListener('change', async () => {
       if (data.dirty && !confirm(L('Несохранённые правки пропадут. Открыть другой ростер?', 'Unsaved edits will be lost. Open another roster?'))) { sel.value = data.roster; return; }
@@ -46,7 +50,17 @@ const Rosters = (() => {
     tsel.append(el('optgroup', { label: L('Без клуба', 'No club') }, el('option', { value: 'FA', selected: team === 'FA' }, L('Свободные агенты', 'Free agents'))));
     const cols = el('div', { class: 'rcols' },
       el('div', { class: 'rleft' }, el('div', { class: 'toolbar' }, tsel,
-        el('button', { class: 'w', onclick: () => newPlayer() }, L('Новый игрок', 'New player'))), el('div', { id: 'plist' })),
+        el('button', { class: 'w', onclick: () => newPlayer() }, L('Новый игрок', 'New player')),
+        el('button', { class: 'w ghost', title: L('4 тройки, 3 пары, спецбригады и 2 вратаря заново по рейтингу', '4 lines, 3 pairs, special teams and 2 goalies rebuilt by rating'), onclick: async () => {
+          if (team === 'FA') return;
+          const j = await busy(t('working'), () => api('/api/x/rosters/lines', { team }));
+          if (j) { toast(L('Звенья собраны по рейтингу', 'Lines rebuilt by rating')); refreshHead(); loadPlayers(); } } }, L('Звенья по рейтингу', 'Lines by rating')),
+        el('button', { class: 'w ghost', title: L('Свой клуб на свободном слоте Custom Team (как CREATE TEAM в игре)', 'Your own club on a free Custom Team slot (like CREATE TEAM in the game)'), onclick: async () => {
+          const name = prompt(L('Название клуба (латиницей)', 'Club name'), ''); if (!name) return;
+          const abbr = prompt(L('Сокращение, до 4 букв', 'Abbreviation, up to 4 letters'), name.slice(0, 3).toUpperCase()); if (!abbr) return;
+          const j = await busy(t('working'), () => api('/api/x/rosters/new_club', { name, abbr }));
+          if (j) { toast(L(`Клуб ${name} создан (слот ${j.team}). Переведите в него игроков (нужно 2 вратаря и 18 полевых) и нажмите «Звенья по рейтингу»`, `Club ${name} created (slot ${j.team}). Move players into it (2 goalies and 18 skaters) and press «Lines by rating»`)); team = String(j.team); open(root); } } }, L('Новый клуб…', 'New club…'))),
+        el('div', { id: 'plist' })),
       el('div', { class: 'rright', id: 'pcard' }, el('p', { class: 'muted' }, L('Выберите игрока', 'Pick a player'))));
     root.append(cols);
     tsel.addEventListener('change', () => { team = tsel.value; gid = null; loadPlayers(); });
@@ -68,6 +82,7 @@ const Rosters = (() => {
     const j = await api('/api/x/rosters/players?team=' + encodeURIComponent(team)).catch(e => { toast(e.message, 'err'); return { players: [] }; });
     const order = { C: 0, LW: 1, RW: 2, D: 3, G: 4 };
     j.players.sort((a, b) => (order[a.pos] - order[b.pos]) || (b.ovr - a.ovr));
+    LAST_PLAYERS = j.players;
     const tb = el('table', { class: 'list plist' }, el('tr', {}, ...['#', L('Игрок', 'Player'), L('Амп.', 'Pos'), 'OVR', L('Возр.', 'Age'), ''].map(h => el('th', {}, h))));
     for (const p of j.players) {
       const tr = el('tr', { class: p.gid === gid ? 'sel' : '', onclick: () => { gid = p.gid; box.querySelectorAll('tr.sel').forEach(x => x.classList.remove('sel')); tr.classList.add('sel'); loadCard(p.gid); } },
@@ -101,6 +116,12 @@ const Rosters = (() => {
       el('button', { class: 'w', id: 'apply', disabled: true, onclick: () => applyEdits() }, L('Применить', 'Apply')),
       el('span', { class: 'muted' }, L('Перевести в', 'Move to')), mv,
       el('button', { class: 'w ghost', onclick: () => mv.value && doMove(mv.value) }, L('Перевести', 'Move'))));
+    if (team !== 'FA' && LAST_PLAYERS.length) {
+      const sw = el('select', { id: 'swsel' }, el('option', { value: '' }, L('— игрок клуба —', '— teammate —')));
+      for (const q of LAST_PLAYERS) if (q.gid !== p.gid) sw.append(el('option', { value: q.gid }, `${q.pos} #${q.jersey} ${q.last}, ${q.first}${q.dressed ? ' · ' + L('в составе', 'dressed') : ''}`));
+      box.append(el('div', { class: 'toolbar' }, el('span', { class: 'muted' }, L('Поменять местами в звеньях с', 'Swap line spots with')), sw,
+        el('button', { class: 'w ghost', onclick: () => sw.value && doSwap(Number(sw.value)) }, L('Поменять', 'Swap'))));
+    }
     for (const s of card.sections) {
       const fs = el('div', { class: 'fgrid' });
       for (const f of s.fields) fs.append(fieldInput(f));
@@ -143,6 +164,12 @@ const Rosters = (() => {
     toast(L('Правка в памяти — запишется кнопкой «Сохранить новым ростером»', 'Edit kept in memory — «Save as new roster» writes it'));
     refreshHead(); loadPlayers();
   }
+  async function doSwap(other) {
+    const j = await busy(t('working'), () => api('/api/x/rosters/swap', { a: card.player.gid, b: other, team }));
+    if (!j) return;
+    toast(L('Поменяны местами в звеньях', 'Line spots swapped') + (j.notes.length ? ': ' + j.notes.join('; ') : ''));
+    refreshHead(); loadPlayers();
+  }
   async function doMove(dst) {
     const j = await busy(t('working'), () => api('/api/x/rosters/move', { gid: card.player.gid, src: team, dst }));
     if (!j) return;
@@ -169,8 +196,9 @@ const Rosters = (() => {
       } }, L('Создать', 'Create'))));
   }
   async function doSave() {
-    const j = await busy(L('Пишу ростер…', 'Writing roster…'), () => api('/api/x/rosters/save', {}));
+    const j = await busy(L('Пишу…', 'Writing…'), () => api('/api/x/rosters/save', {}));
     if (!j) return;
+    if (j.db) { toast(L(`База записана в ${j.display}; новейший ростер с ней сверен (лаунчер, код ${j.launcher ?? '—'})`, `Database saved to ${j.display}; the newest roster checked against it (launcher code ${j.launcher ?? '—'})`)); open(root); return; }
     toast(L(`Записан ${j.display} (${j.name}) — игра загрузит его при следующем запуске`, `Saved ${j.display} (${j.name}) — the game loads it on the next start`));
     open(root);
   }

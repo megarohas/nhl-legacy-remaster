@@ -106,8 +106,8 @@ BIO_MAIN = [
     ('year', 'Год рождения', 'Birth year', 'year'), ('month', 'Месяц рождения', 'Birth month', 'off', 1),
     ('day', 'День рождения', 'Birth day', 'off', 1),
     ('height', 'Рост, дюймов', 'Height, in', 'off', 54), ('weight', 'Вес, фунтов', 'Weight, lb', 'off', 120),
-    ('birthplace', 'Место рождения', 'Birthplace', 'str'), ('intlcountry', 'Страна (код)', 'Country (code)', 'int'),
-    ('state', 'Регион рождения (код)', 'Birth state (code)', 'int'),
+    ('birthplace', 'Место рождения', 'Birthplace', 'str'), ('intlcountry', 'Страна (сборная)', 'Country (national team)', 'int'),
+    ('state', 'Место рождения: страна или штат', 'Birth country or state', 'int'),
     ('rookie', 'Новичок', 'Rookie', 'bool'),
 ]
 BIO_LOOK = [
@@ -185,32 +185,59 @@ class Entry:
         return bool(self['rosterstatus'] or self['captain'] or any(self[f] for f in FLAGS))
 
 
+DB_REF = '@db'      # «ростер» с этим именем — база content\…\db\nhlng.db (основа новых ростеров и франшиз)
+
+
+class DbRef:
+    name = DB_REF
+    stamp = ''
+    header = ''
+
+    def __init__(self, path):
+        self.file = path
+
+
 class Session:
     def __init__(self, ed, ref=None):
         self.ed = ed
         ed.db.load()
         if not ed.db.meta_path:
             raise EditorError('no_db', 'Нет базы content\\database\\db\\nhlng.db', 'No database')
-        from tdb import SaveFile
+        from tdb import SaveFile, Tdb
         self.meta = ed.db.meta
-        saves = ed.fs.saves
-        refs = saves.list('ROSTER')
-        if not refs:
-            raise EditorError('no_roster', 'Ростеров нет: игра ещё не сохраняла составы (CUSTOMIZE → SAVE) и '
-                              '«Обновить ростеры» в лаунчере не делали',
-                              'No rosters yet: save rosters in the game or use «Update rosters» in the launcher')
-        self.ref = next((r for r in refs if r.name == ref), None) if ref else refs[-1]
-        if self.ref is None:
-            raise EditorError('no_roster', f'Нет ростера {ref}', f'No roster {ref}')
-        self.raw = open(self.ref.file, 'rb').read()
-        self.sf = SaveFile(self.raw, self.meta)
-        if self.sf.zlib is None:
-            raise EditorError('bad_roster', 'Это не сейв ROSTER NHL Legacy', 'Not an NHL Legacy ROSTER save')
-        bad = self.sf.verify()
-        if bad:
-            raise EditorError('bad_roster', 'Ростер повреждён: ' + '; '.join(bad[:3]), 'The roster is damaged: '
-                              + '; '.join(bad[:3]))
-        db = self.db = self.sf.db
+        self.is_db = ref == DB_REF
+        if self.is_db:
+            hit = ed.fs.find('db/nhlng.db')
+            if not hit or not hit[2]:
+                raise EditorError('no_db', 'Нет базы content\\…\\db\\nhlng.db', 'No database content\\…\\db\\nhlng.db')
+            self.ref = DbRef(hit[2])
+            self.raw = open(hit[2], 'rb').read()
+            self.sf = None
+            db = self.db = Tdb(self.raw, self.meta)
+            bad = db.verify()
+            if bad:
+                raise EditorError('bad_db', f'База повреждена: CRC @0x{bad[0][0]:X}', f'The database is damaged: CRC '
+                                  f'@0x{bad[0][0]:X}')
+        else:
+            saves = ed.fs.saves
+            refs = saves.list('ROSTER')
+            if not refs:
+                raise EditorError('no_roster', 'Ростеров нет: игра ещё не сохраняла составы (CUSTOMIZE → SAVE) и '
+                                  '«Обновить ростеры» в лаунчере не делали. Можно править базу',
+                                  'No rosters yet: save rosters in the game or use «Update rosters» in the launcher. '
+                                  'You can edit the database')
+            self.ref = next((r for r in refs if r.name == ref), None) if ref else refs[-1]
+            if self.ref is None:
+                raise EditorError('no_roster', f'Нет ростера {ref}', f'No roster {ref}')
+            self.raw = open(self.ref.file, 'rb').read()
+            self.sf = SaveFile(self.raw, self.meta)
+            if self.sf.zlib is None:
+                raise EditorError('bad_roster', 'Это не сейв ROSTER NHL Legacy', 'Not an NHL Legacy ROSTER save')
+            bad = self.sf.verify()
+            if bad:
+                raise EditorError('bad_roster', 'Ростер повреждён: ' + '; '.join(bad[:3]), 'The roster is damaged: '
+                                  + '; '.join(bad[:3]))
+            db = self.db = self.sf.db
         for t in (B, S, G, SE, GE, P, R, F):
             if t in db.by_name and db.counts(t)[2]:
                 raise EditorError('deleted', f'В ростере есть удалённые записи ({t}) — такой редактор не правит',
@@ -248,7 +275,9 @@ class Session:
 
     def club(self, team):
         t = self.teams.get(team)
-        return bool(t) and t['league'] not in SPECIAL_LEAGUES and team not in ALLSTAR and t['table'] != 1
+        if t and t['table'] == 1:                       # свой клуб (слот Custom Team, CREATE TEAM игры) — если включён
+            return bool(t['active'])
+        return bool(t) and t['league'] not in SPECIAL_LEAGUES and team not in ALLSTAR
 
     def gid_of(self, e):
         return self.link_gid.get(e['playerindex'])
@@ -314,7 +343,7 @@ class Session:
         import gamedb
         out = {}
         for t in self.teams.values():
-            if t['table'] == 1 or not t['name']:
+            if (t['table'] == 1 and not t['active']) or not t['name']:
                 continue
             code = 99 if t['index'] in ALLSTAR else t['league']
             out.setdefault(code, []).append(dict(index=t['index'], name=t['name'], abbr=t['abbr'], club=self.club(t['index']),
@@ -413,11 +442,41 @@ class Session:
                 if d:
                     allf.append(d)
         sec.append(dict(title=L('Все поля (как в базе)', 'All fields (as in the database)'), fields=allf, advanced=True))
+        self._named(sec, lang)
         info = self.row(gid, e) if e is not None else self.row(gid, fa=team == 'FA')
         info['team'] = team
         info['clubs'] = [dict(index=x['team'], name=self.teams.get(x['team'], {}).get('name', '?'))
                          for x in self.entries if self.gid_of(x) == gid]
         return dict(player=info, sections=sec)
+
+    def _named(self, sec, lang):
+        """Коды → названия: страна и регион (roster/codes.py), модели экипировки (каталоги редактора игры)."""
+        import gamecat
+        cat = getattr(self.ed, 'catalogs', None)
+        if cat is None:
+            cat = self.ed.catalogs = gamecat.Catalogs(self.ed)
+        equip = {f'{SE}.stick': 'stick', f'{SE}.gloves': 'gloves', f'{SE}.helmetbrand': 'helmetbrand',
+                 f'{SE}.skatebrand': 'skatebrand', f'{GE}.pads': 'goalie', f'{GE}.blocker': 'goalie',
+                 f'{GE}.trapper': 'goalie'}
+        pending = False
+        for s in sec:
+            for f in s['fields']:
+                k = f['key']
+                if k in (f'{B}.state', f'{B}.intlcountry'):
+                    opts = gamecat.country_options(lang, countries_only=k.endswith('intlcountry'))
+                    if f['value'] not in [o[0] for o in opts]:
+                        opts.insert(0, (f['value'], f'{f["value"]}'))
+                    f.update(kind='enum', options=[list(o) for o in opts])
+                elif k in equip:
+                    opts = cat.options(equip[k], f['value'], lang)
+                    if opts is None:
+                        pending = True
+                        continue
+                    f.update(kind='enum', options=[list(o) for o in opts])
+        if pending:
+            sec.insert(0, dict(title=self.ed.t('Названия экипировки готовятся (разбор каталога игры, ~30 с; '
+                                               'откройте карточку ещё раз)', 'Equipment names are being prepared '
+                                               '(reading the game catalog, ~30 s; reopen the card)'), fields=[]))
 
     def club_entry(self, gid, team):
         return next((e for e in self.entries if e['team'] == team and self.gid_of(e) == gid), None)
@@ -671,6 +730,73 @@ class Session:
         self.changes.append(f'{self.name(gid)}: {where(src)} → {where(dst)}')
         return notes
 
+    def swap(self, gid_a, gid_b, team):
+        """Поменять местами в звеньях двух игроков одного клуба: 71 место и «одет» (буквы — как были). Так запасной
+        встаёт в состав вместо одетого — как «поменять» в EDIT LINES игры."""
+        team = int(team)
+        a, b = self.club_entry(int(gid_a), team), self.club_entry(int(gid_b), team)
+        if a is None or b is None or a is b:
+            raise EditorError('swap', 'Оба игрока должны быть в этом клубе', 'Both players must be on this team')
+        ka, kb = self._kind(int(gid_a)), self._kind(int(gid_b))
+        if (ka == 'G') != (kb == 'G'):
+            raise EditorError('swap', 'Вратаря можно поменять только с вратарём', 'A goalie swaps only with a goalie')
+        for f in FLAGS + ['rosterstatus']:
+            a[f], b[f] = b[f], a[f]
+        self.dirty = True
+        self.changes.append(self.ed.t(f'{self.teams[team]["abbr"]}: {self.name(int(gid_a))} ⇄ {self.name(int(gid_b))} '
+                                      'в звеньях', f'{self.teams[team]["abbr"]}: {self.name(int(gid_a))} ⇄ '
+                                      f'{self.name(int(gid_b))} in lines'))
+        note = [] if ka == kb else [self.ed.t('амплуа разные: защитник встал на место нападающего или наоборот',
+                                              'different positions: a defenceman takes a forward spot or vice versa')]
+        return note
+
+    def rebuild_lines(self, team):
+        """Звенья клуба заново по рейтингу (roster/lines.py build: 4 тройки, 3 пары, спецбригады, 2 вратаря, 20 одетых).
+        Буквы — как были."""
+        from roster import lines as lines_mod
+        team = int(team)
+        team_e = [x for x in self.entries if x['team'] == team and self.gid_of(x) in self.bio]
+        lp = [self._lines_player(x) for x in team_e]
+        try:
+            keys, dressed = lines_mod.build(lp)
+        except lines_mod.NotEnoughPlayers as err:
+            raise EditorError('lines', f'Мало игроков для звеньев ({err}): нужно 2 вратаря и 18 полевых',
+                              f'Not enough players for lines ({err}): 2 goalies and 18 skaters are needed')
+        by = {pl['key']: pl['_e'] for pl in lp}
+        for x in team_e:
+            for f in FLAGS:
+                x[f] = 0
+            x['rosterstatus'] = int(x['playerindex'] in dressed)
+        for slot, k in keys.items():
+            by[k][slot] = 1
+        self.dirty = True
+        self.changes.append(self.ed.t(f'{self.teams[team]["abbr"] or self.teams[team]["name"]}: звенья по рейтингу',
+                                      f'{self.teams[team]["abbr"] or self.teams[team]["name"]}: lines by rating'))
+        return []
+
+    def new_club(self, name, abbr, short=None, primary='#1e4f9c', secondary='#ffffff'):
+        """Свой клуб на свободном слоте Custom Team (exhibitionteams table = 1, лига 13 — как CREATE TEAM игры): имя,
+        сокращение, цвета, active = 1. Форма и логотип — конструктора игры (customteamjerseys, czlogo): нарисовать
+        их — CUSTOMIZE → Creation Zone → Edit Team в игре. → номер клуба."""
+        name, abbr = name.strip(), abbr.strip().upper()
+        if not name or not abbr:
+            raise EditorError('club', 'Нужны название и сокращение', 'Name and abbreviation are required')
+        slot = next((i for i, t in sorted(self.teams.items()) if t['table'] == 1 and not t['active']), None)
+        if slot is None:
+            raise EditorError('club_full', 'Свободных слотов своих клубов нет', 'No free custom club slots')
+        r = next(r for r in self.db.live_rows(T) if self.db.get(T, 'index', r) == slot)
+        for f, text in (('fullname', name), ('abbrname', abbr[:4]), ('shortname', short or name), ('artabbr', abbr[:4])):
+            self._set(T, f, r, text)
+        self.db.set(T, 'active', r, 1)
+        for f, c in (('primarycolor', primary), ('secondarycolor', secondary)):
+            c = c.lstrip('#')
+            for k, ch in enumerate('rgb'):
+                self.db.set(T, f'{f}_{ch}', r, int(c[2 * k:2 * k + 2], 16))
+        self.teams[slot].update(name=name, abbr=abbr[:4], active=1)
+        self.dirty = True
+        self.changes.append(self.ed.t(f'новый клуб {name} ({abbr}) на слоте {slot}', f'new club {name} ({abbr}) on slot {slot}'))
+        return slot
+
     # ------------------------------------------------------------ новый игрок
     def create(self, team, pos, first, last, ovr=70, lang='ru'):
         pos = int(pos)
@@ -776,7 +902,75 @@ class Session:
             return None, str(e)
         return p.returncode, (p.stdout or b'').decode('utf-8', 'replace').strip()
 
+    def build_db(self):
+        """База с правками: таблицы составов и свободных агентов — ровно по записям (max = current, как у наших баз,
+        Tdb.resize), CRC — Tdb.fix(). → bytes."""
+        from tdb import Tdb
+        db = self.db
+        for t, recs in ((R, [bytes(e.raw) for e in self.entries]), (F, None)):
+            if recs is None:
+                tpl = bytearray(db.record(F, 0)) if db.by_name[F]['rows'] else bytearray(db.by_name[F]['reclen'])
+                recs = [bytes(_rec_set(db, F, 'playerindex', tpl, link)) for link in self.fa]
+            cur = [bytes(db.record(t, r)) for r in range(db.by_name[t]['rows'])]
+            if cur == recs:
+                continue
+            db.resize(t, len(recs))
+            for i, raw in enumerate(recs):
+                db.put_record(t, i, raw)
+        db.fix()
+        out = bytes(db.d)
+        chk = Tdb(out, self.meta)
+        bad = [f'CRC @0x{o:X}' for o, *_ in chk.verify()]
+        cnt = {}
+        for e in self.entries:
+            cnt[e['team']] = cnt.get(e['team'], 0) + 1
+        bad += [f'клуб {t}: {n} записей' for t, n in cnt.items() if n > ROSTER_MAX]
+        if bad:
+            raise EditorError('check', 'Проверка базы не прошла, ничего не записано: ' + '; '.join(bad[:5]),
+                              'Database check failed, nothing written: ' + '; '.join(bad[:5]))
+        return out
+
+    def save_db(self):
+        """База → content\\my\\db\\nhlng.db (+ draft_roster.db из неё, legacy_data/draft_roster.py). Затем новейший
+        ROSTER сверяется с новой базой лаунчером: игра сравнивает места таблиц сейва с базой, и если правка базы
+        (новые записи) сломала бы сохранённые ростеры, она откатывается."""
+        gamefs.check_game_closed()
+        out = self.build_db()
+        from draft_roster import KEEP, extract
+        from tdb import Tdb
+        draft = extract(Tdb(out, self.meta), KEEP)
+        fs = self.ed.fs
+        rels = ('db/nhlng.db', 'db/draft_roster.db')
+        backup = fs.backup_dir()
+        had = {r: fs.in_my(r) for r in rels}
+        for rel, data in zip(rels, (out, draft)):
+            fs.write_my(rel, data, backup)
+        refs = fs.saves.list('ROSTER')
+        code, msg = (None, '')
+        if refs:
+            code, msg = self.launcher_check(refs[-1].file)
+        if code not in (None, 0):
+            for rel in rels:                              # откат: прежняя правка my или её отсутствие
+                p = fs.my_path(rel)
+                q = os.path.join(backup, 'content', 'my', *rel.split('/'))
+                if had[rel] and os.path.isfile(q):
+                    shutil.copy2(q, p)
+                elif not had[rel] and os.path.isfile(p):
+                    fs.revert(rel, backup)
+            raise EditorError('db_vs_roster', f'С этими правками база не подходит к ростеру {refs[-1].name} (лаунчер, '
+                              f'код {code}: {msg}) — игра назвала бы его damaged. База возвращена как была',
+                              f'With these edits the database does not fit roster {refs[-1].name} (launcher code '
+                              f'{code}: {msg}) — the game would call it damaged. The database was restored')
+        self.ed.log(f'база: {fs.my_path(rels[0])}: {"; ".join(self.changes[-20:])}; ростер {refs[-1].name if refs else "—"}'
+                    f' — лаунчер {code}')
+        self.dirty = False
+        self.ed.db.loaded = False                         # имена — заново
+        return dict(folder=os.path.dirname(fs.my_path(rels[0])), name='content\\my\\db\\nhlng.db',
+                    display='content\\my\\db\\nhlng.db', launcher=code, changes=self.changes, db=True)
+
     def save(self):
+        if self.is_db:
+            return self.save_db()
         gamefs.check_game_closed()
         out = self.build()
         stamp = datetime.date.today().strftime('%d.%m.%Y')
@@ -827,6 +1021,8 @@ def write_save(saves, data, display):
 
 def roster_display(ref):
     """Имя ростера в меню игры — из заголовка (смещение 8, UTF-16 BE)."""
+    if ref.name == DB_REF:
+        return 'nhlng.db'
     try:
         h = open(ref.header, 'rb').read()
         return h[8:0x108].decode('utf-16-be').split('\0')[0]
@@ -840,7 +1036,10 @@ def handle(ed, method, fn, q, a):
     if fn == 'list':
         refs = ed.fs.saves.list('ROSTER')
         cur = ed.rosters.ref.name if ed.rosters else None
-        return dict(rosters=[dict(name=r.name, display=roster_display(r), stamp=r.stamp) for r in reversed(refs)],
+        return dict(rosters=[dict(name=r.name, display=roster_display(r), stamp=r.stamp) for r in reversed(refs)]
+                    + [dict(name=DB_REF, display=ed.t('БАЗА игры (основа новых профилей и франшиз)',
+                                                      'Game DATABASE (base for new profiles and franchises)'),
+                            stamp='')],
                     current=cur, dirty=bool(ed.rosters and ed.rosters.dirty),
                     changes=ed.rosters.changes if ed.rosters else [])
     if fn == 'open':
@@ -853,7 +1052,7 @@ def handle(ed, method, fn, q, a):
         s = ed.rosters = Session(ed)
     if fn == 'teams':
         return dict(leagues=s.leagues(lang), roster=s.ref.name, display=roster_display(s.ref), dirty=s.dirty,
-                    changes=s.changes)
+                    changes=s.changes, is_db=s.is_db, file=s.ref.file)
     if fn == 'players':
         return dict(players=s.team_players(q['team']))
     if fn == 'card':
@@ -863,6 +1062,16 @@ def handle(ed, method, fn, q, a):
     if fn == 'move':
         notes = s.move(a['gid'], a['src'], a['dst'], lang)
         return dict(ok=True, notes=notes, changes=s.changes)
+    if fn == 'lines':
+        s.rebuild_lines(a['team'])
+        return dict(ok=True, changes=s.changes)
+    if fn == 'new_club':
+        slot = s.new_club(a.get('name', ''), a.get('abbr', ''), a.get('short'), a.get('primary') or '#1e4f9c',
+                          a.get('secondary') or '#ffffff')
+        return dict(ok=True, team=slot, changes=s.changes)
+    if fn == 'swap':
+        notes = s.swap(a['a'], a['b'], a['team'])
+        return dict(ok=True, notes=notes, changes=s.changes)
     if fn == 'create':
         gid, notes = s.create(a.get('team'), a.get('pos', 0), a.get('first', ''), a.get('last', ''), a.get('ovr', 70), lang)
         return dict(ok=True, gid=gid, notes=notes, changes=s.changes)
@@ -871,13 +1080,15 @@ def handle(ed, method, fn, q, a):
         return dict(ok=True)
     if fn == 'save':
         res = s.save()
-        ed.rosters = Session(ed)                      # открыть только что записанный (новейший)
+        ed.rosters = Session(ed, DB_REF if s.is_db else None)   # база — снова базу, ростер — записанный (новейший)
         return res
     if fn == 'export':
         ref = s.ref
         start = ed.settings.get('export_dir') or os.path.join(os.path.expanduser('~'), 'Desktop')
         disp = roster_display(ref) or 'ROSTER'
-        if not re.search(r'\d{2}\.\d{2}\.\d{4}', disp):
+        if s.is_db:
+            disp = 'nhlng.db'
+        elif not re.search(r'\d{2}\.\d{2}\.\d{4}', disp):
             disp = 'ROSTER ' + datetime.datetime.strptime(ref.stamp, '%Y%m%d%H%M%S').strftime('%d.%m.%Y') \
                 if ref.stamp else 'ROSTER'
         p = winui.save_file(ed.t('Выгрузить ростер', 'Export roster'), start, disp)

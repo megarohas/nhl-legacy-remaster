@@ -14,6 +14,7 @@ import io
 import json
 import mimetypes
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -259,6 +260,7 @@ class Editor:
             by_file.setdefault(rel, []).append((int(i), im))
         backup = None
         done, notes = [], []
+        jerseys = []                                     # (S, A, V, старый свитер, новый) — для превью в меню
         with self.lock:
             for rel, items in by_file.items():
                 data = self.fs.read(rel)
@@ -267,8 +269,12 @@ class Editor:
                 if data is None:
                     raise EditorError('no_file', f'Нет файла {rel}', f'No file {rel}')
                 c = tex.load(data, rel)
+                m = re.fullmatch(r'rendering/jersey/texlib_(\d+)_(\d+)_(\d+)\.rx2', rel.lower())
                 for i, im in items:
                     r = c.rasters[i]
+                    if m and re.fullmatch(r'jersey_.*_cm\.raster', r.name.lower()) and not r.name.lower().endswith(
+                            '_nm.raster'):
+                        jerseys.append((*(int(x) for x in m.groups()), tex.decode(c, r), im))
                     for n in tex.replace(c, r, im):
                         notes.append(f'{r.name}: {n}')
                 out = c.bytes()
@@ -279,9 +285,74 @@ class Editor:
                     backup = self.fs.backup_dir()
                 self.fs.write_my(rel, out, backup)
                 done.append(rel)
+            if jerseys and self.settings.get('auto_fe', True) and not any(
+                    r.lower().startswith('fe/ion/artassets/jerseys/') for r in by_file):
+                for s_, a_, v_, old, new in jerseys:
+                    done_fe, note = self._fe_update(s_, a_, v_, old, new, backup)
+                    done += done_fe
+                    notes += note
         self._conts.clear()
         self.log(f'{label}: {", ".join(done)}' + (f' ({"; ".join(notes)})' if notes else ''))
         return dict(written=done, notes=notes, my=[self.fs.my_path(r) for r in done])
+
+    def fe_rels(self, s_, a_, v_):
+        """Превью меню комплекта S_A_V: jersey_S_A_F.big по fevariant строк формы (нет строк — F = V)."""
+        self.db.load()
+        fs_ = sorted({k['f'] for ks in self.db.kits.values() for k in ks if (k['s'], k['a'], k['v']) == (s_, a_, v_)})
+        return [f'fe/ion/artassets/jerseys/jersey_{s_}_{a_}_{f}.big' for f in (fs_ or [v_])]
+
+    def _fe_update(self, s_, a_, v_, old, new, backup=None):
+        """Превью меню после правки свитера (fepreview.transfer). → ([записанные], [заметки])."""
+        import fepreview
+        mp = fepreview.model_path(self.fs)
+        if not mp:
+            return [], [self.t('превью в меню не пересобрано: нет модели позы (content\\uniforms\\editor\\fepose.bin) — '
+                               'замените превью вручную', 'menu preview not rebuilt: no pose model '
+                               '(content\\uniforms\\editor\\fepose.bin) — replace the preview by hand')]
+        model = fepreview.load(mp)
+        out, notes = [], []
+        for rel in self.fe_rels(s_, a_, v_):
+            data = self.fs.read(rel)
+            if data is None:
+                continue
+            c = tex.load(data, rel)
+            r = c.rasters[0]
+            prev = tex.decode(c, r)
+            newp, n = fepreview.transfer(prev, old, new, model)
+            if not n:
+                continue
+            tex.replace(c, r, newp)
+            self.fs.write_my(rel, c.bytes(), backup)
+            out.append(rel)
+            notes.append(self.t(f'превью в меню {rel.split("/")[-1]} пересобрано ({n} точек)',
+                                f'menu preview {rel.split("/")[-1]} rebuilt ({n} pixels)'))
+        return out, notes
+
+    def fe_rebuild(self, aid):
+        """Кнопка «Пересобрать превью по свитеру»: разница свитера против оригинала (без content\\my) → превью."""
+        kind, _, rest = aid.partition(':')
+        if kind != 'kit':
+            raise EditorError('not_kit', 'Это не форма', 'Not a kit')
+        s_, a_, v_, _f = (int(x) for x in rest.split(':')[1].split('_'))
+        rel = f'rendering/jersey/texlib_{s_}_{a_}_{v_}.rx2'
+        cur, base = self.container(rel), self.container(rel, below_my=True)
+        if cur is None or base is None:
+            raise EditorError('no_file', f'Нет файла {rel}', f'No file {rel}')
+        ri = next(i for i, r in enumerate(cur.rasters) if re.fullmatch(r'jersey_.*_cm\.raster', r.name.lower()))
+        new, old = tex.decode(cur, cur.rasters[ri]), tex.decode(base, base.rasters[ri])
+        gamefs.check_game_closed()
+        fe = self.fe_rels(s_, a_, v_)
+        with self.lock:
+            backup = self.fs.backup_dir()
+            for r in fe:                                    # от превью «как было», а не от прошлой пересборки
+                if self.fs.in_my(r):
+                    self.fs.revert(r, backup)
+            self._conts.clear()
+            done, notes = self._fe_update(s_, a_, v_, old, new, backup)
+        self._conts.clear()
+        self.log(f'превью меню: {", ".join(done) or "без изменений"}')
+        return dict(written=done, notes=notes or [self.t('свитер как в оригинале — превью оригинальное',
+                                                         'the jersey is as original — the preview is original')])
 
     def import_one(self, rel, i, data=None, template=None):
         if data is None:
@@ -391,7 +462,8 @@ class Editor:
                     game_root=fs.game_root, ea_files=len(fs.ea.index) if fs.ea.ready.is_set() else None,
                     ea_error=fs.ea.error, running=gamefs.game_running(fs.install), lang=self.lang,
                     db=self.db.db_path, roster=self.db.roster_path, names_from=self.db.source,
-                    my_count=len(fs.my_files()), db_error=self.db.error)
+                    my_count=len(fs.my_files()), db_error=self.db.error,
+                    auto_fe=self.settings.get('auto_fe', True))
 
 
 # ---------------------------------------------------------------- HTTP
@@ -485,6 +557,15 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, ed.export_raw(a['rel']) or dict(cancelled=True))
             if p == '/api/import_raw':
                 return self._send(200, ed.import_raw(a['rel']) or dict(cancelled=True))
+            if p == '/api/kit_new':
+                import kitnew
+                return self._send(200, kitnew.create(ed, a['id'], int(a.get('loc', 2)), a.get('label')))
+            if p == '/api/fe_rebuild':
+                return self._send(200, ed.fe_rebuild(a['id']))
+            if p == '/api/auto_fe':
+                ed.settings['auto_fe'] = bool(a.get('on'))
+                ed.save_settings()
+                return self._send(200, dict(ok=True))
             if p == '/api/revert':
                 return self._send(200, ed.revert(a.get('rels') or [a['rel']]))
             if p == '/api/open_folder':
@@ -506,7 +587,7 @@ class Handler(BaseHTTPRequestHandler):
         """Разделы-модули: составы (rosters.py), звук (audio.py), сетки (meshes.py)."""
         mod, _, fn = name.partition('/')
         import importlib
-        if mod not in ('rosters', 'audio', 'meshes'):
+        if mod not in ('rosters', 'audio', 'meshes', 'texts'):
             return self._send(404, dict(error='not_found'))
         m = importlib.import_module(mod)
         res = m.handle(self.ed, method, fn, q, a)
