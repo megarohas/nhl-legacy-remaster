@@ -562,7 +562,9 @@ def browser_exe():
     return next((c for c in cands if os.path.isfile(c)), None)
 
 
-def open_window(url, profile):
+def open_window(url, profile, pos=None):
+    """Окно интерфейса: Edge/Chrome в режиме приложения со своим профилем. Фоновый режим браузера выключен (закрыли
+    окно — процесс браузера завершается), таймеры свёрнутого окна не замедляются (пинг редактору раз в 3 с)."""
     exe = browser_exe()
     if not exe:
         import webbrowser
@@ -571,7 +573,10 @@ def open_window(url, profile):
     os.makedirs(profile, exist_ok=True)
     args = [exe, f'--app={url}', f'--user-data-dir={profile}', '--no-first-run', '--no-default-browser-check',
             '--disable-features=Translate,msEdgeSidebarV2,msUndersideButton', '--disable-sync',
+            '--disable-background-mode', '--disable-background-timer-throttling', '--disable-renderer-backgrounding',
             '--window-size=1500,920', '--lang=' + ('ru' if 'lang=ru' in url else 'en-US')]
+    if pos:
+        args.append(f'--window-position={pos}')
     flags = 0x08000000 if os.name == 'nt' else 0      # CREATE_NO_WINDOW
     return subprocess.Popen(args, creationflags=flags)
 
@@ -589,6 +594,7 @@ def main(argv=None):
     p.add_argument('--port', type=int, default=0, help='порт сервера (0 — свободный)')
     p.add_argument('--no-window', action='store_true', help='не открывать окно (адрес — в выводе)')
     p.add_argument('--lang', choices=['ru', 'en'], help='язык окна')
+    p.add_argument('--window-pos', help='X,Y окна (для снимков: за краем экрана)')
     a = p.parse_args(argv)
     install = os.path.abspath(a.install or default_install())
     if not os.path.isfile(os.path.join(install, 'nhllegacy.exe')) and not os.path.isfile(
@@ -614,12 +620,14 @@ def main(argv=None):
     # уже открыт — показать его окно
     lockf = os.path.join(ed.fs.work, 'editor.lock')
     try:
+        import urllib.request
         port = int(open(lockf).read().strip())
-        s = socket.create_connection(('127.0.0.1', port), timeout=0.5)
-        s.close()
-        if not a.no_window:
-            open_window(f'http://127.0.0.1:{port}/?lang={ed.lang}', os.path.join(ed.fs.work, 'browser'))
-        return 0
+        ok = json.load(urllib.request.urlopen(f'http://127.0.0.1:{port}/api/ping', timeout=1)).get('ok')
+        if ok:
+            if not a.no_window:
+                open_window(f'http://127.0.0.1:{port}/?lang={ed.lang}', os.path.join(ed.fs.work, 'browser'),
+                            a.window_pos)
+            return 0
     except (OSError, ValueError):
         pass
     Handler.ed = ed
@@ -632,7 +640,7 @@ def main(argv=None):
     url = f'http://127.0.0.1:{port}/?lang={ed.lang}'
     ed.log(f'запуск {version()}: {install}, {url}')
     print(url, flush=True)
-    proc = None if a.no_window else open_window(url, os.path.join(ed.fs.work, 'browser'))
+    proc = None if a.no_window else open_window(url, os.path.join(ed.fs.work, 'browser'), a.window_pos)
     ed.last_ping = time.time()
     try:
         while True:
@@ -640,9 +648,11 @@ def main(argv=None):
             idle = time.time() - ed.last_ping
             if a.no_window:
                 continue
-            if proc is not None and proc.poll() is None:
-                continue
-            if idle > (20 if proc is not None else 90):
+            # окно закрыто: процесс браузера вышел и страница больше не пингует (5 с); браузер остался жить или
+            # окно — обычный браузер: страница молчит 3 минуты (пинг раз в 3 с)
+            if proc is not None and proc.poll() is not None and idle > 5:
+                break
+            if idle > 180:
                 break
     except KeyboardInterrupt:
         pass
@@ -651,6 +661,8 @@ def main(argv=None):
             os.remove(lockf)
         except OSError:
             pass
+        if proc is not None and proc.poll() is None:
+            proc.terminate()
         ed.log('выход')
     return 0
 
