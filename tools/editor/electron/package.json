@@ -1,0 +1,9 @@
+{
+  "name": "nhllegacy-editor",
+  "productName": "NHL Legacy Remaster — Editor",
+  "version": "0.18.3",
+  "description": "NHL Legacy Remaster game editor: assets and rosters (docs/editor.md)",
+  "main": "main.js",
+  "license": "MIT",
+  "private": true
+}

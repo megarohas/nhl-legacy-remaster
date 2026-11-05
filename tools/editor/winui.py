@@ -1,6 +1,7 @@
 """Окна Windows для редактора без сторонних библиотек (ctypes): выбор папки и файла (IFileDialog, как у Проводника),
 окно сообщения, поиск окна редактора (владелец диалогов — окно браузера с интерфейсом)."""
 import ctypes
+import threading
 import os
 import uuid
 from ctypes import wintypes
@@ -127,18 +128,65 @@ def _dialog(save=False, folder=False, title='', start=None, filters=None, name=N
         ole32.CoUninitialize()
 
 
+# Приложение (Electron, tools/editor/electron/main.js): диалоги показывает окно приложения. Сервер пишет в stdout строку
+# «@@NHL {"id", "dialog": {…}}», Electron открывает свой dialog.showOpenDialog/showSaveDialog у своего окна и отвечает
+# в stdin строкой «{"id", "path"}» (path — null, если отменили). Без приложения — IFileDialog выше.
+BRIDGE = None                 # (stdin, stdout) сервера в режиме приложения — ставит app.py
+_bridge_lock = threading.Lock()
+_bridge_seq = [0]
+
+
+def _ask_app(req):
+    import json
+    stdin, stdout = BRIDGE
+    with _bridge_lock:
+        _bridge_seq[0] += 1
+        rid = _bridge_seq[0]
+        # строка — чистый ASCII (\uXXXX): у собранного exe кодировка канала — системная, не UTF-8
+        stdout.write('@@NHL ' + json.dumps(dict(id=rid, dialog=req)) + '\n')
+        stdout.flush()
+        while True:
+            line = stdin.readline()
+            if not line:
+                return None
+            try:
+                ans = json.loads(line)
+            except ValueError:
+                continue
+            if ans.get('id') == rid:
+                return ans.get('path')
+
+
+def _filters(filters):
+    """[('PNG', '*.png;*.jpg')] → [{name, extensions: ['png', 'jpg']}] (Electron)."""
+    out = []
+    for name, spec in filters or []:
+        exts = [x.strip().lstrip('*.') or '*' for x in spec.split(';')]
+        out.append(dict(name=name, extensions=['*' if e in ('*', '') else e for e in exts]))
+    return out
+
+
 def pick_folder(title='', start=None):
+    if BRIDGE:
+        return _ask_app(dict(kind='folder', title=title, start=start))
     return _dialog(folder=True, title=title, start=start)
 
 
 def pick_file(title='', start=None, filters=None):
+    if BRIDGE:
+        return _ask_app(dict(kind='open', title=title, start=start, filters=_filters(filters)))
     return _dialog(title=title, start=start, filters=filters)
 
 
 def save_file(title='', start=None, name=None, filters=None, ext=None):
+    if BRIDGE:
+        return _ask_app(dict(kind='save', title=title, start=start, name=name, filters=_filters(filters)))
     return _dialog(save=True, title=title, start=start, filters=filters, name=name, ext=ext)
 
 
 def message(text, title='NHL Legacy Remaster', error=False):
+    if BRIDGE:
+        _ask_app(dict(kind='message', title=title, text=text, error=error))
+        return
     if os.name == 'nt':
         ctypes.windll.user32.MessageBoxW(find_window(), text, title, 0x10 if error else 0x40)

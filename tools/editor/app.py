@@ -1,10 +1,12 @@
 """NHL Legacy Remaster — редактор ассетов и составов (docs/editor.md).
 
-Запуск: nhllegacy_editor.exe рядом с nhllegacy.exe (кнопка «Редактор» в лаунчере) или из репозитория:
+Запуск: приложение editor\\NHL Legacy Editor.exe в папке игры (кнопка «Редактор» в лаунчере; окно — Electron,
+tools/editor/electron, сервер — этот код с --app-mode) или из репозитория:
     python tools/editor [--install ПАПКА_ИГРЫ] [--port N] [--no-window] [--lang ru|en]
 
-Редактор поднимает HTTP-сервер на 127.0.0.1 (только этот ПК) и открывает окно интерфейса — Microsoft Edge (или Chrome)
-в режиме приложения со своим профилем в cache\\editor\\browser. Закрыли окно — редактор завершается. Пишет только в
+Редактор поднимает HTTP-сервер на 127.0.0.1 (только этот ПК). В приложении окно — Electron, сервер на случайном порту
+с ключом сессии, диалоги — через окно (winui.BRIDGE). Из репозитория окно — Microsoft Edge (или Chrome) в режиме
+приложения со своим профилем в cache\\editor\\browser. Закрыли окно — редактор завершается. Пишет только в
 content\\my (ассеты) и saves\\rosters (новый ростер); при запущенной игре ничего не пишет.
 """
 import argparse
@@ -163,6 +165,32 @@ class Editor:
         r = c.rasters[int(i)]
         im = tex.thumb(c, r, side) if side else tex.decode(c, r)
         return tex.png_bytes(im)
+
+    def thumb_png(self, rel, i=0, side=150, stage=True, crop=None):
+        """Плитка выбора: картинка (у превью меню — только сцена Apt в углу текстуры; crop — (x, y, w, h) в точках
+        текстуры), уменьшенная до side."""
+        key = (rel.lower(), i, side, stage, crop)
+        cache = self.__dict__.setdefault('_thumbs', {})
+        if key in cache:
+            return cache[key]
+        c = self.container(rel)
+        if c is None:
+            raise EditorError('no_file', f'Нет файла {rel}', f'No file {rel}')
+        r = c.rasters[i]
+        im = tex.decode(c, r, max_side=max(side * 2, 256))
+        st = getattr(c, 'stage', None)
+        if crop:
+            k = im.size[0] / r.w
+            x, y, w, h = crop
+            im = im.crop((round(x * k), round(y * k), round((x + w) * k), round((y + h) * k)))
+        elif stage and st and im.size == (r.w, r.h) and st[0] <= r.w and st[1] <= r.h:
+            im = im.crop((0, 0, st[0], st[1]))
+        im.thumbnail((side, side))
+        png = tex.png_bytes(im)
+        if len(cache) > 2000:
+            cache.clear()
+        cache[key] = png
+        return png
 
     # ------------------------------------------------------------ выгрузка
     @staticmethod
@@ -484,6 +512,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', ctype)
         self.send_header('Content-Length', str(len(body)))
         self.send_header('Cache-Control', 'max-age=60' if cache else 'no-store')
+        if self._cookie:
+            self.send_header('Set-Cookie', self._cookie)
         self.end_headers()
         self.wfile.write(body)
 
@@ -493,10 +523,30 @@ class Handler(BaseHTTPRequestHandler):
         self.ed.log('ошибка: ' + traceback.format_exc())
         return self._send(500, dict(error='internal', message=f'{type(e).__name__}: {e}'))
 
+    token = None              # режим приложения: ключ сессии (Electron передаёт его в адресе, дальше — cookie)
+    _cookie = None
+
+    def _auth(self, q):
+        """Режим приложения: запросы — только с ключом этой сессии (адрес со случайным портом и ключом знает только
+        окно приложения, другие программы на ПК к серверу не подключатся)."""
+        if not self.token:
+            return True
+        if q.get('token') == self.token:
+            self._cookie = f'nhlt={self.token}; Path=/; HttpOnly; SameSite=Strict'
+            return True
+        for part in (self.headers.get('Cookie') or '').split(';'):
+            k, _, v = part.strip().partition('=')
+            if k == 'nhlt' and v == self.token:
+                return True
+        self._send(403, dict(error='forbidden', message='no token'))
+        return False
+
     def do_GET(self):
         ed = self.ed
         u = urllib.parse.urlparse(self.path)
         q = {k: v[-1] for k, v in urllib.parse.parse_qs(u.query).items()}
+        if not self._auth(q):
+            return
         try:
             if u.path in ('/', '/index.html'):
                 return self._static('index.html')
@@ -519,6 +569,10 @@ class Handler(BaseHTTPRequestHandler):
                 side = int(q['side']) if q.get('side') else None
                 png = ed.tex_png(q['rel'], q.get('i', 0), side, q.get('below') == '1')
                 return self._send(200, png, 'image/png')
+            if u.path == '/api/thumb':
+                crop = tuple(int(x) for x in q['crop'].split(',')) if q.get('crop') else None
+                return self._send(200, ed.thumb_png(q['rel'], int(q.get('i', 0)), int(q.get('side', 150)),
+                                                     q.get('stage') == '1', crop), 'image/png', cache=True)
             if u.path == '/api/my':
                 return self._send(200, dict(files=[dict(rel=r, part=__import__('legacy_paths').part_for(r))
                                                    for r in ed.fs.my_files()]))
@@ -531,6 +585,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         ed = self.ed
         u = urllib.parse.urlparse(self.path)
+        if not self._auth({}):
+            return
         n = int(self.headers.get('Content-Length') or 0)
         body = self.rfile.read(n) if n else b''
         try:
@@ -662,8 +718,53 @@ def open_window(url, profile, pos=None):
     return subprocess.Popen(args, creationflags=flags)
 
 
+def watch_parent(pid):
+    """Завершить сервер, когда завершится процесс pid (окно приложения закрыто или упало)."""
+    if os.name != 'nt':
+        return
+    import ctypes
+    k32 = ctypes.windll.kernel32
+    h = k32.OpenProcess(0x00100000, False, pid)          # SYNCHRONIZE
+    if not h:
+        os._exit(0)
+    k32.WaitForSingleObject(h, 0xFFFFFFFF)
+    os._exit(0)
+
+
+def serve_app(ed, a, install):
+    """Сервер для окна приложения (tools/editor/electron/main.js): случайный порт, ключ, «READY <порт>» в stdout,
+    диалоги — через приложение (winui.BRIDGE)."""
+    import secrets
+    Handler.ed = ed
+    Handler.token = a.token or secrets.token_hex(16)
+    srv = ThreadingHTTPServer(('127.0.0.1', a.port), Handler)
+    srv.daemon_threads = True
+    port = srv.server_address[1]
+    for f in (sys.stdin, sys.stdout):        # канал с окном — UTF-8 (у собранного exe по умолчанию — кодировка системы)
+        try:
+            f.reconfigure(encoding='utf-8')
+        except (AttributeError, ValueError):
+            pass
+    winui.BRIDGE = (sys.stdin, sys.stdout)
+    if a.parent_pid:
+        threading.Thread(target=watch_parent, args=(a.parent_pid,), daemon=True).start()
+    ed.log(f'запуск {version()} (приложение): {install}, порт {port}')
+    sys.stdout.write(f'READY {port}\n')
+    sys.stdout.flush()
+    try:
+        srv.serve_forever()
+    finally:
+        ed.log('выход')
+    return 0
+
+
 def default_install():
-    if FROZEN:
+    if FROZEN:                    # <игра>\editor\backend\nhllegacy_editor_server.exe → <игра>
+        d = os.path.dirname(os.path.abspath(sys.executable))
+        for _ in range(3):
+            if os.path.isfile(os.path.join(d, 'nhllegacy.exe')):
+                return d
+            d = os.path.dirname(d)
         return os.path.dirname(os.path.abspath(sys.executable))
     import legacy_paths
     return legacy_paths.DEFAULT_INSTALL
@@ -676,11 +777,18 @@ def main(argv=None):
     p.add_argument('--no-window', action='store_true', help='не открывать окно (адрес — в выводе)')
     p.add_argument('--lang', choices=['ru', 'en'], help='язык окна')
     p.add_argument('--window-pos', help='X,Y окна (для снимков: за краем экрана)')
+    p.add_argument('--app-mode', action='store_true',
+                   help='сервер для приложения (Electron): без окна и без editor.lock, ключ --token, диалоги — через '
+                        'stdin/stdout, выход вместе с процессом --parent-pid; в stdout — «READY <порт>»')
+    p.add_argument('--token', help='ключ сессии (режим приложения)')
+    p.add_argument('--parent-pid', type=int, help='завершиться, когда завершится этот процесс')
     a = p.parse_args(argv)
+    if a.app_mode:
+        a.no_window = True
     install = os.path.abspath(a.install or default_install())
     if not os.path.isfile(os.path.join(install, 'nhllegacy.exe')) and not os.path.isfile(
             os.path.join(install, 'nhllegacy.toml')):
-        msg = f'Редактор не нашёл игру: в {install} нет nhllegacy.exe. Положите nhllegacy_editor.exe рядом с игрой.'
+        msg = f'Редактор не нашёл игру: в {install} нет nhllegacy.exe. Папка editor должна лежать в папке игры (editor\\NHL Legacy Editor.exe рядом с nhllegacy.exe).'
         if FROZEN:
             winui.message(msg, error=True)
         sys.exit(msg)
@@ -698,6 +806,8 @@ def main(argv=None):
         ed.lang = a.lang
     elif 'lang' in ed.settings:
         ed.lang = ed.settings['lang']
+    if a.app_mode:
+        return serve_app(ed, a, install)
     # уже открыт — показать его окно
     lockf = os.path.join(ed.fs.work, 'editor.lock')
     try:
