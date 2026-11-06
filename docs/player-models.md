@@ -590,6 +590,17 @@ x = 0; 0,52; 0,96; 1,424 м), не скелет игрока. «Модели» �
 - Было / стало — `python tools/tapestyles.py --game legacy compare --out DIR` (по умолчанию «было» — `texlib_999` в
   `cache:` установки): `DIR/preview/compare.png` (полевая `_2`, чёрная и белая лента: верх, торец, крюк, носок) и
   `compare-all.png` (верх у всех сеток с лентой: полевые `_2`/`_4` обеих рук, вратарские, реквизит, клюшка на льду).
+- Проверено в игре 06.11.2026 (стенд — копия установки, замок `game.lock`; лист `game/work/sticks-knob/ingame/ingame_sheet.png`):
+  Customize → Creation Zone → Edit Player → Anaheim → Carlsson и Brossoit (вратарь) → Customization → Stick Tape = Black,
+  плюс Test On Ice. С прежней текстурой верх чёрный, с новой — белый, крюк чёрный; у вратаря — так же (торец и рукоять).
+  В логе порта промаха `cache:\rendering\playerstick\texlib_999.rx2` нет — игра берёт файл из `content\equipment`.
+- Установка — один файл `rendering/playerstick/texlib_999.rx2` (часть `equipment`), при закрытой игре: из
+  `legacy-data/models/tapevar` (сборка `build.sh`) в `content\equipment\…` установки и в `legacy-data/out`. Поставлено
+  06.11.2026 в 06:48 (sha1 9a56997e); прежний файл (736e4b01, 24.10) — `game/work/sticks-knob/backup-20261106-064733/`
+  и `legacy-data/backup-cache/user-20261106-knob/`. Откат — `bash game/work/sticks-knob/uninstall.sh` (навсегда —
+  `KNOB_WHITE = False` и пересборка).
+- Плитки обмотки в редакторе (`tools/editor/pickers.py`) показывают текстуру целиком, поэтому у «чёрной» правая треть
+  плитки теперь белая.
 
 ## 10. Нижний край свитера сзади — как в NHL 10 (`tools/jersey10.py`)
 
