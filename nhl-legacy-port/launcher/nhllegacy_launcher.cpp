@@ -1054,8 +1054,9 @@ void Play() {
   CloseHandle(pi.hThread);
   // Передний план (05.11.2026, жалоба: «окно разворачивается на весь экран, но поверх него остаются окна»). Лаунчер
   // закрывался сразу, передний план уходил другому окну раньше, чем появлялось окно игры, и Windows не пускала её вперёд.
-  // Теперь игра получает право на передний план, а окно лаунчера закрывается, когда появится окно игры (или игра выйдет,
-  // или пройдёт 30 с).
+  // Теперь игра получает право на передний план, а окно лаунчера закрывается, когда окно игры стало передним (или игра
+  // вышла, или пройдёт 60 с). Не раньше: первые секунды окно игры «не отвечает» — поток UI собирает шейдеры, с холодным
+  // кэшем драйвера 25 с, — и в 0.19.0, где лаунчер закрывался при появлении окна, передний план успевал уйти другому окну.
   AllowSetForegroundWindow(pi.dwProcessId);
   g.game = pi.hProcess;
   g.game_pid = pi.dwProcessId;
@@ -1064,31 +1065,18 @@ void Play() {
   SetTimer(g.wnd, kTimerGame, 100, nullptr);
 }
 
-// Окно игры (SDL, видимое) у процесса pid.
-bool GameWindowShown(DWORD pid) {
-  struct Ctx {
-    DWORD pid;
-    bool found;
-  } ctx{pid, false};
-  EnumWindows(
-      [](HWND h, LPARAM lp) -> BOOL {
-        auto* c = reinterpret_cast<Ctx*>(lp);
-        DWORD p = 0;
-        GetWindowThreadProcessId(h, &p);
-        wchar_t cls[32] = {};
-        if (p == c->pid && IsWindowVisible(h) && GetClassNameW(h, cls, 32) && wcscmp(cls, L"SDL_app") == 0) {
-          c->found = true;
-          return FALSE;
-        }
-        return TRUE;
-      },
-      reinterpret_cast<LPARAM>(&ctx));
-  return ctx.found;
+// Переднее окно — окно игры (SDL) процесса pid.
+bool GameInFront(DWORD pid) {
+  HWND fg = GetForegroundWindow();
+  DWORD p = 0;
+  GetWindowThreadProcessId(fg, &p);
+  wchar_t cls[32] = {};
+  return fg && p == pid && GetClassNameW(fg, cls, 32) && wcscmp(cls, L"SDL_app") == 0;
 }
 
 void WaitGameWindow() {
   const bool exited = WaitForSingleObject(g.game, 0) == WAIT_OBJECT_0;
-  if (!exited && !GameWindowShown(g.game_pid) && GetTickCount64() - g.game_start < 30000) return;
+  if (!exited && !GameInFront(g.game_pid) && GetTickCount64() - g.game_start < 60000) return;
   KillTimer(g.wnd, kTimerGame);
   CloseHandle(g.game);
   g.game = nullptr;

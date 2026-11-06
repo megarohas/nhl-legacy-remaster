@@ -94,7 +94,8 @@ DesktopGeometry Geometry() {
 }
 
 DesktopGeometry g_geometry;
-std::chrono::steady_clock::time_point g_opened;  // окно открыто: первые 3 с — выводить его вперёд
+std::chrono::steady_clock::time_point g_opened;  // окно открыто
+std::chrono::steady_clock::time_point g_free;    // первый шаг таймера: поток UI свободен, отсюда 5 с на выход вперёд
 bool g_front_done = false;
 bool g_display_changed = false;  // один шаг таймера после смены дисплеев курсор виден
 std::atomic<bool> g_display_message{false};  // пришёл WM_DISPLAYCHANGE
@@ -167,31 +168,37 @@ UINT_PTR g_timer = 0;
 // Передний план при запуске (05.11.2026, жалоба: «окно разворачивается на весь экран, но поверх него остаются окна,
 // нужно кликать на иконку»). Лаунчер закрывался сразу после CreateProcess, передний план уходил другому окну, и Windows
 // не давала окну игры выйти вперёд. Лаунчер теперь ждёт окна игры и даёт ей AllowSetForegroundWindow; здесь — то же для
-// запуска exe напрямую: первые 3 с после открытия окна просим передний план, пока не получим. Стенды gameshot.ps1
-// запускают игру с SDL_WINDOW_ACTIVATE_WHEN_SHOWN=0 — у них окно вперёд не выводится никогда.
+// запуска exe напрямую: просим передний план, пока не получим, 5 с с первого шага таймера. Не с открытия окна: сразу после
+// него поток UI собирает шейдеры из списка, с холодным кэшем драйвера это 25 с, и окно всё это время «не отвечает» — в 0.19.0
+// 3 с истекали раньше первой попытки (журнал пользователя 06.11.2026 05:04). Стенды gameshot.ps1 запускают игру с
+// SDL_WINDOW_ACTIVATE_WHEN_SHOWN=0 — у них окно вперёд не выводится никогда.
 bool ForegroundWanted() {
   if (!REXCVAR_GET(nhl_foreground)) return false;
   const char* env = std::getenv("SDL_WINDOW_ACTIVATE_WHEN_SHOWN");
   return !(env && std::strcmp(env, "0") == 0);
 }
 
-void BringToFront() {
+void BringToFront(bool tick) {
   if (g_front_done) return;
+  if (tick && g_free.time_since_epoch().count() == 0) {
+    g_free = std::chrono::steady_clock::now();
+  }
   HWND hwnd = Hwnd();
   if (!hwnd || !IsWindowVisible(hwnd)) return;
   if (!ForegroundWanted()) {
     g_front_done = true;
     return;
   }
-  const double sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - g_opened).count();
+  const auto now = std::chrono::steady_clock::now();
+  const double sec = std::chrono::duration<double>(now - g_opened).count();
   if (GetForegroundWindow() == hwnd) {
     g_front_done = true;
     REXLOG_INFO("[nhllegacy] window: in front ({:.1f} s after it opened)", sec);
     return;
   }
-  if (sec > 3.0) {
+  if (g_free.time_since_epoch().count() != 0 && std::chrono::duration<double>(now - g_free).count() > 5.0) {
     g_front_done = true;
-    REXLOG_WARN("[nhllegacy] window: Windows did not let it to the front in 3 s");
+    REXLOG_WARN("[nhllegacy] window: Windows did not let it to the front ({:.1f} s after it opened)", sec);
     return;
   }
   SetForegroundWindow(hwnd);
@@ -199,7 +206,7 @@ void BringToFront() {
 }
 
 void CALLBACK OnCursorTimer(HWND, UINT, UINT_PTR, DWORD) {
-  BringToFront();
+  BringToFront(true);
   UpdateCursor();
 }
 #endif
@@ -213,7 +220,7 @@ void NhlLegacyStartCursorHide(rex::ui::Window* window, rex::ui::ImGuiDrawer* dra
   g_geometry = Geometry();
   g_hook = SetWindowsHookExW(WH_CALLWNDPROC, OnCallWndProc, nullptr, GetCurrentThreadId());
   g_opened = std::chrono::steady_clock::now();
-  BringToFront();
+  BringToFront(false);
 #endif
   UpdateCursor();
 #if defined(_WIN32)
