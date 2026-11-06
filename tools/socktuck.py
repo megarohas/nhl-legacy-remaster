@@ -9,7 +9,9 @@ rendering/sock/playersock_T_L, и деталь rendering/skate/skatetongue_T_L; 
     3  язык заправлен, задник торчит (как есть)  playersock_3 (своя)   skatetongue_3 — задник (своя)
     1  ничего не торчит                          копия playersock_3    нет (так у игры при 1)
     2  задник заправлен, язык торчит             копия playersock_3    skatetongue_2 EA целиком сдвинут вперёд-вниз
-    0  ничего не заправлено                      копия playersock_3    skatetongue_0 = skatetongue_3 как есть + тот же язык
+    0  ничего не заправлено                      playersock_0 до tuck4 skatetongue_0 = задник кольца до tuck4 + язык 2 на
+                                                                          гетре 0 (06.11.2026; --full sock3 — как 05.11:
+                                                                          копия гетры 3 + skatetongue_3 + язык как у T 2)
 
 У 1 и 2 (без задника) низ копии гетры подтянут к стенке ботинка у его верха (fill_rim): иначе в щель видна изнанка
 стенки. Затенение playersock_T_K_am у 0, 1, 2 — копии от 3.
@@ -34,7 +36,7 @@ import rw4mesh as rm  # noqa: E402
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 import legacy_paths as LP  # noqa: E402 (cache: в обеих раскладках, docs/legacy-port.md «Папка content»)
 CACHE = LP.legacy_cache()
-OUT = os.path.join(REPO, 'game', 'work', 'models-check', 'tuck4', 'out')     # эксперимент: не в legacy-data
+OUT = os.path.join(REPO, 'game', 'work', 'models-check', 'tuck4', 'out-v3')  # набор 06.11.2026 (05.11 — out)
 LODS = (2, 0, 3)
 SRC_T = 3                          # гетра-образец: её толщину пользователь хочет у всех четырёх видов
 AM = 'rendering/sock/playersock_{t}_{k}_am.rx2'   # затенение гетры (k — 0/1: выбирается не детализацией)
@@ -492,9 +494,148 @@ def am_copy(data, t_from, t_to):
     return bytes(rw.raw)
 
 
-def build(base=CACHE, out=OUT, fill=True, log=print):
+# ---------------------------------------------------------------- вид «ничего не заправлено» (T 0) на гетре 0
+#
+# 06.11.2026, пользователь: «тот вариант, когда язык торчит и задник торчит, давай возьмём то, что было в нашей предыдущей
+# версии (до tuck4) — там язык спереди не заправлялся под гетру, но был как будто прижат к щитку … взять саму модельку за
+# основу из предыдущей версии, но положение языка сделать как в текущей». Значит, у T 0: гетра 0 и задник кольца
+# skatetongue_0 — как до tuck4 (с правкой голени §6 и задника), а язык — родной skatetongue_2 целиком (форма и наклон EA,
+# как у T 2), посаженный на гетру 0 так же, как EA сажает его на гетру 2 (fit_tongue по гетре 0).
+# Подбор (06.11.2026, ближняя детализация, без поворота): назад на 5 мм, по высоте 0 — у корня язык прилегает к гетре 0
+# (0…3 мм), кверху отходит, как у EA 2; на нынешнем месте T 2 (+15/−6) он висел бы на 2–3 см перед тонкой гетрой 0.
+TONGUE_MOVE_0 = {'rot_x_deg': 0.0, 'up_m': 0.0, 'fwd_m': -0.005}
+TONGUE_MOVE_0_LOD = {}
+# Затенение гетры 0 (playersock_0_K_am): у EA под высоким языком кольца спереди — тёмное пятно; с языком 2 (ниже и
+# отогнут) оно видно над языком. Спереди на высоте AO_Y — затенение не темнее, чем у гетры 3 в том же месте (у неё
+# спереди языка нет): по углу — полностью до AO_TH[0] от «вперёд», к AO_TH[1] — с нуля.
+AO_Y = (0.20, 0.22, 0.33, 0.35)   # м: снизу с нуля … полностью … сверху к нулю
+AO_TH = (55.0, 80.0)              # градусы от направления «вперёд»
+
+
+def components(m):
+    """Куски сетки (связность по треугольникам с учётом сварки швов) → [множество вершин]."""
+    w = rm.Weld(m)
+    par = list(range(w.ngroups))
+
+    def f(a):
+        while par[a] != a:
+            par[a] = par[par[a]]
+            a = par[a]
+        return a
+    for a, b, c in m.tris:
+        for x, y in ((a, b), (b, c)):
+            ra, rb = f(w.group[x]), f(w.group[y])
+            if ra != rb:
+                par[ra] = rb
+    out = {}
+    for i in range(m.nv):
+        out.setdefault(f(w.group[i]), set()).add(i)
+    return list(out.values())
+
+
+def part_mesh(m, axes, back=True):
+    """Задние (back) или передние куски детали — отдельной сеткой того же файла: у кольца skatetongue_0 EA четыре куска,
+    язык и задник на каждой ноге. Вершины и полосы — как у EA (полоса, задевшая другой кусок, — по треугольнику)."""
+    keep = set()
+    for comp in components(m):
+        s = sum(math.sin(axes[rm.leg_of(m, i)].polar(m.pos[i])[0]) for i in comp)
+        if (s < 0) == back:
+            keep |= comp
+    order = [i for i in range(m.nv) if i in keep]
+    remap = {i: k for k, i in enumerate(order)}
+    strips, cur = [], []
+    for i in list(m.indices) + [rm.STRIP_RESTART]:
+        if i == rm.STRIP_RESTART:
+            if cur:
+                strips.append(cur)
+            cur = []
+        else:
+            cur.append(i)
+    idx = []
+    for s in strips:
+        if all(i in keep for i in s):
+            if idx:
+                idx.append(rm.STRIP_RESTART)
+            idx.extend(remap[i] for i in s)
+    want = sorted(tuple(remap[i] for i in t) for t in m.tris if all(i in keep for i in t))
+    if sorted(rm.strip_triangles(idx)) != want:
+        idx = []
+        for t in want:
+            if idx:
+                idx.append(rm.STRIP_RESTART)
+            idx.extend(t)
+    vb = b''.join(m.vertex_raw(i) for i in order)
+    return rm.Mesh(m.rebuilt(vb, idx), m.path)
+
+
+def ao_relight(am_data, sock, ref_sock, ref_am, axes, log=print):
+    """Затенение гетры sock (playersock_*_am, байты) — спереди на высоте AO_Y не темнее, чем у ref_sock (ref_am — Tex её
+    затенения) в той же точке голени: тексели гетры (по её UV, ближняя детализация) → точка на ноге → 4 ближайшие вершины
+    ref_sock в (угол, высота) → их затенение. Только светлее. → (байты, сколько текселей стало светлее)."""
+    import numpy as np
+    import teamart as ta
+    import kitpaint as kp
+    rw = ta.Rw4(rm.unchunk_any(am_data), 'am')
+    t = rw.textures[0]
+    w, h, px = kp.tex_decode(rw, t, 0)
+    img = np.frombuffer(bytes(px), dtype=np.uint8).reshape(h, w, 4).copy()
+    # вершины образца: (нога, угол от «вперёд», высота) → затенение
+    ref = []
+    for i in range(ref_sock.nv):
+        side = rm.leg_of(ref_sock, i)
+        th, _ = axes[side].polar(ref_sock.pos[i])
+        u, v = ref_sock.uv[i]
+        ref.append((side, math.degrees(th), ref_sock.pos[i][1], float(ref_am.sample(np.array([u]), np.array([v]))[0, 0])))
+    refs = {s: np.array([(a, y, q) for ss, a, y, q in ref if ss == s]) for s in (0, 1)}
+    done = np.zeros((h, w), dtype=bool)
+    target = np.full((h, w), -1.0)
+    for tri in sock.tris:
+        P = [sock.pos[i] for i in tri]
+        UV = [(sock.uv[i][0] * w - 0.5, sock.uv[i][1] * h - 0.5) for i in tri]
+        side = rm.leg_of(sock, tri[0])
+        (x0, y0), (x1, y1), (x2, y2) = UV
+        area = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0)
+        if abs(area) < 1e-9:
+            continue
+        for py in range(max(0, int(min(y0, y1, y2))), min(h - 1, int(max(y0, y1, y2)) + 1) + 1):
+            for qx in range(max(0, int(min(x0, x1, x2))), min(w - 1, int(max(x0, x1, x2)) + 1) + 1):
+                if done[py, qx]:
+                    continue
+                b0 = ((x1 - qx) * (y2 - py) - (x2 - qx) * (y1 - py)) / area
+                b1 = ((x2 - qx) * (y0 - py) - (x0 - qx) * (y2 - py)) / area
+                b2 = 1 - b0 - b1
+                if min(b0, b1, b2) < -0.02:
+                    continue
+                p = [b0 * P[0][k] + b1 * P[1][k] + b2 * P[2][k] for k in range(3)]
+                th, _ = axes[side].polar(p)
+                da = abs((math.degrees(th) - 90.0 + 180.0) % 360.0 - 180.0)
+                wy = rm.smoothstep(AO_Y[0], AO_Y[1], p[1]) * (1.0 - rm.smoothstep(AO_Y[2], AO_Y[3], p[1]))
+                wt = (1.0 - rm.smoothstep(AO_TH[0], AO_TH[1], da)) * wy
+                done[py, qx] = True
+                if wt <= 0:
+                    continue
+                R = refs[side]
+                d = np.hypot((R[:, 0] - math.degrees(th)) / 30.0, (R[:, 1] - p[1]) / 0.01)  # 30° ~ 1 см по высоте
+                k = np.argsort(d)[:4]
+                q = float(np.sum(R[k, 2] / (d[k] + 1e-3)) / np.sum(1.0 / (d[k] + 1e-3)))
+                target[py, qx] = max(target[py, qx], img[py, qx, 0] + wt * max(0.0, q - img[py, qx, 0]))
+    sel = target > img[:, :, 0]
+    for c in range(3):
+        ch = img[:, :, c].astype(float)
+        ch[sel] = target[sel]
+        img[:, :, c] = np.clip(np.round(ch), 0, 255).astype(np.uint8)
+    kp.tex_replace(rw, t, img.tobytes(), w, h)
+    log(f'  затенение: светлее {int(sel.sum())} текселей из {w * h}')
+    return bytes(rw.raw), int(sel.sum())
+
+
+def build(base=CACHE, out=OUT, fill=True, full='prev', before=None, log=print):
     """Все файлы четырёх видов в out (раскладка cache:), сводка manifest.json. fill — у видов без задника (1, 2) низ
-    гетры подтянуть к стенке ботинка (fill_rim). → ({путь: байты}, сводка)."""
+    гетры подтянуть к стенке ботинка (fill_rim). full — вид T 0: 'prev' (06.11.2026) — гетра 0 и задник кольца «до правки»
+    (before, раскладка cache:; нет — архив) + язык 2, посаженный на гетру 0 (TONGUE_MOVE_0), затенение гетры 0 спереди
+    — ao_relight; 'sock3' (05.11.2026) — копия гетры 3 + задник 3 + язык как у T 2. → ({путь: байты}, сводка)."""
+    before = before if before is not None else BEFORE
+    before = before if before and os.path.isdir(before) else None
     import hashlib
     use_legacy()
     skel = rm.Skeleton.game()
@@ -505,7 +646,9 @@ def build(base=CACHE, out=OUT, fill=True, log=print):
                'tongue_pivot_m': piv,
                'fill': fill, 'fill_margin_mm': FILL_MARGIN * 1000, 'fill_depth_m': list(FILL_DEPTH),
                'fill_up_m': list(FILL_UP), 'fill_max_mm': FILL_MAX * 1000, 'fill_over_mm': FILL_OVER * 1000,
-               'fill_shin_m': FILL_SHIN, 'views': NAMES, 'files': {}}
+               'fill_shin_m': FILL_SHIN, 'full': full, 'before': before, 'tongue_move_0': TONGUE_MOVE_0,
+               'tongue_move_0_lod': TONGUE_MOVE_0_LOD, 'ao_y_m': list(AO_Y), 'ao_th_deg': list(AO_TH), 'views': NAMES,
+               'files': {}}
     files = {}
 
     def put(rel, data, note):
@@ -518,8 +661,12 @@ def build(base=CACHE, out=OUT, fill=True, log=print):
     for lod in LODS:
         srel = rm.SOCK.format(t=SRC_T, lod=lod)
         s3 = load(base, srel)
-        # гетры: у 0 сзади родной задник — копия 3 как есть; у 1 и 2 задника нет — низ у стенки ботинка
-        put(rm.SOCK.format(t=0, lod=lod), s3.bytes(), {'what': f'копия {srel}'})
+        # гетры: у 1 и 2 задника нет — копия 3, низ у стенки ботинка; у 0 — гетра 0 «до правки» (или копия 3)
+        s0rel = rm.SOCK.format(t=0, lod=lod)
+        if full == 'prev':
+            put(s0rel, load(before, s0rel).bytes(), {'what': f'{s0rel} до правки' + ('' if before else ' (архив)')})
+        else:
+            put(s0rel, s3.bytes(), {'what': f'копия {srel}'})
         sf = load(base, srel)
         rep = fill_rim(sf, rm.Mesh.game(rm.BOOT.format(lod=lod)), axes, skel) if fill else {}
         for t in (1, 2):
@@ -530,17 +677,32 @@ def build(base=CACHE, out=OUT, fill=True, log=print):
         k2 = rm.Mesh.game(k2rel)
         mv = move_rigid(k2, piv, dict(TONGUE_MOVE, **TONGUE_MOVE_LOD.get(lod, {})))
         put(k2rel, k2.bytes(), {'what': f'{k2rel} EA целиком сдвинут', 'move': mv})
-        # кольцо: родной задник skatetongue_3 как есть + тот же язык
-        k3 = load(base, k3rel)
-        put(k0rel, merged(rm.Mesh.game(k0rel), k3, k2),
-            {'what': f'{k3rel} как есть + {k2rel} (сдвинутый) одной сеткой', 'vertices': k3.nv + k2.nv})
-    # затенение гетр: у 0, 1, 2 — от 3 (UV те же)
+        if full == 'prev':
+            # кольцо: задник кольца «до правки» как есть + язык 2, посаженный на гетру 0
+            back = part_mesh(load(before, k0rel), axes, back=True)
+            k20 = rm.Mesh.game(k2rel)
+            mv0 = move_rigid(k20, piv, dict(TONGUE_MOVE_0, **TONGUE_MOVE_0_LOD.get(lod, {})))
+            put(k0rel, merged(rm.Mesh.game(k0rel), back, k20),
+                {'what': f'задник {k0rel} до правки как есть + {k2rel} (на гетре 0) одной сеткой', 'move': mv0,
+                 'vertices': back.nv + k20.nv})
+        else:
+            # кольцо: родной задник skatetongue_3 как есть + тот же язык
+            k3 = load(base, k3rel)
+            put(k0rel, merged(rm.Mesh.game(k0rel), k3, k2),
+                {'what': f'{k3rel} как есть + {k2rel} (сдвинутый) одной сеткой', 'vertices': k3.nv + k2.nv})
+    # затенение гетр: у копий гетры 3 — от 3 (UV те же); у гетры 0 «до правки» — её же, светлее спереди над языком
+    ref_sock = load(base, rm.SOCK.format(t=SRC_T, lod=2))
     for k in (0, 1):
         arel = AM.format(t=SRC_T, k=k)
         data = raw_file(base, arel)
-        for t in (0, 1, 2):
+        for t in ((1, 2) if full == 'prev' else (0, 1, 2)):
             put(AM.format(t=t, k=k), am_copy(data, SRC_T, t),
                 {'what': f'копия {arel}' + (' (cache: — Edge)' if base_file(base, arel) else ' (архив)')})
+        if full == 'prev':
+            a0 = AM.format(t=0, k=k)
+            d0, n = ao_relight(raw_file(before, a0) if before else rm.source(a0),
+                               load(before, rm.SOCK.format(t=0, lod=2)), ref_sock, Tex(data, 'playersock'), axes, log)
+            put(a0, d0, {'what': f'{a0} до правки, спереди над языком — не темнее гетры 3', 'texels_lighter': n})
     with open(os.path.join(out, 'manifest.json'), 'w', encoding='utf-8', newline='\n') as f:
         json.dump(summary, f, ensure_ascii=False, indent=1)
     for rel, data in files.items():            # файлы разбираются, пересборка своими буферами — байт в байт
@@ -656,7 +818,7 @@ ROWS = [  # (подпись, вариант T, откуда файлы: 'new' �
     ('Вид 1 = T 3 (как есть)\n= родной EA 3: гетра 3 + задник 3', 3, 'base'),
     ('Вид 2 = T 1\nгетра 3, ничего не торчит', 1, 'new'),
     ('Вид 3 = T 2\nгетра 3 + язык 2 (сдвинут)', 2, 'new'),
-    ('Вид 4 = T 0\nгетра 3 + задник 3 + язык 2', 0, 'new'),
+    ('Вид 4 = T 0\nгетра 0 + задник до tuck4 + язык 2', 0, 'new'),
     ('Родной EA 2 (до правки)\nдля сравнения', 2, 'before'),
 ]
 # «как было до»: бэкап cache: перед первой установкой (05.11.2026 06:56, раскладка cache:); чего там нет — архив игры
@@ -849,6 +1011,29 @@ def check(out=OUT, base=CACHE, poses=rm.SHIN_POSES, before=BEFORE, log=print):
                     bad += 1
                     log(f'  язык _{lod}, {rm.pose_name(pose)}: {name} входит в язык {a} (у EA 2 {b})  ← ПРОВЕРИТЬ')
             res['obstacles_in_tongue'][f'_{lod} {rm.pose_name(pose)}'] = row
+        # вид T 0 на гетре 0 (full = 'prev'): кольцо против своей гетры 0, ботинка и шнуровки — рядом то же у кольца «до»
+        man = json.load(open(os.path.join(out, 'manifest.json'), encoding='utf-8'))
+        if man.get('full') == 'prev':
+            s0 = get(rm.SOCK.format(t=0, lod=lod))
+            r_new = get(rm.TONGUE.format(t=0, lod=lod))
+            r_old = load(before, rm.TONGUE.format(t=0, lod=lod))
+            s0b = load(before, rm.SOCK.format(t=0, lod=lod))
+            new, old = wall_relation(rm.Slicer(r_new), rm.Slicer(s0), axes), wall_relation(rm.Slicer(r_old), rm.Slicer(s0b), axes)
+            res.setdefault('ring0_vs_sock0', {})[f'_{lod}'] = {'new': new, 'before': old}
+            log(f'  кольцо T 0 _{lod} на гетре 0: {new}\n         до правки: {old}')
+            if new['through_max_mm'] > max(1.0, old['through_max_mm'] + 0.5):
+                bad += 1
+                log('    ← ПРОВЕРИТЬ: гетра 0 выходит сквозь кольцо глубже, чем до правки')
+            for pose in poses:
+                for name, om in obs.items():
+                    osl = rm.Slicer(om, rm.posed(om, skel, pose) if pose[1] else None)
+                    a = obstacle_into(rm.Slicer(r_new, rm.posed(r_new, skel, pose) if pose[1] else None), osl, axes)
+                    b = obstacle_into(rm.Slicer(r_old, rm.posed(r_old, skel, pose) if pose[1] else None), osl, axes)
+                    res.setdefault('obstacles_in_ring0', {})[f'_{lod} {rm.pose_name(pose)} {name}'] = {'new': a, 'before': b}
+                    if a[1] > max(1.0, b[1] + 0.5):
+                        bad += 1
+                        log(f'  кольцо T 0 _{lod}, {rm.pose_name(pose)}: {name} входит в кольцо {a} (до правки {b})'
+                            '  ← ПРОВЕРИТЬ')
     res['problems'] = bad
     log(f'  итог: {"замечаний нет" if not bad else f"{bad} мест проверить"}')
     with open(os.path.join(out, 'check.json'), 'w', encoding='utf-8', newline='\n') as f:
@@ -982,11 +1167,13 @@ def main(argv=None):
                                                     'по умолчанию ' + LP.DEFAULT_INSTALL)
     ap.add_argument('--from', dest='src', help='restore: бэкап в раскладке cache: (с absent.txt)')
     ap.add_argument('--no-fill', action='store_true', help='у видов без задника гетру у ботинка не подтягивать')
+    ap.add_argument('--full', choices=('prev', 'sock3'), default='prev',
+                    help='вид T 0: prev — гетра 0 и задник «до правки» + язык 2 (06.11.2026); sock3 — на гетре 3 (05.11)')
     ap.add_argument('--kit', default=SHEET_KIT, help='форма для картинок (S_A_V), по умолчанию ' + SHEET_KIT)
     ap.add_argument('--skate', type=int, default=SHEET_SKATE, help='конёк для картинок (texlib_N)')
     a = ap.parse_args(argv)
     if a.cmd == 'build':
-        build(a.base, a.out, fill=not a.no_fill)
+        build(a.base, a.out, fill=not a.no_fill, full=a.full, before=a.before)
     elif a.cmd == 'check':
         check(a.out, a.base, before=a.before)
     elif a.cmd == 'sheet':
