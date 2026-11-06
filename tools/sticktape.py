@@ -1334,6 +1334,43 @@ def blade_views(pair):
             ('носок, три четверти сверху', Cam(n, rm.v_cross(obl, n), toe, pair.tip * 2.6, 200, 200))]
 
 
+def knob_verts(tape, blade=None):
+    """Вершины набалдашника (ленты рукояти) в сетке ленты: связный кусок, ближний к торцу древка (меньше x)."""
+    used = set(i for t in tape.tris for i in t)
+    comps = [[i for i in c if i in used] for c in components(tape)]
+    comps = [c for c in comps if c and (blade is None or not set(c) & set(blade))]
+    return min(comps, key=lambda ii: min(tape.pos[i][0] for i in ii))
+
+
+def knob_views(tape, w=300, scale=1.0):
+    """Виды верха клюшки — набалдашника (лента рукояти: торец и ~17 см древка сверху, второй кусок сетки ленты):
+    широкая и узкая стороны древка (торец слева) и торец в три четверти. Древко — вдоль оси набалдашника (≈ +x)."""
+    K = knob_verts(tape)
+    P = [tape.pos[i] for i in K]
+    a = pca_axis(P)
+    if a[0] < 0:
+        a = v_mul(a, -1)
+    cen = [sum(p[k] for p in P) / len(P) for k in range(3)]
+    # поперёк древка: главное направление сечения (шире) и второе
+    Q = [rm.v_sub(p, v_mul(a, rm.v_dot(rm.v_sub(p, cen), a))) for p in P]
+    wide = pca_axis(Q)
+    wide = rm.v_norm(rm.v_sub(wide, v_mul(a, rm.v_dot(wide, a))))
+    narrow = rm.v_cross(a, wide)
+    lo = min(rm.v_dot(rm.v_sub(p, cen), a) for p in P)
+    hi = max(rm.v_dot(rm.v_sub(p, cen), a) for p in P)
+    rad = max(math.dist(q, cen) for q in Q)                         # радиус сечения набалдашника
+    L = (hi - lo) * 1.45 * scale                                   # кадр — набалдашник и начало голого древка
+    mid = v_add(cen, v_mul(a, lo + L / 2 - 0.012 * scale))
+    butt = v_add(cen, v_mul(a, lo))
+    h = max(int(w * 3.0 * rad / L) // 2 * 2, 40)                   # по высоте — сечение с запасом
+    d = rm.v_norm(v_add(v_add(v_mul(a, -0.85), v_mul(wide, 0.4)), v_mul(narrow, 0.35)))   # к зрителю: из-за торца
+    r = rm.v_norm(rm.v_cross(narrow, d))
+    s = int(w * 0.5)
+    return [('верх, широкая сторона', Cam(a, wide, mid, L / 2, w, h)),
+            ('верх, узкая сторона', Cam(a, narrow, mid, L / 2, w, h)),
+            ('торец, три четверти', Cam(r, narrow, v_add(butt, v_mul(a, rad * 1.6)), rad * 2.4, s, s))]
+
+
 def _silhouette(stick, tape, cam):
     import czkit as cz
     cv = cz.Canvas(cam.w, cam.h, (0, 0, 0, 255))

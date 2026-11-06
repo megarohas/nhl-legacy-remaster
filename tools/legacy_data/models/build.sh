@@ -2,7 +2,8 @@
 # 3D-правки игроков для NHL Legacy: гетры (голень), задник конька не сквозь икру (skatetongue_0/3), обмотка клюшки до носка («низ-2», вратарские — без скругления,
 # и реквизит вратарской клюшки prop/goaliestick*_left/right_0), нижний край свитера сзади как в NHL 10.
 # Клюшки полевых и клюшка на льду — с осевым UV ленты (tape/out-bottom2-axial, sticktape.py --axial-uv) и варианты
-# обмотки texlib_999.rx2 (tools/tapestyles.py → tapevar/: коды 3, 4, 6, 8, 9 — белая частичная, docs/player-models.md §13).
+# обмотки texlib_999.rx2 (tools/tapestyles.py → tapevar/: коды 3, 4, 6, 8, 9 — белая частичная, docs/player-models.md §13;
+# верх клюшки — лента рукояти — у всех кодов белый, §9).
 # Собирает инструментами с --game legacy (источник — распакованные архивы game/other/legacy/big) в
 # game/work/legacy-data/models/{out,tape/out-bottom2,jersey10/out} и раскладывает готовые .rx2 в
 # game/work/legacy-data/out/ (дерево cache:), список своих файлов — models/files.txt.
